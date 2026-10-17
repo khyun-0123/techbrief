@@ -22,8 +22,12 @@
 
 .tab {
   padding: 8px 14px;
+  border: none;
   border-radius: 6px;
+  background: none;
   color: #c8d0dc;
+  font: inherit;
+  cursor: pointer;
 }
 
 .tab.active {
@@ -171,6 +175,15 @@ select {
   color: #fff;
 }
 
+.btn.primary:disabled {
+  opacity: 0.5;
+}
+
+.btn.danger {
+  border-color: #c0392b;
+  color: #c0392b;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -228,7 +241,146 @@ select {
   font-size: 13px;
 }
 
+/* 선별·요약 화면 */
+.select-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+  margin-top: 24px;
+}
+
+.select-empty {
+  margin-top: 24px;
+  padding-bottom: 32px;
+  text-align: center;
+}
+
+.candidate-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  border-bottom: 1px solid #dde2ea;
+}
+
+.candidate-header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+}
+
+.candidate-header .btn {
+  margin-right: 0;
+}
+
+.candidates {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.candidate {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #eef1f5;
+  cursor: pointer;
+}
+
+.candidate:last-child {
+  border-bottom: none;
+}
+
+.candidate.active {
+  background: #eef6fb;
+}
+
+.candidate input {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+}
+
+.candidate-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.meta {
+  margin-top: 4px;
+  color: #5b6677;
+  font-size: 13px;
+}
+
+.chip.muted {
+  background: #eef1f5;
+  color: #5b6677;
+}
+
+.detail {
+  padding: 24px;
+}
+
+.detail-label {
+  color: #5b6677;
+  font-size: 13px;
+}
+
+.detail h2 {
+  margin: 6px 0 0;
+  font-size: 22px;
+}
+
+.detail h3 {
+  margin: 22px 0 8px;
+  font-size: 16px;
+}
+
+.summary {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.7;
+}
+
+.source-link {
+  margin: 18px 0 0;
+  color: #5b6677;
+  font-size: 14px;
+}
+
+.detail-actions {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #eef1f5;
+}
+
+.report-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20px;
+  padding: 16px 20px;
+}
+
+.report-bar strong {
+  font-size: 20px;
+}
+
+.report-bar .btn {
+  margin-right: 0;
+}
+
 @media (max-width: 860px) {
+  .select-content {
+    grid-template-columns: 1fr;
+  }
+
+  .candidate-header {
+    flex-wrap: wrap;
+  }
+
   .content {
     grid-template-columns: 1fr;
   }
