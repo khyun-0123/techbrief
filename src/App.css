@@ -115,6 +115,37 @@
   min-width: 0;
 }
 
+/* 기사 찾기: 입력칸 + 「네이버에서 찾기」 */
+.search-form {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+}
+
+.search-form .btn {
+  white-space: nowrap;
+}
+
+.search-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #eef1f5;
+  background: #f3f7ff;
+  font-size: 13px;
+}
+
+.search-note {
+  color: #8a94a3;
+}
+
+.search-error {
+  margin: 8px 16px 0;
+}
+
 input,
 select {
   padding: 10px 12px;
@@ -153,6 +184,10 @@ select {
 
 .articles td.actions .btn:last-child {
   margin-right: 0;
+}
+
+.articles td.time {
+  white-space: nowrap;
 }
 
 .articles td.source {

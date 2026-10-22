@@ -118,16 +118,15 @@ export async function collect(keywords) {
   return { fetched, added, failed, ...list }
 }
 
-// 대표 기사 목록 (최근 LIST_DAYS일). 같은 이슈 기사는 related로 붙인다
-export async function listArticles() {
-  const stored = dbEnabled() ? await loadRecentFromDb(LIST_DAYS) : [...memory.values()]
+// 같은 이슈를 묶고 대표 기사에 중요도 점수를 매긴다. 같은 이슈 기사는 related로 붙인다
+function toIssues(stored) {
   const grouped = groupArticles(stored)
   const members = new Map()
   for (const a of grouped) {
     if (!members.has(a.groupId)) members.set(a.groupId, [])
     members.get(a.groupId).push(a)
   }
-  const articles = grouped
+  return grouped
     .filter((a) => a.id === a.groupId)
     .map((rep) => {
       const group = members.get(rep.id)
@@ -139,6 +138,23 @@ export async function listArticles() {
       return { ...rep, sameIssue: group.length - 1, importance: score, importanceLevel: level, scoreParts: parts, related }
     })
     .sort((x, y) => y.publishedAt.localeCompare(x.publishedAt))
+}
+
+// 대표 기사 목록 (최근 LIST_DAYS일)
+export async function listArticles() {
+  const stored = dbEnabled() ? await loadRecentFromDb(LIST_DAYS) : [...memory.values()]
+  const articles = toIssues(stored)
   const lastCollectedAt = dbEnabled() ? await lastCollectedFromDb() : memoryCollectedAt
   return { articles, total: stored.length, lastCollectedAt, storage: dbEnabled() ? 'db' : 'memory' }
+}
+
+// 「기사 찾기」: 등록 키워드와 상관없이 네이버에서 바로 찾는다. 정확도순 100건
+// 수집이 아니라 찾아보기라서 DB에 쌓지 않는다 (추이 집계에도 넣지 않음). 요약하면 요약만 저장된다
+export async function searchArticles(query) {
+  const q = String(query ?? '').trim().slice(0, 50)
+  if (!q) throw Object.assign(new Error('찾을 말을 입력해 주세요.'), { status: 400 })
+  const items = await searchNews(q, { sort: 'sim' })
+  const articles = items.map((item, i) => ({ ...toArticle(item, q), rank: i + 1 })).filter((a) => a.url && a.title)
+  const unique = [...new Map(articles.map((a) => [a.url, a])).values()]
+  return { query: q, fetched: items.length, articles: toIssues(unique) }
 }

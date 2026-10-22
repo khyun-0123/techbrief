@@ -2,7 +2,7 @@
 // API만 따로 시험할 때: npm run server. 키는 .env.local에서 읽고 브라우저로 보내지 않는다
 import { createServer } from 'node:http'
 import { pathToFileURL } from 'node:url'
-import { collect, listArticles } from './collector/index.js'
+import { collect, listArticles, searchArticles } from './collector/index.js'
 import { similarity } from './collector/dedupe.js'
 import { dbEnabled, dbStatus } from './db/index.js'
 import {
@@ -173,6 +173,10 @@ export async function handleApi(req, res) {
       const { keywords = [] } = await readJson(req)
       await startRefresh(keywords.map(String).slice(0, 20))
       return send(res, 202, await refreshStatus())
+    }
+    if (req.method === 'POST' && req.url === '/api/search') {
+      const { query } = await readJson(req)
+      return send(res, 200, await searchArticles(query))
     }
     if (req.method === 'GET' && req.url === '/api/articles') {
       return send(res, 200, await listArticles())

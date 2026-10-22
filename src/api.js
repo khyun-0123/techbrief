@@ -20,6 +20,11 @@ export async function fetchArticles() {
   return res.json()
 }
 
+// 기사 찾기: 등록 키워드와 상관없이 네이버에서 바로 찾는다 (DB에 쌓지 않음)
+export function searchNewsApi(query) {
+  return postJson('/api/search', { query })
+}
+
 // 자동 최신화 상태 (설정·마지막/다음 실행·진행 상황)
 export async function fetchRefresh() {
   const res = await fetch('/api/refresh')
