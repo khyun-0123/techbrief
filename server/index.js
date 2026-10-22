@@ -1,9 +1,10 @@
-// 요약 API 서버. 실행: npm run server (키는 .env.local에서 읽고 브라우저로 보내지 않는다)
+// 요약 API. 보통은 npm run dev 하나로 화면과 같은 포트(PORT)에서 열린다 (vite.config.js).
+// API만 따로 시험할 때: npm run server. 키는 .env.local에서 읽고 브라우저로 보내지 않는다
 import { createServer } from 'node:http'
+import { pathToFileURL } from 'node:url'
 import { chatJson, modelName } from './llm/client.js'
 import { buildSummaryMessages, SUMMARY_SCHEMA } from './llm/prompts.js'
 
-const PORT = Number(process.env.API_PORT ?? 3001)
 const MAX_BODY = 100_000
 
 // 같은 기사는 다시 부르지 않는다 (서버를 끄면 비워짐. 화면 쪽은 localStorage에 따로 저장)
@@ -62,7 +63,8 @@ async function handleSummary(req, res) {
   send(res, 200, result)
 }
 
-const server = createServer(async (req, res) => {
+// /api 요청을 처리한다. Vite 개발 서버와 단독 서버가 같이 쓴다
+export async function handleApi(req, res) {
   try {
     if (req.method === 'GET' && req.url === '/api/health') {
       return send(res, 200, { ok: true, model: modelName() })
@@ -76,8 +78,12 @@ const server = createServer(async (req, res) => {
     console.error(`[api] ${req.method} ${req.url} → ${status}: ${err.message}`)
     send(res, status, { error: err.message })
   }
-})
+}
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`요약 API 서버: http://127.0.0.1:${PORT} (모델 ${modelName() || '설정 없음'})`)
-})
+// node server/index.js로 직접 실행했을 때만 단독 서버를 연다
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  const port = Number(process.env.PORT ?? 3001)
+  createServer(handleApi).listen(port, '127.0.0.1', () => {
+    console.log(`요약 API 서버: http://127.0.0.1:${port} (모델 ${modelName() || '설정 없음'})`)
+  })
+}
