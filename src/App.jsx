@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
-import { collectNews } from './api.js'
+import { collectNews, fetchHealth } from './api.js'
 import ProgressPanel from './ProgressPanel.jsx'
+import ReportArchive from './ReportArchive.jsx'
 import ReportDraft from './ReportDraft.jsx'
+import { loadReports, saveReports } from './reportStore.js'
 import { useSummaryQueue } from './summaryQueue.js'
 import { DEFAULT_KEYWORDS, SAMPLE_ARTICLES } from './sampleArticles.js'
 import SelectSummary from './SelectSummary.jsx'
@@ -43,6 +45,31 @@ function App() {
   const [collectError, setCollectError] = useState('')
   const [sort, setSort] = useState('latest')
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
+  const [reports, setReports] = useState(() => loadReports())
+  const [health, setHealth] = useState(null) // { model, modelReachable } | { error }
+
+  // 상단 메뉴 오른쪽의 AI 연결 상태 (1분마다 확인)
+  useEffect(() => {
+    let alive = true
+    const check = () =>
+      fetchHealth()
+        .then((h) => alive && setHealth(h))
+        .catch(() => alive && setHealth({ error: true }))
+    check()
+    const timer = setInterval(check, 60_000)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [])
+
+  function updateReports(update) {
+    setReports((prev) => {
+      const next = update(prev)
+      saveReports(next)
+      return next
+    })
+  }
 
   useEffect(() => {
     localStorage.setItem(AI_SUMMARIES_KEY, JSON.stringify(aiSummaries))
@@ -170,16 +197,45 @@ function App() {
         >
           보고서 초안
         </button>
+        <button
+          type="button"
+          className={screen === 'archive' ? 'tab active' : 'tab'}
+          onClick={() => setScreen('archive')}
+        >
+          보고서함{reports.length > 0 && <span className="tab-count">{reports.length}</span>}
+        </button>
         </div>
-        <span className="topbar-side" />
+        <span className="topbar-side">
+          {health === null ? null : health.error ? (
+            <span className="ai-status off">● 서버 연결 안 됨</span>
+          ) : health.modelReachable ? (
+            <span className="ai-status on" title="AI 요약 모델에 연결됨">
+              ● AI {health.model}
+            </span>
+          ) : (
+            <span className="ai-status off" title="맥미니(AI 서버)에 닿지 않아요. 요약·보고서를 만들 수 없어요">
+              ● AI 연결 안 됨
+            </span>
+          )}
+        </span>
       </nav>
 
-      {screen === 'report' ? (
+      {screen === 'archive' ? (
+        <ReportArchive
+          reports={reports}
+          onDelete={(id) => updateReports((list) => list.filter((r) => r.id !== id))}
+          onGoDraft={() => setScreen(reportArticles.length ? 'report' : 'select')}
+        />
+      ) : screen === 'report' ? (
         <ReportDraft
           articles={reportArticles}
           aiSummaries={aiSummaries}
           queue={queue}
+          reports={reports}
+          onSaved={(entry) => updateReports((list) => [entry, ...list])}
+          onUpdated={(entry) => updateReports((list) => list.map((r) => (r.id === entry.id ? entry : r)))}
           onGoSelect={() => setScreen('select')}
+          onGoArchive={() => setScreen('archive')}
         />
       ) : screen === 'select' ? (
         <SelectSummary

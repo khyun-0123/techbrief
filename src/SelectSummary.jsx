@@ -47,21 +47,37 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
   const activeJob = active && jobOf(active.id)
   const activeBusy = activeJob && (activeJob.status === 'queued' || activeJob.status === 'running')
   const summarizedCount = candidates.filter((a) => aiSummaries[a.id]).length
+  const allChecked = candidates.length > 0 && candidates.every((a) => includedIds.includes(a.id))
 
   function toggleIncluded(id) {
     setIncludedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
-  function includeOne(id) {
-    setIncludedIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
+  function toggleAll() {
+    setIncludedIds(allChecked ? [] : candidates.map((a) => a.id))
   }
-
 
   return (
     <main className="page">
-      <header className="page-header">
-        <h1>뉴스 선별·요약</h1>
-        <p>선별한 기사는 자동으로 6항목 요약을 시작해요. 요약을 확인하고 보고서에 넣을 기사를 고르세요.</p>
+      <header className="page-header with-actions">
+        <div>
+          <h1>뉴스 선별·요약</h1>
+          <p>선별한 기사는 자동으로 6항목 요약을 시작해요. 요약을 확인하고 보고서에 넣을 기사를 체크하세요.</p>
+        </div>
+        <div className="header-actions">
+          <span className="header-count">
+            보고서에 넣을 기사 <strong>{includedIds.length}건</strong>
+          </span>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={onGoReport}
+            disabled={includedIds.length === 0}
+            title={includedIds.length === 0 ? '왼쪽 목록에서 보고서에 넣을 기사를 체크하세요' : undefined}
+          >
+            보고서 초안 만들기 →
+          </button>
+        </div>
       </header>
 
       {candidates.length === 0 ? (
@@ -73,7 +89,7 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
         </section>
       ) : (
         <div className="select-content">
-          <section className="panel">
+          <section className="panel select-pane">
             <div className="candidate-header">
               <h2>
                 후보 기사 {candidates.length}건 <small>· 요약 완료 {summarizedCount}</small>
@@ -82,11 +98,8 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
                 <option value="importance">중요도순</option>
                 <option value="latest">최신순</option>
               </select>
-              <button type="button" className="btn" onClick={() => setIncludedIds(candidates.map((a) => a.id))}>
-                전체 선택
-              </button>
-              <button type="button" className="btn" onClick={() => setIncludedIds([])}>
-                선택 해제
+              <button type="button" className="btn" onClick={toggleAll}>
+                {allChecked ? '전체 해제' : '전체 선택'}
               </button>
             </div>
 
@@ -130,92 +143,95 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
             </ul>
           </section>
 
-          <section className="panel detail">
-            <span className="detail-label">선택한 기사</span>
-            <h2>{active.title}</h2>
-            <p className="meta">
-              {active.source} · {formatPublished(active.hoursAgo)}
-              {active.sameIssue > 0 && ` · 같은 이슈 기사 ${active.sameIssue}건 묶음`}
-            </p>
-
-            {activeBusy && (
-              <div className="summary-progress">
-                <span>
-                  {activeJob.status === 'running'
-                    ? `AI 요약 중 ${queue.progressOf(activeJob)}% (예상)`
-                    : `요약 대기 중 — 앞에 ${queue.jobs.filter((j) => j.status === 'queued' || j.status === 'running').findIndex((j) => j.id === active.id)}건`}
-                </span>
-                <div className="gauge gauge-running">
-                  <div className="gauge-fill" style={{ width: `${queue.progressOf(activeJob)}%` }} />
-                </div>
-              </div>
-            )}
-            {activeJob?.status === 'error' && <p className="ai-error">요약 오류: {activeJob.error}</p>}
-
-            {ai ? (
-              <>
-                <h3>AI 요약 (6항목)</h3>
-                <dl className="ai-summary">
-                  {ITEM_LABELS.map(([key, label]) => {
-                    const item = ai.summary.items?.[key]
-                    if (!item) return null
-                    return (
-                      <div key={key} className="ai-item">
-                        <dt>{label}</dt>
-                        <dd>
-                          {item.text}
-                          {item.basis === 'article' && item.refs?.length > 0 && (
-                            <span className="ref"> [{item.refs.join('][')}]</span>
-                          )}
-                          <span className={`basis basis-${item.basis}`}>{BASIS_LABEL[item.basis] ?? item.basis}</span>
-                        </dd>
-                      </div>
-                    )
-                  })}
-                </dl>
-                {ai.summary.warnings?.length > 0 && (
-                  <p className="ai-warning">⚠ {ai.summary.warnings.join(' / ')}</p>
-                )}
-                <p className="hint">
-                  모델 {ai.model} · {new Date(ai.createdAt).toLocaleString('ko-KR')}
-                </p>
-              </>
-            ) : summary ? (
-              <h3>3줄 요약 (샘플)</h3>
-            ) : (
-              <h3>기사 요약문</h3>
-            )}
-            {ai ? null : summary ? (
-              <ol className="summary">
-                {summary.lines.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ol>
-            ) : active.description ? (
-              <p className="description">{active.description}</p>
-            ) : (
-              <p className="hint">이 기사는 아직 요약이 없어요.</p>
-            )}
-
-            <h3>핵심 키워드</h3>
-            <div className="chips">
-              {(ai?.summary.keywords ?? summary?.keywords ?? [active.keyword]).map((k) => (
-                <span key={k} className="chip">
-                  {k}
-                </span>
-              ))}
-            </div>
-
-            {active.url ? (
-              <p className="source-link">
-                원문 링크:{' '}
-                <a href={active.url} target="_blank" rel="noreferrer">
-                  {active.source} 원문 열기 ↗
-                </a>
+          <section className="panel select-pane detail">
+            <div className="detail-body">
+              <span className="detail-label">선택한 기사</span>
+              <h2>{active.title}</h2>
+              <p className="meta">
+                {active.source} · {formatPublished(active.hoursAgo)}
+                {active.sameIssue > 0 && ` · 같은 이슈 기사 ${active.sameIssue}건 묶음`}
               </p>
-            ) : (
-              <p className="source-link">원문 링크: 샘플 기사라 원문이 없어요</p>
-            )}
+
+              {activeBusy && (
+                <div className="summary-progress">
+                  <span>
+                    {activeJob.status === 'running'
+                      ? `AI 요약 중 ${queue.progressOf(activeJob)}% (예상)`
+                      : `요약 대기 중 — 앞에 ${queue.jobs.filter((j) => j.status === 'queued' || j.status === 'running').findIndex((j) => j.id === active.id)}건`}
+                  </span>
+                  <div className="gauge gauge-running">
+                    <div className="gauge-fill" style={{ width: `${queue.progressOf(activeJob)}%` }} />
+                  </div>
+                </div>
+              )}
+              {activeJob?.status === 'error' && <p className="ai-error">요약 오류: {activeJob.error}</p>}
+
+              {ai ? (
+                <>
+                  <h3>AI 요약 (6항목)</h3>
+                  <dl className="ai-summary">
+                    {ITEM_LABELS.map(([key, label]) => {
+                      const item = ai.summary.items?.[key]
+                      if (!item) return null
+                      return (
+                        <div key={key} className="ai-item">
+                          <dt>{label}</dt>
+                          <dd>
+                            {item.text}
+                            {item.basis === 'article' && item.refs?.length > 0 && (
+                              <span className="ref"> [{item.refs.join('][')}]</span>
+                            )}
+                            <span className={`basis basis-${item.basis}`}>{BASIS_LABEL[item.basis] ?? item.basis}</span>
+                          </dd>
+                        </div>
+                      )
+                    })}
+                  </dl>
+                  {ai.summary.warnings?.length > 0 && <p className="ai-warning">⚠ {ai.summary.warnings.join(' / ')}</p>}
+                  <p className="hint">
+                    모델 {ai.model} · {new Date(ai.createdAt).toLocaleString('ko-KR')}
+                  </p>
+                </>
+              ) : summary ? (
+                <>
+                  <h3>3줄 요약 (샘플)</h3>
+                  <ol className="summary">
+                    {summary.lines.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ol>
+                </>
+              ) : (
+                <>
+                  <h3>기사 요약문</h3>
+                  {active.description ? (
+                    <p className="description">{active.description}</p>
+                  ) : (
+                    <p className="hint">이 기사는 아직 요약이 없어요.</p>
+                  )}
+                </>
+              )}
+
+              <h3>핵심 키워드</h3>
+              <div className="chips">
+                {(ai?.summary.keywords ?? summary?.keywords ?? [active.keyword]).map((k) => (
+                  <span key={k} className="chip">
+                    {k}
+                  </span>
+                ))}
+              </div>
+
+              {active.url ? (
+                <p className="source-link">
+                  원문 링크:{' '}
+                  <a href={active.url} target="_blank" rel="noreferrer">
+                    {active.source} 원문 열기 ↗
+                  </a>
+                </p>
+              ) : (
+                <p className="source-link">원문 링크: 샘플 기사라 원문이 없어요</p>
+              )}
+            </div>
 
             <div className="detail-actions">
               <button
@@ -228,28 +244,18 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
               </button>
               <button
                 type="button"
-                className="btn primary"
-                onClick={() => includeOne(active.id)}
-                disabled={activeIncluded}
+                className={activeIncluded ? 'btn' : 'btn primary'}
+                onClick={() => toggleIncluded(active.id)}
               >
-                {activeIncluded ? '보고서에 포함됨 ✓' : '보고서에 포함'}
+                {activeIncluded ? '보고서에서 빼기' : '보고서에 넣기'}
               </button>
               <button type="button" className="btn danger" onClick={() => onExclude(active.id)}>
-                제외
+                선별 취소
               </button>
             </div>
           </section>
         </div>
       )}
-
-      <section className="panel report-bar">
-        <span>
-          보고서에 포함된 기사 <strong>{includedIds.length}건</strong>
-        </span>
-        <button type="button" className="btn primary" onClick={onGoReport} disabled={includedIds.length === 0}>
-          보고서 초안 만들기
-        </button>
-      </section>
     </main>
   )
 }

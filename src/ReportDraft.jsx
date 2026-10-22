@@ -1,59 +1,30 @@
-// ③ 보고서 초안 (데모) — 10 보고서 계획 3절
+// ③ 보고서 초안 — 선별·요약에서 체크한 기사로 새 보고서를 만든다 (10 보고서 계획 3절)
+// 만들기 전: 담길 기사와 섹션별 재료 미리보기 / 생성 중: 섹션별 진행 표시 / 생성 직후: 결과 (보고서함에 저장)
 import { useEffect, useState } from 'react'
 import { requestReport, requestReportSection } from './api.js'
+import { articleKey, copyText, SECTIONS, toPlainText } from './reportStore.js'
+import ReportView from './ReportView.jsx'
 import { load } from './utils.js'
 
-const REPORT_KEY = 'techbrief-report' // 마지막 초안
 const REPORT_AVG_KEY = 'techbrief-report-avg-ms'
-const DEFAULT_REPORT_MS = 45_000 // 맥미니 qwen3:14b 실측 약 41초 (기사 3건)
-
-const SECTIONS = [
-  ['summary', '핵심 요약'],
-  ['tech', '기술 개요'],
-  ['industry', '업계 동향'],
-  ['implications', '시사점'],
-]
+const DEFAULT_REPORT_MS = 45_000 // 맥미니 qwen3:14b 실측 35~41초 (기사 3건)
 const PERIODS = { today: '오늘', week: '이번 주', month: '이번 달' }
 
-function formatDate(iso) {
-  return iso ? new Date(iso).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }) : ''
+// 섹션마다 어떤 요약 항목이 재료가 되는지 (서버 reportPrompts.js와 같은 구성)
+const SECTION_PLAN = {
+  summary: { desc: '경영진이 가장 먼저 알아야 할 내용, 3줄 이내', items: [] },
+  tech: { desc: '어떤 기술이고 어떤 원리인지', items: [['concept', '컨셉'], ['principle', '원리']] },
+  industry: { desc: '타사의 개발·활용 현황과 장단점', items: [['competitors', '타사 현황'], ['pros_cons', '장단점']] },
+  implications: { desc: '우리 회사 활용 방안과 기대 효과', items: [['application', '활용 방안'], ['effect', '효과성']] },
 }
+const BASIS_SHORT = { article: '기사 근거', ai_background: 'AI 보충', ai_suggestion: 'AI 제안' }
 
-// 업무망 문서에 붙여 넣기 좋은 개조식 텍스트
-function toPlainText(saved) {
-  const { report, articles, createdAt } = saved
-  const lines = [`${report.title} (${formatDate(createdAt)} · 기사 ${articles.length}건 기준)`, '']
-  for (const [key, label] of SECTIONS) {
-    lines.push(`■ ${label}`)
-    for (const b of report.sections[key]?.bullets ?? []) {
-      lines.push(` - ${b.text}${b.refs.length ? ` [${b.refs.join('][')}]` : ' (근거 확인 필요)'}`)
-    }
-    lines.push('')
-  }
-  lines.push('[근거 기사]')
-  articles.forEach((a, i) => lines.push(`[${i + 1}] ${a.title} — ${a.source}${a.publishedAt ? `, ${formatDate(a.publishedAt)}` : ''}${a.url ? ` ${a.url}` : ''}`))
-  return lines.join('\n')
-}
-
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text)
-  } catch {
-    const area = document.createElement('textarea')
-    area.value = text
-    document.body.appendChild(area)
-    area.select()
-    document.execCommand('copy')
-    area.remove()
-  }
-}
-
-function ReportDraft({ articles, aiSummaries, queue, onGoSelect }) {
+function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated, onGoSelect, onGoArchive }) {
   const [title, setTitle] = useState('테크 동향 브리핑')
   const [period, setPeriod] = useState('today')
-  const [saved, setSaved] = useState(() => load(REPORT_KEY, null))
-  const [generating, setGenerating] = useState(null) // { startedAt } — 초안 전체 생성 중
-  const [regenKey, setRegenKey] = useState(null) // 다시 쓰는 섹션
+  const [generating, setGenerating] = useState(null) // { startedAt }
+  const [lastId, setLastId] = useState(null) // 이 화면에서 방금 만든 보고서
+  const [regenKey, setRegenKey] = useState(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [avgMs, setAvgMs] = useState(() => load(REPORT_AVG_KEY, DEFAULT_REPORT_MS))
@@ -65,14 +36,14 @@ function ReportDraft({ articles, aiSummaries, queue, onGoSelect }) {
     return () => clearInterval(timer)
   }, [generating])
 
-  function save(next) {
-    setSaved(next)
-    localStorage.setItem(REPORT_KEY, JSON.stringify(next))
-  }
+  const key = articleKey(articles.map((a) => a.id))
+  // 방금 만든 보고서가 지금 체크한 기사와 같을 때만 결과를 보여 준다. 기사를 바꾸면 다시 '만들기 전' 화면
+  const current = reports.find((r) => r.id === lastId && r.articleKey === key)
 
   const missing = articles.filter((a) => !aiSummaries[a.id])
-  const pending = missing.filter((a) => queue.jobs.some((j) => j.id === a.id && (j.status === 'queued' || j.status === 'running')))
-  const canGenerate = articles.length > 0 && missing.length === 0 && !generating && !regenKey
+  const jobOf = (id) => queue.jobs.find((j) => j.id === id)
+  const pending = missing.filter((a) => ['queued', 'running'].includes(jobOf(a.id)?.status))
+  const canGenerate = articles.length > 0 && missing.length === 0 && !generating
 
   async function handleGenerate() {
     const startedAt = Date.now()
@@ -82,17 +53,19 @@ function ReportDraft({ articles, aiSummaries, queue, onGoSelect }) {
     setNotice('')
     try {
       const result = await requestReport({ articles, aiSummaries, title, periodLabel: PERIODS[period] })
-      save({
+      const entry = {
+        id: result.createdAt,
+        articleKey: key,
         report: result.report,
         model: result.model,
         createdAt: result.createdAt,
         periodLabel: PERIODS[period],
         articles: articles.map(({ title: t, source, url, publishedAt }) => ({ title: t, source, url, publishedAt })),
-        // 섹션 다시 쓰기에 쓰려고 생성할 때의 기사를 같이 둔다
-        inputs: articles,
-      })
-      const took = Date.now() - startedAt
-      const avg = Math.round(avgMs * 0.6 + took * 0.4)
+        inputs: articles, // 섹션 다시 쓰기용 (요약문·같은 이슈 기사 포함)
+      }
+      onSaved(entry)
+      setLastId(entry.id)
+      const avg = Math.round(avgMs * 0.6 + (Date.now() - startedAt) * 0.4)
       setAvgMs(avg)
       localStorage.setItem(REPORT_AVG_KEY, JSON.stringify(avg))
     } catch (err) {
@@ -102,15 +75,18 @@ function ReportDraft({ articles, aiSummaries, queue, onGoSelect }) {
     }
   }
 
-  async function handleRegenerate(key) {
-    if (!saved) return
-    setRegenKey(key)
+  async function handleRegenerate(sectionKey) {
+    setRegenKey(sectionKey)
     setError('')
     try {
-      const inputs = saved.inputs ?? articles
-      const result = await requestReportSection({ articles: inputs, aiSummaries, key, report: saved.report })
-      const report = { ...saved.report, sections: { ...saved.report.sections, [key]: { bullets: result.bullets } } }
-      save({ ...saved, report })
+      const result = await requestReportSection({
+        articles: current.inputs ?? articles,
+        aiSummaries,
+        key: sectionKey,
+        report: current.report,
+      })
+      const report = { ...current.report, sections: { ...current.report.sections, [sectionKey]: { bullets: result.bullets } } }
+      onUpdated({ ...current, report })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -119,28 +95,82 @@ function ReportDraft({ articles, aiSummaries, queue, onGoSelect }) {
   }
 
   async function handleCopy() {
-    await copyText(toPlainText(saved))
+    await copyText(toPlainText(current))
     setNotice('개조식 텍스트를 복사했어요. 업무 문서에 붙여 넣으세요.')
   }
 
   const progress = generating ? Math.min(95, Math.round(((now - generating.startedAt) / avgMs) * 100)) : 0
-  const report = saved?.report
 
+  if (articles.length === 0) {
+    return (
+      <main className="page">
+        <header className="page-header">
+          <h1>보고서 초안</h1>
+          <p>선별·요약에서 체크한 기사로 1페이지 개조식 초안을 만들어요.</p>
+        </header>
+        <section className="panel select-empty">
+          <p className="empty">보고서에 넣을 기사가 없어요. 선별·요약에서 기사를 체크해 주세요.</p>
+          <div className="empty-actions">
+            <button type="button" className="btn primary" onClick={onGoSelect}>
+              선별·요약으로 가기
+            </button>
+            {reports.length > 0 && (
+              <button type="button" className="btn" onClick={onGoArchive}>
+                보고서함 보기 ({reports.length})
+              </button>
+            )}
+          </div>
+        </section>
+      </main>
+    )
+  }
+
+  // 생성 직후: 결과
+  if (current) {
+    return (
+      <main className="page">
+        <header className="page-header with-actions">
+          <div>
+            <h1>보고서 초안</h1>
+            <p className="saved-note">
+              ✓ 보고서함에 저장했어요.{' '}
+              <button type="button" className="link-btn" onClick={onGoArchive}>
+                보고서함 보기
+              </button>
+            </p>
+          </div>
+          <div className="header-actions">
+            <button type="button" className="btn" onClick={() => setLastId(null)} disabled={Boolean(regenKey)}>
+              새 보고서 만들기
+            </button>
+            <button type="button" className="btn primary" onClick={handleCopy}>
+              텍스트 복사
+            </button>
+          </div>
+        </header>
+        {error && <p className="ai-error">{error}</p>}
+        {notice && <p className="report-copied">{notice}</p>}
+        <ReportView saved={current} onRegenerate={handleRegenerate} regenKey={regenKey} busy={Boolean(regenKey)} />
+      </main>
+    )
+  }
+
+  // 만들기 전 · 생성 중: 담길 내용 미리보기
   return (
     <main className="page">
       <header className="page-header">
         <h1>보고서 초안</h1>
-        <p>보고서에 포함한 기사의 AI 요약으로 1페이지 개조식 초안을 만들어요. 데모 단계예요.</p>
+        <p>선별·요약에서 체크한 기사 {articles.length}건으로 만들어요. 아래는 보고서에 담길 재료예요.</p>
       </header>
 
       <section className="panel report-settings">
         <label>
           <span>보고서 제목</span>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input value={title} onChange={(e) => setTitle(e.target.value)} disabled={Boolean(generating)} />
         </label>
         <label>
           <span>기간</span>
-          <select value={period} onChange={(e) => setPeriod(e.target.value)}>
+          <select value={period} onChange={(e) => setPeriod(e.target.value)} disabled={Boolean(generating)}>
             {Object.entries(PERIODS).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
@@ -150,33 +180,21 @@ function ReportDraft({ articles, aiSummaries, queue, onGoSelect }) {
         </label>
         <div className="report-settings-actions">
           <button type="button" className="btn primary" onClick={handleGenerate} disabled={!canGenerate}>
-            {generating ? '초안 만드는 중…' : report ? '초안 새로 만들기' : '초안 생성'}
-          </button>
-          <button type="button" className="btn" onClick={handleCopy} disabled={!report || Boolean(generating)}>
-            텍스트 복사
+            {generating ? '초안 만드는 중…' : '초안 생성'}
           </button>
         </div>
       </section>
 
-      {articles.length === 0 ? (
-        <section className="panel select-empty">
-          <p className="empty">보고서에 포함한 기사가 없어요. 선별·요약에서 「보고서에 포함」을 눌러 주세요.</p>
-          <button type="button" className="btn primary" onClick={onGoSelect}>
-            선별·요약으로 가기
-          </button>
-        </section>
-      ) : (
-        missing.length > 0 && (
-          <p className="report-notice">
-            AI 요약이 아직 없는 기사가 {missing.length}건 있어요
-            {pending.length > 0 ? ` (${pending.length}건 요약 중 — 진행 창 참고)` : ''}. 요약이 끝나야 초안을 만들 수 있어요.{' '}
-            {pending.length < missing.length && (
-              <button type="button" className="btn" onClick={() => missing.forEach((a) => queue.enqueue(a))}>
-                남은 기사 요약하기
-              </button>
-            )}
-          </p>
-        )
+      {missing.length > 0 && (
+        <p className="report-notice">
+          AI 요약이 아직 없는 기사가 {missing.length}건 있어요
+          {pending.length > 0 ? ` (${pending.length}건 요약 중 — 진행 창 참고)` : ''}. 요약이 끝나면 초안을 만들 수 있어요.{' '}
+          {pending.length < missing.length && (
+            <button type="button" className="btn" onClick={() => missing.forEach((a) => queue.enqueue(a))}>
+              남은 기사 요약하기
+            </button>
+          )}
+        </p>
       )}
 
       {generating && (
@@ -184,94 +202,94 @@ function ReportDraft({ articles, aiSummaries, queue, onGoSelect }) {
           <div className="gauge gauge-running">
             <div className="gauge-fill" style={{ width: `${progress}%` }} />
           </div>
-          <span>초안 만드는 중 {progress}% (예상, 약 {Math.round(avgMs / 1000)}초 걸려요)</span>
+          <span>
+            초안 만드는 중 {progress}% (예상, 약 {Math.round(avgMs / 1000)}초)
+          </span>
         </div>
       )}
       {error && <p className="ai-error">{error}</p>}
-      {notice && <p className="report-copied">{notice}</p>}
 
-      {report && (
-        <div className="report-layout">
-          <article className="panel report-doc">
-            <header className="report-doc-head">
-              <h2>{report.title}</h2>
-              <span>
-                {formatDate(saved.createdAt)} · {saved.periodLabel} · 기사 {saved.articles.length}건 기준
-              </span>
-            </header>
+      <div className="report-layout">
+        <article className={`panel report-doc report-preview${generating ? ' is-generating' : ''}`}>
+          <header className="report-doc-head">
+            <h2>{title || '제목 없음'}</h2>
+            <span>
+              {PERIODS[period]} · 기사 {articles.length}건 기준
+            </span>
+          </header>
 
-            {report.warnings?.length > 0 && (
-              <ul className="report-warnings">
-                {report.warnings.map((w) => (
-                  <li key={w}>⚠ {w}</li>
-                ))}
-              </ul>
-            )}
-
-            {SECTIONS.map(([key, label]) => (
-              <section key={key} className="report-section">
+          {SECTIONS.map(([sectionKey, label]) => {
+            const plan = SECTION_PLAN[sectionKey]
+            return (
+              <section key={sectionKey} className="report-section">
                 <div className="report-section-head">
                   <h3>■ {label}</h3>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => handleRegenerate(key)}
-                    disabled={Boolean(generating) || Boolean(regenKey)}
-                  >
-                    {regenKey === key ? '다시 쓰는 중…' : '다시 쓰기'}
-                  </button>
+                  <span className={generating ? 'section-state generating' : 'section-state'}>
+                    {generating ? '생성 중…' : '생성 전'}
+                  </span>
                 </div>
-                <ul className="report-bullets">
-                  {(report.sections[key]?.bullets ?? []).map((b) => (
-                    <li key={b.text}>
-                      {b.text}
-                      {b.refs.length > 0 ? (
-                        b.refs.map((n) => (
-                          <a key={n} className="report-ref" href={`#ref-${n}`} title={saved.articles[n - 1]?.title}>
-                            [{n}]
-                          </a>
-                        ))
-                      ) : (
-                        <span className="basis basis-ai_background" title="원래 기사 내용에서 확인되지 않은 문장">
-                          근거 없음 · 확인 필요
-                        </span>
-                      )}
-                      {b.han && <span className="basis basis-ai_background">한자 확인</span>}
-                    </li>
-                  ))}
+                <p className="section-desc">{plan.desc}</p>
+                <ul className="section-sources">
+                  {articles.map((a, i) => {
+                    const ai = aiSummaries[a.id]
+                    if (!ai) {
+                      return (
+                        <li key={a.id} className="muted">
+                          [{i + 1}] 요약 대기 중
+                        </li>
+                      )
+                    }
+                    if (plan.items.length === 0) {
+                      return (
+                        <li key={a.id}>
+                          <b>[{i + 1}]</b> {ai.summary.headline || a.title}
+                        </li>
+                      )
+                    }
+                    return plan.items.map(([itemKey, itemLabel]) => {
+                      const item = ai.summary.items?.[itemKey]
+                      if (!item) return null
+                      return (
+                        <li key={`${a.id}-${itemKey}`}>
+                          <b>[{i + 1}]</b> {itemLabel}: {item.text}
+                          <span className={`basis basis-${item.basis}`}>{BASIS_SHORT[item.basis]}</span>
+                        </li>
+                      )
+                    })
+                  })}
                 </ul>
               </section>
-            ))}
+            )
+          })}
+          <p className="hint">
+            회색 글은 보고서에 들어갈 재료(기사별 AI 요약)예요. 「초안 생성」을 누르면 AI가 섹션별로 묶어 개조식으로 정리해요.
+          </p>
+        </article>
 
-            <p className="hint">
-              AI가 만든 초안이에요. 근거 기사를 확인하고 고쳐 쓰세요. · 모델 {saved.model}
-            </p>
-          </article>
-
-          <aside className="panel report-refs">
-            <h3>근거 기사</h3>
-            <ol>
-              {saved.articles.map((a, i) => (
-                <li key={a.title} id={`ref-${i + 1}`}>
+        <aside className="panel report-refs">
+          <h3>담길 기사 {articles.length}건</h3>
+          <ol>
+            {articles.map((a, i) => {
+              const job = jobOf(a.id)
+              const state = aiSummaries[a.id] ? '요약 완료' : job?.status === 'running' ? `요약 중 ${queue.progressOf(job)}%` : job?.status === 'queued' ? '요약 대기' : '요약 없음'
+              return (
+                <li key={a.id}>
                   <span className="report-ref-num">[{i + 1}]</span>
                   <div>
                     <div className="title">{a.title}</div>
                     <div className="meta">
-                      {a.source}
-                      {a.publishedAt && ` · ${formatDate(a.publishedAt)}`}
+                      {a.source} · <span className={aiSummaries[a.id] ? 'summary-state done' : 'summary-state running'}>{state}</span>
                     </div>
-                    {a.url && (
-                      <a href={a.url} target="_blank" rel="noreferrer">
-                        원문 열기 ↗
-                      </a>
-                    )}
                   </div>
                 </li>
-              ))}
-            </ol>
-          </aside>
-        </div>
-      )}
+              )
+            })}
+          </ol>
+          <button type="button" className="btn" onClick={onGoSelect}>
+            기사 바꾸기
+          </button>
+        </aside>
+      </div>
     </main>
   )
 }

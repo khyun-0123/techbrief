@@ -8,20 +8,23 @@
 
 .topbar {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   padding: 12px 32px;
   background: #1c2533;
 }
 
-/* 탭은 가운데, 브랜드는 왼쪽 */
+/* 업무 도구라 왼쪽 정렬: 브랜드 | 탭 ……… AI 연결 상태 */
 .tabs {
   display: flex;
-  gap: 8px;
+  gap: 4px;
+  justify-self: start;
 }
 
 .brand {
-  justify-self: start;
+  margin-right: 20px;
+  padding-right: 20px;
+  border-right: 1px solid #33415a;
   color: #fff;
   font-size: 20px;
   font-weight: 700;
@@ -298,10 +301,22 @@ select {
 /* 선별·요약 화면 */
 .select-content {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr; /* 좌우 박스 같은 너비 */
   gap: 20px;
-  align-items: start;
   margin-top: 24px;
+}
+
+/* 좌우 박스 같은 높이: 화면 높이에 맞추되 520~860px 사이. 넘치는 내용은 박스 안에서 스크롤 */
+.select-pane {
+  display: flex;
+  flex-direction: column;
+  height: clamp(520px, calc(100vh - 250px), 860px);
+  overflow: hidden;
+}
+
+.select-pane .candidates {
+  flex: 1;
+  overflow-y: auto;
 }
 
 .select-empty {
@@ -347,6 +362,10 @@ select {
   border-bottom: none;
 }
 
+.candidate-header select {
+  padding: 8px 10px;
+}
+
 .candidate.active {
   background: #eef6fb;
 }
@@ -373,7 +392,9 @@ select {
   color: #5b6677;
 }
 
-.detail {
+.detail-body {
+  flex: 1;
+  overflow-y: auto;
   padding: 24px;
 }
 
@@ -405,30 +426,20 @@ select {
 }
 
 .detail-actions {
-  margin-top: 20px;
-  padding-top: 18px;
+  padding: 14px 24px;
   border-top: 1px solid #eef1f5;
+  background: #fafbfc;
 }
 
-.report-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 20px;
-  padding: 16px 20px;
-}
-
-.report-bar strong {
-  font-size: 20px;
-}
-
-.report-bar .btn {
-  margin-right: 0;
-}
 
 @media (max-width: 860px) {
   .select-content {
     grid-template-columns: 1fr;
+  }
+
+  .select-pane {
+    height: auto;
+    max-height: 70vh;
   }
 
   .candidate-header {
@@ -916,4 +927,194 @@ a.btn {
 .report-refs .meta {
   margin: 2px 0 4px;
   color: #5b6677;
+}
+
+/* 상단 메뉴 오른쪽 */
+.topbar-side {
+  justify-self: end;
+}
+
+.tab-count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #33415a;
+  color: #c8d0dc;
+  font-size: 12px;
+}
+
+.tab.active .tab-count {
+  background: #4a5a78;
+  color: #fff;
+}
+
+.ai-status {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.ai-status.on {
+  color: #86efac;
+}
+
+.ai-status.off {
+  color: #fca5a5;
+}
+
+/* 머리말 오른쪽 버튼 영역 */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.header-actions .btn {
+  margin: 0;
+  padding: 10px 16px;
+}
+
+.header-count {
+  color: #5b6677;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.header-count strong {
+  color: #1c2533;
+}
+
+.saved-note {
+  color: #16a34a !important;
+}
+
+.link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #1d4ed8;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.empty-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* 보고서 초안: 만들기 전 미리보기 */
+.section-state {
+  color: #9aa3b1;
+  font-size: 12px;
+}
+
+.section-state.generating {
+  color: #1b6a96;
+  font-weight: 600;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.section-desc {
+  margin: 4px 0 6px;
+  color: #374151;
+  font-size: 14px;
+}
+
+.section-sources {
+  margin: 0;
+  padding: 10px 12px 10px 28px;
+  border-radius: 8px;
+  background: #f8f9fb;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.section-sources .muted {
+  color: #9aa3b1;
+}
+
+.report-preview.is-generating .section-sources {
+  opacity: 0.55;
+}
+
+.report-refs > .btn {
+  margin-top: 12px;
+}
+
+/* 보고서함 */
+.archive-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 20px;
+  align-items: start;
+  margin-top: 24px;
+}
+
+.archive-list {
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+
+.archive-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.archive-item:hover {
+  background: #f3f5f8;
+}
+
+.archive-item.active {
+  background: #eef6fb;
+}
+
+.archive-item .title {
+  font-size: 15px;
+}
+
+.archive-item .meta {
+  margin: 0;
+}
+
+.archive-preview {
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.archive-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.archive-actions .report-copied {
+  margin: 0;
+}
+
+.archive-layout .report-layout {
+  margin-top: 12px;
 }

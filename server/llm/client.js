@@ -65,6 +65,20 @@ export function modelName() {
   return process.env.LLM_SUMMARY_MODEL ?? ''
 }
 
+// AI 서버(맥미니)에 닿는지 짧게 확인한다
+export async function pingModel() {
+  try {
+    const { baseUrl, apiKey } = config()
+    const res = await fetch(`${baseUrl}/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(6000),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
 export function reportModelName() {
   return process.env.LLM_REPORT_MODEL || process.env.LLM_SUMMARY_MODEL || ''
 }

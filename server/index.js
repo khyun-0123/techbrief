@@ -3,7 +3,8 @@
 import { createServer } from 'node:http'
 import { pathToFileURL } from 'node:url'
 import { collect, listArticles } from './collector/index.js'
-import { chatJson, modelName, reportModelName } from './llm/client.js'
+import { similarity } from './collector/dedupe.js'
+import { chatJson, modelName, pingModel, reportModelName } from './llm/client.js'
 import { evidenceOf, hasHan, isSupported, stripInlineRefs } from './llm/evidence.js'
 import { buildSummaryMessages, SUMMARY_SCHEMA } from './llm/prompts.js'
 import {
@@ -81,16 +82,27 @@ async function handleSummary(req, res) {
   send(res, 200, result)
 }
 
+// 같은 섹션에서 이 이상 비슷한 글머리는 하나로 합친다 (기사마다 같은 원리 설명이 반복되는 문제)
+// 실측: 같은 원리 설명끼리 0.28~0.60, 서로 다른 내용끼리 0.05~0.06
+const SAME_BULLET = 0.3
+
 // 글머리의 근거 번호를 정리한다: 범위 밖 번호를 지우고, 그 기사 원문과 맞지 않는 번호도 지운다
 function cleanBullets(bullets, articles) {
-  return (bullets ?? [])
-    .filter((b) => b?.text?.trim())
-    .map((b) => {
-      const text = stripInlineRefs(b.text)
-      const claimed = [...new Set((b.refs ?? []).filter((n) => Number.isInteger(n) && n >= 1 && n <= articles.length))]
-      const refs = claimed.filter((n) => isSupported(text, evidenceOf(articles[n - 1]))).sort((x, y) => x - y)
-      return { text, refs, removedRefs: claimed.filter((n) => !refs.includes(n)), han: hasHan(text) }
-    })
+  const kept = []
+  for (const b of bullets ?? []) {
+    if (!b?.text?.trim()) continue
+    const text = stripInlineRefs(b.text)
+    const claimed = [...new Set((b.refs ?? []).filter((n) => Number.isInteger(n) && n >= 1 && n <= articles.length))]
+    const refs = claimed.filter((n) => isSupported(text, evidenceOf(articles[n - 1]))).sort((x, y) => x - y)
+    const dup = kept.find((k) => similarity(k.text, text) >= SAME_BULLET)
+    if (dup) {
+      // 비슷한 글머리는 합치고 근거 번호만 모은다
+      dup.refs = [...new Set([...dup.refs, ...refs])].sort((x, y) => x - y)
+      continue
+    }
+    kept.push({ text, refs, removedRefs: claimed.filter((n) => !refs.includes(n)), han: hasHan(text) })
+  }
+  return kept
 }
 
 function reportWarnings(sections) {
@@ -151,7 +163,7 @@ async function handleReportSection(req, res) {
 export async function handleApi(req, res) {
   try {
     if (req.method === 'GET' && req.url === '/api/health') {
-      return send(res, 200, { ok: true, model: modelName() })
+      return send(res, 200, { ok: true, model: modelName(), modelReachable: await pingModel() })
     }
     if (req.method === 'POST' && req.url === '/api/summaries') {
       return await handleSummary(req, res)

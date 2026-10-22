@@ -61,3 +61,10 @@ export function requestReportSection({ articles, aiSummaries, key, report }) {
     articles: articles.map((a) => reportArticle(a, aiSummaries[a.id])),
   })
 }
+
+// 상단 메뉴의 AI 연결 상태
+export async function fetchHealth() {
+  const res = await fetch('/api/health')
+  if (!res.ok) throw new Error('서버 응답 없음')
+  return res.json()
+}
