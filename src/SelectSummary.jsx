@@ -28,7 +28,6 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
   const active = sorted.find((a) => a.id === activeId) ?? sorted[0]
   const summary = active && SAMPLE_SUMMARIES[active.id]
   const ai = active && aiSummaries[active.id]
-  const activeIncluded = active && includedIds.includes(active.id)
   const jobOf = (id) => queue.jobs.find((j) => j.id === id)
   const activeJob = active && jobOf(active.id)
   const activeBusy = activeJob && (activeJob.status === 'queued' || activeJob.status === 'running')
@@ -37,6 +36,14 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
 
   function toggleIncluded(id) {
     setIncludedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  // 체크한 기사를 선별 목록에서 뺀다
+  function removeChecked() {
+    const ids = candidates.filter((a) => includedIds.includes(a.id)).map((a) => a.id)
+    if (ids.length === 0) return
+    if (!window.confirm(`체크한 기사 ${ids.length}건을 선별에서 뺄까요? 만든 요약은 그대로 남아요.`)) return
+    ids.forEach(onExclude)
   }
 
   function toggleAll() {
@@ -87,6 +94,15 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
               <button type="button" className="btn" onClick={toggleAll}>
                 {allChecked ? '전체 해제' : '전체 선택'}
               </button>
+              <button
+                type="button"
+                className="btn danger"
+                onClick={removeChecked}
+                disabled={includedIds.length === 0}
+                title="체크한 기사를 선별 목록에서 빼요. 만든 요약은 그대로 남아요"
+              >
+                선별 삭제
+              </button>
             </div>
 
             <ul className="candidates">
@@ -131,31 +147,7 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
 
           <section className="panel select-pane detail">
             <div className="detail-body">
-              <div className="detail-head">
-                <span className="detail-label">선택한 기사</span>
-                <div className="detail-tools">
-                  <label className="include-toggle">
-                    <input type="checkbox" checked={Boolean(activeIncluded)} onChange={() => toggleIncluded(active.id)} />
-                    보고서에 넣기
-                  </label>
-                  <button
-                    type="button"
-                    className="btn-text"
-                    onClick={() => queue.enqueue(active, { refresh: Boolean(ai) })}
-                    disabled={Boolean(activeBusy)}
-                  >
-                    {activeBusy ? '요약 진행 중…' : ai ? '요약 다시 생성' : 'AI 요약 생성'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-text danger"
-                    onClick={() => onExclude(active.id)}
-                    title="선별 목록에서 빼요. 만든 요약은 그대로 남아요"
-                  >
-                    선별 취소
-                  </button>
-                </div>
-              </div>
+              <span className="detail-label">선택한 기사</span>
               <h2>{active.title}</h2>
               <p className="meta">
                 {active.source} · {formatPublished(active.hoursAgo)}
@@ -201,6 +193,11 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
                     <p className="description">{active.description}</p>
                   ) : (
                     <p className="hint">이 기사는 아직 요약이 없어요.</p>
+                  )}
+                  {!activeBusy && (
+                    <button type="button" className="btn outline" onClick={() => queue.enqueue(active)}>
+                      AI 요약 만들기
+                    </button>
                   )}
                 </>
               )}

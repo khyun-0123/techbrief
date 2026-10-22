@@ -526,14 +526,6 @@ tr.row-open td {
   font-size: 14px;
 }
 
-/* 상세 맨 위: '선택한 기사' + 선별 취소 */
-.detail-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 .btn-text {
   padding: 4px 8px;
   border: none;
@@ -1298,35 +1290,6 @@ a.btn {
    - 페이지 머리 오른쪽: 이 화면의 다음 단계 버튼 하나
    - 카드 맨 위 오른쪽(도구 줄): 지금 보는 대상에 대한 버튼
    - 지우기·취소: 도구 줄 맨 오른쪽, 빨간 글자 */
-.detail-tools {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.include-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-right: 6px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  color: #1c2533;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.include-toggle:hover {
-  background: #eef1f5;
-}
-
-.include-toggle input {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-}
-
 .report-toolbar {
   display: flex;
   align-items: center;
