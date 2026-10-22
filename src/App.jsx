@@ -38,6 +38,22 @@ function toView(a) {
   return { ...a, hoursAgo: Math.max(0, (Date.now() - Date.parse(a.publishedAt)) / 3600_000) }
 }
 
+// 원문 링크 표시(↗)가 혼자 다음 줄로 넘어가지 않게 마지막 단어와 붙여 둔다
+function TitleWithIcon({ title }) {
+  const cut = title.lastIndexOf(' ') + 1
+  return (
+    <>
+      {title.slice(0, cut)}
+      <span className="nowrap">
+        {title.slice(cut)}
+        <svg className="external-icon" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M6 3H3v10h10v-3M9 3h4v4M13 3 7 9" />
+        </svg>
+      </span>
+    </>
+  )
+}
+
 const PERIODS = [
   { value: 'today', label: '오늘', hours: 24 },
   { value: 'week', label: '최근 7일', hours: 24 * 7 },
@@ -185,7 +201,7 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetched])
 
-  // 「선별에 추가」하면 자동 요약 (08 13-1: 선별한 기사만 요약)
+  // 「선별 추가」하면 자동 요약 (08 13-1: 선별한 기사만 요약)
   const queue = useSummaryQueue({
     onDone: (id, result) => setAiSummaries((prev) => ({ ...prev, [id]: result })),
   })
@@ -482,6 +498,7 @@ function App() {
                       const selected = selectedIds.includes(a.id)
                       const ai = aiSummaries[a.id]
                       const open = openSummaryId === a.id && ai
+                      const job = queue.jobs.find((j) => j.id === a.id)
                       return (
                         <Fragment key={a.id}>
                         <tr className={open ? 'row-open' : undefined}>
@@ -490,23 +507,13 @@ function App() {
                               {a.importanceLevel === 'high' && <span className="badge-important">중요</span>}
                               {a.url ? (
                                 <a className="title-link" href={a.url} target="_blank" rel="noreferrer" title="원문 열기 (새 창)">
-                                  {a.title}
+                                  <TitleWithIcon title={a.title} />
                                 </a>
                               ) : (
                                 a.title
                               )}
                             </div>
                             <div className="row-meta">
-                              {ai && (
-                                <button
-                                  type="button"
-                                  className="badge-summary"
-                                  aria-expanded={Boolean(open)}
-                                  onClick={() => setOpenSummaryId(open ? null : a.id)}
-                                >
-                                  요약 {open ? '접기 ▴' : '보기 ▾'}
-                                </button>
-                              )}
                               {a.sameIssue > 0 && <span className="same-issue">같은 이슈 기사 {a.sameIssue}건</span>}
                             </div>
                           </td>
@@ -518,12 +525,35 @@ function App() {
                             <span className="chip">{a.keyword}</span>
                           </td>
                           <td className="actions">
+                            {ai ? (
+                              <button
+                                type="button"
+                                className={open ? 'btn summary-btn open' : 'btn summary-btn'}
+                                aria-expanded={Boolean(open)}
+                                onClick={() => setOpenSummaryId(open ? null : a.id)}
+                              >
+                                {open ? '요약 접기' : '요약 보기'}
+                              </button>
+                            ) : job?.status === 'queued' || job?.status === 'running' ? (
+                              <button type="button" className="btn summary-btn" disabled>
+                                {job.status === 'running' ? '요약 중…' : '요약 대기'}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn outline summary-btn"
+                                title={job?.status === 'error' ? `요약 오류: ${job.error}` : 'AI로 6항목 요약 (선별하지 않아도 됨)'}
+                                onClick={() => queue.enqueue(a)}
+                              >
+                                {job?.status === 'error' ? '요약 재시도' : '요약 추가'}
+                              </button>
+                            )}
                             <button
                               type="button"
                               className={selected ? 'btn primary' : 'btn outline'}
                               onClick={() => toggleSelected(a)}
                             >
-                              {selected ? '선별됨 ✓' : '선별에 추가'}
+                              {selected ? '선별됨 ✓' : '선별 추가'}
                             </button>
                           </td>
                         </tr>

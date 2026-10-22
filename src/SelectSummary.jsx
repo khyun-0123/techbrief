@@ -11,7 +11,7 @@ function importanceOf(article) {
   return article.importanceLevel ?? SAMPLE_SUMMARIES[article.id]?.importance ?? 'normal'
 }
 
-// aiSummaries·queue는 App이 관리한다 (「선별에 추가」하면 자동 요약)
+// aiSummaries·queue는 App이 관리한다 (「선별 추가」하면 자동 요약)
 function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onGoCollect, onGoReport, aiSummaries, queue }) {
   const [sort, setSort] = useState('importance')
   const [activeId, setActiveId] = useState(null)
@@ -68,7 +68,7 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
 
       {candidates.length === 0 ? (
         <section className="panel select-empty">
-          <p className="empty">아직 선별한 기사가 없어요. 수집 현황에서 「선별에 추가」를 눌러 주세요.</p>
+          <p className="empty">아직 선별한 기사가 없어요. 수집 현황에서 「선별 추가」를 눌러 주세요.</p>
           <button type="button" className="btn primary" onClick={onGoCollect}>
             수집 현황으로 가기
           </button>
