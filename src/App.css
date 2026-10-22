@@ -1,20 +1,30 @@
 .app {
   min-height: 100vh;
+  padding-bottom: 140px; /* 오른쪽 아래 진행 창에 가려지지 않게 */
   background: #f3f5f8;
   color: #1c2533;
   font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif;
 }
 
 .topbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 8px;
   padding: 12px 32px;
   background: #1c2533;
 }
 
+/* 업무 도구라 왼쪽 정렬: 브랜드 | 탭 ……… AI 연결 상태 */
+.tabs {
+  display: flex;
+  gap: 4px;
+  justify-self: start;
+}
+
 .brand {
-  margin-right: 24px;
+  margin-right: 20px;
+  padding-right: 20px;
+  border-right: 1px solid #33415a;
   color: #fff;
   font-size: 20px;
   font-weight: 700;
@@ -42,7 +52,7 @@
 }
 
 .page {
-  max-width: 1200px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 32px 16px;
 }
@@ -88,7 +98,7 @@
 
 .content {
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: 1fr 280px;
   gap: 20px;
   align-items: start;
 }
@@ -117,6 +127,35 @@ select {
 .articles {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed; /* 칸 너비를 colgroup대로 고정 → 제목이 남는 공간을 모두 씀 */
+}
+
+.col-source {
+  width: 124px;
+}
+
+.col-time {
+  width: 64px;
+}
+
+.col-keyword {
+  width: 108px;
+}
+
+.col-actions {
+  width: 216px;
+}
+
+.articles td.actions .btn:last-child {
+  margin-right: 0;
+}
+
+.articles td.source {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #374151;
+  font-size: 14px;
 }
 
 .articles th,
@@ -136,6 +175,23 @@ select {
 
 .title {
   font-weight: 600;
+  /* 제목은 두 줄까지, 넘치면 말줄임 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.badge-important {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #fde8e6;
+  color: #c0392b;
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: 1px;
 }
 
 .same-issue {
@@ -185,6 +241,7 @@ select {
 }
 
 .chip {
+  white-space: nowrap; /* 키워드는 한 줄로 */
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -244,10 +301,22 @@ select {
 /* 선별·요약 화면 */
 .select-content {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr; /* 좌우 박스 같은 너비 */
   gap: 20px;
-  align-items: start;
   margin-top: 24px;
+}
+
+/* 좌우 박스 같은 높이: 화면 높이에 맞추되 520~860px 사이. 넘치는 내용은 박스 안에서 스크롤 */
+.select-pane {
+  display: flex;
+  flex-direction: column;
+  height: clamp(520px, calc(100vh - 250px), 860px);
+  overflow: hidden;
+}
+
+.select-pane .candidates {
+  flex: 1;
+  overflow-y: auto;
 }
 
 .select-empty {
@@ -293,6 +362,10 @@ select {
   border-bottom: none;
 }
 
+.candidate-header select {
+  padding: 8px 10px;
+}
+
 .candidate.active {
   background: #eef6fb;
 }
@@ -319,7 +392,9 @@ select {
   color: #5b6677;
 }
 
-.detail {
+.detail-body {
+  flex: 1;
+  overflow-y: auto;
   padding: 24px;
 }
 
@@ -351,30 +426,20 @@ select {
 }
 
 .detail-actions {
-  margin-top: 20px;
-  padding-top: 18px;
+  padding: 14px 24px;
   border-top: 1px solid #eef1f5;
+  background: #fafbfc;
 }
 
-.report-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 20px;
-  padding: 16px 20px;
-}
-
-.report-bar strong {
-  font-size: 20px;
-}
-
-.report-bar .btn {
-  margin-right: 0;
-}
 
 @media (max-width: 860px) {
   .select-content {
     grid-template-columns: 1fr;
+  }
+
+  .select-pane {
+    height: auto;
+    max-height: 70vh;
   }
 
   .candidate-header {
@@ -456,4 +521,600 @@ select {
   margin: 8px 0;
   font-size: 13px;
   color: #b91c1c;
+}
+
+/* 수집 현황 머리말의 「지금 수집하기」 버튼 */
+.page-header.with-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+a.btn {
+  display: inline-block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.description {
+  line-height: 1.6;
+  color: #374151;
+}
+
+.page-header.with-actions .last-collected {
+  margin-top: 10px;
+  color: #5b6677;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.stat strong small {
+  color: #5b6677;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.list-meta {
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid #eef1f5;
+  color: #5b6677;
+  font-size: 13px;
+}
+
+.collect-btn {
+  width: 100%;
+  margin: 16px 0 0;
+  padding: 10px 12px;
+}
+
+/* 게이지 (요약·보고서 진행) */
+.gauge {
+  height: 6px;
+  border-radius: 999px;
+  background: #e5e9f0;
+  overflow: hidden;
+}
+
+.gauge-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #1b6a96;
+  transition: width 0.4s linear;
+}
+
+.gauge-done .gauge-fill {
+  background: #16a34a;
+}
+
+.gauge-error .gauge-fill {
+  background: #c0392b;
+}
+
+.gauge-queued .gauge-fill {
+  background: transparent;
+}
+
+/* AI 요약 진행 창 (오른쪽 아래) */
+.progress-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 10;
+  width: 360px;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #dde2ea;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(28, 37, 51, 0.18);
+}
+
+.progress-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.progress-count {
+  margin-left: auto;
+  color: #5b6677;
+  font-size: 13px;
+}
+
+.icon-btn {
+  padding: 2px 6px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: #5b6677;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: #eef1f5;
+}
+
+.progress-sub {
+  margin: 6px 0 8px;
+  color: #5b6677;
+  font-size: 12px;
+}
+
+.progress-list {
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border-top: 1px solid #eef1f5;
+}
+
+.progress-item {
+  padding: 8px 0;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.progress-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.progress-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.progress-status {
+  color: #5b6677;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.status-running .progress-status {
+  color: #1b6a96;
+  font-weight: 600;
+}
+
+.status-done .progress-status {
+  color: #16a34a;
+}
+
+.status-error .progress-status,
+.progress-error {
+  color: #c0392b;
+}
+
+.progress-error {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.progress-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.progress-foot .hint {
+  margin: 0;
+  font-size: 11px;
+}
+
+.progress-foot .btn {
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* 선별 화면의 요약 상태 */
+.summary-state {
+  font-weight: 600;
+}
+
+.summary-state.done {
+  color: #16a34a;
+}
+
+.summary-state.running,
+.summary-state.queued {
+  color: #1b6a96;
+}
+
+.summary-state.error {
+  color: #c0392b;
+}
+
+.candidate-header h2 small {
+  color: #5b6677;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.summary-progress {
+  margin: 8px 0 14px;
+  font-size: 13px;
+  color: #1b6a96;
+}
+
+.summary-progress .gauge {
+  margin-top: 6px;
+}
+
+/* 보고서 초안 */
+.report-settings {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding: 16px;
+}
+
+.report-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #5b6677;
+}
+
+.report-settings label:first-child {
+  flex: 1;
+}
+
+.report-settings-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.report-settings-actions .btn {
+  margin: 0;
+  padding: 10px 14px;
+}
+
+.report-notice {
+  margin: 16px 0 0;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 14px;
+}
+
+.report-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 0;
+  color: #1b6a96;
+  font-size: 14px;
+}
+
+.report-progress .gauge {
+  flex: 1;
+}
+
+.report-copied {
+  margin: 12px 0 0;
+  color: #16a34a;
+  font-size: 14px;
+}
+
+.report-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 20px;
+  align-items: start;
+  margin-top: 20px;
+}
+
+.report-doc {
+  padding: 28px 32px;
+}
+
+.report-doc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #1c2533;
+}
+
+.report-doc-head h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.report-doc-head span {
+  color: #5b6677;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.report-warnings {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 13px;
+  list-style: none;
+}
+
+.report-section {
+  margin-top: 18px;
+}
+
+.report-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.report-section-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.report-section-head .btn {
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.report-bullets {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.report-bullets li {
+  margin: 6px 0;
+  line-height: 1.6;
+}
+
+.report-ref {
+  margin-left: 3px;
+  color: #1d4ed8;
+  font-size: 12px;
+  text-decoration: none;
+  vertical-align: super;
+}
+
+.report-refs {
+  padding: 18px;
+}
+
+.report-refs h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.report-refs ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-refs li {
+  display: flex;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid #eef1f5;
+  font-size: 13px;
+}
+
+.report-refs li:target {
+  background: #eff6ff;
+}
+
+.report-ref-num {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.report-refs .meta {
+  margin: 2px 0 4px;
+  color: #5b6677;
+}
+
+/* 상단 메뉴 오른쪽 */
+.topbar-side {
+  justify-self: end;
+}
+
+.tab-count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #33415a;
+  color: #c8d0dc;
+  font-size: 12px;
+}
+
+.tab.active .tab-count {
+  background: #4a5a78;
+  color: #fff;
+}
+
+.ai-status {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.ai-status.on {
+  color: #86efac;
+}
+
+.ai-status.off {
+  color: #fca5a5;
+}
+
+/* 머리말 오른쪽 버튼 영역 */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.header-actions .btn {
+  margin: 0;
+  padding: 10px 16px;
+}
+
+.header-count {
+  color: #5b6677;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.header-count strong {
+  color: #1c2533;
+}
+
+.saved-note {
+  color: #16a34a !important;
+}
+
+.link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #1d4ed8;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.empty-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* 보고서 초안: 만들기 전 미리보기 */
+.section-state {
+  color: #9aa3b1;
+  font-size: 12px;
+}
+
+.section-state.generating {
+  color: #1b6a96;
+  font-weight: 600;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.section-desc {
+  margin: 4px 0 6px;
+  color: #374151;
+  font-size: 14px;
+}
+
+.section-sources {
+  margin: 0;
+  padding: 10px 12px 10px 28px;
+  border-radius: 8px;
+  background: #f8f9fb;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.section-sources .muted {
+  color: #9aa3b1;
+}
+
+.report-preview.is-generating .section-sources {
+  opacity: 0.55;
+}
+
+.report-refs > .btn {
+  margin-top: 12px;
+}
+
+/* 보고서함 */
+.archive-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 20px;
+  align-items: start;
+  margin-top: 24px;
+}
+
+.archive-list {
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+
+.archive-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.archive-item:hover {
+  background: #f3f5f8;
+}
+
+.archive-item.active {
+  background: #eef6fb;
+}
+
+.archive-item .title {
+  font-size: 15px;
+}
+
+.archive-item .meta {
+  margin: 0;
+}
+
+.archive-preview {
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.archive-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.archive-actions .report-copied {
+  margin: 0;
+}
+
+.archive-layout .report-layout {
+  margin-top: 12px;
 }
