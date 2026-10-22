@@ -60,16 +60,20 @@ function ReportArchive({ reports, onDelete, onGoDraft }) {
           </ul>
 
           <div>
-            <div className="archive-actions">
-              <button type="button" className="btn" onClick={handleCopy}>
-                텍스트 복사
-              </button>
-              <button type="button" className="btn danger" onClick={handleDelete}>
-                지우기
-              </button>
-              {notice && <span className="report-copied">{notice}</span>}
-            </div>
-            <ReportView saved={open} />
+            <ReportView
+              saved={open}
+              tools={
+                <>
+                  {notice && <span className="toolbar-note">{notice}</span>}
+                  <button type="button" className="btn" onClick={handleCopy}>
+                    텍스트 복사
+                  </button>
+                  <button type="button" className="btn-text danger" onClick={handleDelete}>
+                    지우기
+                  </button>
+                </>
+              }
+            />
           </div>
         </div>
       )}

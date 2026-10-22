@@ -526,11 +526,35 @@ tr.row-open td {
   font-size: 14px;
 }
 
-.detail-actions {
-  padding: 14px 24px;
-  border-top: 1px solid #eef1f5;
-  background: #fafbfc;
+.btn-text {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: #5b6677;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
 }
+
+.btn-text:hover:not(:disabled) {
+  background: #eef1f5;
+  color: #1c2533;
+}
+
+.btn-text:disabled {
+  color: #a3acb9;
+  cursor: default;
+}
+
+.btn-text.danger {
+  color: #c0392b;
+}
+
+.btn-text.danger:hover:not(:disabled) {
+  background: #fde8e6;
+}
+
 
 
 @media (max-width: 860px) {
@@ -643,12 +667,6 @@ a.btn {
   color: #374151;
 }
 
-.page-header.with-actions .last-collected {
-  margin-top: 10px;
-  color: #5b6677;
-  font-size: 14px;
-  white-space: nowrap;
-}
 
 .stat strong small {
   color: #5b6677;
@@ -874,15 +892,7 @@ a.btn {
   flex: 1;
 }
 
-.report-settings-actions {
-  display: flex;
-  gap: 8px;
-}
 
-.report-settings-actions .btn {
-  margin: 0;
-  padding: 10px 14px;
-}
 
 .report-notice {
   margin: 16px 0 0;
@@ -906,11 +916,6 @@ a.btn {
   flex: 1;
 }
 
-.report-copied {
-  margin: 12px 0 0;
-  color: #16a34a;
-  font-size: 14px;
-}
 
 .report-layout {
   display: grid;
@@ -1206,18 +1211,13 @@ a.btn {
   text-overflow: ellipsis;
 }
 
-.archive-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
 .archive-actions .report-copied {
   margin: 0;
 }
 
 .archive-layout .report-layout {
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 .db-status.on {
@@ -1284,4 +1284,38 @@ a.btn {
 
 .refresh-current {
   color: #8a94a3;
+}
+
+/* 버튼 배치 규칙
+   - 페이지 머리 오른쪽: 이 화면의 다음 단계 버튼 하나
+   - 카드 맨 위 오른쪽(도구 줄): 지금 보는 대상에 대한 버튼
+   - 지우기·취소: 도구 줄 맨 오른쪽, 빨간 글자 */
+.report-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: -8px 0 12px;
+}
+
+.report-toolbar .btn {
+  margin: 0;
+}
+
+.toolbar-note {
+  margin-right: 4px;
+  color: #16a34a;
+  font-size: 13px;
+}
+
+.aside-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.aside-head h3 {
+  margin: 0;
 }
