@@ -489,7 +489,7 @@ function App() {
                             <div className="title" title={a.title}>
                               {a.importanceLevel === 'high' && <span className="badge-important">중요</span>}
                               {a.url ? (
-                                <a className="title-link" href={a.url} target="_blank" rel="noreferrer">
+                                <a className="title-link" href={a.url} target="_blank" rel="noreferrer" title="원문 열기 (새 창)">
                                   {a.title}
                                 </a>
                               ) : (
@@ -518,15 +518,6 @@ function App() {
                             <span className="chip">{a.keyword}</span>
                           </td>
                           <td className="actions">
-                            {a.url ? (
-                              <a className="btn" href={a.url} target="_blank" rel="noreferrer">
-                                원문 보기
-                              </a>
-                            ) : (
-                              <button type="button" className="btn" disabled title="샘플 기사라 원문이 없어요">
-                                원문 보기
-                              </button>
-                            )}
                             <button
                               type="button"
                               className={selected ? 'btn primary' : 'btn outline'}
