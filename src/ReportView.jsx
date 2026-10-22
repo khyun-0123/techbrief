@@ -1,11 +1,13 @@
 // 완성된 보고서 한 건을 보여 준다 (보고서 초안·보고서함 공용)
 import { formatDate, SECTIONS } from './reportStore.js'
 
-function ReportView({ saved, onRegenerate, regenKey, busy }) {
+// tools: 보고서 맨 위 오른쪽 도구 줄 (복사·지우기 등)
+function ReportView({ saved, onRegenerate, regenKey, busy, tools }) {
   const { report } = saved
   return (
     <div className="report-layout">
       <article className="panel report-doc">
+        {tools && <div className="report-toolbar">{tools}</div>}
         <header className="report-doc-head">
           <h2>{report.title}</h2>
           <span>
@@ -26,7 +28,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy }) {
             <div className="report-section-head">
               <h3>■ {label}</h3>
               {onRegenerate && (
-                <button type="button" className="btn" onClick={() => onRegenerate(key)} disabled={busy}>
+                <button type="button" className="btn-text" onClick={() => onRegenerate(key)} disabled={busy}>
                   {regenKey === key ? '다시 쓰는 중…' : '다시 쓰기'}
                 </button>
               )}

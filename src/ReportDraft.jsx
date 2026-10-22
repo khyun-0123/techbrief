@@ -139,14 +139,23 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
             <button type="button" className="btn" onClick={() => setLastId(null)} disabled={Boolean(regenKey)}>
               새 보고서 만들기
             </button>
-            <button type="button" className="btn primary" onClick={handleCopy}>
-              텍스트 복사
-            </button>
           </div>
         </header>
         {error && <p className="ai-error">{error}</p>}
-        {notice && <p className="report-copied">{notice}</p>}
-        <ReportView saved={current} onRegenerate={handleRegenerate} regenKey={regenKey} busy={Boolean(regenKey)} />
+        <ReportView
+          saved={current}
+          onRegenerate={handleRegenerate}
+          regenKey={regenKey}
+          busy={Boolean(regenKey)}
+          tools={
+            <>
+              {notice && <span className="toolbar-note">{notice}</span>}
+              <button type="button" className="btn primary" onClick={handleCopy}>
+                텍스트 복사
+              </button>
+            </>
+          }
+        />
       </main>
     )
   }
@@ -154,9 +163,16 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
   // 만들기 전 · 생성 중: 담길 내용 미리보기
   return (
     <main className="page">
-      <header className="page-header">
-        <h1>보고서 초안</h1>
-        <p>선별·요약에서 체크한 기사 {articles.length}건으로 만들어요. 아래는 보고서에 담길 재료예요.</p>
+      <header className="page-header with-actions">
+        <div>
+          <h1>보고서 초안</h1>
+          <p>선별·요약에서 체크한 기사 {articles.length}건으로 만들어요. 아래는 보고서에 담길 재료예요.</p>
+        </div>
+        <div className="header-actions">
+          <button type="button" className="btn primary" onClick={handleGenerate} disabled={!canGenerate}>
+            {generating ? '초안 만드는 중…' : '초안 생성'}
+          </button>
+        </div>
       </header>
 
       <section className="panel report-settings">
@@ -174,11 +190,6 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
             ))}
           </select>
         </label>
-        <div className="report-settings-actions">
-          <button type="button" className="btn primary" onClick={handleGenerate} disabled={!canGenerate}>
-            {generating ? '초안 만드는 중…' : '초안 생성'}
-          </button>
-        </div>
       </section>
 
       {missing.length > 0 && (
@@ -263,7 +274,12 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
         </article>
 
         <aside className="panel report-refs">
-          <h3>담길 기사 {articles.length}건</h3>
+          <div className="aside-head">
+            <h3>담길 기사 {articles.length}건</h3>
+            <button type="button" className="btn-text" onClick={onGoSelect}>
+              기사 바꾸기
+            </button>
+          </div>
           <ol>
             {articles.map((a, i) => {
               const job = jobOf(a.id)
@@ -281,9 +297,6 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
               )
             })}
           </ol>
-          <button type="button" className="btn" onClick={onGoSelect}>
-            기사 바꾸기
-          </button>
         </aside>
       </div>
     </main>

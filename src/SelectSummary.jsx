@@ -133,14 +133,28 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
             <div className="detail-body">
               <div className="detail-head">
                 <span className="detail-label">선택한 기사</span>
-                <button
-                  type="button"
-                  className="btn-text danger"
-                  onClick={() => onExclude(active.id)}
-                  title="선별 목록에서 빼요. 만든 요약은 그대로 남아요"
-                >
-                  선별 취소
-                </button>
+                <div className="detail-tools">
+                  <label className="include-toggle">
+                    <input type="checkbox" checked={Boolean(activeIncluded)} onChange={() => toggleIncluded(active.id)} />
+                    보고서에 넣기
+                  </label>
+                  <button
+                    type="button"
+                    className="btn-text"
+                    onClick={() => queue.enqueue(active, { refresh: Boolean(ai) })}
+                    disabled={Boolean(activeBusy)}
+                  >
+                    {activeBusy ? '요약 진행 중…' : ai ? '요약 다시 생성' : 'AI 요약 생성'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-text danger"
+                    onClick={() => onExclude(active.id)}
+                    title="선별 목록에서 빼요. 만든 요약은 그대로 남아요"
+                  >
+                    선별 취소
+                  </button>
+                </div>
               </div>
               <h2>{active.title}</h2>
               <p className="meta">
@@ -212,23 +226,6 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
               )}
             </div>
 
-            <div className="detail-actions">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => queue.enqueue(active, { refresh: Boolean(ai) })}
-                disabled={Boolean(activeBusy)}
-              >
-                {activeBusy ? '요약 진행 중…' : ai ? '요약 다시 생성' : 'AI 요약 생성'}
-              </button>
-              <button
-                type="button"
-                className={activeIncluded ? 'btn' : 'btn primary'}
-                onClick={() => toggleIncluded(active.id)}
-              >
-                {activeIncluded ? '보고서에서 빼기' : '보고서에 넣기'}
-              </button>
-            </div>
           </section>
         </div>
       )}

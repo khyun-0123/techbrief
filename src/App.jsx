@@ -469,9 +469,21 @@ function App() {
                   : '네이버 뉴스에서 모은 기사예요. 같은 이슈 기사는 하나로 묶었어요.'}
               </p>
             </div>
-            <span className="last-collected">
-              {refreshRunning ? '최신화 중…' : collectedAt ? `마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 수집 전'}
-            </span>
+            <div className="header-actions">
+              <span className="header-count">
+                {refreshRunning ? '최신화 중…' : collectedAt ? `마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 수집 전'}
+                {' · '}선별 <strong>{selectedIds.length}건</strong>
+              </span>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() => setScreen('select')}
+                disabled={selectedIds.length === 0}
+                title={selectedIds.length === 0 ? '목록에서 「선별 추가」를 눌러 기사를 고르세요' : undefined}
+              >
+                선별·요약으로 →
+              </button>
+            </div>
           </header>
 
           <section className="stats">
