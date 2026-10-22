@@ -2,6 +2,7 @@
 // API만 따로 시험할 때: npm run server. 키는 .env.local에서 읽고 브라우저로 보내지 않는다
 import { createServer } from 'node:http'
 import { pathToFileURL } from 'node:url'
+import { collect, listArticles } from './collector/index.js'
 import { chatJson, modelName } from './llm/client.js'
 import { buildSummaryMessages, SUMMARY_SCHEMA } from './llm/prompts.js'
 
@@ -71,6 +72,13 @@ export async function handleApi(req, res) {
     }
     if (req.method === 'POST' && req.url === '/api/summaries') {
       return await handleSummary(req, res)
+    }
+    if (req.method === 'POST' && req.url === '/api/collect') {
+      const { keywords = [] } = await readJson(req)
+      return send(res, 200, await collect(keywords))
+    }
+    if (req.method === 'GET' && req.url === '/api/articles') {
+      return send(res, 200, listArticles())
     }
     send(res, 404, { error: '없는 주소예요.' })
   } catch (err) {

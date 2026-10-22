@@ -457,3 +457,22 @@ select {
   font-size: 13px;
   color: #b91c1c;
 }
+
+/* 수집 현황 머리말의 「지금 수집하기」 버튼 */
+.page-header.with-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+a.btn {
+  display: inline-block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.description {
+  line-height: 1.6;
+  color: #374151;
+}

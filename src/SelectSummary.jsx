@@ -21,6 +21,11 @@ const BASIS_LABEL = {
   ai_suggestion: 'AI 제안',
 }
 
+// 실제 기사는 서버가 매긴 중요도, 샘플은 샘플 값
+function importanceOf(article) {
+  return article.importanceLevel ?? SAMPLE_SUMMARIES[article.id]?.importance ?? 'normal'
+}
+
 function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onGoCollect }) {
   const [sort, setSort] = useState('importance')
   const [activeId, setActiveId] = useState(null)
@@ -34,7 +39,7 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
 
   const sorted = [...candidates].sort((a, b) => {
     if (sort === 'importance') {
-      const rank = (x) => (SAMPLE_SUMMARIES[x.id]?.importance === 'high' ? 0 : 1)
+      const rank = (x) => (importanceOf(x) === 'high' ? 0 : 1)
       if (rank(a) !== rank(b)) return rank(a) - rank(b)
     }
     return a.hoursAgo - b.hoursAgo
@@ -100,7 +105,7 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
 
             <ul className="candidates">
               {sorted.map((a) => {
-                const importance = SAMPLE_SUMMARIES[a.id]?.importance ?? 'normal'
+                const importance = importanceOf(a)
                 return (
                   <li
                     key={a.id}
@@ -164,8 +169,10 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
                   모델 {ai.model} · {new Date(ai.createdAt).toLocaleString('ko-KR')}
                 </p>
               </>
-            ) : (
+            ) : summary ? (
               <h3>3줄 요약 (샘플)</h3>
+            ) : (
+              <h3>기사 요약문</h3>
             )}
             {ai ? null : summary ? (
               <ol className="summary">
@@ -173,6 +180,8 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
                   <li key={line}>{line}</li>
                 ))}
               </ol>
+            ) : active.description ? (
+              <p className="description">{active.description}</p>
             ) : (
               <p className="hint">이 기사는 아직 요약이 없어요.</p>
             )}
@@ -186,7 +195,16 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
               ))}
             </div>
 
-            <p className="source-link">원문 링크: 샘플 기사라 원문이 없어요</p>
+            {active.url ? (
+              <p className="source-link">
+                원문 링크:{' '}
+                <a href={active.url} target="_blank" rel="noreferrer">
+                  {active.source} 원문 열기 ↗
+                </a>
+              </p>
+            ) : (
+              <p className="source-link">원문 링크: 샘플 기사라 원문이 없어요</p>
+            )}
 
             {error && <p className="ai-error">{error}</p>}
 

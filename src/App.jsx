@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
+import { collectNews } from './api.js'
 import { DEFAULT_KEYWORDS, SAMPLE_ARTICLES } from './sampleArticles.js'
 import SelectSummary from './SelectSummary.jsx'
 import { formatPublished, load } from './utils.js'
@@ -7,6 +8,15 @@ import { formatPublished, load } from './utils.js'
 const KEYWORDS_KEY = 'techbrief-keywords'
 const SELECTED_KEY = 'techbrief-selected'
 const INCLUDED_KEY = 'techbrief-included'
+const ARTICLES_KEY = 'techbrief-articles' // 마지막으로 수집한 기사 (서버를 꺼도 화면에 남게)
+const COLLECTED_AT_KEY = 'techbrief-collected-at'
+const MAX_SAVED = 400
+
+// 서버 기사(publishedAt)를 화면에서 쓰는 모양(hoursAgo)으로 바꾼다
+function toView(a) {
+  if (a.hoursAgo !== undefined) return a
+  return { ...a, hoursAgo: Math.max(0, (Date.now() - Date.parse(a.publishedAt)) / 3600_000) }
+}
 
 const PERIODS = [
   { value: 'today', label: '오늘', hours: 24 },
@@ -23,6 +33,10 @@ function App() {
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState('today')
   const [source, setSource] = useState('all')
+  const [fetched, setFetched] = useState(() => load(ARTICLES_KEY, []))
+  const [collectedAt, setCollectedAt] = useState(() => load(COLLECTED_AT_KEY, null))
+  const [collecting, setCollecting] = useState(false)
+  const [collectError, setCollectError] = useState('')
 
   useEffect(() => {
     localStorage.setItem(KEYWORDS_KEY, JSON.stringify(keywords))
@@ -36,10 +50,13 @@ function App() {
     localStorage.setItem(INCLUDED_KEY, JSON.stringify(includedIds))
   }, [includedIds])
 
-  const sources = useMemo(() => [...new Set(SAMPLE_ARTICLES.map((a) => a.source))], [])
+  // 한 번도 수집하지 않았으면 샘플 기사를 보여 준다
+  const isSample = fetched.length === 0
+  const pool = useMemo(() => (isSample ? SAMPLE_ARTICLES : fetched.map(toView)), [isSample, fetched])
+  const sources = useMemo(() => [...new Set(pool.map((a) => a.source))].sort(), [pool])
 
   // 수집 대상: 등록한 키워드에 해당하는 기사
-  const collected = SAMPLE_ARTICLES.filter((a) => keywords.includes(a.keyword))
+  const collected = pool.filter((a) => keywords.includes(a.keyword))
   const todayCount = collected.filter((a) => a.hoursAgo < 24).length
 
   const maxHours = PERIODS.find((p) => p.value === period).hours
@@ -63,12 +80,34 @@ function App() {
     setKeywords((prev) => prev.filter((k) => k !== word))
   }
 
+  async function handleCollect() {
+    setCollecting(true)
+    setCollectError('')
+    try {
+      const result = await collectNews(keywords)
+      const articles = result.articles.slice(0, MAX_SAVED)
+      setFetched(articles)
+      setCollectedAt(result.lastCollectedAt)
+      localStorage.setItem(ARTICLES_KEY, JSON.stringify(articles))
+      localStorage.setItem(COLLECTED_AT_KEY, JSON.stringify(result.lastCollectedAt))
+      if (result.failed?.length) {
+        setCollectError(`일부 키워드 수집 실패: ${result.failed.map((f) => f.keyword).join(', ')}`)
+      }
+    } catch (err) {
+      setCollectError(err.message)
+    } finally {
+      setCollecting(false)
+    }
+  }
+
   function toggleSelected(id) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+    // 선별을 풀면 보고서 포함 목록에서도 뺀다
+    setIncludedIds((prev) => prev.filter((x) => x !== id))
   }
 
   // 선별에서 빠진 기사는 보고서 포함 목록에서도 뺀다
-  const candidates = SAMPLE_ARTICLES.filter((a) => selectedIds.includes(a.id))
+  const candidates = pool.filter((a) => selectedIds.includes(a.id))
   const included = includedIds.filter((id) => selectedIds.includes(id))
 
   function handleExclude(id) {
@@ -107,9 +146,19 @@ function App() {
         />
       ) : (
         <main className="page">
-          <header className="page-header">
-            <h1>뉴스 수집 현황</h1>
-            <p>설정한 키워드로 기사를 모아 보여 줘요. 지금은 샘플 기사로 동작해요.</p>
+          <header className="page-header with-actions">
+            <div>
+              <h1>뉴스 수집 현황</h1>
+              <p>
+                {isSample
+                  ? '설정한 키워드로 기사를 모아 보여 줘요. 아직 수집 전이라 샘플 기사를 보여 줘요.'
+                  : `네이버 뉴스에서 모은 기사예요. 같은 이슈 기사는 하나로 묶었어요. 마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR')}`}
+              </p>
+              {collectError && <p className="ai-error">{collectError}</p>}
+            </div>
+            <button type="button" className="btn primary" onClick={handleCollect} disabled={collecting || keywords.length === 0}>
+              {collecting ? '수집 중…' : '지금 수집하기'}
+            </button>
           </header>
 
           <section className="stats">
@@ -181,9 +230,15 @@ function App() {
                             <span className="chip">{a.keyword}</span>
                           </td>
                           <td className="actions">
-                            <button type="button" className="btn" disabled title="샘플 기사라 원문이 없어요">
-                              원문 보기
-                            </button>
+                            {a.url ? (
+                              <a className="btn" href={a.url} target="_blank" rel="noreferrer">
+                                원문 보기
+                              </a>
+                            ) : (
+                              <button type="button" className="btn" disabled title="샘플 기사라 원문이 없어요">
+                                원문 보기
+                              </button>
+                            )}
                             <button
                               type="button"
                               className={selected ? 'btn primary' : 'btn outline'}

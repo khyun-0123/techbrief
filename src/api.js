@@ -1,17 +1,34 @@
-// 요약 API 서버(npm run server) 호출 모음. 접속 키는 서버에만 있고 여기에는 없다.
+// 서버(/api) 호출 모음. 접속 키는 서버에만 있고 여기에는 없다.
 
-export async function requestSummary(article, { refresh = false } = {}) {
-  const res = await fetch('/api/summaries', {
+async function postJson(path, body) {
+  const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      article: { id: article.id, title: article.title, source: article.source, keyword: article.keyword },
-      refresh,
-    }),
+    body: JSON.stringify(body),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    throw new Error(data.error ?? `요약 서버 오류 (${res.status}). npm run server가 켜져 있는지 확인해 주세요.`)
+    throw new Error(data.error ?? `서버 오류 (${res.status}). npm run dev가 켜져 있는지 확인해 주세요.`)
   }
   return data
+}
+
+// 등록한 키워드로 네이버 뉴스를 모은다
+export function collectNews(keywords) {
+  return postJson('/api/collect', { keywords })
+}
+
+// 기사 요약문과 같은 이슈 기사를 함께 보내면 '기사 근거' 항목이 늘어난다
+export function requestSummary(article, { refresh = false } = {}) {
+  return postJson('/api/summaries', {
+    article: {
+      id: article.id,
+      title: article.title,
+      source: article.source,
+      keyword: article.keyword,
+      description: article.description,
+    },
+    related: (article.related ?? []).map(({ title, source, description }) => ({ title, source, description })),
+    refresh,
+  })
 }
