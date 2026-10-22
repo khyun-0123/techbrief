@@ -34,12 +34,23 @@ async function callChat({ messages, schema, schemaName, model: modelOverride, ti
     body.reasoning_effort = process.env.LLM_REASONING_EFFORT
   }
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  })
+  const send = () =>
+    fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+  let res
+  try {
+    res = await send()
+  } catch (err) {
+    // 맥미니까지 가는 연결이 순간 끊긴 경우(fetch failed)만 2초 뒤 한 번 더. 시간 초과는 다시 보내지 않는다
+    if (err.name === 'TimeoutError') throw err
+    console.warn(`[llm] 연결 실패, 다시 시도: ${err.message}`)
+    await new Promise((r) => setTimeout(r, 2000))
+    res = await send()
+  }
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     throw new Error(`AI 서버 응답 오류 ${res.status} ${detail.slice(0, 200)}`)

@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
-import { collectNews, fetchHealth } from './api.js'
+import {
+  collectNews,
+  deleteReportApi,
+  fetchArticles,
+  fetchHealth,
+  fetchKeywords,
+  fetchReports,
+  importReports,
+  lookupSummaries,
+  saveKeywordsApi,
+} from './api.js'
 import ProgressPanel from './ProgressPanel.jsx'
 import ReportArchive from './ReportArchive.jsx'
 import ReportDraft from './ReportDraft.jsx'
@@ -46,6 +56,43 @@ function App() {
   const [sort, setSort] = useState('latest')
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
   const [reports, setReports] = useState(() => loadReports())
+  const [reportsInDb, setReportsInDb] = useState(false) // true면 보고서함을 서버 DB에 저장
+
+  // 앱을 열 때 DB에 쌓인 기사를 불러온다 (수집 버튼을 누르지 않아도 지난 수집 결과가 보이게)
+  useEffect(() => {
+    let alive = true
+    fetchArticles()
+      .then((result) => {
+        if (!alive || result.storage !== 'db' || result.articles.length === 0) return
+        const articles = result.articles.slice(0, MAX_SAVED)
+        setFetched(articles)
+        setCollectedAt(result.lastCollectedAt)
+        localStorage.setItem(ARTICLES_KEY, JSON.stringify(articles))
+        localStorage.setItem(COLLECTED_AT_KEY, JSON.stringify(result.lastCollectedAt))
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // 보고서함: DB가 있으면 서버에서 불러온다. 처음 한 번은 브라우저에 있던 보고서를 DB로 옮긴다
+  useEffect(() => {
+    let alive = true
+    fetchReports()
+      .then(async ({ stored, reports: serverReports }) => {
+        if (!alive || !stored) return
+        const local = loadReports()
+        const list = serverReports.length === 0 && local.length > 0 ? (await importReports(local)).reports : serverReports
+        if (!alive) return
+        setReportsInDb(true)
+        setReports(list)
+      })
+      .catch(() => {}) // 서버가 없으면 브라우저 저장소 그대로
+    return () => {
+      alive = false
+    }
+  }, [])
   const [health, setHealth] = useState(null) // { model, modelReachable } | { error }
 
   // 상단 메뉴 오른쪽의 AI 연결 상태 (1분마다 확인)
@@ -63,26 +110,70 @@ function App() {
     }
   }, [])
 
+  // DB가 없을 때만 브라우저에 저장한다 (DB가 있으면 서버가 저장)
   function updateReports(update) {
     setReports((prev) => {
       const next = update(prev)
-      saveReports(next)
+      if (!reportsInDb) saveReports(next)
       return next
     })
+  }
+
+  async function handleDeleteReport(id) {
+    if (reportsInDb) await deleteReportApi(id)
+    updateReports((list) => list.filter((r) => r.id !== id))
   }
 
   useEffect(() => {
     localStorage.setItem(AI_SUMMARIES_KEY, JSON.stringify(aiSummaries))
   }, [aiSummaries])
 
+  // 선별한 기사 중 이 브라우저에 요약이 없는 것은 DB에서 가져온다 (다른 브라우저·이전 작업에서 만든 요약)
+  useEffect(() => {
+    const missing = selectedIds.filter((id) => !aiSummaries[id])
+    if (missing.length === 0) return
+    lookupSummaries(missing)
+      .then(({ summaries }) => {
+        if (Object.keys(summaries).length) setAiSummaries((prev) => ({ ...summaries, ...prev }))
+      })
+      .catch(() => {})
+    // aiSummaries가 바뀔 때마다 다시 부르지 않도록 선별 목록이 바뀔 때만 확인한다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIds])
+
   // 「선별에 추가」하면 자동 요약 (08 13-1: 선별한 기사만 요약)
   const queue = useSummaryQueue({
     onDone: (id, result) => setAiSummaries((prev) => ({ ...prev, [id]: result })),
   })
 
+  const [keywordsInDb, setKeywordsInDb] = useState(false)
+
   useEffect(() => {
     localStorage.setItem(KEYWORDS_KEY, JSON.stringify(keywords))
   }, [keywords])
+
+  // 키워드: DB가 있으면 팀이 같이 쓰는 목록을 불러온다. DB가 비어 있으면 이 브라우저의 키워드를 올린다
+  useEffect(() => {
+    let alive = true
+    fetchKeywords()
+      .then(async ({ stored, keywords: serverWords }) => {
+        if (!alive || !stored) return
+        const words = serverWords.length ? serverWords : (await saveKeywordsApi(load(KEYWORDS_KEY, DEFAULT_KEYWORDS))).keywords
+        if (!alive) return
+        setKeywords(words)
+        setKeywordsInDb(true)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // 키워드를 바꾸면 DB에도 저장
+  function changeKeywords(next) {
+    setKeywords(next)
+    if (keywordsInDb) saveKeywordsApi(next).catch((err) => setCollectError(err.message))
+  }
 
   useEffect(() => {
     localStorage.setItem(SELECTED_KEY, JSON.stringify(selectedIds))
@@ -117,12 +208,12 @@ function App() {
     e.preventDefault()
     const word = keywordInput.trim()
     if (!word || keywords.includes(word)) return
-    setKeywords((prev) => [...prev, word])
+    changeKeywords([...keywords, word])
     setKeywordInput('')
   }
 
   function handleRemoveKeyword(word) {
-    setKeywords((prev) => prev.filter((k) => k !== word))
+    changeKeywords(keywords.filter((k) => k !== word))
   }
 
   async function handleCollect() {
@@ -211,6 +302,11 @@ function App() {
           ) : health.modelReachable ? (
             <span className="ai-status on" title="AI 요약 모델에 연결됨">
               ● AI {health.model}
+              {health.db?.enabled && (
+                <span className={health.db.ok ? 'db-status on' : 'db-status off'} title={health.db.ok ? `기사 ${health.db.articles} · 요약 ${health.db.summaries} · 보고서 ${health.db.reports}` : health.db.error}>
+                  {health.db.ok ? ' · DB' : ' · DB 오류'}
+                </span>
+              )}
             </span>
           ) : (
             <span className="ai-status off" title="맥미니(AI 서버)에 닿지 않아요. 요약·보고서를 만들 수 없어요">
@@ -223,7 +319,7 @@ function App() {
       {screen === 'archive' ? (
         <ReportArchive
           reports={reports}
-          onDelete={(id) => updateReports((list) => list.filter((r) => r.id !== id))}
+          onDelete={handleDeleteReport}
           onGoDraft={() => setScreen(reportArticles.length ? 'report' : 'select')}
         />
       ) : screen === 'report' ? (
@@ -233,6 +329,7 @@ function App() {
           queue={queue}
           reports={reports}
           onSaved={(entry) => updateReports((list) => [entry, ...list])}
+          storageLabel={reportsInDb ? 'DB' : '이 브라우저'}
           onUpdated={(entry) => updateReports((list) => list.map((r) => (r.id === entry.id ? entry : r)))}
           onGoSelect={() => setScreen('select')}
           onGoArchive={() => setScreen('archive')}

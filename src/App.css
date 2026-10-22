@@ -1118,3 +1118,11 @@ a.btn {
 .archive-layout .report-layout {
   margin-top: 12px;
 }
+
+.db-status.on {
+  color: #86efac;
+}
+
+.db-status.off {
+  color: #fca5a5;
+}

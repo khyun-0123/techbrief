@@ -4,6 +4,19 @@ import { createServer } from 'node:http'
 import { pathToFileURL } from 'node:url'
 import { collect, listArticles } from './collector/index.js'
 import { similarity } from './collector/dedupe.js'
+import { articleId } from './collector/normalize.js'
+import { dbEnabled, dbStatus } from './db/index.js'
+import {
+  deleteReport,
+  getSummaries,
+  getKeywords,
+  getSummary,
+  listReports,
+  saveReport,
+  saveSummary,
+  setKeywords,
+  updateReportSection,
+} from './db/store.js'
 import { chatJson, modelName, pingModel, reportModelName } from './llm/client.js'
 import { evidenceOf, hasHan, isSupported, stripInlineRefs } from './llm/evidence.js'
 import { buildSummaryMessages, SUMMARY_SCHEMA } from './llm/prompts.js'
@@ -18,10 +31,7 @@ import {
 const REPORT_TIMEOUT_MS = 240_000 // 보고서는 출력이 길어 요약보다 오래 걸린다
 const MAX_REPORT_ARTICLES = 10
 
-const MAX_BODY = 300_000 // 보고서 요청에는 기사 요약 여러 건이 들어간다
-
-// 같은 기사는 다시 부르지 않는다 (서버를 끄면 비워짐. 화면 쪽은 localStorage에 따로 저장)
-const cache = new Map()
+const MAX_BODY = 1_000_000 // 보고서 요청·보고서함 옮기기에는 기사 요약 여러 건이 들어간다
 
 function send(res, status, data) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -68,8 +78,12 @@ async function handleSummary(req, res) {
   const { article, related = [], refresh = false } = await readJson(req)
   if (!article?.title) return send(res, 400, { error: 'article.title이 필요해요.' })
 
-  const key = `${article.id ?? ''}:${article.title}`
-  if (!refresh && cache.has(key)) return send(res, 200, { ...cache.get(key), cached: true })
+  // 같은 기사, 또는 같은 이슈로 묶여 이미 요약된 기사면 저장된 요약을 쓴다 (DB → 서버를 꺼도 남음)
+  const id = String(article.id ?? (article.url ? articleId(article.url) : article.title))
+  if (!refresh) {
+    const saved = await getSummary(id)
+    if (saved) return send(res, 200, { ...saved, cached: true })
+  }
 
   const articles = [article, ...related]
   const { data, model } = await chatJson({
@@ -78,7 +92,9 @@ async function handleSummary(req, res) {
     schemaName: 'article_summary',
   })
   const result = { summary: checkBasis(data, articles), model, createdAt: new Date().toISOString() }
-  cache.set(key, result)
+  // 같은 이슈 기사들도 이 요약을 함께 쓰게 해 둔다
+  const aliasIds = related.map((r) => r.id ?? (r.url ? articleId(r.url) : null))
+  await saveSummary(id, result, aliasIds)
   send(res, 200, result)
 }
 
@@ -138,11 +154,20 @@ async function handleReport(req, res) {
   const sections = Object.fromEntries(
     SECTION_KEYS.map((k) => [k, { bullets: cleanBullets(data.sections?.[k]?.bullets, articles) }]),
   )
-  send(res, 200, {
+  const createdAt = new Date().toISOString()
+  // 보고서함에 넣을 한 건. DB가 있으면 서버에 저장하고, 없으면 화면이 브라우저에 저장한다
+  const entry = {
+    id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+    articleKey: articles.map((a) => String(a.id ?? '')).sort().join('|'),
     report: { title, sections, warnings: [...reportWarnings(sections), ...(data.warnings ?? [])] },
     model,
-    createdAt: new Date().toISOString(),
-  })
+    createdAt,
+    periodLabel: body.periodLabel ?? '오늘',
+    articles: articles.map(({ title: t, source, url, publishedAt }) => ({ title: t, source, url, publishedAt })),
+    inputs: articles.map(({ n: _n, ...rest }) => rest),
+  }
+  if (dbEnabled()) await saveReport(entry)
+  send(res, 200, { entry, stored: dbEnabled() })
 }
 
 async function handleReportSection(req, res) {
@@ -156,24 +181,53 @@ async function handleReportSection(req, res) {
     model: reportModelName(),
     timeoutMs: REPORT_TIMEOUT_MS,
   })
-  send(res, 200, { key: body.key, bullets: cleanBullets(data.bullets, articles), model })
+  const bullets = cleanBullets(data.bullets, articles)
+  if (body.reportId && dbEnabled()) await updateReportSection(body.reportId, body.key, bullets)
+  send(res, 200, { key: body.key, bullets, model })
 }
 
 // /api 요청을 처리한다. Vite 개발 서버와 단독 서버가 같이 쓴다
 export async function handleApi(req, res) {
   try {
     if (req.method === 'GET' && req.url === '/api/health') {
-      return send(res, 200, { ok: true, model: modelName(), modelReachable: await pingModel() })
+      const [modelReachable, db] = await Promise.all([pingModel(), dbStatus()])
+      return send(res, 200, { ok: true, model: modelName(), modelReachable, db })
     }
     if (req.method === 'POST' && req.url === '/api/summaries') {
       return await handleSummary(req, res)
+    }
+    if (req.method === 'POST' && req.url === '/api/summaries/lookup') {
+      const { ids = [] } = await readJson(req)
+      return send(res, 200, { summaries: await getSummaries(ids.slice(0, 200).map(String)) })
     }
     if (req.method === 'POST' && req.url === '/api/collect') {
       const { keywords = [] } = await readJson(req)
       return send(res, 200, await collect(keywords))
     }
     if (req.method === 'GET' && req.url === '/api/articles') {
-      return send(res, 200, listArticles())
+      return send(res, 200, await listArticles())
+    }
+    if (req.method === 'GET' && req.url === '/api/keywords') {
+      return send(res, 200, { stored: dbEnabled(), keywords: dbEnabled() ? await getKeywords() : [] })
+    }
+    if (req.method === 'PUT' && req.url === '/api/keywords') {
+      if (!dbEnabled()) return send(res, 400, { error: 'DB가 설정되지 않았어요.' })
+      const { keywords = [] } = await readJson(req)
+      return send(res, 200, { keywords: await setKeywords(keywords) })
+    }
+    if (req.method === 'GET' && req.url === '/api/reports') {
+      return send(res, 200, { stored: dbEnabled(), reports: dbEnabled() ? await listReports() : [] })
+    }
+    if (req.method === 'POST' && req.url === '/api/reports/import') {
+      // 브라우저(localStorage)에 있던 보고서함을 DB로 옮긴다. 이미 있는 건 건너뜀
+      if (!dbEnabled()) return send(res, 400, { error: 'DB가 설정되지 않았어요.' })
+      const { reports = [] } = await readJson(req)
+      for (const r of reports.slice(0, 30)) if (r?.id && r.report) await saveReport(r)
+      return send(res, 200, { reports: await listReports() })
+    }
+    if (req.method === 'DELETE' && req.url.startsWith('/api/reports/')) {
+      await deleteReport(decodeURIComponent(req.url.slice('/api/reports/'.length)))
+      return send(res, 200, { ok: true })
     }
     if (req.method === 'POST' && req.url === '/api/reports') {
       return await handleReport(req, res)
