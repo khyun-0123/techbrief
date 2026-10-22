@@ -37,6 +37,7 @@ function App() {
   const [collectedAt, setCollectedAt] = useState(() => load(COLLECTED_AT_KEY, null))
   const [collecting, setCollecting] = useState(false)
   const [collectError, setCollectError] = useState('')
+  const [sort, setSort] = useState('latest')
 
   useEffect(() => {
     localStorage.setItem(KEYWORDS_KEY, JSON.stringify(keywords))
@@ -57,16 +58,19 @@ function App() {
 
   // 수집 대상: 등록한 키워드에 해당하는 기사
   const collected = pool.filter((a) => keywords.includes(a.keyword))
-  const todayCount = collected.filter((a) => a.hoursAgo < 24).length
+  const todayIssues = collected.filter((a) => a.hoursAgo < 24)
+  const countArticles = (list) => list.reduce((n, a) => n + 1 + (a.sameIssue ?? 0), 0)
 
   const maxHours = PERIODS.find((p) => p.value === period).hours
   const q = query.trim().toLowerCase()
-  const visible = collected.filter(
-    (a) =>
-      a.hoursAgo < maxHours &&
-      (source === 'all' || a.source === source) &&
-      (!q || a.title.toLowerCase().includes(q) || a.keyword.toLowerCase().includes(q)),
-  )
+  const visible = collected
+    .filter(
+      (a) =>
+        a.hoursAgo < maxHours &&
+        (source === 'all' || a.source === source) &&
+        (!q || a.title.toLowerCase().includes(q) || a.keyword.toLowerCase().includes(q)),
+    )
+    .sort((a, b) => (sort === 'importance' ? (b.importance ?? 0) - (a.importance ?? 0) : 0) || a.hoursAgo - b.hoursAgo)
 
   function handleAddKeyword(e) {
     e.preventDefault()
@@ -119,6 +123,7 @@ function App() {
     <div className="app">
       <nav className="topbar">
         <span className="brand">테크브리프</span>
+        <div className="tabs">
         <button
           type="button"
           className={screen === 'collect' ? 'tab active' : 'tab'}
@@ -134,6 +139,8 @@ function App() {
           선별·요약
         </button>
         <span className="tab disabled" title="다음 단계에서 만들 화면">보고서 초안</span>
+        </div>
+        <span className="topbar-side" />
       </nav>
 
       {screen === 'select' ? (
@@ -151,20 +158,21 @@ function App() {
               <h1>뉴스 수집 현황</h1>
               <p>
                 {isSample
-                  ? '설정한 키워드로 기사를 모아 보여 줘요. 아직 수집 전이라 샘플 기사를 보여 줘요.'
-                  : `네이버 뉴스에서 모은 기사예요. 같은 이슈 기사는 하나로 묶었어요. 마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR')}`}
+                  ? '키워드로 기사를 모아 보여 줘요. 아직 수집 전이라 샘플 기사를 보여 줘요.'
+                  : '네이버 뉴스에서 모은 기사예요. 같은 이슈 기사는 하나로 묶었어요.'}
               </p>
-              {collectError && <p className="ai-error">{collectError}</p>}
             </div>
-            <button type="button" className="btn primary" onClick={handleCollect} disabled={collecting || keywords.length === 0}>
-              {collecting ? '수집 중…' : '지금 수집하기'}
-            </button>
+            <span className="last-collected">
+              {collecting ? '수집 중…' : collectedAt ? `마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 수집 전'}
+            </span>
           </header>
 
           <section className="stats">
             <div className="stat">
-              <span className="stat-label">오늘 수집된 기사</span>
-              <strong>{todayCount}건</strong>
+              <span className="stat-label">오늘 수집된 이슈 · 기사</span>
+              <strong>
+                {todayIssues.length}개 <small>· 기사 {countArticles(todayIssues)}건</small>
+              </strong>
             </div>
             <div className="stat">
               <span className="stat-label">등록한 키워드</span>
@@ -181,7 +189,8 @@ function App() {
               <div className="filters">
                 <input
                   type="search"
-                  placeholder="제목이나 키워드로 검색"
+                  placeholder="모은 기사에서 찾기 (제목·키워드)"
+                  aria-label="모은 기사에서 찾기"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
@@ -200,12 +209,26 @@ function App() {
                     </option>
                   ))}
                 </select>
+                <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="정렬">
+                  <option value="latest">최신순</option>
+                  <option value="importance">중요도순</option>
+                </select>
               </div>
+              <p className="list-meta">
+                이슈 {visible.length}개 · 기사 {countArticles(visible)}건
+              </p>
 
               {visible.length === 0 ? (
                 <p className="empty">조건에 맞는 기사가 없어요. 기간을 넓히거나 키워드를 추가해 보세요.</p>
               ) : (
                 <table className="articles">
+                  <colgroup>
+                    <col />
+                    <col className="col-source" />
+                    <col className="col-time" />
+                    <col className="col-keyword" />
+                    <col className="col-actions" />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th>제목</th>
@@ -221,10 +244,15 @@ function App() {
                       return (
                         <tr key={a.id}>
                           <td>
-                            <div className="title">{a.title}</div>
+                            <div className="title" title={a.title}>
+                              {a.importanceLevel === 'high' && <span className="badge-important">중요</span>}
+                              {a.title}
+                            </div>
                             {a.sameIssue > 0 && <div className="same-issue">같은 이슈 기사 {a.sameIssue}건</div>}
                           </td>
-                          <td>{a.source}</td>
+                          <td className="source" title={a.source}>
+                            {a.source}
+                          </td>
                           <td>{formatPublished(a.hoursAgo)}</td>
                           <td>
                             <span className="chip">{a.keyword}</span>
@@ -277,7 +305,17 @@ function App() {
                   </span>
                 ))}
               </div>
-              <p className="hint">샘플 기사에는 생성형 AI · 반도체 · 클라우드 · OLED 키워드가 있어요.</p>
+              <button
+                type="button"
+                className="btn primary collect-btn"
+                onClick={handleCollect}
+                disabled={collecting || keywords.length === 0}
+              >
+                {collecting ? '수집 중…' : '지금 수집하기'}
+              </button>
+              <p className="hint">키워드마다 네이버 뉴스 최신 100건을 가져와요.</p>
+              {collectError && <p className="ai-error">{collectError}</p>}
+              {isSample && <p className="hint">샘플 기사에는 생성형 AI · 반도체 · 클라우드 · OLED 키워드가 있어요.</p>}
             </aside>
           </div>
         </main>
