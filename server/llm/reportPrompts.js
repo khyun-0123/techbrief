@@ -1,4 +1,5 @@
 // 보고서 초안 프롬프트와 출력 형식 (10 보고서 초안 계획 3절, 08 개발 계획안 5-4)
+import { similarity } from '../collector/dedupe.js'
 
 export const SECTION_KEYS = ['summary', 'tech', 'industry', 'implications']
 
@@ -66,18 +67,30 @@ const ITEM_LABELS = {
 }
 const BASIS_TAG = { article: '', ai_background: ' [AI 보충]', ai_suggestion: ' [AI 제안]' }
 
-// articles: [{ n, title, source, publishedAt, summary: { items: {...} } }]
+const DESC_MAX = 160 // 기사 요약문은 앞부분만 (원래 사실을 근거로 쓰게)
+const SAME_ITEM = 0.3 // 기사끼리 이 이상 비슷한 'AI 보충·제안' 항목은 처음 한 번만 넣는다
+
+// 보고서 입력을 압축한다 (10 보고서 계획 · '요약한 것을 또 요약'하는 부담 줄이기)
+// - 기사 근거 항목은 그대로, 기사 요약문(원래 사실)을 함께 넣는다
+// - 여러 기사에 반복되는 AI 보충·제안(같은 원리 설명 등)은 한 번만 넣는다
+// articles: [{ n, title, source, publishedAt, description, summary: { items: {...} } }]
 function describeArticles(articles) {
+  const seenAi = [] // { label, text }
   return articles
     .map((a) => {
       const head = `[${a.n}] ${a.title} (${a.source ?? '매체 미상'}${a.publishedAt ? `, ${a.publishedAt.slice(0, 10)}` : ''})`
-      const items = Object.entries(ITEM_LABELS)
-        .map(([key, label]) => {
-          const item = a.summary?.items?.[key]
-          return item ? `  - ${label}: ${item.text}${BASIS_TAG[item.basis] ?? ''}` : null
-        })
-        .filter(Boolean)
-      return [head, ...items].join('\n')
+      const lines = [head]
+      if (a.description) lines.push(`  - 기사 요약문: ${a.description.slice(0, DESC_MAX)}`)
+      for (const [key, label] of Object.entries(ITEM_LABELS)) {
+        const item = a.summary?.items?.[key]
+        if (!item?.text) continue
+        if (item.basis !== 'article') {
+          if (seenAi.some((x) => x.label === label && similarity(x.text, item.text) >= SAME_ITEM)) continue
+          seenAi.push({ label, text: item.text })
+        }
+        lines.push(`  - ${label}: ${item.text}${BASIS_TAG[item.basis] ?? ''}`)
+      }
+      return lines.join('\n')
     })
     .join('\n\n')
 }

@@ -19,7 +19,7 @@ const SECTION_PLAN = {
 }
 const BASIS_SHORT = { article: '기사 근거', ai_background: 'AI 보충', ai_suggestion: 'AI 제안' }
 
-function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated, onGoSelect, onGoArchive }) {
+function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated, onGoSelect, onGoArchive, storageLabel }) {
   const [title, setTitle] = useState('테크 동향 브리핑')
   const [period, setPeriod] = useState('today')
   const [generating, setGenerating] = useState(null) // { startedAt }
@@ -52,17 +52,9 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
     setError('')
     setNotice('')
     try {
-      const result = await requestReport({ articles, aiSummaries, title, periodLabel: PERIODS[period] })
-      const entry = {
-        id: result.createdAt,
-        articleKey: key,
-        report: result.report,
-        model: result.model,
-        createdAt: result.createdAt,
-        periodLabel: PERIODS[period],
-        articles: articles.map(({ title: t, source, url, publishedAt }) => ({ title: t, source, url, publishedAt })),
-        inputs: articles, // 섹션 다시 쓰기용 (요약문·같은 이슈 기사 포함)
-      }
+      // 서버가 보고서함 한 건(entry)을 만들어 준다. DB가 있으면 서버에 이미 저장됨
+      const { entry } = await requestReport({ articles, aiSummaries, title, periodLabel: PERIODS[period] })
+      entry.articleKey = key
       onSaved(entry)
       setLastId(entry.id)
       const avg = Math.round(avgMs * 0.6 + (Date.now() - startedAt) * 0.4)
@@ -79,11 +71,15 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
     setRegenKey(sectionKey)
     setError('')
     try {
+      // inputs에는 생성할 때의 요약이 들어 있다 (summary). 없으면 지금 요약을 쓴다
+      const inputs = current.inputs ?? articles
+      const summaries = Object.fromEntries(inputs.map((a) => [a.id, a.summary ? { summary: a.summary } : aiSummaries[a.id]]))
       const result = await requestReportSection({
-        articles: current.inputs ?? articles,
-        aiSummaries,
+        articles: inputs,
+        aiSummaries: summaries,
         key: sectionKey,
         report: current.report,
+        reportId: current.id,
       })
       const report = { ...current.report, sections: { ...current.report.sections, [sectionKey]: { bullets: result.bullets } } }
       onUpdated({ ...current, report })
@@ -133,7 +129,7 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
           <div>
             <h1>보고서 초안</h1>
             <p className="saved-note">
-              ✓ 보고서함에 저장했어요.{' '}
+              ✓ 보고서함에 저장했어요 ({storageLabel}).{' '}
               <button type="button" className="link-btn" onClick={onGoArchive}>
                 보고서함 보기
               </button>
