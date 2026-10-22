@@ -3,10 +3,21 @@
 import { createServer } from 'node:http'
 import { pathToFileURL } from 'node:url'
 import { collect, listArticles } from './collector/index.js'
-import { chatJson, modelName } from './llm/client.js'
+import { chatJson, modelName, reportModelName } from './llm/client.js'
+import { evidenceOf, hasHan, isSupported, stripInlineRefs } from './llm/evidence.js'
 import { buildSummaryMessages, SUMMARY_SCHEMA } from './llm/prompts.js'
+import {
+  buildReportMessages,
+  buildSectionMessages,
+  REPORT_SCHEMA,
+  SECTION_KEYS,
+  SECTION_SCHEMA,
+} from './llm/reportPrompts.js'
 
-const MAX_BODY = 100_000
+const REPORT_TIMEOUT_MS = 240_000 // 보고서는 출력이 길어 요약보다 오래 걸린다
+const MAX_REPORT_ARTICLES = 10
+
+const MAX_BODY = 300_000 // 보고서 요청에는 기사 요약 여러 건이 들어간다
 
 // 같은 기사는 다시 부르지 않는다 (서버를 끄면 비워짐. 화면 쪽은 localStorage에 따로 저장)
 const cache = new Map()
@@ -29,20 +40,26 @@ async function readJson(req) {
   }
 }
 
-// 요약문 없이 제목만 넣었으면 컨셉 말고는 기사로 뒷받침할 수 없다.
-// 모델이 "기사 근거"라고 해도 "AI 보충"으로 바꿔 근거 표시를 정직하게 유지한다
+// 요약 항목의 '기사 근거' 표시를 원래 기사 텍스트로 다시 확인한다 (llm/evidence.js)
+// 기사에 거의 없는 내용이면 'AI 보충'으로 바꾸고 근거 번호를 지운다
 function checkBasis(summary, articles) {
-  const hasBody = articles.some((a) => a.description)
-  if (hasBody || !summary?.items) return summary
-  let changed = false
-  for (const [key, item] of Object.entries(summary.items)) {
-    if (key !== 'concept' && item.basis === 'article') {
+  if (!summary?.items) return summary
+  const evidence = articles.map((a) => [a.title, a.description].filter(Boolean).join(' ')).join(' ')
+  let changed = 0
+  for (const item of Object.values(summary.items)) {
+    item.text = stripInlineRefs(item.text ?? '')
+    if (item.basis !== 'article') {
+      item.refs = []
+    } else if (!isSupported(item.text, evidence)) {
       item.basis = 'ai_background'
       item.refs = []
-      changed = true
+      changed += 1
+    } else {
+      const refs = (item.refs ?? []).filter((n) => Number.isInteger(n) && n >= 1 && n <= articles.length)
+      item.refs = refs.length ? [...new Set(refs)] : [1]
     }
   }
-  if (changed) summary.warnings = [...(summary.warnings ?? []), '기사 제목만 있어 컨셉 외 항목은 AI 보충으로 표시함']
+  if (changed) summary.warnings = [...(summary.warnings ?? []), `기사 내용과 맞지 않아 ${changed}개 항목을 'AI 보충'으로 바꿈`]
   return summary
 }
 
@@ -64,6 +81,72 @@ async function handleSummary(req, res) {
   send(res, 200, result)
 }
 
+// 글머리의 근거 번호를 정리한다: 범위 밖 번호를 지우고, 그 기사 원문과 맞지 않는 번호도 지운다
+function cleanBullets(bullets, articles) {
+  return (bullets ?? [])
+    .filter((b) => b?.text?.trim())
+    .map((b) => {
+      const text = stripInlineRefs(b.text)
+      const claimed = [...new Set((b.refs ?? []).filter((n) => Number.isInteger(n) && n >= 1 && n <= articles.length))]
+      const refs = claimed.filter((n) => isSupported(text, evidenceOf(articles[n - 1]))).sort((x, y) => x - y)
+      return { text, refs, removedRefs: claimed.filter((n) => !refs.includes(n)), han: hasHan(text) }
+    })
+}
+
+function reportWarnings(sections) {
+  const all = Object.values(sections).flatMap((s) => s.bullets)
+  const warnings = []
+  const unsupported = all.filter((b) => b.refs.length === 0).length
+  if (unsupported) warnings.push(`근거 기사가 확인되지 않은 문장 ${unsupported}개 — 확인 후 고치거나 지우세요`)
+  if (all.some((b) => b.han)) warnings.push('한자·중국어가 섞인 문장이 있어요 — 한글로 고치세요')
+  return warnings
+}
+
+function readReportArticles(body) {
+  const articles = (body.articles ?? []).slice(0, MAX_REPORT_ARTICLES).map((a, i) => ({ ...a, n: i + 1 }))
+  if (articles.length === 0) throw Object.assign(new Error('보고서에 넣을 기사가 없어요.'), { status: 400 })
+  const missing = articles.filter((a) => !a.summary?.items)
+  if (missing.length) {
+    throw Object.assign(new Error(`AI 요약이 없는 기사가 ${missing.length}건 있어요. 먼저 요약해 주세요.`), { status: 400 })
+  }
+  return articles
+}
+
+async function handleReport(req, res) {
+  const body = await readJson(req)
+  const articles = readReportArticles(body)
+  const title = body.title?.trim() || '테크 동향 브리핑'
+  const { data, model } = await chatJson({
+    messages: buildReportMessages(articles, { title, periodLabel: body.periodLabel ?? '오늘' }),
+    schema: REPORT_SCHEMA,
+    schemaName: 'report_draft',
+    model: reportModelName(),
+    timeoutMs: REPORT_TIMEOUT_MS,
+  })
+  const sections = Object.fromEntries(
+    SECTION_KEYS.map((k) => [k, { bullets: cleanBullets(data.sections?.[k]?.bullets, articles) }]),
+  )
+  send(res, 200, {
+    report: { title, sections, warnings: [...reportWarnings(sections), ...(data.warnings ?? [])] },
+    model,
+    createdAt: new Date().toISOString(),
+  })
+}
+
+async function handleReportSection(req, res) {
+  const body = await readJson(req)
+  const articles = readReportArticles(body)
+  if (!SECTION_KEYS.includes(body.key)) return send(res, 400, { error: '없는 섹션이에요.' })
+  const { data, model } = await chatJson({
+    messages: buildSectionMessages(articles, { key: body.key, report: body.report }),
+    schema: SECTION_SCHEMA,
+    schemaName: 'report_section',
+    model: reportModelName(),
+    timeoutMs: REPORT_TIMEOUT_MS,
+  })
+  send(res, 200, { key: body.key, bullets: cleanBullets(data.bullets, articles), model })
+}
+
 // /api 요청을 처리한다. Vite 개발 서버와 단독 서버가 같이 쓴다
 export async function handleApi(req, res) {
   try {
@@ -79,6 +162,12 @@ export async function handleApi(req, res) {
     }
     if (req.method === 'GET' && req.url === '/api/articles') {
       return send(res, 200, listArticles())
+    }
+    if (req.method === 'POST' && req.url === '/api/reports') {
+      return await handleReport(req, res)
+    }
+    if (req.method === 'POST' && req.url === '/api/reports/section') {
+      return await handleReportSection(req, res)
     }
     send(res, 404, { error: '없는 주소예요.' })
   } catch (err) {

@@ -1,7 +1,7 @@
 // AI 모델 호출은 이 파일에서만 한다. 모델을 바꿀 때는 .env.local 값만 바꾼다.
 // OpenAI 호환 /chat/completions 주소를 쓰므로 Ollama(맥미니)와 상용 API 모두 같은 코드로 부른다.
 
-const TIMEOUT_MS = 120_000
+const TIMEOUT_MS = 120_000 // 요약 기본값. 보고서처럼 긴 출력은 호출할 때 늘린다
 
 function config() {
   const baseUrl = process.env.LLM_BASE_URL
@@ -22,8 +22,9 @@ function enqueue(task) {
   return run
 }
 
-async function callChat({ messages, schema, schemaName }) {
-  const { baseUrl, apiKey, model } = config()
+async function callChat({ messages, schema, schemaName, model: modelOverride, timeoutMs = TIMEOUT_MS }) {
+  const { baseUrl, apiKey, model: defaultModel } = config()
+  const model = modelOverride || defaultModel
   const body = { model, messages, temperature: 0.2 }
   if (schema) {
     body.response_format = { type: 'json_schema', json_schema: { name: schemaName, schema } }
@@ -37,7 +38,7 @@ async function callChat({ messages, schema, schemaName }) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
@@ -48,11 +49,12 @@ async function callChat({ messages, schema, schemaName }) {
 }
 
 // 질문 하나를 보내고 JSON으로 받는다
-export function chatJson({ messages, schema, schemaName = 'result' }) {
+// model·timeoutMs는 선택 (보고서는 LLM_REPORT_MODEL과 더 긴 시간)
+export function chatJson({ messages, schema, schemaName = 'result', model, timeoutMs }) {
   return enqueue(async () => {
-    const { content, model } = await callChat({ messages, schema, schemaName })
+    const { content, model: used } = await callChat({ messages, schema, schemaName, model, timeoutMs })
     try {
-      return { data: JSON.parse(content), model }
+      return { data: JSON.parse(content), model: used }
     } catch {
       throw new Error('AI 응답이 JSON 형식이 아니에요.')
     }
@@ -61,4 +63,8 @@ export function chatJson({ messages, schema, schemaName = 'result' }) {
 
 export function modelName() {
   return process.env.LLM_SUMMARY_MODEL ?? ''
+}
+
+export function reportModelName() {
+  return process.env.LLM_REPORT_MODEL || process.env.LLM_SUMMARY_MODEL || ''
 }

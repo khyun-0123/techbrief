@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { collectNews } from './api.js'
+import ProgressPanel from './ProgressPanel.jsx'
+import ReportDraft from './ReportDraft.jsx'
+import { useSummaryQueue } from './summaryQueue.js'
 import { DEFAULT_KEYWORDS, SAMPLE_ARTICLES } from './sampleArticles.js'
 import SelectSummary from './SelectSummary.jsx'
 import { formatPublished, load } from './utils.js'
@@ -10,6 +13,7 @@ const SELECTED_KEY = 'techbrief-selected'
 const INCLUDED_KEY = 'techbrief-included'
 const ARTICLES_KEY = 'techbrief-articles' // 마지막으로 수집한 기사 (서버를 꺼도 화면에 남게)
 const COLLECTED_AT_KEY = 'techbrief-collected-at'
+const AI_SUMMARIES_KEY = 'techbrief-ai-summaries'
 const MAX_SAVED = 400
 
 // 서버 기사(publishedAt)를 화면에서 쓰는 모양(hoursAgo)으로 바꾼다
@@ -38,6 +42,16 @@ function App() {
   const [collecting, setCollecting] = useState(false)
   const [collectError, setCollectError] = useState('')
   const [sort, setSort] = useState('latest')
+  const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
+
+  useEffect(() => {
+    localStorage.setItem(AI_SUMMARIES_KEY, JSON.stringify(aiSummaries))
+  }, [aiSummaries])
+
+  // 「선별에 추가」하면 자동 요약 (08 13-1: 선별한 기사만 요약)
+  const queue = useSummaryQueue({
+    onDone: (id, result) => setAiSummaries((prev) => ({ ...prev, [id]: result })),
+  })
 
   useEffect(() => {
     localStorage.setItem(KEYWORDS_KEY, JSON.stringify(keywords))
@@ -104,10 +118,17 @@ function App() {
     }
   }
 
-  function toggleSelected(id) {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
-    // 선별을 풀면 보고서 포함 목록에서도 뺀다
-    setIncludedIds((prev) => prev.filter((x) => x !== id))
+  function toggleSelected(article) {
+    const { id } = article
+    if (selectedIds.includes(id)) {
+      setSelectedIds((prev) => prev.filter((x) => x !== id))
+      // 선별을 풀면 보고서 포함 목록에서도 빼고, 아직 시작 전인 요약은 취소한다
+      setIncludedIds((prev) => prev.filter((x) => x !== id))
+      queue.remove(id)
+    } else {
+      setSelectedIds((prev) => [...prev, id])
+      if (!aiSummaries[id]) queue.enqueue(article)
+    }
   }
 
   // 선별에서 빠진 기사는 보고서 포함 목록에서도 뺀다
@@ -117,7 +138,11 @@ function App() {
   function handleExclude(id) {
     setSelectedIds((prev) => prev.filter((x) => x !== id))
     setIncludedIds((prev) => prev.filter((x) => x !== id))
+    queue.remove(id)
   }
+
+  // 보고서에는 선별 화면에서 고른 순서대로
+  const reportArticles = included.map((id) => candidates.find((a) => a.id === id)).filter(Boolean)
 
   return (
     <div className="app">
@@ -138,18 +163,34 @@ function App() {
         >
           선별·요약
         </button>
-        <span className="tab disabled" title="다음 단계에서 만들 화면">보고서 초안</span>
+        <button
+          type="button"
+          className={screen === 'report' ? 'tab active' : 'tab'}
+          onClick={() => setScreen('report')}
+        >
+          보고서 초안
+        </button>
         </div>
         <span className="topbar-side" />
       </nav>
 
-      {screen === 'select' ? (
+      {screen === 'report' ? (
+        <ReportDraft
+          articles={reportArticles}
+          aiSummaries={aiSummaries}
+          queue={queue}
+          onGoSelect={() => setScreen('select')}
+        />
+      ) : screen === 'select' ? (
         <SelectSummary
           candidates={candidates}
           includedIds={included}
           setIncludedIds={setIncludedIds}
           onExclude={handleExclude}
           onGoCollect={() => setScreen('collect')}
+          onGoReport={() => setScreen('report')}
+          aiSummaries={aiSummaries}
+          queue={queue}
         />
       ) : (
         <main className="page">
@@ -270,7 +311,7 @@ function App() {
                             <button
                               type="button"
                               className={selected ? 'btn primary' : 'btn outline'}
-                              onClick={() => toggleSelected(a.id)}
+                              onClick={() => toggleSelected(a)}
                             >
                               {selected ? '선별됨 ✓' : '선별에 추가'}
                             </button>
@@ -320,6 +361,7 @@ function App() {
           </div>
         </main>
       )}
+      <ProgressPanel queue={queue} />
     </div>
   )
 }

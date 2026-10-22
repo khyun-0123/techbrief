@@ -32,3 +32,32 @@ export function requestSummary(article, { refresh = false } = {}) {
     refresh,
   })
 }
+
+// 보고서에 넣는 기사: 6항목 요약 + 근거 검증용 원문 텍스트(요약문·같은 이슈 기사)
+function reportArticle(article, aiSummary) {
+  return {
+    title: article.title,
+    source: article.source,
+    publishedAt: article.publishedAt,
+    url: article.url,
+    description: article.description,
+    related: (article.related ?? []).map(({ title, source, description }) => ({ title, source, description })),
+    summary: aiSummary?.summary,
+  }
+}
+
+export function requestReport({ articles, aiSummaries, title, periodLabel }) {
+  return postJson('/api/reports', {
+    title,
+    periodLabel,
+    articles: articles.map((a) => reportArticle(a, aiSummaries[a.id])),
+  })
+}
+
+export function requestReportSection({ articles, aiSummaries, key, report }) {
+  return postJson('/api/reports/section', {
+    key,
+    report,
+    articles: articles.map((a) => reportArticle(a, aiSummaries[a.id])),
+  })
+}

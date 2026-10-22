@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react'
-import { requestSummary } from './api.js'
+import { useState } from 'react'
 import { SAMPLE_SUMMARIES } from './sampleArticles.js'
-import { formatPublished, load } from './utils.js'
+import { formatPublished } from './utils.js'
 
 const IMPORTANCE_LABEL = { high: '중요도 높음', normal: '중요도 보통' }
-const AI_SUMMARIES_KEY = 'techbrief-ai-summaries'
+const JOB_LABEL = { queued: '요약 대기', running: '요약 중', error: '요약 오류' }
 
 // 6항목 요약 (1차 인터뷰)
 const ITEM_LABELS = [
@@ -26,16 +25,10 @@ function importanceOf(article) {
   return article.importanceLevel ?? SAMPLE_SUMMARIES[article.id]?.importance ?? 'normal'
 }
 
-function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onGoCollect }) {
+// aiSummaries·queue는 App이 관리한다 (「선별에 추가」하면 자동 요약)
+function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onGoCollect, onGoReport, aiSummaries, queue }) {
   const [sort, setSort] = useState('importance')
   const [activeId, setActiveId] = useState(null)
-  const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
-  const [loadingId, setLoadingId] = useState(null)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    localStorage.setItem(AI_SUMMARIES_KEY, JSON.stringify(aiSummaries))
-  }, [aiSummaries])
 
   const sorted = [...candidates].sort((a, b) => {
     if (sort === 'importance') {
@@ -50,6 +43,10 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
   const summary = active && SAMPLE_SUMMARIES[active.id]
   const ai = active && aiSummaries[active.id]
   const activeIncluded = active && includedIds.includes(active.id)
+  const jobOf = (id) => queue.jobs.find((j) => j.id === id)
+  const activeJob = active && jobOf(active.id)
+  const activeBusy = activeJob && (activeJob.status === 'queued' || activeJob.status === 'running')
+  const summarizedCount = candidates.filter((a) => aiSummaries[a.id]).length
 
   function toggleIncluded(id) {
     setIncludedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
@@ -59,24 +56,12 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
     setIncludedIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
   }
 
-  async function handleSummarize(article) {
-    setLoadingId(article.id)
-    setError('')
-    try {
-      const result = await requestSummary(article, { refresh: Boolean(aiSummaries[article.id]) })
-      setAiSummaries((prev) => ({ ...prev, [article.id]: result }))
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoadingId(null)
-    }
-  }
 
   return (
     <main className="page">
       <header className="page-header">
         <h1>뉴스 선별·요약</h1>
-        <p>보고서에 넣을 기사를 고르고, 기사별 요약을 확인해요. 「AI 요약 생성」을 누르면 6항목으로 요약해요.</p>
+        <p>선별한 기사는 자동으로 6항목 요약을 시작해요. 요약을 확인하고 보고서에 넣을 기사를 고르세요.</p>
       </header>
 
       {candidates.length === 0 ? (
@@ -90,7 +75,9 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
         <div className="select-content">
           <section className="panel">
             <div className="candidate-header">
-              <h2>후보 기사 {candidates.length}건</h2>
+              <h2>
+                후보 기사 {candidates.length}건 <small>· 요약 완료 {summarizedCount}</small>
+              </h2>
               <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="정렬">
                 <option value="importance">중요도순</option>
                 <option value="latest">최신순</option>
@@ -106,6 +93,8 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
             <ul className="candidates">
               {sorted.map((a) => {
                 const importance = importanceOf(a)
+                const job = jobOf(a.id)
+                const jobStatus = aiSummaries[a.id] && job?.status !== 'running' && job?.status !== 'queued' ? 'done' : job?.status
                 return (
                   <li
                     key={a.id}
@@ -124,6 +113,14 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
                       <div className="meta">
                         {a.source} · {formatPublished(a.hoursAgo)}
                         {a.sameIssue > 0 && ` · 같은 이슈 ${a.sameIssue}건`}
+                        {jobStatus === 'done' && <span className="summary-state done"> · 요약 완료</span>}
+                        {jobStatus && jobStatus !== 'done' && (
+                          <span className={`summary-state ${jobStatus}`}>
+                            {' '}
+                            · {JOB_LABEL[jobStatus]}
+                            {jobStatus === 'running' && ` ${queue.progressOf(job)}%`}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <span className={importance === 'high' ? 'chip' : 'chip muted'}>{IMPORTANCE_LABEL[importance]}</span>
@@ -140,6 +137,20 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
               {active.source} · {formatPublished(active.hoursAgo)}
               {active.sameIssue > 0 && ` · 같은 이슈 기사 ${active.sameIssue}건 묶음`}
             </p>
+
+            {activeBusy && (
+              <div className="summary-progress">
+                <span>
+                  {activeJob.status === 'running'
+                    ? `AI 요약 중 ${queue.progressOf(activeJob)}% (예상)`
+                    : `요약 대기 중 — 앞에 ${queue.jobs.filter((j) => j.status === 'queued' || j.status === 'running').findIndex((j) => j.id === active.id)}건`}
+                </span>
+                <div className="gauge gauge-running">
+                  <div className="gauge-fill" style={{ width: `${queue.progressOf(activeJob)}%` }} />
+                </div>
+              </div>
+            )}
+            {activeJob?.status === 'error' && <p className="ai-error">요약 오류: {activeJob.error}</p>}
 
             {ai ? (
               <>
@@ -206,16 +217,14 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
               <p className="source-link">원문 링크: 샘플 기사라 원문이 없어요</p>
             )}
 
-            {error && <p className="ai-error">{error}</p>}
-
             <div className="detail-actions">
               <button
                 type="button"
                 className="btn"
-                onClick={() => handleSummarize(active)}
-                disabled={loadingId !== null}
+                onClick={() => queue.enqueue(active, { refresh: Boolean(ai) })}
+                disabled={Boolean(activeBusy)}
               >
-                {loadingId === active.id ? 'AI 요약 중…' : ai ? '요약 다시 생성' : 'AI 요약 생성'}
+                {activeBusy ? '요약 진행 중…' : ai ? '요약 다시 생성' : 'AI 요약 생성'}
               </button>
               <button
                 type="button"
@@ -237,7 +246,7 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
         <span>
           보고서에 포함된 기사 <strong>{includedIds.length}건</strong>
         </span>
-        <button type="button" className="btn primary" disabled title="보고서 초안 화면은 다음 단계에서 만들어요">
+        <button type="button" className="btn primary" onClick={onGoReport} disabled={includedIds.length === 0}>
           보고서 초안 만들기
         </button>
       </section>

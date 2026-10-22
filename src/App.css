@@ -1,5 +1,6 @@
 .app {
   min-height: 100vh;
+  padding-bottom: 140px; /* 오른쪽 아래 진행 창에 가려지지 않게 */
   background: #f3f5f8;
   color: #1c2533;
   font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif;
@@ -555,4 +556,364 @@ a.btn {
   width: 100%;
   margin: 16px 0 0;
   padding: 10px 12px;
+}
+
+/* 게이지 (요약·보고서 진행) */
+.gauge {
+  height: 6px;
+  border-radius: 999px;
+  background: #e5e9f0;
+  overflow: hidden;
+}
+
+.gauge-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #1b6a96;
+  transition: width 0.4s linear;
+}
+
+.gauge-done .gauge-fill {
+  background: #16a34a;
+}
+
+.gauge-error .gauge-fill {
+  background: #c0392b;
+}
+
+.gauge-queued .gauge-fill {
+  background: transparent;
+}
+
+/* AI 요약 진행 창 (오른쪽 아래) */
+.progress-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 10;
+  width: 360px;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #dde2ea;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(28, 37, 51, 0.18);
+}
+
+.progress-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.progress-count {
+  margin-left: auto;
+  color: #5b6677;
+  font-size: 13px;
+}
+
+.icon-btn {
+  padding: 2px 6px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: #5b6677;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: #eef1f5;
+}
+
+.progress-sub {
+  margin: 6px 0 8px;
+  color: #5b6677;
+  font-size: 12px;
+}
+
+.progress-list {
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border-top: 1px solid #eef1f5;
+}
+
+.progress-item {
+  padding: 8px 0;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.progress-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.progress-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.progress-status {
+  color: #5b6677;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.status-running .progress-status {
+  color: #1b6a96;
+  font-weight: 600;
+}
+
+.status-done .progress-status {
+  color: #16a34a;
+}
+
+.status-error .progress-status,
+.progress-error {
+  color: #c0392b;
+}
+
+.progress-error {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.progress-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.progress-foot .hint {
+  margin: 0;
+  font-size: 11px;
+}
+
+.progress-foot .btn {
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* 선별 화면의 요약 상태 */
+.summary-state {
+  font-weight: 600;
+}
+
+.summary-state.done {
+  color: #16a34a;
+}
+
+.summary-state.running,
+.summary-state.queued {
+  color: #1b6a96;
+}
+
+.summary-state.error {
+  color: #c0392b;
+}
+
+.candidate-header h2 small {
+  color: #5b6677;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.summary-progress {
+  margin: 8px 0 14px;
+  font-size: 13px;
+  color: #1b6a96;
+}
+
+.summary-progress .gauge {
+  margin-top: 6px;
+}
+
+/* 보고서 초안 */
+.report-settings {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding: 16px;
+}
+
+.report-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #5b6677;
+}
+
+.report-settings label:first-child {
+  flex: 1;
+}
+
+.report-settings-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.report-settings-actions .btn {
+  margin: 0;
+  padding: 10px 14px;
+}
+
+.report-notice {
+  margin: 16px 0 0;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 14px;
+}
+
+.report-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 0;
+  color: #1b6a96;
+  font-size: 14px;
+}
+
+.report-progress .gauge {
+  flex: 1;
+}
+
+.report-copied {
+  margin: 12px 0 0;
+  color: #16a34a;
+  font-size: 14px;
+}
+
+.report-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 20px;
+  align-items: start;
+  margin-top: 20px;
+}
+
+.report-doc {
+  padding: 28px 32px;
+}
+
+.report-doc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #1c2533;
+}
+
+.report-doc-head h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.report-doc-head span {
+  color: #5b6677;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.report-warnings {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 13px;
+  list-style: none;
+}
+
+.report-section {
+  margin-top: 18px;
+}
+
+.report-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.report-section-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.report-section-head .btn {
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.report-bullets {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.report-bullets li {
+  margin: 6px 0;
+  line-height: 1.6;
+}
+
+.report-ref {
+  margin-left: 3px;
+  color: #1d4ed8;
+  font-size: 12px;
+  text-decoration: none;
+  vertical-align: super;
+}
+
+.report-refs {
+  padding: 18px;
+}
+
+.report-refs h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.report-refs ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-refs li {
+  display: flex;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid #eef1f5;
+  font-size: 13px;
+}
+
+.report-refs li:target {
+  background: #eff6ff;
+}
+
+.report-ref-num {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.report-refs .meta {
+  margin: 2px 0 4px;
+  color: #5b6677;
 }
