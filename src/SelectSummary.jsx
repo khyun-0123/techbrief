@@ -131,7 +131,17 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
 
           <section className="panel select-pane detail">
             <div className="detail-body">
-              <span className="detail-label">선택한 기사</span>
+              <div className="detail-head">
+                <span className="detail-label">선택한 기사</span>
+                <button
+                  type="button"
+                  className="btn-text danger"
+                  onClick={() => onExclude(active.id)}
+                  title="선별 목록에서 빼요. 만든 요약은 그대로 남아요"
+                >
+                  선별 취소
+                </button>
+              </div>
               <h2>{active.title}</h2>
               <p className="meta">
                 {active.source} · {formatPublished(active.hoursAgo)}
@@ -217,9 +227,6 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
                 onClick={() => toggleIncluded(active.id)}
               >
                 {activeIncluded ? '보고서에서 빼기' : '보고서에 넣기'}
-              </button>
-              <button type="button" className="btn danger" onClick={() => onExclude(active.id)}>
-                선별 취소
               </button>
             </div>
           </section>

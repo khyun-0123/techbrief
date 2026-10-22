@@ -526,6 +526,33 @@ tr.row-open td {
   font-size: 14px;
 }
 
+/* 상세 맨 위: '선택한 기사' + 선별 취소 */
+.detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.btn-text {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: #5b6677;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-text.danger {
+  color: #c0392b;
+}
+
+.btn-text.danger:hover {
+  background: #fde8e6;
+}
+
 .detail-actions {
   padding: 14px 24px;
   border-top: 1px solid #eef1f5;
