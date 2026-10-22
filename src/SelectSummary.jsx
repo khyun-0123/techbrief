@@ -1,24 +1,10 @@
 import { useState } from 'react'
 import { SAMPLE_SUMMARIES } from './sampleArticles.js'
+import SummaryItems from './SummaryItems.jsx'
 import { formatPublished } from './utils.js'
 
 const IMPORTANCE_LABEL = { high: '중요도 높음', normal: '중요도 보통' }
 const JOB_LABEL = { queued: '요약 대기', running: '요약 중', error: '요약 오류' }
-
-// 6항목 요약 (1차 인터뷰)
-const ITEM_LABELS = [
-  ['concept', '컨셉'],
-  ['principle', '원리'],
-  ['pros_cons', '장단점'],
-  ['competitors', '타사 현황'],
-  ['application', '활용 방안'],
-  ['effect', '효과성'],
-]
-const BASIS_LABEL = {
-  article: '기사 근거',
-  ai_background: 'AI 보충 · 확인 필요',
-  ai_suggestion: 'AI 제안',
-}
 
 // 실제 기사는 서버가 매긴 중요도, 샘플은 샘플 값
 function importanceOf(article) {
@@ -169,24 +155,7 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
               {ai ? (
                 <>
                   <h3>AI 요약 (6항목)</h3>
-                  <dl className="ai-summary">
-                    {ITEM_LABELS.map(([key, label]) => {
-                      const item = ai.summary.items?.[key]
-                      if (!item) return null
-                      return (
-                        <div key={key} className="ai-item">
-                          <dt>{label}</dt>
-                          <dd>
-                            {item.text}
-                            {item.basis === 'article' && item.refs?.length > 0 && (
-                              <span className="ref"> [{item.refs.join('][')}]</span>
-                            )}
-                            <span className={`basis basis-${item.basis}`}>{BASIS_LABEL[item.basis] ?? item.basis}</span>
-                          </dd>
-                        </div>
-                      )
-                    })}
-                  </dl>
+                  <SummaryItems summary={ai.summary} />
                   {ai.summary.warnings?.length > 0 && <p className="ai-warning">⚠ {ai.summary.warnings.join(' / ')}</p>}
                   <p className="hint">
                     모델 {ai.model} · {new Date(ai.createdAt).toLocaleString('ko-KR')}

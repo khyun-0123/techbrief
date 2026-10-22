@@ -20,9 +20,27 @@ export async function fetchArticles() {
   return res.json()
 }
 
-// 등록한 키워드로 네이버 뉴스를 모은다
-export function collectNews(keywords) {
-  return postJson('/api/collect', { keywords })
+// 자동 최신화 상태 (설정·마지막/다음 실행·진행 상황)
+export async function fetchRefresh() {
+  const res = await fetch('/api/refresh')
+  if (!res.ok) throw new Error('최신화 상태를 불러오지 못했어요')
+  return res.json()
+}
+
+// 「지금 최신화」: 키워드로 기사를 모으고 중요한 기사 몇 건을 미리 요약한다 (끝날 때까지 기다리지 않음)
+export function runRefresh(keywords) {
+  return postJson('/api/refresh/run', { keywords })
+}
+
+export async function saveRefreshSettings(settings) {
+  const res = await fetch('/api/refresh/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
 }
 
 // 기사 요약문과 같은 이슈 기사를 함께 보내면 '기사 근거' 항목이 늘어난다

@@ -6,7 +6,8 @@ function summaryApi() {
   return {
     name: 'summary-api',
     async configureServer(server) {
-      const { handleApi } = await import('./server/index.js')
+      const { handleApi, startScheduler } = await import('./server/index.js')
+      startScheduler() // 자동 최신화 예약 확인 (설정이 '꺼짐'이면 아무것도 안 함)
       server.middlewares.use((req, res, next) => {
         if (!req.url?.startsWith('/api/')) return next()
         handleApi(req, res)

@@ -4,22 +4,18 @@ import { createServer } from 'node:http'
 import { pathToFileURL } from 'node:url'
 import { collect, listArticles } from './collector/index.js'
 import { similarity } from './collector/dedupe.js'
-import { articleId } from './collector/normalize.js'
 import { dbEnabled, dbStatus } from './db/index.js'
 import {
   deleteReport,
   getSummaries,
   getKeywords,
-  getSummary,
   listReports,
   saveReport,
-  saveSummary,
   setKeywords,
   updateReportSection,
 } from './db/store.js'
 import { chatJson, modelName, pingModel, reportModelName } from './llm/client.js'
 import { evidenceOf, hasHan, isSupported, stripInlineRefs } from './llm/evidence.js'
-import { buildSummaryMessages, SUMMARY_SCHEMA } from './llm/prompts.js'
 import {
   buildReportMessages,
   buildSectionMessages,
@@ -27,6 +23,8 @@ import {
   SECTION_KEYS,
   SECTION_SCHEMA,
 } from './llm/reportPrompts.js'
+import { refreshStatus, saveRefreshSettings, startRefresh, startScheduler } from './refresh.js'
+import { summarizeArticle } from './summarize.js'
 
 const REPORT_TIMEOUT_MS = 240_000 // 보고서는 출력이 길어 요약보다 오래 걸린다
 const MAX_REPORT_ARTICLES = 10
@@ -51,51 +49,10 @@ async function readJson(req) {
   }
 }
 
-// 요약 항목의 '기사 근거' 표시를 원래 기사 텍스트로 다시 확인한다 (llm/evidence.js)
-// 기사에 거의 없는 내용이면 'AI 보충'으로 바꾸고 근거 번호를 지운다
-function checkBasis(summary, articles) {
-  if (!summary?.items) return summary
-  const evidence = articles.map((a) => [a.title, a.description].filter(Boolean).join(' ')).join(' ')
-  let changed = 0
-  for (const item of Object.values(summary.items)) {
-    item.text = stripInlineRefs(item.text ?? '')
-    if (item.basis !== 'article') {
-      item.refs = []
-    } else if (!isSupported(item.text, evidence)) {
-      item.basis = 'ai_background'
-      item.refs = []
-      changed += 1
-    } else {
-      const refs = (item.refs ?? []).filter((n) => Number.isInteger(n) && n >= 1 && n <= articles.length)
-      item.refs = refs.length ? [...new Set(refs)] : [1]
-    }
-  }
-  if (changed) summary.warnings = [...(summary.warnings ?? []), `기사 내용과 맞지 않아 ${changed}개 항목을 'AI 보충'으로 바꿈`]
-  return summary
-}
-
 async function handleSummary(req, res) {
   const { article, related = [], refresh = false } = await readJson(req)
   if (!article?.title) return send(res, 400, { error: 'article.title이 필요해요.' })
-
-  // 같은 기사, 또는 같은 이슈로 묶여 이미 요약된 기사면 저장된 요약을 쓴다 (DB → 서버를 꺼도 남음)
-  const id = String(article.id ?? (article.url ? articleId(article.url) : article.title))
-  if (!refresh) {
-    const saved = await getSummary(id)
-    if (saved) return send(res, 200, { ...saved, cached: true })
-  }
-
-  const articles = [article, ...related]
-  const { data, model } = await chatJson({
-    messages: buildSummaryMessages(articles),
-    schema: SUMMARY_SCHEMA,
-    schemaName: 'article_summary',
-  })
-  const result = { summary: checkBasis(data, articles), model, createdAt: new Date().toISOString() }
-  // 같은 이슈 기사들도 이 요약을 함께 쓰게 해 둔다
-  const aliasIds = related.map((r) => r.id ?? (r.url ? articleId(r.url) : null))
-  await saveSummary(id, result, aliasIds)
-  send(res, 200, result)
+  send(res, 200, await summarizeArticle(article, related, { refresh }))
 }
 
 // 같은 섹션에서 이 이상 비슷한 글머리는 하나로 합친다 (기사마다 같은 원리 설명이 반복되는 문제)
@@ -186,6 +143,8 @@ async function handleReportSection(req, res) {
   send(res, 200, { key: body.key, bullets, model })
 }
 
+export { startScheduler }
+
 // /api 요청을 처리한다. Vite 개발 서버와 단독 서버가 같이 쓴다
 export async function handleApi(req, res) {
   try {
@@ -203,6 +162,17 @@ export async function handleApi(req, res) {
     if (req.method === 'POST' && req.url === '/api/collect') {
       const { keywords = [] } = await readJson(req)
       return send(res, 200, await collect(keywords))
+    }
+    if (req.method === 'GET' && req.url === '/api/refresh') {
+      return send(res, 200, await refreshStatus())
+    }
+    if (req.method === 'PUT' && req.url === '/api/refresh/settings') {
+      return send(res, 200, await saveRefreshSettings(await readJson(req)))
+    }
+    if (req.method === 'POST' && req.url === '/api/refresh/run') {
+      const { keywords = [] } = await readJson(req)
+      await startRefresh(keywords.map(String).slice(0, 20))
+      return send(res, 202, await refreshStatus())
     }
     if (req.method === 'GET' && req.url === '/api/articles') {
       return send(res, 200, await listArticles())
@@ -246,6 +216,7 @@ export async function handleApi(req, res) {
 // node server/index.js로 직접 실행했을 때만 단독 서버를 연다
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const port = Number(process.env.PORT ?? 3001)
+  startScheduler()
   createServer(handleApi).listen(port, '127.0.0.1', () => {
     console.log(`요약 API 서버: http://127.0.0.1:${port} (모델 ${modelName() || '설정 없음'})`)
   })

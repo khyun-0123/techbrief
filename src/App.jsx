@@ -1,23 +1,27 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import {
-  collectNews,
   deleteReportApi,
   fetchArticles,
   fetchHealth,
   fetchKeywords,
+  fetchRefresh,
   fetchReports,
   importReports,
   lookupSummaries,
+  runRefresh,
   saveKeywordsApi,
+  saveRefreshSettings,
 } from './api.js'
 import ProgressPanel from './ProgressPanel.jsx'
+import RefreshPanel from './RefreshPanel.jsx'
 import ReportArchive from './ReportArchive.jsx'
 import ReportDraft from './ReportDraft.jsx'
 import { loadReports, saveReports } from './reportStore.js'
 import { useSummaryQueue } from './summaryQueue.js'
 import { DEFAULT_KEYWORDS, SAMPLE_ARTICLES } from './sampleArticles.js'
 import SelectSummary from './SelectSummary.jsx'
+import SummaryItems from './SummaryItems.jsx'
 import { formatPublished, load } from './utils.js'
 
 const KEYWORDS_KEY = 'techbrief-keywords'
@@ -51,30 +55,51 @@ function App() {
   const [source, setSource] = useState('all')
   const [fetched, setFetched] = useState(() => load(ARTICLES_KEY, []))
   const [collectedAt, setCollectedAt] = useState(() => load(COLLECTED_AT_KEY, null))
-  const [collecting, setCollecting] = useState(false)
-  const [collectError, setCollectError] = useState('')
+  const [refresh, setRefresh] = useState(null) // 자동 최신화 상태 (서버)
+  const [refreshError, setRefreshError] = useState('')
+  const [starting, setStarting] = useState(false)
+  const [openSummaryId, setOpenSummaryId] = useState(null) // 목록에서 요약을 펼친 기사
   const [sort, setSort] = useState('latest')
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
   const [reports, setReports] = useState(() => loadReports())
   const [reportsInDb, setReportsInDb] = useState(false) // true면 보고서함을 서버 DB에 저장
 
-  // 앱을 열 때 DB에 쌓인 기사를 불러온다 (수집 버튼을 누르지 않아도 지난 수집 결과가 보이게)
+  // 서버에 쌓인 기사를 불러온다. 앱을 열 때, 최신화가 끝났을 때
+  const reloadArticles = useCallback(async () => {
+    const result = await fetchArticles()
+    if (result.articles.length === 0) return
+    const articles = result.articles.slice(0, MAX_SAVED)
+    setFetched(articles)
+    setCollectedAt(result.lastCollectedAt)
+    localStorage.setItem(ARTICLES_KEY, JSON.stringify(articles))
+    localStorage.setItem(COLLECTED_AT_KEY, JSON.stringify(result.lastCollectedAt))
+  }, [])
+
+  useEffect(() => {
+    reloadArticles().catch(() => {})
+  }, [reloadArticles])
+
+  // 자동 최신화 상태: 도는 중이면 3초, 아니면 30초마다 확인. 끝나면(마지막 실행 시각이 바뀌면) 기사를 다시 불러온다
+  const lastRunRef = useRef(undefined)
+  const refreshRunning = Boolean(refresh?.running)
   useEffect(() => {
     let alive = true
-    fetchArticles()
-      .then((result) => {
-        if (!alive || result.storage !== 'db' || result.articles.length === 0) return
-        const articles = result.articles.slice(0, MAX_SAVED)
-        setFetched(articles)
-        setCollectedAt(result.lastCollectedAt)
-        localStorage.setItem(ARTICLES_KEY, JSON.stringify(articles))
-        localStorage.setItem(COLLECTED_AT_KEY, JSON.stringify(result.lastCollectedAt))
-      })
-      .catch(() => {})
+    const check = () =>
+      fetchRefresh()
+        .then((status) => {
+          if (!alive) return
+          setRefresh(status)
+          if (lastRunRef.current !== undefined && status.lastRunAt !== lastRunRef.current) reloadArticles().catch(() => {})
+          lastRunRef.current = status.lastRunAt
+        })
+        .catch(() => {})
+    check()
+    const timer = setInterval(check, refreshRunning || starting ? 3_000 : 30_000)
     return () => {
       alive = false
+      clearInterval(timer)
     }
-  }, [])
+  }, [refreshRunning, starting, reloadArticles])
 
   // 보고서함: DB가 있으면 서버에서 불러온다. 처음 한 번은 브라우저에 있던 보고서를 DB로 옮긴다
   useEffect(() => {
@@ -141,6 +166,25 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIds])
 
+  // 목록 기사 중 미리 요약된 것을 가져온다 (자동 최신화·다른 팀원이 만든 요약)
+  useEffect(() => {
+    const ids = fetched.map((a) => a.id).filter((id) => !aiSummaries[id])
+    if (ids.length === 0) return
+    let alive = true
+    const chunks = []
+    for (let i = 0; i < ids.length; i += 200) chunks.push(ids.slice(i, i + 200))
+    Promise.all(chunks.map((c) => lookupSummaries(c)))
+      .then((results) => {
+        const found = Object.assign({}, ...results.map((r) => r.summaries))
+        if (alive && Object.keys(found).length) setAiSummaries((prev) => ({ ...found, ...prev }))
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetched])
+
   // 「선별에 추가」하면 자동 요약 (08 13-1: 선별한 기사만 요약)
   const queue = useSummaryQueue({
     onDone: (id, result) => setAiSummaries((prev) => ({ ...prev, [id]: result })),
@@ -172,7 +216,7 @@ function App() {
   // 키워드를 바꾸면 DB에도 저장
   function changeKeywords(next) {
     setKeywords(next)
-    if (keywordsInDb) saveKeywordsApi(next).catch((err) => setCollectError(err.message))
+    if (keywordsInDb) saveKeywordsApi(next).catch((err) => setRefreshError(err.message))
   }
 
   useEffect(() => {
@@ -216,23 +260,24 @@ function App() {
     changeKeywords(keywords.filter((k) => k !== word))
   }
 
-  async function handleCollect() {
-    setCollecting(true)
-    setCollectError('')
+  async function handleRefresh() {
+    setStarting(true)
+    setRefreshError('')
     try {
-      const result = await collectNews(keywords)
-      const articles = result.articles.slice(0, MAX_SAVED)
-      setFetched(articles)
-      setCollectedAt(result.lastCollectedAt)
-      localStorage.setItem(ARTICLES_KEY, JSON.stringify(articles))
-      localStorage.setItem(COLLECTED_AT_KEY, JSON.stringify(result.lastCollectedAt))
-      if (result.failed?.length) {
-        setCollectError(`일부 키워드 수집 실패: ${result.failed.map((f) => f.keyword).join(', ')}`)
-      }
+      setRefresh(await runRefresh(keywords))
     } catch (err) {
-      setCollectError(err.message)
+      setRefreshError(err.message)
     } finally {
-      setCollecting(false)
+      setStarting(false)
+    }
+  }
+
+  async function handleRefreshSettings(settings) {
+    setRefreshError('')
+    try {
+      setRefresh(await saveRefreshSettings(settings))
+    } catch (err) {
+      setRefreshError(err.message)
     }
   }
 
@@ -357,7 +402,7 @@ function App() {
               </p>
             </div>
             <span className="last-collected">
-              {collecting ? '수집 중…' : collectedAt ? `마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 수집 전'}
+              {refreshRunning ? '최신화 중…' : collectedAt ? `마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 수집 전'}
             </span>
           </header>
 
@@ -383,8 +428,8 @@ function App() {
               <div className="filters">
                 <input
                   type="search"
-                  placeholder="모은 기사에서 찾기 (제목·키워드)"
-                  aria-label="모은 기사에서 찾기"
+                  placeholder="기사 찾기 (키워드·제목)"
+                  aria-label="기사 찾기"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
@@ -435,14 +480,35 @@ function App() {
                   <tbody>
                     {visible.map((a) => {
                       const selected = selectedIds.includes(a.id)
+                      const ai = aiSummaries[a.id]
+                      const open = openSummaryId === a.id && ai
                       return (
-                        <tr key={a.id}>
+                        <Fragment key={a.id}>
+                        <tr className={open ? 'row-open' : undefined}>
                           <td>
                             <div className="title" title={a.title}>
                               {a.importanceLevel === 'high' && <span className="badge-important">중요</span>}
-                              {a.title}
+                              {a.url ? (
+                                <a className="title-link" href={a.url} target="_blank" rel="noreferrer" title="원문 열기 (새 창)">
+                                  {a.title}
+                                </a>
+                              ) : (
+                                a.title
+                              )}
                             </div>
-                            {a.sameIssue > 0 && <div className="same-issue">같은 이슈 기사 {a.sameIssue}건</div>}
+                            <div className="row-meta">
+                              {ai && (
+                                <button
+                                  type="button"
+                                  className="badge-summary"
+                                  aria-expanded={Boolean(open)}
+                                  onClick={() => setOpenSummaryId(open ? null : a.id)}
+                                >
+                                  요약 {open ? '접기 ▴' : '보기 ▾'}
+                                </button>
+                              )}
+                              {a.sameIssue > 0 && <span className="same-issue">같은 이슈 기사 {a.sameIssue}건</span>}
+                            </div>
                           </td>
                           <td className="source" title={a.source}>
                             {a.source}
@@ -452,15 +518,6 @@ function App() {
                             <span className="chip">{a.keyword}</span>
                           </td>
                           <td className="actions">
-                            {a.url ? (
-                              <a className="btn" href={a.url} target="_blank" rel="noreferrer">
-                                원문 보기
-                              </a>
-                            ) : (
-                              <button type="button" className="btn" disabled title="샘플 기사라 원문이 없어요">
-                                원문 보기
-                              </button>
-                            )}
                             <button
                               type="button"
                               className={selected ? 'btn primary' : 'btn outline'}
@@ -470,6 +527,17 @@ function App() {
                             </button>
                           </td>
                         </tr>
+                        {open && (
+                          <tr className="summary-row">
+                            <td colSpan={5}>
+                              <SummaryItems summary={ai.summary} />
+                              <p className="hint">
+                                모델 {ai.model} · {new Date(ai.createdAt).toLocaleString('ko-KR')}
+                              </p>
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
                       )
                     })}
                   </tbody>
@@ -499,16 +567,14 @@ function App() {
                   </span>
                 ))}
               </div>
-              <button
-                type="button"
-                className="btn primary collect-btn"
-                onClick={handleCollect}
-                disabled={collecting || keywords.length === 0}
-              >
-                {collecting ? '수집 중…' : '지금 수집하기'}
-              </button>
-              <p className="hint">키워드마다 네이버 뉴스 최신 100건을 가져와요.</p>
-              {collectError && <p className="ai-error">{collectError}</p>}
+              <RefreshPanel
+                status={refresh}
+                error={refreshError}
+                starting={starting}
+                disabled={keywords.length === 0}
+                onRun={handleRefresh}
+                onSave={handleRefreshSettings}
+              />
               {isSample && <p className="hint">샘플 기사에는 생성형 AI · 반도체 · 클라우드 · OLED 키워드가 있어요.</p>}
             </aside>
           </div>
