@@ -12,5 +12,7 @@ export function formatPublished(hoursAgo) {
   if (hoursAgo < 24) {
     return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
   }
-  return date.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
+  const md = `${date.getMonth() + 1}.${date.getDate()}`
+  // 기사 찾기는 오래된 기사도 나오므로 1년 가까이 지난 것은 연도까지 (예: 25.3.14)
+  return hoursAgo > 24 * 300 ? `${String(date.getFullYear()).slice(2)}.${md}` : md
 }

@@ -12,6 +12,7 @@ import {
   runRefresh,
   saveKeywordsApi,
   saveRefreshSettings,
+  searchNewsApi,
 } from './api.js'
 import ProgressPanel from './ProgressPanel.jsx'
 import RefreshPanel from './RefreshPanel.jsx'
@@ -30,6 +31,7 @@ const INCLUDED_KEY = 'techbrief-included'
 const ARTICLES_KEY = 'techbrief-articles' // 마지막으로 수집한 기사 (서버를 꺼도 화면에 남게)
 const COLLECTED_AT_KEY = 'techbrief-collected-at'
 const AI_SUMMARIES_KEY = 'techbrief-ai-summaries'
+const EXTRA_KEY = 'techbrief-extra-articles' // 「기사 찾기」 결과에서 선별한 기사 (수집 목록에 없는 것)
 const MAX_SAVED = 400
 
 // 서버 기사(publishedAt)를 화면에서 쓰는 모양(hoursAgo)으로 바꾼다
@@ -75,6 +77,8 @@ function App() {
   const [refreshError, setRefreshError] = useState('')
   const [starting, setStarting] = useState(false)
   const [openSummaryId, setOpenSummaryId] = useState(null) // 목록에서 요약을 펼친 기사
+  const [search, setSearch] = useState(null) // 네이버 기사 찾기 { query, articles?, loading?, error? }
+  const [extraArticles, setExtraArticles] = useState(() => load(EXTRA_KEY, []))
   const [sort, setSort] = useState('latest')
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
   const [reports, setReports] = useState(() => loadReports())
@@ -183,8 +187,9 @@ function App() {
   }, [selectedIds])
 
   // 목록 기사 중 미리 요약된 것을 가져온다 (자동 최신화·다른 팀원이 만든 요약)
+  const searchArticles = search?.articles
   useEffect(() => {
-    const ids = fetched.map((a) => a.id).filter((id) => !aiSummaries[id])
+    const ids = [...fetched, ...(searchArticles ?? [])].map((a) => a.id).filter((id) => !aiSummaries[id])
     if (ids.length === 0) return
     let alive = true
     const chunks = []
@@ -199,7 +204,7 @@ function App() {
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetched])
+  }, [fetched, searchArticles])
 
   // 「선별 추가」하면 자동 요약 (08 13-1: 선별한 기사만 요약)
   const queue = useSummaryQueue({
@@ -243,19 +248,37 @@ function App() {
     localStorage.setItem(INCLUDED_KEY, JSON.stringify(includedIds))
   }, [includedIds])
 
+  useEffect(() => {
+    localStorage.setItem(EXTRA_KEY, JSON.stringify(extraArticles))
+  }, [extraArticles])
+
   // 한 번도 수집하지 않았으면 샘플 기사를 보여 준다
   const isSample = fetched.length === 0
-  const pool = useMemo(() => (isSample ? SAMPLE_ARTICLES : fetched.map(toView)), [isSample, fetched])
+  // 화면 전체에서 쓰는 기사: 수집 기사 + 찾기에서 선별한 기사 + 지금 찾기 결과
+  const pool = useMemo(() => {
+    const base = isSample ? SAMPLE_ARTICLES : fetched.map(toView)
+    const seen = new Set(base.map((a) => a.id))
+    const more = [...extraArticles, ...(searchArticles ?? [])].filter((a) => !seen.has(a.id) && seen.add(a.id))
+    return [...base, ...more.map(toView)]
+  }, [isSample, fetched, extraArticles, searchArticles])
   const sources = useMemo(() => [...new Set(pool.map((a) => a.source))].sort(), [pool])
 
   // 수집 대상: 등록한 키워드에 해당하는 기사
-  const collected = pool.filter((a) => keywords.includes(a.keyword))
+  const collected = (isSample ? SAMPLE_ARTICLES : fetched.map(toView)).filter((a) => keywords.includes(a.keyword))
   const todayIssues = collected.filter((a) => a.hoursAgo < 24)
   const countArticles = (list) => list.reduce((n, a) => n + 1 + (a.sameIssue ?? 0), 0)
 
   const maxHours = PERIODS.find((p) => p.value === period).hours
   const q = query.trim().toLowerCase()
-  const visible = collected
+  const byId = new Map(pool.map((a) => [a.id, a]))
+  const visible = searchArticles
+    ? searchArticles
+        .map((a) => ({ ...byId.get(a.id), rank: a.rank }))
+        .filter((a) => source === 'all' || a.source === source)
+        .sort((a, b) =>
+          sort === 'relevance' ? a.rank - b.rank : sort === 'importance' ? b.importance - a.importance || a.hoursAgo - b.hoursAgo : a.hoursAgo - b.hoursAgo,
+        )
+    : collected
     .filter(
       (a) =>
         a.hoursAgo < maxHours &&
@@ -274,6 +297,27 @@ function App() {
 
   function handleRemoveKeyword(word) {
     changeKeywords(keywords.filter((k) => k !== word))
+  }
+
+  // 「기사 찾기」: 등록 키워드와 상관없이 네이버에서 바로 찾는다
+  async function handleSearch(e) {
+    e.preventDefault()
+    const q = query.trim()
+    if (!q || search?.loading) return
+    setSearch({ query: q, loading: true })
+    try {
+      const result = await searchNewsApi(q)
+      setSearch({ query: result.query, articles: result.articles })
+      setSort('relevance')
+    } catch (err) {
+      setSearch({ query: q, error: err.message })
+    }
+  }
+
+  function closeSearch() {
+    setSearch(null)
+    setQuery('')
+    if (sort === 'relevance') setSort('latest')
   }
 
   async function handleRefresh() {
@@ -303,9 +347,16 @@ function App() {
       setSelectedIds((prev) => prev.filter((x) => x !== id))
       // 선별을 풀면 보고서 포함 목록에서도 빼고, 아직 시작 전인 요약은 취소한다
       setIncludedIds((prev) => prev.filter((x) => x !== id))
+      setExtraArticles((prev) => prev.filter((x) => x.id !== id))
       queue.remove(id)
     } else {
       setSelectedIds((prev) => [...prev, id])
+      // 수집 목록에 없는 기사(찾기 결과)는 따로 보관해 선별·보고서에서 계속 쓸 수 있게
+      if (!fetched.some((x) => x.id === id)) {
+        // eslint-disable-next-line no-unused-vars
+        const { hoursAgo, ...plain } = article
+        setExtraArticles((prev) => [...prev.filter((x) => x.id !== id), plain].slice(-100))
+      }
       if (!aiSummaries[id]) queue.enqueue(article)
     }
   }
@@ -316,6 +367,7 @@ function App() {
 
   function handleExclude(id) {
     setSelectedIds((prev) => prev.filter((x) => x !== id))
+    setExtraArticles((prev) => prev.filter((x) => x.id !== id))
     setIncludedIds((prev) => prev.filter((x) => x !== id))
     queue.remove(id)
   }
@@ -442,14 +494,25 @@ function App() {
           <div className="content">
             <section className="panel list-panel">
               <div className="filters">
-                <input
-                  type="search"
-                  placeholder="기사 찾기 (키워드·제목)"
-                  aria-label="기사 찾기"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-                <select value={period} onChange={(e) => setPeriod(e.target.value)} aria-label="기간">
+                <form className="search-form" onSubmit={handleSearch}>
+                  <input
+                    type="search"
+                    placeholder="기사 찾기 (키워드·제목)"
+                    aria-label="기사 찾기"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                  <button type="submit" className="btn outline" disabled={!query.trim() || search?.loading}>
+                    {search?.loading ? '찾는 중…' : '네이버에서 찾기'}
+                  </button>
+                </form>
+                <select
+                  value={period}
+                  onChange={(e) => setPeriod(e.target.value)}
+                  aria-label="기간"
+                  disabled={Boolean(searchArticles)}
+                  title={searchArticles ? '찾기 결과에는 기간을 적용하지 않아요' : undefined}
+                >
                   {PERIODS.map((p) => (
                     <option key={p.value} value={p.value}>
                       {p.label}
@@ -465,16 +528,39 @@ function App() {
                   ))}
                 </select>
                 <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="정렬">
+                  {searchArticles && <option value="relevance">정확도순</option>}
                   <option value="latest">최신순</option>
                   <option value="importance">중요도순</option>
                 </select>
               </div>
-              <p className="list-meta">
-                이슈 {visible.length}개 · 기사 {countArticles(visible)}건
-              </p>
+              {search ? (
+                <div className="search-banner">
+                  <span>
+                    <strong>‘{search.query}’</strong> 네이버 찾기 결과
+                    {search.articles && ` · 이슈 ${visible.length}개 · 기사 ${countArticles(visible)}건`}
+                    {search.loading && ' · 찾는 중…'}
+                    <span className="search-note"> · 수집 목록에는 쌓이지 않아요. 선별·요약하면 그 기사만 남아요</span>
+                  </span>
+                  <button type="button" className="btn" onClick={closeSearch}>
+                    모은 기사로 돌아가기
+                  </button>
+                </div>
+              ) : (
+                <p className="list-meta">
+                  이슈 {visible.length}개 · 기사 {countArticles(visible)}건
+                  {q && <span className="search-note"> · 모은 기사에서 찾는 중. 없으면 「네이버에서 찾기」</span>}
+                </p>
+              )}
+              {search?.error && <p className="ai-error search-error">{search.error}</p>}
 
               {visible.length === 0 ? (
-                <p className="empty">조건에 맞는 기사가 없어요. 기간을 넓히거나 키워드를 추가해 보세요.</p>
+                <p className="empty">
+                  {search
+                    ? search.loading
+                      ? '네이버에서 찾는 중이에요…'
+                      : '찾은 기사가 없어요. 다른 말로 찾아보세요.'
+                    : '조건에 맞는 기사가 없어요. 기간을 넓히거나 「네이버에서 찾기」를 눌러 보세요.'}
+                </p>
               ) : (
                 <table className="articles">
                   <colgroup>
@@ -520,7 +606,7 @@ function App() {
                           <td className="source" title={a.source}>
                             {a.source}
                           </td>
-                          <td>{formatPublished(a.hoursAgo)}</td>
+                          <td className="time">{formatPublished(a.hoursAgo)}</td>
                           <td>
                             <span className="chip">{a.keyword}</span>
                           </td>
