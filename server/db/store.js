@@ -27,9 +27,24 @@ export async function getSummary(id) {
 // 여러 기사의 요약을 한 번에 (다른 브라우저에서 열어도 요약 상태를 맞추려고)
 export async function getSummaries(ids) {
   const out = {}
-  for (const id of ids) {
-    const hit = await getSummary(id)
-    if (hit) out[id] = hit
+  if (!dbEnabled()) {
+    for (const id of ids) {
+      const hit = resolveMemory(id)
+      if (hit?.summary) out[id] = hit
+    }
+    return out
+  }
+  if (ids.length === 0) return out
+  const { rows } = await query(
+    `SELECT s.article_id, coalesce(t.content, s.content) AS content, coalesce(t.model, s.model) AS model,
+            coalesce(t.created_at, s.created_at) AS created_at, s.alias_of
+       FROM summaries s LEFT JOIN summaries t ON t.article_id = s.alias_of
+      WHERE s.article_id = ANY($1::text[])`,
+    [ids],
+  )
+  for (const r of rows) {
+    if (!r.content) continue
+    out[r.article_id] = { summary: r.content, model: r.model, createdAt: r.created_at.toISOString(), sharedFrom: r.alias_of ?? undefined }
   }
   return out
 }
@@ -141,4 +156,25 @@ export async function setKeywords(words) {
     )
   }
   return list
+}
+
+// ── 앱 설정 (자동 최신화 등) ──
+const memorySettings = new Map()
+
+export async function getSetting(key, fallback) {
+  if (!dbEnabled()) return memorySettings.get(key) ?? fallback
+  const { rows } = await query('SELECT value FROM app_settings WHERE key = $1', [key])
+  return rows[0]?.value ?? fallback
+}
+
+export async function setSetting(key, value) {
+  if (!dbEnabled()) {
+    memorySettings.set(key, value)
+    return
+  }
+  await query(
+    `INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [key, JSON.stringify(value)],
+  )
 }

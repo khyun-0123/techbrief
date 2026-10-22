@@ -64,6 +64,13 @@ CREATE TABLE IF NOT EXISTS keyword_daily (
   articles  integer NOT NULL,
   PRIMARY KEY (keyword, day)
 );
+
+-- 앱 설정·상태 (자동 최신화 주기, 마지막 실행 시각 등). 팀원 앱이 같이 본다
+CREATE TABLE IF NOT EXISTS app_settings (
+  key        text PRIMARY KEY,
+  value      jsonb NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 `
 
 export async function db() {
