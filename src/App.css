@@ -394,3 +394,66 @@ select {
     overflow-x: auto;
   }
 }
+
+/* AI 6항목 요약 */
+.ai-summary {
+  margin: 0 0 12px;
+}
+
+.ai-item {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #eef0f3;
+}
+
+.ai-item dt {
+  font-weight: 600;
+  color: #374151;
+}
+
+.ai-item dd {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.ai-item .ref {
+  color: #1d4ed8;
+}
+
+.basis {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  vertical-align: middle;
+}
+
+.basis-article {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.basis-ai_background {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.basis-ai_suggestion {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.ai-warning {
+  margin: 4px 0 8px;
+  font-size: 13px;
+  color: #b45309;
+}
+
+.ai-error {
+  margin: 8px 0;
+  font-size: 13px;
+  color: #b91c1c;
+}

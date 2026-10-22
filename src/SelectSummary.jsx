@@ -1,12 +1,36 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { requestSummary } from './api.js'
 import { SAMPLE_SUMMARIES } from './sampleArticles.js'
-import { formatPublished } from './utils.js'
+import { formatPublished, load } from './utils.js'
 
 const IMPORTANCE_LABEL = { high: '중요도 높음', normal: '중요도 보통' }
+const AI_SUMMARIES_KEY = 'techbrief-ai-summaries'
+
+// 6항목 요약 (1차 인터뷰)
+const ITEM_LABELS = [
+  ['concept', '컨셉'],
+  ['principle', '원리'],
+  ['pros_cons', '장단점'],
+  ['competitors', '타사 현황'],
+  ['application', '활용 방안'],
+  ['effect', '효과성'],
+]
+const BASIS_LABEL = {
+  article: '기사 근거',
+  ai_background: 'AI 보충 · 확인 필요',
+  ai_suggestion: 'AI 제안',
+}
 
 function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onGoCollect }) {
   const [sort, setSort] = useState('importance')
   const [activeId, setActiveId] = useState(null)
+  const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
+  const [loadingId, setLoadingId] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    localStorage.setItem(AI_SUMMARIES_KEY, JSON.stringify(aiSummaries))
+  }, [aiSummaries])
 
   const sorted = [...candidates].sort((a, b) => {
     if (sort === 'importance') {
@@ -19,6 +43,7 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
   // 고른 기사가 목록에서 빠지면 첫 기사를 보여 준다
   const active = sorted.find((a) => a.id === activeId) ?? sorted[0]
   const summary = active && SAMPLE_SUMMARIES[active.id]
+  const ai = active && aiSummaries[active.id]
   const activeIncluded = active && includedIds.includes(active.id)
 
   function toggleIncluded(id) {
@@ -29,11 +54,24 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
     setIncludedIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
   }
 
+  async function handleSummarize(article) {
+    setLoadingId(article.id)
+    setError('')
+    try {
+      const result = await requestSummary(article, { refresh: Boolean(aiSummaries[article.id]) })
+      setAiSummaries((prev) => ({ ...prev, [article.id]: result }))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoadingId(null)
+    }
+  }
+
   return (
     <main className="page">
       <header className="page-header">
         <h1>뉴스 선별·요약</h1>
-        <p>보고서에 넣을 기사를 고르고, 기사별 3줄 요약을 확인해요. 지금은 샘플 요약으로 동작해요.</p>
+        <p>보고서에 넣을 기사를 고르고, 기사별 요약을 확인해요. 「AI 요약 생성」을 누르면 6항목으로 요약해요.</p>
       </header>
 
       {candidates.length === 0 ? (
@@ -98,8 +136,38 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
               {active.sameIssue > 0 && ` · 같은 이슈 기사 ${active.sameIssue}건 묶음`}
             </p>
 
-            <h3>3줄 요약</h3>
-            {summary ? (
+            {ai ? (
+              <>
+                <h3>AI 요약 (6항목)</h3>
+                <dl className="ai-summary">
+                  {ITEM_LABELS.map(([key, label]) => {
+                    const item = ai.summary.items?.[key]
+                    if (!item) return null
+                    return (
+                      <div key={key} className="ai-item">
+                        <dt>{label}</dt>
+                        <dd>
+                          {item.text}
+                          {item.basis === 'article' && item.refs?.length > 0 && (
+                            <span className="ref"> [{item.refs.join('][')}]</span>
+                          )}
+                          <span className={`basis basis-${item.basis}`}>{BASIS_LABEL[item.basis] ?? item.basis}</span>
+                        </dd>
+                      </div>
+                    )
+                  })}
+                </dl>
+                {ai.summary.warnings?.length > 0 && (
+                  <p className="ai-warning">⚠ {ai.summary.warnings.join(' / ')}</p>
+                )}
+                <p className="hint">
+                  모델 {ai.model} · {new Date(ai.createdAt).toLocaleString('ko-KR')}
+                </p>
+              </>
+            ) : (
+              <h3>3줄 요약 (샘플)</h3>
+            )}
+            {ai ? null : summary ? (
               <ol className="summary">
                 {summary.lines.map((line) => (
                   <li key={line}>{line}</li>
@@ -111,7 +179,7 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
 
             <h3>핵심 키워드</h3>
             <div className="chips">
-              {(summary?.keywords ?? [active.keyword]).map((k) => (
+              {(ai?.summary.keywords ?? summary?.keywords ?? [active.keyword]).map((k) => (
                 <span key={k} className="chip">
                   {k}
                 </span>
@@ -120,9 +188,16 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
 
             <p className="source-link">원문 링크: 샘플 기사라 원문이 없어요</p>
 
+            {error && <p className="ai-error">{error}</p>}
+
             <div className="detail-actions">
-              <button type="button" className="btn" disabled title="AI 요약 연결 후 사용할 수 있어요">
-                요약 다시 생성
+              <button
+                type="button"
+                className="btn"
+                onClick={() => handleSummarize(active)}
+                disabled={loadingId !== null}
+              >
+                {loadingId === active.id ? 'AI 요약 중…' : ai ? '요약 다시 생성' : 'AI 요약 생성'}
               </button>
               <button
                 type="button"
