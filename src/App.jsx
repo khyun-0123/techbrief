@@ -42,6 +42,8 @@ const AI_SUMMARIES_KEY = 'techbrief-ai-summaries'
 const PAGE_SIZE_KEY = 'techbrief-page-size'
 const EXCLUDE_OWN_KEY = 'techbrief-exclude-own'
 const SHOW_LOW_KEY = 'techbrief-show-low'
+const RECENT_KEY = 'techbrief-recent-searches' // 최근 검색어 (이 브라우저에만)
+const RECENT_MAX = 10
 const EXTRA_KEY = 'techbrief-extra-articles' // 「기사 찾기」 결과에서 선별한 기사 (수집 목록에 없는 것)
 const MAX_SAVED = 400
 
@@ -113,6 +115,7 @@ function App() {
   const [showLow, setShowLow] = useState(() => load(SHOW_LOW_KEY, false)) // 관련도 낮은 기사도 보기 (F4)
   const [sentimentFilter, setSentimentFilter] = useState('all') // 호재·악재 거르기 (F5)
   const [favorites, setFavorites] = useState([]) // 즐겨찾는 검색어 (F3, 팀 공용)
+  const [recent, setRecent] = useState(() => load(RECENT_KEY, [])) // 최근 검색어 (이 브라우저에만)
   const [pageSize, setPageSize] = useState(() => load(PAGE_SIZE_KEY, 20))
   const [sort, setSort] = useState('latest')
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
@@ -400,9 +403,20 @@ function App() {
     await runSearch(query.trim())
   }
 
+  function saveRecent(next) {
+    setRecent(next)
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(next))
+    } catch {
+      // 저장 공간을 못 쓰면 이번 화면에서만 유지
+    }
+  }
+
   async function runSearch(q) {
     if (!q || search?.loading) return
     setQuery(q)
+    // 찾은 말은 최근 검색어 맨 위로 (같은 말은 하나만)
+    saveRecent([q, ...recent.filter((r) => r !== q)].slice(0, RECENT_MAX))
     setSearch({ query: q, loading: true })
     try {
       const result = await searchNewsApi(q)
@@ -614,9 +628,11 @@ function App() {
           <div className="content with-favs">
             <FavoritesRail
               favorites={favorites}
+              recent={recent}
               active={search?.query}
               onSearch={runSearch}
-              onRemove={(q) => changeFavorites(favorites.filter((f) => f !== q))}
+              onToggleFavorite={(q) => changeFavorites(favorites.includes(q) ? favorites.filter((f) => f !== q) : [...favorites, q])}
+              onRemoveRecent={(q) => saveRecent(recent.filter((r) => r !== q))}
             />
             <section className="panel list-panel">
               <div className="filters">
@@ -665,20 +681,6 @@ function App() {
                     <strong>‘{search.query}’</strong> 네이버 찾기 결과
                     {search.articles && ` · 이슈 ${visible.length}개 · 기사 ${countArticles(visible)}건`}
                     {search.loading && ' · 찾는 중…'}
-                    {' '}
-                    <button
-                      type="button"
-                      className={favorites.includes(search.query) ? 'fav-star on' : 'fav-star'}
-                      onClick={() =>
-                        changeFavorites(
-                          favorites.includes(search.query) ? favorites.filter((f) => f !== search.query) : [...favorites, search.query],
-                        )
-                      }
-                      aria-pressed={favorites.includes(search.query)}
-                      title="즐겨찾는 검색어 (자동 수집과 별개)"
-                    >
-                      {favorites.includes(search.query) ? '★ 즐겨찾기됨' : '☆ 즐겨찾기'}
-                    </button>
                     <span className="search-note"> · 수집 목록에는 쌓이지 않아요. 선별·요약하면 그 기사만 남아요</span>
                   </span>
                   <button type="button" className="btn" onClick={closeSearch}>
