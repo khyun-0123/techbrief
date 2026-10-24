@@ -14,6 +14,7 @@ import {
   saveRefreshSettings,
   searchNewsApi,
 } from './api.js'
+import Pager from './Pager.jsx'
 import ProgressPanel from './ProgressPanel.jsx'
 import RefreshPanel from './RefreshPanel.jsx'
 import ReportArchive from './ReportArchive.jsx'
@@ -31,6 +32,7 @@ const INCLUDED_KEY = 'techbrief-included'
 const ARTICLES_KEY = 'techbrief-articles' // 마지막으로 수집한 기사 (서버를 꺼도 화면에 남게)
 const COLLECTED_AT_KEY = 'techbrief-collected-at'
 const AI_SUMMARIES_KEY = 'techbrief-ai-summaries'
+const PAGE_SIZE_KEY = 'techbrief-page-size'
 const EXTRA_KEY = 'techbrief-extra-articles' // 「기사 찾기」 결과에서 선별한 기사 (수집 목록에 없는 것)
 const MAX_SAVED = 400
 
@@ -79,6 +81,8 @@ function App() {
   const [openSummaryId, setOpenSummaryId] = useState(null) // 목록에서 요약을 펼친 기사
   const [search, setSearch] = useState(null) // 네이버 기사 찾기 { query, articles?, loading?, error? }
   const [extraArticles, setExtraArticles] = useState(() => load(EXTRA_KEY, []))
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(() => load(PAGE_SIZE_KEY, 20))
   const [sort, setSort] = useState('latest')
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
   const [reports, setReports] = useState(() => loadReports())
@@ -286,6 +290,26 @@ function App() {
         (!q || a.title.toLowerCase().includes(q) || a.keyword.toLowerCase().includes(q)),
     )
     .sort((a, b) => (sort === 'importance' ? (b.importance ?? 0) - (a.importance ?? 0) : 0) || a.hoursAgo - b.hoursAgo)
+
+  // 정렬·필터·검색이 바뀌면 1페이지로 (13 문서 F2)
+  const listKey = [period, source, sort, q, search?.query ?? '', keywords.join(',')].join('|')
+  useEffect(() => {
+    setPage(1)
+  }, [listKey])
+  const pageCount = Math.max(1, Math.ceil(visible.length / pageSize))
+  const currentPage = Math.min(page, pageCount)
+  const paged = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  function changePageSize(size) {
+    setPageSize(size)
+    setPage(1)
+    localStorage.setItem(PAGE_SIZE_KEY, JSON.stringify(size))
+  }
+
+  function goPage(p) {
+    setPage(Math.min(Math.max(1, p), pageCount))
+    document.querySelector('.list-panel')?.scrollIntoView({ block: 'start' })
+  }
 
   function handleAddKeyword(e) {
     e.preventDefault()
@@ -592,7 +616,7 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {visible.map((a) => {
+                    {paged.map((a) => {
                       const selected = selectedIds.includes(a.id)
                       const ai = aiSummaries[a.id]
                       const open = openSummaryId === a.id && ai
@@ -670,6 +694,9 @@ function App() {
                     })}
                   </tbody>
                 </table>
+              )}
+              {visible.length > 0 && (
+                <Pager page={currentPage} pageSize={pageSize} total={visible.length} onPage={goPage} onPageSize={changePageSize} />
               )}
             </section>
 
