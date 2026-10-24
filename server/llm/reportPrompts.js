@@ -17,8 +17,13 @@ const bullets = {
       type: 'array',
       items: {
         type: 'object',
-        properties: { text: { type: 'string' }, refs: { type: 'array', items: { type: 'integer' } } },
-        required: ['text', 'refs'],
+        // kind: fact = 기사(원문)에서 확인된 사실, ai = AI 해설·제안 (15 문서 F15: 둘을 섞지 않는다)
+        properties: {
+          text: { type: 'string' },
+          refs: { type: 'array', items: { type: 'integer' } },
+          kind: { type: 'string', enum: ['fact', 'ai'] },
+        },
+        required: ['text', 'refs', 'kind'],
       },
     },
   },
@@ -44,8 +49,11 @@ export const SECTION_SCHEMA = bullets
 const RULES = `규칙
 - 개조식, 명사형 종결("~함", "~임"). 서술식 문장 금지.
 - 섹션별 글머리 2~4개, 핵심 요약은 3개 이내. 한 글머리는 한 문장.
-- 각 글머리에 근거 기사 번호를 refs에 넣는다. 번호는 아래 기사 목록의 번호만 쓴다.
-- 요약 항목 중 [AI 보충] 또는 [AI 제안]으로 표시된 내용만으로 쓴 글머리는 refs를 빈 배열로 둔다.
+- 글머리마다 kind를 정한다. 기사(원문 본문·요약문)에 나온 사실이면 "fact", 원리 설명·일반 지식·전망·우리 회사 활용 제안처럼 기사 밖의 해설이면 "ai".
+- 한 글머리에 사실과 해설을 섞지 않는다. 섞이면 두 글머리로 나눈다.
+- fact 글머리는 근거 기사 번호를 refs에 넣는다. 번호는 아래 기사 목록의 번호만 쓴다.
+- ai 글머리는 refs를 빈 배열로 둔다. 요약 항목 중 [AI 보충] 또는 [AI 제안]으로 표시된 내용만으로 쓴 글머리는 ai다.
+- 업계 동향은 기사에 나온 타사의 실제 움직임(공급·투자·출시·점유율 등)을 쓰므로 대부분 fact이고 근거 번호를 꼭 넣는다.
 - 사실(수치·회사명·날짜·발표 내용)은 '원문 본문'을 먼저 근거로 쓰고, 원문이 없는 기사는 기사 요약문과 6항목 요약을 쓴다.
 - 수치·회사명·날짜는 원문이나 기사 요약에 있는 것만 쓴다. 지어내지 않는다.
 - 한국어로만 쓴다. 중국어·한자를 쓰지 않는다 (예: BOE는 'BOE').

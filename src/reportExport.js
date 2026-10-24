@@ -1,7 +1,7 @@
 // 보고서 내보내기: PPT(.pptx)와 PDF(브라우저 인쇄 → PDF로 저장). 여러 쪽 가능, 인터랙션 없음
 // 사내 규칙(1차 인터뷰): 제목 18pt · 소주제 14pt · 본문 11pt · 유첨·주석 10pt, 개조식
 // 한글 'LG 스마트체'는 PC마다 설치 여부가 달라 기본은 맑은 고딕. 회사 PC에서는 PPT 글꼴만 바꾸면 된다
-import { formatDate } from './reportStore.js'
+import { formatDate, kindOf } from './reportStore.js'
 
 const FONT_KO = '맑은 고딕'
 const INK = '1C2533'
@@ -10,14 +10,10 @@ const ACCENT = '1B6A96'
 const WARN = 'B45309'
 
 function bulletRuns(b) {
-  const refs = b.refs.length ? ` [${b.refs.join('][')}]` : ''
-  const runs = [{ text: b.text, options: { color: INK } }]
-  runs.push(
-    b.refs.length
-      ? { text: refs, options: { color: ACCENT, fontSize: 10 } }
-      : { text: ' (근거 없음 · 확인 필요)', options: { color: WARN, fontSize: 10 } },
-  )
-  return runs
+  return [
+    { text: b.text, options: { color: INK } },
+    { text: ` [${b.refs.join('][')}]`, options: { color: ACCENT, fontSize: 10 } },
+  ]
 }
 
 function fileName(saved, ext) {
@@ -38,18 +34,22 @@ export async function exportPptx(saved) {
   const meta = `${formatDate(saved.createdAt)} · ${saved.periodLabel ?? ''} · 기사 ${saved.articles.length}건 기준`
   const sections = saved.report.sections
 
+  // 기사에서 확인된 내용 → (줄 바꿔) AI 해설·제안 순서. 둘을 섞지 않는다 (15 문서 F15)
   function runs(list) {
-    const items = list?.length ? list : [{ text: '내용 없음', refs: [] }]
+    const facts = (list ?? []).filter((b) => kindOf(b) === 'fact')
+    const ai = (list ?? []).filter((b) => kindOf(b) === 'ai')
     const out = []
-    items.forEach((b, i) => {
+    const push = (text, options = {}) => out.push({ text, options })
+    facts.forEach((b, i) => {
       const parts = bulletRuns(b)
-      parts.forEach((r, j) => {
-        const text = j === 0 ? `• ${r.text}` : r.text
-        const options = { ...r.options }
-        if (j === parts.length - 1 && i < items.length - 1) options.breakLine = true
-        out.push({ text, options })
-      })
+      push(`• ${parts[0].text}`, parts[0].options)
+      push(parts[1].text, { ...parts[1].options, breakLine: i < facts.length - 1 || ai.length > 0 })
     })
+    if (ai.length) {
+      push('AI 해설·제안 (기사에서 확인된 내용 아님, 확인 필요)', { color: WARN, fontSize: 10, bold: true, breakLine: true })
+      ai.forEach((b, i) => push(`· ${b.text}`, { color: MUTED, breakLine: i < ai.length - 1 }))
+    }
+    if (out.length === 0) push('내용 없음', { color: MUTED })
     return out
   }
   function box(slide, label, list, x, y, w, h) {
