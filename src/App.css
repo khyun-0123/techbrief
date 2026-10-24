@@ -1601,3 +1601,46 @@ a.btn {
     break-inside: avoid;
   }
 }
+
+/* 호재·악재 ○ △ ✕ (F5) — 색과 함께 기호·글자로도 구분 */
+.sentiment {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+.sentiment.good {
+  background: #e3f3ea;
+  color: #1b6b43;
+}
+
+.sentiment.neutral {
+  background: #f1f2f5;
+  color: #4b5563;
+}
+
+.sentiment.bad {
+  background: #fde8e6;
+  color: #b42318;
+}
+
+.sentiment-line {
+  margin: 10px 0 0;
+  color: #374151;
+  font-size: 15px;
+}
+
+.sentiment-note {
+  color: #8a94a3;
+  font-size: 13px;
+}
+
+.sentiment-filter {
+  padding: 4px 8px;
+  font-size: 13px;
+}

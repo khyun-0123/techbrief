@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { SAMPLE_SUMMARIES } from './sampleArticles.js'
+import SentimentBadge from './SentimentBadge.jsx'
 import SummaryItems from './SummaryItems.jsx'
 import { formatPublished } from './utils.js'
 
@@ -129,6 +130,12 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
                         {a.source} · {formatPublished(a.hoursAgo)}
                         {a.sameIssue > 0 && ` · 같은 이슈 ${a.sameIssue}건`}
                         {jobStatus === 'done' && <span className="summary-state done"> · 요약 완료</span>}
+                        {aiSummaries[a.id]?.summary?.sentiment && (
+                          <>
+                            {' · '}
+                            <SentimentBadge sentiment={aiSummaries[a.id].summary.sentiment} />
+                          </>
+                        )}
                         {jobStatus && jobStatus !== 'done' && (
                           <span className={`summary-state ${jobStatus}`}>
                             {' '}
@@ -153,6 +160,12 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
                 {active.source} · {formatPublished(active.hoursAgo)}
                 {active.sameIssue > 0 && ` · 같은 이슈 기사 ${active.sameIssue}건 묶음`}
               </p>
+              {ai?.summary?.sentiment && (
+                <p className="sentiment-line">
+                  <SentimentBadge sentiment={ai.summary.sentiment} /> {ai.summary.sentiment.reason}
+                  <span className="sentiment-note"> · 선별 판단용 보조 표시 (투자 판단용 아님)</span>
+                </p>
+              )}
 
               {activeBusy && (
                 <div className="summary-progress">

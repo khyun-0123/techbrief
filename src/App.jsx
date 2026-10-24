@@ -26,6 +26,7 @@ import { loadReports, saveReports } from './reportStore.js'
 import { useSummaryQueue } from './summaryQueue.js'
 import { DEFAULT_KEYWORDS, SAMPLE_ARTICLES } from './sampleArticles.js'
 import SelectSummary from './SelectSummary.jsx'
+import SentimentBadge from './SentimentBadge.jsx'
 import SummaryItems from './SummaryItems.jsx'
 import { formatPublished, load } from './utils.js'
 
@@ -107,6 +108,7 @@ function App() {
   const [listsError, setListsError] = useState('')
   const [excludeOwn, setExcludeOwn] = useState(() => load(EXCLUDE_OWN_KEY, false))
   const [showLow, setShowLow] = useState(() => load(SHOW_LOW_KEY, false)) // 관련도 낮은 기사도 보기 (F4)
+  const [sentimentFilter, setSentimentFilter] = useState('all') // 호재·악재 거르기 (F5)
   const [pageSize, setPageSize] = useState(() => load(PAGE_SIZE_KEY, 20))
   const [sort, setSort] = useState('latest')
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
@@ -345,10 +347,16 @@ function App() {
   const isLow = (a) => a.relevance === 'low'
   const lowCount = listed.filter(isLow).length
   const ownCount = listed.filter(isOwnOnly).length
-  const visible = listed.filter((a) => (showLow || !isLow(a)) && !(excludeOwn && isOwnOnly(a)))
+  const sentimentOf = (a) => aiSummaries[a.id]?.summary?.sentiment?.label
+  const visible = listed.filter(
+    (a) =>
+      (showLow || !isLow(a)) &&
+      !(excludeOwn && isOwnOnly(a)) &&
+      (sentimentFilter === 'all' || sentimentOf(a) === sentimentFilter),
+  )
 
   // 정렬·필터·검색이 바뀌면 1페이지로 (13 문서 F2)
-  const listKey = [period, source, sort, q, search?.query ?? '', keywords.join(','), excludeOwn, showLow].join('|')
+  const listKey = [period, source, sort, q, search?.query ?? '', keywords.join(','), excludeOwn, showLow, sentimentFilter].join('|')
   useEffect(() => {
     setPage(1)
   }, [listKey])
@@ -648,6 +656,18 @@ function App() {
                   <input type="checkbox" checked={showLow} onChange={(e) => toggleShowLow(e.target.checked)} />
                   관련도 낮은 기사도 보기 <span className="own-count">{lowCount}건</span>
                 </label>
+                <select
+                  className="sentiment-filter"
+                  value={sentimentFilter}
+                  onChange={(e) => setSentimentFilter(e.target.value)}
+                  aria-label="호재·악재 거르기"
+                  title="요약된 기사만 판정이 있어요. 선별할지 판단하는 보조 표시예요 (투자 판단용 아님)"
+                >
+                  <option value="all">호재·악재 전체</option>
+                  <option value="호재">○ 호재만</option>
+                  <option value="중립">△ 중립만</option>
+                  <option value="악재">✕ 악재만</option>
+                </select>
                 <label className="own-toggle" title="자사·자회사만 나온 기사를 숨겨요. 경쟁사도 함께 나오면 남겨요">
                   <input type="checkbox" checked={excludeOwn} onChange={(e) => toggleExcludeOwn(e.target.checked)} />
                   자사·자회사 기사 제외 <span className="own-count">{ownCount}건</span>
@@ -700,6 +720,7 @@ function App() {
                                 </span>
                               )}
                               {a.relevance === 'low' && <span className="badge-low">관련 낮음</span>}
+                              <SentimentBadge sentiment={ai?.summary?.sentiment} />
                               {a.url ? (
                                 <a className="title-link" href={a.url} target="_blank" rel="noreferrer" title="원문 열기 (새 창)">
                                   <TitleWithIcon title={a.title} />
