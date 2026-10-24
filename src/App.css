@@ -234,6 +234,18 @@ select {
   vertical-align: 1px;
 }
 
+.badge-low {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #eef1f5;
+  color: #5b6677;
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
 .same-issue {
   color: #b0601b;
   font-size: 13px;
@@ -1318,4 +1330,182 @@ a.btn {
 
 .aside-head h3 {
   margin: 0;
+}
+
+/* 목록 페이지 번호 (F2) */
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-top: 1px solid #eef1f5;
+}
+
+.pager-range {
+  color: #5b6677;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pager-pages {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pager-btn {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid #d5dbe3;
+  border-radius: 6px;
+  background: #fff;
+  color: #1c2533;
+  font: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.pager-btn:hover:not(:disabled) {
+  background: #f1f4f8;
+}
+
+.pager-btn.active {
+  border-color: #1b6a96;
+  background: #1b6a96;
+  color: #fff;
+  font-weight: 600;
+}
+
+.pager-btn:disabled {
+  color: #b5bdc9;
+  cursor: default;
+}
+
+.pager-gap {
+  padding: 0 4px;
+  color: #8a94a3;
+}
+
+.pager select {
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+/* 자사 기사 제외 (F6) */
+.list-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.own-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #374151;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.own-toggle input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+
+.own-count {
+  color: #8a94a3;
+}
+
+/* 회사·관심 기술 목록 (F6) */
+.lists-panel {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #eef1f5;
+}
+
+.lists-panel summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.list-count {
+  color: #8a94a3;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.list-group {
+  margin-top: 14px;
+}
+
+.list-hint {
+  margin: 4px 0 0;
+  color: #8a94a3;
+  font-size: 12px;
+}
+
+.list-empty {
+  color: #a3acb9;
+  font-size: 13px;
+}
+
+/* 같은 이슈 펼치기 · 중요 이유 (F7) */
+.same-issue-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.same-issue-btn:hover {
+  text-decoration: underline;
+}
+
+.why-important {
+  color: #8a5a00;
+  font-size: 12px;
+}
+
+.group-row td {
+  padding: 2px 16px 14px;
+  background: #fbfaf6;
+}
+
+.group-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.group-list a {
+  color: #1c2533;
+  text-decoration: none;
+}
+
+.group-list a:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.group-source {
+  color: #8a94a3;
+  font-size: 13px;
 }

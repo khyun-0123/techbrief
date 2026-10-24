@@ -42,6 +42,9 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave }) {
           <p className="hint">
             {progressText(running)}
             {running.current && <span className="refresh-current"> · {running.current}</span>}
+            {status.queue?.userFirst > 0 && running.phase === 'summarize' && (
+              <span className="refresh-current"> · 사용자 요청 {status.queue.userFirst}건을 먼저 처리하는 중</span>
+            )}
           </p>
           {running.total > 0 && (
             <div className="gauge">

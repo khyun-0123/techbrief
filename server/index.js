@@ -4,6 +4,7 @@ import { createServer } from 'node:http'
 import { pathToFileURL } from 'node:url'
 import { collect, listArticles, searchArticles } from './collector/index.js'
 import { similarity } from './collector/dedupe.js'
+import { getLists, saveLists } from './collector/lists.js'
 import { dbEnabled, dbStatus } from './db/index.js'
 import {
   deleteReport,
@@ -177,6 +178,12 @@ export async function handleApi(req, res) {
     if (req.method === 'POST' && req.url === '/api/search') {
       const { query } = await readJson(req)
       return send(res, 200, await searchArticles(query))
+    }
+    if (req.method === 'GET' && req.url === '/api/lists') {
+      return send(res, 200, await getLists())
+    }
+    if (req.method === 'PUT' && req.url === '/api/lists') {
+      return send(res, 200, await saveLists(await readJson(req)))
     }
     if (req.method === 'GET' && req.url === '/api/articles') {
       return send(res, 200, await listArticles())

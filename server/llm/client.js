@@ -13,13 +13,50 @@ function config() {
   return { baseUrl: baseUrl.replace(/\/$/, ''), apiKey, model }
 }
 
-// 맥미니 메모리가 넉넉하지 않아 요청을 한 번에 하나씩 보낸다
-let queue = Promise.resolve()
+// 맥미니 메모리가 넉넉하지 않아 요청을 한 번에 하나씩 보낸다.
+// 기다리는 요청은 우선순위가 높은 것(숫자가 작은 것)부터, 같으면 먼저 온 순서로 꺼낸다.
+// 이미 돌고 있는 1건은 끝까지 둔다 (13 문서 F1)
+export const PRIORITY = {
+  USER: 1, // 사람이 누른 요약·보고서
+  APPROVED: 2, // AI 추천을 위해 사람이 승인한 요약
+  BACKGROUND: 3, // 자동 최신화의 미리 요약
+}
 
-function enqueue(task) {
-  const run = queue.then(task, task)
-  queue = run.catch(() => {})
-  return run
+const waiting = []
+let running = null // 지금 처리 중인 요청의 우선순위
+let seq = 0
+
+function enqueue(task, priority = PRIORITY.USER) {
+  return new Promise((resolve, reject) => {
+    waiting.push({ priority, order: seq++, task, resolve, reject })
+    pump()
+  })
+}
+
+async function pump() {
+  if (running !== null || waiting.length === 0) return
+  let next = 0
+  for (let i = 1; i < waiting.length; i += 1) {
+    const a = waiting[i]
+    const b = waiting[next]
+    if (a.priority < b.priority || (a.priority === b.priority && a.order < b.order)) next = i
+  }
+  const job = waiting.splice(next, 1)[0]
+  running = job.priority
+  try {
+    job.resolve(await job.task())
+  } catch (err) {
+    job.reject(err)
+  } finally {
+    running = null
+    pump()
+  }
+}
+
+// 대기 상황 (자동 최신화 화면에 "사용자 요청 먼저 처리 중"을 보여 줄 때 쓴다)
+export function queueStatus() {
+  const ahead = waiting.filter((j) => j.priority < PRIORITY.BACKGROUND).length
+  return { running, waiting: waiting.length, userFirst: ahead + (running !== null && running < PRIORITY.BACKGROUND ? 1 : 0) }
 }
 
 async function callChat({ messages, schema, schemaName, model: modelOverride, timeoutMs = TIMEOUT_MS }) {
@@ -60,8 +97,8 @@ async function callChat({ messages, schema, schemaName, model: modelOverride, ti
 }
 
 // 질문 하나를 보내고 JSON으로 받는다
-// model·timeoutMs는 선택 (보고서는 LLM_REPORT_MODEL과 더 긴 시간)
-export function chatJson({ messages, schema, schemaName = 'result', model, timeoutMs }) {
+// model·timeoutMs는 선택 (보고서는 LLM_REPORT_MODEL과 더 긴 시간), priority는 PRIORITY 중 하나 (기본: 사람 요청)
+export function chatJson({ messages, schema, schemaName = 'result', model, timeoutMs, priority = PRIORITY.USER }) {
   return enqueue(async () => {
     const { content, model: used } = await callChat({ messages, schema, schemaName, model, timeoutMs })
     try {
@@ -69,7 +106,7 @@ export function chatJson({ messages, schema, schemaName = 'result', model, timeo
     } catch {
       throw new Error('AI 응답이 JSON 형식이 아니에요.')
     }
-  })
+  }, priority)
 }
 
 export function modelName() {

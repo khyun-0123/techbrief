@@ -25,6 +25,24 @@ export function searchNewsApi(query) {
   return postJson('/api/search', { query })
 }
 
+// 자사·자회사, 경쟁사, 관심 기술 목록 (팀 공용)
+export async function fetchLists() {
+  const res = await fetch('/api/lists')
+  if (!res.ok) throw new Error('목록을 불러오지 못했어요')
+  return res.json()
+}
+
+export async function saveListsApi(lists) {
+  const res = await fetch('/api/lists', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(lists),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}
+
 // 자동 최신화 상태 (설정·마지막/다음 실행·진행 상황)
 export async function fetchRefresh() {
   const res = await fetch('/api/refresh')

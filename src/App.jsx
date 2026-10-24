@@ -5,15 +5,19 @@ import {
   fetchArticles,
   fetchHealth,
   fetchKeywords,
+  fetchLists,
   fetchRefresh,
   fetchReports,
   importReports,
   lookupSummaries,
   runRefresh,
   saveKeywordsApi,
+  saveListsApi,
   saveRefreshSettings,
   searchNewsApi,
 } from './api.js'
+import ListsPanel from './ListsPanel.jsx'
+import Pager from './Pager.jsx'
 import ProgressPanel from './ProgressPanel.jsx'
 import RefreshPanel from './RefreshPanel.jsx'
 import ReportArchive from './ReportArchive.jsx'
@@ -31,6 +35,9 @@ const INCLUDED_KEY = 'techbrief-included'
 const ARTICLES_KEY = 'techbrief-articles' // 마지막으로 수집한 기사 (서버를 꺼도 화면에 남게)
 const COLLECTED_AT_KEY = 'techbrief-collected-at'
 const AI_SUMMARIES_KEY = 'techbrief-ai-summaries'
+const PAGE_SIZE_KEY = 'techbrief-page-size'
+const EXCLUDE_OWN_KEY = 'techbrief-exclude-own'
+const SHOW_LOW_KEY = 'techbrief-show-low'
 const EXTRA_KEY = 'techbrief-extra-articles' // 「기사 찾기」 결과에서 선별한 기사 (수집 목록에 없는 것)
 const MAX_SAVED = 400
 
@@ -56,6 +63,21 @@ function TitleWithIcon({ title }) {
   )
 }
 
+// 왜 중요한지 (13 문서 F7). 보도량(같은 이슈 N건)과 최신성(발행 칸)은 이미 줄에 보이므로
+// 선별에 도움이 되는 전문 매체·경쟁사 언급만 글로 보여 준다. 점수 전체는 마우스를 올리면
+function importanceReasons(a) {
+  const p = a.scoreParts ?? {}
+  const out = []
+  if (p.expert) out.push('전문 매체')
+  if (p.competitorName) out.push(`경쟁사 ${p.competitorName} 언급`)
+  return out
+}
+
+function scoreTitle(a) {
+  const p = a.scoreParts ?? {}
+  return `중요도 ${a.importance ?? 0}점 = 보도량 ${p.coverage ?? 0} + 전문 매체 ${p.expert ?? 0} + 경쟁사 ${p.competitor ?? 0} + 최신성 ${p.recency ?? 0} (60점 이상 중요)`
+}
+
 const PERIODS = [
   { value: 'today', label: '오늘', hours: 24 },
   { value: 'week', label: '최근 7일', hours: 24 * 7 },
@@ -77,8 +99,15 @@ function App() {
   const [refreshError, setRefreshError] = useState('')
   const [starting, setStarting] = useState(false)
   const [openSummaryId, setOpenSummaryId] = useState(null) // 목록에서 요약을 펼친 기사
+  const [openGroupId, setOpenGroupId] = useState(null) // 같은 이슈 기사를 펼친 기사
   const [search, setSearch] = useState(null) // 네이버 기사 찾기 { query, articles?, loading?, error? }
   const [extraArticles, setExtraArticles] = useState(() => load(EXTRA_KEY, []))
+  const [page, setPage] = useState(1)
+  const [lists, setLists] = useState(null) // 자사·경쟁사·관심 기술 (팀 공용)
+  const [listsError, setListsError] = useState('')
+  const [excludeOwn, setExcludeOwn] = useState(() => load(EXCLUDE_OWN_KEY, false))
+  const [showLow, setShowLow] = useState(() => load(SHOW_LOW_KEY, false)) // 관련도 낮은 기사도 보기 (F4)
+  const [pageSize, setPageSize] = useState(() => load(PAGE_SIZE_KEY, 20))
   const [sort, setSort] = useState('latest')
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
   const [reports, setReports] = useState(() => loadReports())
@@ -97,7 +126,32 @@ function App() {
 
   useEffect(() => {
     reloadArticles().catch(() => {})
+    fetchLists()
+      .then(setLists)
+      .catch(() => {})
   }, [reloadArticles])
+
+  // 목록을 바꾸면 저장하고 기사(중요도·자사 표시)를 다시 계산해 받는다
+  async function saveLists(next) {
+    setLists(next)
+    setListsError('')
+    try {
+      setLists(await saveListsApi(next))
+      await reloadArticles()
+    } catch (err) {
+      setListsError(err.message)
+    }
+  }
+
+  function toggleShowLow(on) {
+    setShowLow(on)
+    localStorage.setItem(SHOW_LOW_KEY, JSON.stringify(on))
+  }
+
+  function toggleExcludeOwn(on) {
+    setExcludeOwn(on)
+    localStorage.setItem(EXCLUDE_OWN_KEY, JSON.stringify(on))
+  }
 
   // 자동 최신화 상태: 도는 중이면 3초, 아니면 30초마다 확인. 끝나면(마지막 실행 시각이 바뀌면) 기사를 다시 불러온다
   const lastRunRef = useRef(undefined)
@@ -271,7 +325,9 @@ function App() {
   const maxHours = PERIODS.find((p) => p.value === period).hours
   const q = query.trim().toLowerCase()
   const byId = new Map(pool.map((a) => [a.id, a]))
-  const visible = searchArticles
+  // 자사·자회사만 나온 기사 (경쟁사도 함께 나오면 경쟁사 소식이라 남긴다)
+  const isOwnOnly = (a) => Boolean(a.own) && !a.scoreParts?.competitorName
+  const listed = searchArticles
     ? searchArticles
         .map((a) => ({ ...byId.get(a.id), rank: a.rank }))
         .filter((a) => source === 'all' || a.source === source)
@@ -286,6 +342,30 @@ function App() {
         (!q || a.title.toLowerCase().includes(q) || a.keyword.toLowerCase().includes(q)),
     )
     .sort((a, b) => (sort === 'importance' ? (b.importance ?? 0) - (a.importance ?? 0) : 0) || a.hoursAgo - b.hoursAgo)
+  const isLow = (a) => a.relevance === 'low'
+  const lowCount = listed.filter(isLow).length
+  const ownCount = listed.filter(isOwnOnly).length
+  const visible = listed.filter((a) => (showLow || !isLow(a)) && !(excludeOwn && isOwnOnly(a)))
+
+  // 정렬·필터·검색이 바뀌면 1페이지로 (13 문서 F2)
+  const listKey = [period, source, sort, q, search?.query ?? '', keywords.join(','), excludeOwn, showLow].join('|')
+  useEffect(() => {
+    setPage(1)
+  }, [listKey])
+  const pageCount = Math.max(1, Math.ceil(visible.length / pageSize))
+  const currentPage = Math.min(page, pageCount)
+  const paged = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  function changePageSize(size) {
+    setPageSize(size)
+    setPage(1)
+    localStorage.setItem(PAGE_SIZE_KEY, JSON.stringify(size))
+  }
+
+  function goPage(p) {
+    setPage(Math.min(Math.max(1, p), pageCount))
+    document.querySelector('.list-panel')?.scrollIntoView({ block: 'start' })
+  }
 
   function handleAddKeyword(e) {
     e.preventDefault()
@@ -563,6 +643,16 @@ function App() {
                   {q && <span className="search-note"> · 모은 기사에서 찾는 중. 없으면 「네이버에서 찾기」</span>}
                 </p>
               )}
+              <div className="list-tools">
+                <label className="own-toggle" title="키워드가 제목·발췌에 없거나, 정치·사회 섹션 기사예요">
+                  <input type="checkbox" checked={showLow} onChange={(e) => toggleShowLow(e.target.checked)} />
+                  관련도 낮은 기사도 보기 <span className="own-count">{lowCount}건</span>
+                </label>
+                <label className="own-toggle" title="자사·자회사만 나온 기사를 숨겨요. 경쟁사도 함께 나오면 남겨요">
+                  <input type="checkbox" checked={excludeOwn} onChange={(e) => toggleExcludeOwn(e.target.checked)} />
+                  자사·자회사 기사 제외 <span className="own-count">{ownCount}건</span>
+                </label>
+              </div>
               {search?.error && <p className="ai-error search-error">{search.error}</p>}
 
               {visible.length === 0 ? (
@@ -592,17 +682,24 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {visible.map((a) => {
+                    {paged.map((a) => {
                       const selected = selectedIds.includes(a.id)
                       const ai = aiSummaries[a.id]
                       const open = openSummaryId === a.id && ai
+                      const groupOpen = openGroupId === a.id && a.related?.length > 0
+                      const reasons = importanceReasons(a)
                       const job = queue.jobs.find((j) => j.id === a.id)
                       return (
                         <Fragment key={a.id}>
-                        <tr className={open ? 'row-open' : undefined}>
+                        <tr className={open || groupOpen ? 'row-open' : undefined}>
                           <td>
                             <div className="title" title={a.title}>
-                              {a.importanceLevel === 'high' && <span className="badge-important">중요</span>}
+                              {a.importanceLevel === 'high' && (
+                                <span className="badge-important" title={scoreTitle(a)}>
+                                  중요
+                                </span>
+                              )}
+                              {a.relevance === 'low' && <span className="badge-low">관련 낮음</span>}
                               {a.url ? (
                                 <a className="title-link" href={a.url} target="_blank" rel="noreferrer" title="원문 열기 (새 창)">
                                   <TitleWithIcon title={a.title} />
@@ -612,7 +709,24 @@ function App() {
                               )}
                             </div>
                             <div className="row-meta">
-                              {a.sameIssue > 0 && <span className="same-issue">같은 이슈 기사 {a.sameIssue}건</span>}
+                              {a.sameIssue > 0 &&
+                                (a.related?.length ? (
+                                  <button
+                                    type="button"
+                                    className="same-issue same-issue-btn"
+                                    aria-expanded={groupOpen}
+                                    onClick={() => setOpenGroupId(groupOpen ? null : a.id)}
+                                  >
+                                    같은 이슈 기사 {a.sameIssue}건 {groupOpen ? '▴' : '▾'}
+                                  </button>
+                                ) : (
+                                  <span className="same-issue">같은 이슈 기사 {a.sameIssue}건</span>
+                                ))}
+                              {reasons.length > 0 && (
+                                <span className="why-important" title={scoreTitle(a)}>
+                                  {reasons.join(' · ')}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="source" title={a.source}>
@@ -655,6 +769,29 @@ function App() {
                             </button>
                           </td>
                         </tr>
+                        {groupOpen && (
+                          <tr className="group-row">
+                            <td colSpan={5}>
+                              <ul className="group-list">
+                                {a.related.map((r) => (
+                                  <li key={r.id ?? r.url}>
+                                    {r.url ? (
+                                      <a href={r.url} target="_blank" rel="noreferrer">
+                                        {r.title}
+                                      </a>
+                                    ) : (
+                                      r.title
+                                    )}
+                                    <span className="group-source"> · {r.source}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                              {a.sameIssue > a.related.length && (
+                                <p className="hint">외 {a.sameIssue - a.related.length}건 · 제목이 비슷한 기사를 48시간 안에서 묶었어요</p>
+                              )}
+                            </td>
+                          </tr>
+                        )}
                         {open && (
                           <tr className="summary-row">
                             <td colSpan={5}>
@@ -670,6 +807,9 @@ function App() {
                     })}
                   </tbody>
                 </table>
+              )}
+              {visible.length > 0 && (
+                <Pager page={currentPage} pageSize={pageSize} total={visible.length} onPage={goPage} onPageSize={changePageSize} />
               )}
             </section>
 
@@ -703,6 +843,7 @@ function App() {
                 onRun={handleRefresh}
                 onSave={handleRefreshSettings}
               />
+              <ListsPanel lists={lists} onSave={saveLists} error={listsError} />
               {isSample && <p className="hint">샘플 기사에는 생성형 AI · 반도체 · 클라우드 · OLED 키워드가 있어요.</p>}
             </aside>
           </div>
