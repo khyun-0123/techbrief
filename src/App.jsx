@@ -63,6 +63,21 @@ function TitleWithIcon({ title }) {
   )
 }
 
+// 왜 중요한지 (13 문서 F7). 보도량(같은 이슈 N건)과 최신성(발행 칸)은 이미 줄에 보이므로
+// 선별에 도움이 되는 전문 매체·경쟁사 언급만 글로 보여 준다. 점수 전체는 마우스를 올리면
+function importanceReasons(a) {
+  const p = a.scoreParts ?? {}
+  const out = []
+  if (p.expert) out.push('전문 매체')
+  if (p.competitorName) out.push(`경쟁사 ${p.competitorName} 언급`)
+  return out
+}
+
+function scoreTitle(a) {
+  const p = a.scoreParts ?? {}
+  return `중요도 ${a.importance ?? 0}점 = 보도량 ${p.coverage ?? 0} + 전문 매체 ${p.expert ?? 0} + 경쟁사 ${p.competitor ?? 0} + 최신성 ${p.recency ?? 0} (60점 이상 중요)`
+}
+
 const PERIODS = [
   { value: 'today', label: '오늘', hours: 24 },
   { value: 'week', label: '최근 7일', hours: 24 * 7 },
@@ -84,6 +99,7 @@ function App() {
   const [refreshError, setRefreshError] = useState('')
   const [starting, setStarting] = useState(false)
   const [openSummaryId, setOpenSummaryId] = useState(null) // 목록에서 요약을 펼친 기사
+  const [openGroupId, setOpenGroupId] = useState(null) // 같은 이슈 기사를 펼친 기사
   const [search, setSearch] = useState(null) // 네이버 기사 찾기 { query, articles?, loading?, error? }
   const [extraArticles, setExtraArticles] = useState(() => load(EXTRA_KEY, []))
   const [page, setPage] = useState(1)
@@ -670,13 +686,19 @@ function App() {
                       const selected = selectedIds.includes(a.id)
                       const ai = aiSummaries[a.id]
                       const open = openSummaryId === a.id && ai
+                      const groupOpen = openGroupId === a.id && a.related?.length > 0
+                      const reasons = importanceReasons(a)
                       const job = queue.jobs.find((j) => j.id === a.id)
                       return (
                         <Fragment key={a.id}>
-                        <tr className={open ? 'row-open' : undefined}>
+                        <tr className={open || groupOpen ? 'row-open' : undefined}>
                           <td>
                             <div className="title" title={a.title}>
-                              {a.importanceLevel === 'high' && <span className="badge-important">중요</span>}
+                              {a.importanceLevel === 'high' && (
+                                <span className="badge-important" title={scoreTitle(a)}>
+                                  중요
+                                </span>
+                              )}
                               {a.relevance === 'low' && <span className="badge-low">관련 낮음</span>}
                               {a.url ? (
                                 <a className="title-link" href={a.url} target="_blank" rel="noreferrer" title="원문 열기 (새 창)">
@@ -687,7 +709,24 @@ function App() {
                               )}
                             </div>
                             <div className="row-meta">
-                              {a.sameIssue > 0 && <span className="same-issue">같은 이슈 기사 {a.sameIssue}건</span>}
+                              {a.sameIssue > 0 &&
+                                (a.related?.length ? (
+                                  <button
+                                    type="button"
+                                    className="same-issue same-issue-btn"
+                                    aria-expanded={groupOpen}
+                                    onClick={() => setOpenGroupId(groupOpen ? null : a.id)}
+                                  >
+                                    같은 이슈 기사 {a.sameIssue}건 {groupOpen ? '▴' : '▾'}
+                                  </button>
+                                ) : (
+                                  <span className="same-issue">같은 이슈 기사 {a.sameIssue}건</span>
+                                ))}
+                              {reasons.length > 0 && (
+                                <span className="why-important" title={scoreTitle(a)}>
+                                  {reasons.join(' · ')}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="source" title={a.source}>
@@ -730,6 +769,29 @@ function App() {
                             </button>
                           </td>
                         </tr>
+                        {groupOpen && (
+                          <tr className="group-row">
+                            <td colSpan={5}>
+                              <ul className="group-list">
+                                {a.related.map((r) => (
+                                  <li key={r.id ?? r.url}>
+                                    {r.url ? (
+                                      <a href={r.url} target="_blank" rel="noreferrer">
+                                        {r.title}
+                                      </a>
+                                    ) : (
+                                      r.title
+                                    )}
+                                    <span className="group-source"> · {r.source}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                              {a.sameIssue > a.related.length && (
+                                <p className="hint">외 {a.sameIssue - a.related.length}건 · 제목이 비슷한 기사를 48시간 안에서 묶었어요</p>
+                              )}
+                            </td>
+                          </tr>
+                        )}
                         {open && (
                           <tr className="summary-row">
                             <td colSpan={5}>

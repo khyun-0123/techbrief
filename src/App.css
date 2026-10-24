@@ -1461,3 +1461,51 @@ a.btn {
   color: #a3acb9;
   font-size: 13px;
 }
+
+/* 같은 이슈 펼치기 · 중요 이유 (F7) */
+.same-issue-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.same-issue-btn:hover {
+  text-decoration: underline;
+}
+
+.why-important {
+  color: #8a5a00;
+  font-size: 12px;
+}
+
+.group-row td {
+  padding: 2px 16px 14px;
+  background: #fbfaf6;
+}
+
+.group-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.group-list a {
+  color: #1c2533;
+  text-decoration: none;
+}
+
+.group-list a:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.group-source {
+  color: #8a94a3;
+  font-size: 13px;
+}
