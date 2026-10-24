@@ -1,13 +1,39 @@
 // 완성된 보고서 한 건을 보여 준다 (보고서 초안·보고서함 공용)
+import { useState } from 'react'
+import { exportPptx, printReport } from './reportExport.js'
 import { formatDate, SECTIONS } from './reportStore.js'
 
 // tools: 보고서 맨 위 오른쪽 도구 줄 (복사·지우기 등)
 function ReportView({ saved, onRegenerate, regenKey, busy, tools }) {
   const { report } = saved
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState('')
+
+  async function handlePptx() {
+    setExporting(true)
+    setExportError('')
+    try {
+      await exportPptx(saved)
+    } catch (err) {
+      setExportError(`PPT를 만들지 못했어요: ${err.message}`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="report-layout">
       <article className="panel report-doc">
-        {tools && <div className="report-toolbar">{tools}</div>}
+        <div className="report-toolbar">
+          {exportError && <span className="toolbar-error">{exportError}</span>}
+          <button type="button" className="btn" onClick={printReport} title="인쇄 창에서 'PDF로 저장'을 고르세요">
+            PDF로 저장
+          </button>
+          <button type="button" className="btn" onClick={handlePptx} disabled={exporting}>
+            {exporting ? 'PPT 만드는 중…' : 'PPT로 저장'}
+          </button>
+          {tools}
+        </div>
         <header className="report-doc-head">
           <h2>{report.title}</h2>
           <span>
