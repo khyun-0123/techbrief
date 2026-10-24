@@ -62,12 +62,15 @@ export function articleId(url) {
 
 export function toArticle(item, keyword) {
   const url = item.originallink || item.link
+  // 네이버 뉴스 주소의 sid가 섹션 번호 (100 정치, 101 경제, 102 사회, 103 생활/문화, 104 세계, 105 IT/과학)
+  const section = String(item.link ?? '').match(/n\.news\.naver\.com\/.*[?&]sid=(\d{3})/)?.[1] ?? null
   const published = new Date(item.pubDate)
   return {
     id: articleId(url),
     title: cleanText(item.title),
     description: cleanText(item.description),
     url,
+    section,
     source: sourceFromUrl(url),
     keyword,
     publishedAt: Number.isNaN(published.getTime()) ? new Date().toISOString() : published.toISOString(),

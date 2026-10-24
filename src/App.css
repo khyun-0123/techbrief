@@ -234,6 +234,18 @@ select {
   vertical-align: 1px;
 }
 
+.badge-low {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #eef1f5;
+  color: #5b6677;
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
 .same-issue {
   color: #b0601b;
   font-size: 13px;

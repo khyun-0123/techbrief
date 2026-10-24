@@ -37,6 +37,7 @@ const COLLECTED_AT_KEY = 'techbrief-collected-at'
 const AI_SUMMARIES_KEY = 'techbrief-ai-summaries'
 const PAGE_SIZE_KEY = 'techbrief-page-size'
 const EXCLUDE_OWN_KEY = 'techbrief-exclude-own'
+const SHOW_LOW_KEY = 'techbrief-show-low'
 const EXTRA_KEY = 'techbrief-extra-articles' // 「기사 찾기」 결과에서 선별한 기사 (수집 목록에 없는 것)
 const MAX_SAVED = 400
 
@@ -89,6 +90,7 @@ function App() {
   const [lists, setLists] = useState(null) // 자사·경쟁사·관심 기술 (팀 공용)
   const [listsError, setListsError] = useState('')
   const [excludeOwn, setExcludeOwn] = useState(() => load(EXCLUDE_OWN_KEY, false))
+  const [showLow, setShowLow] = useState(() => load(SHOW_LOW_KEY, false)) // 관련도 낮은 기사도 보기 (F4)
   const [pageSize, setPageSize] = useState(() => load(PAGE_SIZE_KEY, 20))
   const [sort, setSort] = useState('latest')
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
@@ -123,6 +125,11 @@ function App() {
     } catch (err) {
       setListsError(err.message)
     }
+  }
+
+  function toggleShowLow(on) {
+    setShowLow(on)
+    localStorage.setItem(SHOW_LOW_KEY, JSON.stringify(on))
   }
 
   function toggleExcludeOwn(on) {
@@ -319,11 +326,13 @@ function App() {
         (!q || a.title.toLowerCase().includes(q) || a.keyword.toLowerCase().includes(q)),
     )
     .sort((a, b) => (sort === 'importance' ? (b.importance ?? 0) - (a.importance ?? 0) : 0) || a.hoursAgo - b.hoursAgo)
+  const isLow = (a) => a.relevance === 'low'
+  const lowCount = listed.filter(isLow).length
   const ownCount = listed.filter(isOwnOnly).length
-  const visible = excludeOwn ? listed.filter((a) => !isOwnOnly(a)) : listed
+  const visible = listed.filter((a) => (showLow || !isLow(a)) && !(excludeOwn && isOwnOnly(a)))
 
   // 정렬·필터·검색이 바뀌면 1페이지로 (13 문서 F2)
-  const listKey = [period, source, sort, q, search?.query ?? '', keywords.join(','), excludeOwn].join('|')
+  const listKey = [period, source, sort, q, search?.query ?? '', keywords.join(','), excludeOwn, showLow].join('|')
   useEffect(() => {
     setPage(1)
   }, [listKey])
@@ -619,6 +628,10 @@ function App() {
                 </p>
               )}
               <div className="list-tools">
+                <label className="own-toggle" title="키워드가 제목·발췌에 없거나, 정치·사회 섹션 기사예요">
+                  <input type="checkbox" checked={showLow} onChange={(e) => toggleShowLow(e.target.checked)} />
+                  관련도 낮은 기사도 보기 <span className="own-count">{lowCount}건</span>
+                </label>
                 <label className="own-toggle" title="자사·자회사만 나온 기사를 숨겨요. 경쟁사도 함께 나오면 남겨요">
                   <input type="checkbox" checked={excludeOwn} onChange={(e) => toggleExcludeOwn(e.target.checked)} />
                   자사·자회사 기사 제외 <span className="own-count">{ownCount}건</span>
@@ -664,6 +677,7 @@ function App() {
                           <td>
                             <div className="title" title={a.title}>
                               {a.importanceLevel === 'high' && <span className="badge-important">중요</span>}
+                              {a.relevance === 'low' && <span className="badge-low">관련 낮음</span>}
                               {a.url ? (
                                 <a className="title-link" href={a.url} target="_blank" rel="noreferrer" title="원문 열기 (새 창)">
                                   <TitleWithIcon title={a.title} />

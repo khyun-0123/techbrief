@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS articles (
   collected_at timestamptz NOT NULL DEFAULT now(),
   last_seen_at timestamptz NOT NULL DEFAULT now()
 );
+-- 네이버 뉴스 섹션 (정치·경제·사회·IT/과학 등). 네이버 제휴 언론사 기사만 있음 → 관련도 판단 (13 F4)
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS section text;
 CREATE INDEX IF NOT EXISTS articles_published_idx ON articles (published_at DESC);
 CREATE INDEX IF NOT EXISTS articles_keyword_idx ON articles (keyword, published_at DESC);
 

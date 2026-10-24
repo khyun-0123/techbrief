@@ -19,12 +19,13 @@ let memoryCollectedAt = null
 // 여러 건을 한 번에 넣는다. 이미 있는 기사는 마지막으로 본 시각만 갱신 (inserted로 새 기사 수를 센다)
 async function saveToDb(articles) {
   if (articles.length === 0) return 0
-  const cols = ['id', 'url', 'title', 'description', 'source', 'keyword', 'published_at']
+  const cols = ['id', 'url', 'title', 'description', 'source', 'keyword', 'published_at', 'section']
   const values = cols.map((c) => articles.map((a) => (c === 'published_at' ? a.publishedAt : a[c] ?? null)))
   const { rows } = await query(
-    `INSERT INTO articles (id, url, title, description, source, keyword, published_at)
-     SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::timestamptz[])
-     ON CONFLICT (url) DO UPDATE SET last_seen_at = now(), title = EXCLUDED.title, description = EXCLUDED.description
+    `INSERT INTO articles (id, url, title, description, source, keyword, published_at, section)
+     SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::timestamptz[], $8::text[])
+     ON CONFLICT (url) DO UPDATE SET last_seen_at = now(), title = EXCLUDED.title, description = EXCLUDED.description,
+       section = coalesce(EXCLUDED.section, articles.section)
      RETURNING (xmax = 0) AS inserted`,
     values,
   )
@@ -33,7 +34,7 @@ async function saveToDb(articles) {
 
 async function loadRecentFromDb(days) {
   const { rows } = await query(
-    `SELECT id, url, title, description, source, keyword, published_at
+    `SELECT id, url, title, description, source, keyword, published_at, section
        FROM articles WHERE published_at > now() - make_interval(days => $1) ORDER BY published_at`,
     [days],
   )
@@ -120,6 +121,20 @@ export async function collect(keywords) {
 }
 
 // 같은 이슈를 묶고 대표 기사에 중요도 점수를 매긴다. 같은 이슈 기사는 related로 붙인다
+// 관련도 (13 문서 F4). 네이버 검색은 본문 어딘가에 단어가 한 번만 나와도 결과로 준다
+// high: 제목에 키워드 / mid: 발췌에만 / low: 발췌에도 없거나, 발췌에만 있고 네이버 섹션이 정치·사회·생활·세계
+const OFF_TOPIC_SECTIONS = new Set(['100', '102', '103', '104'])
+const squash = (t) => String(t ?? '').toLowerCase().replace(/\s+/g, '')
+
+export function relevanceOf(article) {
+  const words = String(article.keyword).split(/\s+/).filter(Boolean).map(squash)
+  const has = (text) => words.every((w) => squash(text).includes(w))
+  if (has(article.title)) return 'high'
+  if (has(`${article.title} ${article.description ?? ''}`)) return OFF_TOPIC_SECTIONS.has(article.section) ? 'low' : 'mid'
+  return 'low'
+}
+const RANK = { low: 0, mid: 1, high: 2 }
+
 // lists: 자사·경쟁사 목록 → 중요도의 경쟁사 언급, 자사 기사 표시(own)
 function toIssues(stored, lists) {
   const grouped = groupArticles(stored)
@@ -134,11 +149,13 @@ function toIssues(stored, lists) {
       const group = members.get(rep.id)
       const { score, level, parts } = scoreArticle(rep, group.length, lists.competitors)
       const own = findMention(`${rep.title} ${rep.description ?? ''}`, lists.own)
+      // 같은 이슈 기사 중 가장 관련 높은 것을 이슈의 관련도로
+      const relevance = group.map(relevanceOf).reduce((a, b) => (RANK[b] > RANK[a] ? b : a), 'low')
       const related = group
         .filter((a) => a.id !== rep.id)
         .slice(0, 4)
         .map(({ id, title, source, description, url }) => ({ id, title, source, description, url }))
-      return { ...rep, sameIssue: group.length - 1, importance: score, importanceLevel: level, scoreParts: parts, related, own }
+      return { ...rep, sameIssue: group.length - 1, importance: score, importanceLevel: level, scoreParts: parts, related, own, relevance }
     })
     .sort((x, y) => y.publishedAt.localeCompare(x.publishedAt))
 }
