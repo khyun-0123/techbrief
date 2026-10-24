@@ -3,6 +3,7 @@
 import { dbEnabled, query } from '../db/index.js'
 import { groupArticles } from './dedupe.js'
 import { searchNews } from './naver.js'
+import { findMention, getLists } from './lists.js'
 import { toArticle } from './normalize.js'
 import { scoreArticle } from './score.js'
 
@@ -119,7 +120,8 @@ export async function collect(keywords) {
 }
 
 // 같은 이슈를 묶고 대표 기사에 중요도 점수를 매긴다. 같은 이슈 기사는 related로 붙인다
-function toIssues(stored) {
+// lists: 자사·경쟁사 목록 → 중요도의 경쟁사 언급, 자사 기사 표시(own)
+function toIssues(stored, lists) {
   const grouped = groupArticles(stored)
   const members = new Map()
   for (const a of grouped) {
@@ -130,12 +132,13 @@ function toIssues(stored) {
     .filter((a) => a.id === a.groupId)
     .map((rep) => {
       const group = members.get(rep.id)
-      const { score, level, parts } = scoreArticle(rep, group.length)
+      const { score, level, parts } = scoreArticle(rep, group.length, lists.competitors)
+      const own = findMention(`${rep.title} ${rep.description ?? ''}`, lists.own)
       const related = group
         .filter((a) => a.id !== rep.id)
         .slice(0, 4)
         .map(({ id, title, source, description, url }) => ({ id, title, source, description, url }))
-      return { ...rep, sameIssue: group.length - 1, importance: score, importanceLevel: level, scoreParts: parts, related }
+      return { ...rep, sameIssue: group.length - 1, importance: score, importanceLevel: level, scoreParts: parts, related, own }
     })
     .sort((x, y) => y.publishedAt.localeCompare(x.publishedAt))
 }
@@ -143,7 +146,7 @@ function toIssues(stored) {
 // 대표 기사 목록 (최근 LIST_DAYS일)
 export async function listArticles() {
   const stored = dbEnabled() ? await loadRecentFromDb(LIST_DAYS) : [...memory.values()]
-  const articles = toIssues(stored)
+  const articles = toIssues(stored, await getLists())
   const lastCollectedAt = dbEnabled() ? await lastCollectedFromDb() : memoryCollectedAt
   return { articles, total: stored.length, lastCollectedAt, storage: dbEnabled() ? 'db' : 'memory' }
 }
@@ -156,5 +159,5 @@ export async function searchArticles(query) {
   const items = await searchNews(q, { sort: 'sim' })
   const articles = items.map((item, i) => ({ ...toArticle(item, q), rank: i + 1 })).filter((a) => a.url && a.title)
   const unique = [...new Map(articles.map((a) => [a.url, a])).values()]
-  return { query: q, fetched: items.length, articles: toIssues(unique) }
+  return { query: q, fetched: items.length, articles: toIssues(unique, await getLists()) }
 }

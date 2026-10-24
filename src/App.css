@@ -1382,3 +1382,70 @@ a.btn {
   padding: 6px 8px;
   font-size: 13px;
 }
+
+/* 자사 기사 제외 (F6) */
+.list-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.own-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #374151;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.own-toggle input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+
+.own-count {
+  color: #8a94a3;
+}
+
+/* 회사·관심 기술 목록 (F6) */
+.lists-panel {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #eef1f5;
+}
+
+.lists-panel summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.list-count {
+  color: #8a94a3;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.list-group {
+  margin-top: 14px;
+}
+
+.list-hint {
+  margin: 4px 0 0;
+  color: #8a94a3;
+  font-size: 12px;
+}
+
+.list-empty {
+  color: #a3acb9;
+  font-size: 13px;
+}

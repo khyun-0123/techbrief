@@ -5,15 +5,18 @@ import {
   fetchArticles,
   fetchHealth,
   fetchKeywords,
+  fetchLists,
   fetchRefresh,
   fetchReports,
   importReports,
   lookupSummaries,
   runRefresh,
   saveKeywordsApi,
+  saveListsApi,
   saveRefreshSettings,
   searchNewsApi,
 } from './api.js'
+import ListsPanel from './ListsPanel.jsx'
 import Pager from './Pager.jsx'
 import ProgressPanel from './ProgressPanel.jsx'
 import RefreshPanel from './RefreshPanel.jsx'
@@ -33,6 +36,7 @@ const ARTICLES_KEY = 'techbrief-articles' // 마지막으로 수집한 기사 (�
 const COLLECTED_AT_KEY = 'techbrief-collected-at'
 const AI_SUMMARIES_KEY = 'techbrief-ai-summaries'
 const PAGE_SIZE_KEY = 'techbrief-page-size'
+const EXCLUDE_OWN_KEY = 'techbrief-exclude-own'
 const EXTRA_KEY = 'techbrief-extra-articles' // 「기사 찾기」 결과에서 선별한 기사 (수집 목록에 없는 것)
 const MAX_SAVED = 400
 
@@ -82,6 +86,9 @@ function App() {
   const [search, setSearch] = useState(null) // 네이버 기사 찾기 { query, articles?, loading?, error? }
   const [extraArticles, setExtraArticles] = useState(() => load(EXTRA_KEY, []))
   const [page, setPage] = useState(1)
+  const [lists, setLists] = useState(null) // 자사·경쟁사·관심 기술 (팀 공용)
+  const [listsError, setListsError] = useState('')
+  const [excludeOwn, setExcludeOwn] = useState(() => load(EXCLUDE_OWN_KEY, false))
   const [pageSize, setPageSize] = useState(() => load(PAGE_SIZE_KEY, 20))
   const [sort, setSort] = useState('latest')
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
@@ -101,7 +108,27 @@ function App() {
 
   useEffect(() => {
     reloadArticles().catch(() => {})
+    fetchLists()
+      .then(setLists)
+      .catch(() => {})
   }, [reloadArticles])
+
+  // 목록을 바꾸면 저장하고 기사(중요도·자사 표시)를 다시 계산해 받는다
+  async function saveLists(next) {
+    setLists(next)
+    setListsError('')
+    try {
+      setLists(await saveListsApi(next))
+      await reloadArticles()
+    } catch (err) {
+      setListsError(err.message)
+    }
+  }
+
+  function toggleExcludeOwn(on) {
+    setExcludeOwn(on)
+    localStorage.setItem(EXCLUDE_OWN_KEY, JSON.stringify(on))
+  }
 
   // 자동 최신화 상태: 도는 중이면 3초, 아니면 30초마다 확인. 끝나면(마지막 실행 시각이 바뀌면) 기사를 다시 불러온다
   const lastRunRef = useRef(undefined)
@@ -275,7 +302,9 @@ function App() {
   const maxHours = PERIODS.find((p) => p.value === period).hours
   const q = query.trim().toLowerCase()
   const byId = new Map(pool.map((a) => [a.id, a]))
-  const visible = searchArticles
+  // 자사·자회사만 나온 기사 (경쟁사도 함께 나오면 경쟁사 소식이라 남긴다)
+  const isOwnOnly = (a) => Boolean(a.own) && !a.scoreParts?.competitorName
+  const listed = searchArticles
     ? searchArticles
         .map((a) => ({ ...byId.get(a.id), rank: a.rank }))
         .filter((a) => source === 'all' || a.source === source)
@@ -290,9 +319,11 @@ function App() {
         (!q || a.title.toLowerCase().includes(q) || a.keyword.toLowerCase().includes(q)),
     )
     .sort((a, b) => (sort === 'importance' ? (b.importance ?? 0) - (a.importance ?? 0) : 0) || a.hoursAgo - b.hoursAgo)
+  const ownCount = listed.filter(isOwnOnly).length
+  const visible = excludeOwn ? listed.filter((a) => !isOwnOnly(a)) : listed
 
   // 정렬·필터·검색이 바뀌면 1페이지로 (13 문서 F2)
-  const listKey = [period, source, sort, q, search?.query ?? '', keywords.join(',')].join('|')
+  const listKey = [period, source, sort, q, search?.query ?? '', keywords.join(','), excludeOwn].join('|')
   useEffect(() => {
     setPage(1)
   }, [listKey])
@@ -587,6 +618,12 @@ function App() {
                   {q && <span className="search-note"> · 모은 기사에서 찾는 중. 없으면 「네이버에서 찾기」</span>}
                 </p>
               )}
+              <div className="list-tools">
+                <label className="own-toggle" title="자사·자회사만 나온 기사를 숨겨요. 경쟁사도 함께 나오면 남겨요">
+                  <input type="checkbox" checked={excludeOwn} onChange={(e) => toggleExcludeOwn(e.target.checked)} />
+                  자사·자회사 기사 제외 <span className="own-count">{ownCount}건</span>
+                </label>
+              </div>
               {search?.error && <p className="ai-error search-error">{search.error}</p>}
 
               {visible.length === 0 ? (
@@ -730,6 +767,7 @@ function App() {
                 onRun={handleRefresh}
                 onSave={handleRefreshSettings}
               />
+              <ListsPanel lists={lists} onSave={saveLists} error={listsError} />
               {isSample && <p className="hint">샘플 기사에는 생성형 AI · 반도체 · 클라우드 · OLED 키워드가 있어요.</p>}
             </aside>
           </div>
