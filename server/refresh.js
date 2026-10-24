@@ -6,7 +6,7 @@
 import { collect } from './collector/index.js'
 import { db, dbEnabled } from './db/index.js'
 import { getKeywords, getSetting, getSummaries, setSetting } from './db/store.js'
-import { pingModel } from './llm/client.js'
+import { pingModel, PRIORITY, queueStatus } from './llm/client.js'
 import { summarizeArticle } from './summarize.js'
 
 const SETTINGS_KEY = 'refresh_settings'
@@ -63,6 +63,7 @@ export async function refreshStatus() {
     settings,
     hourOptions: HOUR_OPTIONS,
     running: running ? state.running : null,
+    queue: queueStatus(),
     lastRunAt: state.lastRunAt ?? null,
     lastResult: state.lastResult ?? null,
     nextRunAt: next ? next.toISOString() : null,
@@ -149,7 +150,8 @@ async function execute({ trigger, keywords }) {
         progress.current = article.title
         await saveProgress()
         try {
-          await summarizeArticle(article, article.related)
+          // 사람이 누른 요약이 있으면 그것부터 처리된다 (자동 요약은 가장 낮은 우선순위)
+          await summarizeArticle(article, article.related, { priority: PRIORITY.BACKGROUND })
           result.summarized += 1
           failedInRow = 0
         } catch (err) {

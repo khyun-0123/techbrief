@@ -1,7 +1,7 @@
 // 기사 한 건(+ 같은 이슈 기사)의 6항목 요약을 만든다. 화면 요청(/api/summaries)과 자동 최신화가 같이 쓴다
 import { articleId } from './collector/normalize.js'
 import { getSummary, saveSummary } from './db/store.js'
-import { chatJson } from './llm/client.js'
+import { chatJson, PRIORITY } from './llm/client.js'
 import { isSupported, stripInlineRefs } from './llm/evidence.js'
 import { buildSummaryMessages, SUMMARY_SCHEMA } from './llm/prompts.js'
 
@@ -34,7 +34,8 @@ export function idOf(article) {
 
 // 저장된 요약이 있으면 그대로 (cached: true), 없으면 AI로 만들어 저장한다
 // 같은 이슈 기사들(related)도 이 요약을 함께 쓰게 해 둔다 → 다시 요약하지 않음
-export async function summarizeArticle(article, related = [], { refresh = false } = {}) {
+// priority: 사람이 누른 요약은 PRIORITY.USER(기본), 자동 최신화는 PRIORITY.BACKGROUND
+export async function summarizeArticle(article, related = [], { refresh = false, priority = PRIORITY.USER } = {}) {
   const id = idOf(article)
   if (!refresh) {
     const saved = await getSummary(id)
@@ -45,6 +46,7 @@ export async function summarizeArticle(article, related = [], { refresh = false 
     messages: buildSummaryMessages(articles),
     schema: SUMMARY_SCHEMA,
     schemaName: 'article_summary',
+    priority,
   })
   const result = { summary: checkBasis(data, articles), model, createdAt: new Date().toISOString() }
   await saveSummary(id, result, related.map((r) => (r.id || r.url ? idOf(r) : null)))
