@@ -59,9 +59,43 @@ export function queueStatus() {
   return { running, waiting: waiting.length, userFirst: ahead + (running !== null && running < PRIORITY.BACKGROUND ? 1 : 0) }
 }
 
+// Ollama는 OpenAI 호환 주소(/v1)로 부르면 입력을 약 2,000토큰까지만 읽는다 (실측: 더 긴 입력은 앞부분이 잘림).
+// LLM_NUM_CTX(예: 16384)가 있으면 Ollama 원래 API(/api/chat)로 불러 문맥 크기를 넘긴다. 상용 API는 비워 둔다
+async function callOllama({ baseUrl, apiKey, model, messages, schema, timeoutMs, numCtx }) {
+  const root = baseUrl.replace(/\/v1$/, '')
+  const body = { model, messages, stream: false, think: false, options: { num_ctx: numCtx, temperature: 0.2 } }
+  if (schema) body.format = schema
+  const send = () =>
+    fetch(`${root}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+  let res
+  try {
+    res = await send()
+  } catch (err) {
+    if (err.name === 'TimeoutError') throw err
+    console.warn(`[llm] 연결 실패, 다시 시도: ${err.message}`)
+    await new Promise((r) => setTimeout(r, 2000))
+    res = await send()
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(`AI 서버 응답 오류 ${res.status} ${detail.slice(0, 200)}`)
+  }
+  const data = await res.json()
+  const usage = { input: data.prompt_eval_count ?? 0, output: data.eval_count ?? 0 }
+  if (usage.input >= numCtx - 8) console.warn(`[llm] 입력이 문맥 크기(${numCtx})를 넘어 앞부분이 잘렸을 수 있어요`)
+  return { content: data.message?.content ?? '', model, usage }
+}
+
 async function callChat({ messages, schema, schemaName, model: modelOverride, timeoutMs = TIMEOUT_MS }) {
   const { baseUrl, apiKey, model: defaultModel } = config()
   const model = modelOverride || defaultModel
+  const numCtx = Number(process.env.LLM_NUM_CTX) || 0
+  if (numCtx) return callOllama({ baseUrl, apiKey, model, messages, schema, timeoutMs, numCtx })
   const body = { model, messages, temperature: 0.2 }
   if (schema) {
     body.response_format = { type: 'json_schema', json_schema: { name: schemaName, schema } }
@@ -93,16 +127,17 @@ async function callChat({ messages, schema, schemaName, model: modelOverride, ti
     throw new Error(`AI 서버 응답 오류 ${res.status} ${detail.slice(0, 200)}`)
   }
   const data = await res.json()
-  return { content: data.choices?.[0]?.message?.content ?? '', model }
+  const usage = { input: data.usage?.prompt_tokens ?? 0, output: data.usage?.completion_tokens ?? 0 }
+  return { content: data.choices?.[0]?.message?.content ?? '', model, usage }
 }
 
 // 질문 하나를 보내고 JSON으로 받는다
 // model·timeoutMs는 선택 (보고서는 LLM_REPORT_MODEL과 더 긴 시간), priority는 PRIORITY 중 하나 (기본: 사람 요청)
 export function chatJson({ messages, schema, schemaName = 'result', model, timeoutMs, priority = PRIORITY.USER }) {
   return enqueue(async () => {
-    const { content, model: used } = await callChat({ messages, schema, schemaName, model, timeoutMs })
+    const { content, model: used, usage } = await callChat({ messages, schema, schemaName, model, timeoutMs })
     try {
-      return { data: JSON.parse(content), model: used }
+      return { data: JSON.parse(content), model: used, usage }
     } catch {
       throw new Error('AI 응답이 JSON 형식이 아니에요.')
     }

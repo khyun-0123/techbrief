@@ -29,7 +29,7 @@ export function isSupported(text, evidence) {
 
 // 기사 하나의 원래 텍스트
 export function evidenceOf(article) {
-  return [article.title, article.description, ...(article.related ?? []).flatMap((r) => [r.title, r.description])]
+  return [article.title, article.description, article.body, ...(article.related ?? []).flatMap((r) => [r.title, r.description])]
     .filter(Boolean)
     .join(' ')
 }

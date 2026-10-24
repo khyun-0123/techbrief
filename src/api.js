@@ -25,6 +25,24 @@ export function searchNewsApi(query) {
   return postJson('/api/search', { query })
 }
 
+// 즐겨찾는 검색어 (팀 공용, 자동 수집과 별개)
+export async function fetchFavorites() {
+  const res = await fetch('/api/favorites')
+  if (!res.ok) throw new Error('즐겨찾기를 불러오지 못했어요')
+  return (await res.json()).favorites
+}
+
+export async function saveFavoritesApi(favorites) {
+  const res = await fetch('/api/favorites', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ favorites }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data.favorites
+}
+
 // 자사·자회사, 경쟁사, 관심 기술 목록 (팀 공용)
 export async function fetchLists() {
   const res = await fetch('/api/lists')

@@ -1509,3 +1509,260 @@ a.btn {
   color: #8a94a3;
   font-size: 13px;
 }
+
+/* 근거 기사의 원문 반영 여부 */
+.fulltext-badge.on {
+  color: #1f7a4c;
+}
+
+.fulltext-badge.off {
+  color: #b45309;
+}
+
+/* PDF 저장용 인쇄 화면: 보고서만 A4로 (사내 규칙 18/14/11/10pt) */
+@media print {
+  @page {
+    size: A4;
+    margin: 16mm 15mm;
+  }
+
+  body.printing-report * {
+    visibility: hidden;
+  }
+
+  body.printing-report .report-layout,
+  body.printing-report .report-layout * {
+    visibility: visible;
+  }
+
+  body.printing-report .report-layout {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    display: block;
+    margin: 0;
+  }
+
+  body.printing-report .report-doc,
+  body.printing-report .report-refs {
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    width: 100%;
+  }
+
+  body.printing-report .report-toolbar,
+  body.printing-report .report-section-head .btn-text,
+  body.printing-report .progress-panel {
+    display: none;
+  }
+
+  body.printing-report .report-doc-head h2 {
+    font-size: 18pt;
+  }
+
+  body.printing-report .report-section-head h3,
+  body.printing-report .report-refs h3 {
+    font-size: 14pt;
+  }
+
+  body.printing-report .report-bullets,
+  body.printing-report .report-warnings {
+    font-size: 11pt;
+    line-height: 1.55;
+  }
+
+  body.printing-report .report-section {
+    break-inside: avoid;
+  }
+
+  body.printing-report .report-refs {
+    margin-top: 10mm;
+    font-size: 10pt;
+    break-before: auto;
+  }
+
+  body.printing-report .report-ref,
+  body.printing-report .report-refs a {
+    color: #1b6a96;
+    text-decoration: none;
+  }
+}
+
+.toolbar-error {
+  margin-right: 4px;
+  color: #c0392b;
+  font-size: 13px;
+}
+
+@media print {
+  body.printing-report .report-refs li {
+    break-inside: avoid;
+  }
+}
+
+/* 호재·악재 ○ △ ✕ (F5) — 색과 함께 기호·글자로도 구분 */
+.sentiment {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+.sentiment.good {
+  background: #e3f3ea;
+  color: #1b6b43;
+}
+
+.sentiment.neutral {
+  background: #f1f2f5;
+  color: #4b5563;
+}
+
+.sentiment.bad {
+  background: #fde8e6;
+  color: #b42318;
+}
+
+.sentiment-line {
+  margin: 10px 0 0;
+  color: #374151;
+  font-size: 15px;
+}
+
+.sentiment-note {
+  color: #8a94a3;
+  font-size: 13px;
+}
+
+.sentiment-filter {
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+/* 즐겨찾는 검색어 (F3): 넓은 화면은 왼쪽 열, 좁으면 목록 위 한 줄 */
+.page.page-wide {
+  max-width: 1600px;
+}
+
+.content.with-favs {
+  grid-template-columns: 184px 1fr 280px;
+}
+
+.fav-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
+
+.fav-title {
+  margin: 0;
+  font-size: 15px;
+}
+
+.fav-empty {
+  margin: 0;
+  color: #8a94a3;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.fav-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fav-item {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.fav-item:hover,
+.fav-item.active {
+  background: #eef4ff;
+}
+
+.fav-go {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: none;
+  background: none;
+  color: #1c2533;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.fav-item.active .fav-go {
+  color: #2557c7;
+  font-weight: 600;
+}
+
+.fav-remove {
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  color: #a3acb9;
+  cursor: pointer;
+}
+
+.fav-remove:hover {
+  color: #c0392b;
+}
+
+.fav-star {
+  padding: 2px 8px;
+  border: 1px solid #c7d7f5;
+  border-radius: 999px;
+  background: #fff;
+  color: #2557c7;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fav-star.on {
+  border-color: #f0b429;
+  background: #fff7e0;
+  color: #8a5a00;
+}
+
+@media (max-width: 1399px) {
+  .content.with-favs {
+    grid-template-columns: 1fr 280px;
+  }
+
+  .fav-rail {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 10px 16px;
+  }
+
+  .fav-list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .fav-item {
+    border: 1px solid #dde2ea;
+  }
+}

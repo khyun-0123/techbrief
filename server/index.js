@@ -4,7 +4,9 @@ import { createServer } from 'node:http'
 import { pathToFileURL } from 'node:url'
 import { collect, listArticles, searchArticles } from './collector/index.js'
 import { similarity } from './collector/dedupe.js'
+import { fetchBodies } from './collector/fulltext.js'
 import { getLists, saveLists } from './collector/lists.js'
+import { getSetting, setSetting } from './db/store.js'
 import { dbEnabled, dbStatus } from './db/index.js'
 import {
   deleteReport,
@@ -88,6 +90,17 @@ function reportWarnings(sections) {
   return warnings
 }
 
+// 원문 본문을 붙인다 (13 문서 9절). 기사마다 길이를 나눠 전체 입력이 문맥 크기를 넘지 않게 한다
+const BODY_BUDGET = 12_000 // 모든 기사 본문 합계(글자). LLM_NUM_CTX=16384 기준 여유 있게
+async function attachBodies(articles) {
+  const per = Math.min(2_500, Math.floor(BODY_BUDGET / articles.length))
+  const bodies = await fetchBodies(articles.map((a) => a.url))
+  articles.forEach((a, i) => {
+    a.body = bodies[i] ? bodies[i].slice(0, per) : null
+  })
+  return articles
+}
+
 function readReportArticles(body) {
   const articles = (body.articles ?? []).slice(0, MAX_REPORT_ARTICLES).map((a, i) => ({ ...a, n: i + 1 }))
   if (articles.length === 0) throw Object.assign(new Error('보고서에 넣을 기사가 없어요.'), { status: 400 })
@@ -100,7 +113,7 @@ function readReportArticles(body) {
 
 async function handleReport(req, res) {
   const body = await readJson(req)
-  const articles = readReportArticles(body)
+  const articles = await attachBodies(readReportArticles(body))
   const title = body.title?.trim() || '테크 동향 브리핑'
   const { data, model } = await chatJson({
     messages: buildReportMessages(articles, { title, periodLabel: body.periodLabel ?? '오늘' }),
@@ -121,8 +134,9 @@ async function handleReport(req, res) {
     model,
     createdAt,
     periodLabel: body.periodLabel ?? '오늘',
-    articles: articles.map(({ title: t, source, url, publishedAt }) => ({ title: t, source, url, publishedAt })),
-    inputs: articles.map(({ n: _n, ...rest }) => rest),
+    // fulltext: 원문 본문을 반영했는지 (화면 근거 기사 목록에 표시). 본문 자체는 저장하지 않는다
+    articles: articles.map(({ title: t, source, url, publishedAt, body: b }) => ({ title: t, source, url, publishedAt, fulltext: Boolean(b) })),
+    inputs: articles.map(({ n: _n, body: _b, ...rest }) => rest),
   }
   if (dbEnabled()) await saveReport(entry)
   send(res, 200, { entry, stored: dbEnabled() })
@@ -130,7 +144,7 @@ async function handleReport(req, res) {
 
 async function handleReportSection(req, res) {
   const body = await readJson(req)
-  const articles = readReportArticles(body)
+  const articles = await attachBodies(readReportArticles(body))
   if (!SECTION_KEYS.includes(body.key)) return send(res, 400, { error: '없는 섹션이에요.' })
   const { data, model } = await chatJson({
     messages: buildSectionMessages(articles, { key: body.key, report: body.report }),
@@ -178,6 +192,16 @@ export async function handleApi(req, res) {
     if (req.method === 'POST' && req.url === '/api/search') {
       const { query } = await readJson(req)
       return send(res, 200, await searchArticles(query))
+    }
+    if (req.method === 'GET' && req.url === '/api/favorites') {
+      return send(res, 200, { favorites: await getSetting('favorite_queries', []) })
+    }
+    if (req.method === 'PUT' && req.url === '/api/favorites') {
+      // 즐겨찾는 검색어 (13 문서 F3). 자동 수집 키워드와 별개, 팀 공용, 최대 30개
+      const { favorites = [] } = await readJson(req)
+      const list = [...new Set(favorites.map((q) => String(q).trim().slice(0, 50)).filter(Boolean))].slice(0, 30)
+      await setSetting('favorite_queries', list)
+      return send(res, 200, { favorites: list })
     }
     if (req.method === 'GET' && req.url === '/api/lists') {
       return send(res, 200, await getLists())
