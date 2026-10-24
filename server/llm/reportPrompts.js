@@ -46,7 +46,8 @@ const RULES = `규칙
 - 섹션별 글머리 2~4개, 핵심 요약은 3개 이내. 한 글머리는 한 문장.
 - 각 글머리에 근거 기사 번호를 refs에 넣는다. 번호는 아래 기사 목록의 번호만 쓴다.
 - 요약 항목 중 [AI 보충] 또는 [AI 제안]으로 표시된 내용만으로 쓴 글머리는 refs를 빈 배열로 둔다.
-- 수치·회사명·날짜는 기사 요약에 있는 것만 쓴다. 지어내지 않는다.
+- 사실(수치·회사명·날짜·발표 내용)은 '원문 본문'을 먼저 근거로 쓰고, 원문이 없는 기사는 기사 요약문과 6항목 요약을 쓴다.
+- 수치·회사명·날짜는 원문이나 기사 요약에 있는 것만 쓴다. 지어내지 않는다.
 - 한국어로만 쓴다. 중국어·한자를 쓰지 않는다 (예: BOE는 'BOE').
 - 문장 안에 [1] 같은 번호를 쓰지 않는다. 번호는 refs에만 넣는다.
 - 여러 기사에 걸친 공통 흐름이 있으면 하나의 글머리로 묶고 refs에 여러 번호를 넣는다.`
@@ -80,7 +81,8 @@ function describeArticles(articles) {
     .map((a) => {
       const head = `[${a.n}] ${a.title} (${a.source ?? '매체 미상'}${a.publishedAt ? `, ${a.publishedAt.slice(0, 10)}` : ''})`
       const lines = [head]
-      if (a.description) lines.push(`  - 기사 요약문: ${a.description.slice(0, DESC_MAX)}`)
+      if (a.body) lines.push(`  - 원문 본문: ${a.body.replace(/\n+/g, ' ')}`)
+      else if (a.description) lines.push(`  - 기사 요약문: ${a.description.slice(0, DESC_MAX)}`)
       for (const [key, label] of Object.entries(ITEM_LABELS)) {
         const item = a.summary?.items?.[key]
         if (!item?.text) continue
@@ -103,7 +105,7 @@ export function buildReportMessages(articles, { title, periodLabel }) {
     },
     {
       role: 'user',
-      content: `보고서 제목: ${title}\n기간: ${periodLabel}\n\n기사와 6항목 요약\n${describeArticles(articles)}`,
+      content: `보고서 제목: ${title}\n기간: ${periodLabel}\n\n기사 (원문 본문 또는 요약문)와 6항목 요약\n${describeArticles(articles)}`,
     },
   ]
 }

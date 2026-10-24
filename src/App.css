@@ -1509,3 +1509,12 @@ a.btn {
   color: #8a94a3;
   font-size: 13px;
 }
+
+/* 근거 기사의 원문 반영 여부 */
+.fulltext-badge.on {
+  color: #1f7a4c;
+}
+
+.fulltext-badge.off {
+  color: #b45309;
+}

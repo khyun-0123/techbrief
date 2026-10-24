@@ -6,8 +6,8 @@ import { articleKey, copyText, SECTIONS, toPlainText } from './reportStore.js'
 import ReportView from './ReportView.jsx'
 import { load } from './utils.js'
 
-const REPORT_AVG_KEY = 'techbrief-report-avg-ms'
-const DEFAULT_REPORT_MS = 45_000 // 맥미니 qwen3:14b 실측 35~41초 (기사 3건)
+const REPORT_AVG_KEY = 'techbrief-report-avg-ms-v2' // 원문 반영 뒤 소요 시간이 달라져 새로 잰다
+const DEFAULT_REPORT_MS = 90_000 // 원문 본문을 읽고 쓰므로 실측 약 1분 30초 (기사 3건, 맥미니)
 const PERIODS = { today: '오늘', week: '이번 주', month: '이번 달' }
 
 // 섹션마다 어떤 요약 항목이 재료가 되는지 (서버 reportPrompts.js와 같은 구성)
@@ -210,7 +210,7 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
             <div className="gauge-fill" style={{ width: `${progress}%` }} />
           </div>
           <span>
-            초안 만드는 중 {progress}% (예상, 약 {Math.round(avgMs / 1000)}초)
+            원문을 읽고 초안 쓰는 중 {progress}% (예상, 약 {Math.round(avgMs / 1000)}초)
           </span>
         </div>
       )}

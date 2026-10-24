@@ -69,6 +69,13 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools }) {
                 <div className="meta">
                   {a.source}
                   {a.publishedAt && ` · ${formatDate(a.publishedAt)}`}
+                  {a.fulltext === true && <span className="fulltext-badge on"> · 원문 반영</span>}
+                  {a.fulltext === false && (
+                    <span className="fulltext-badge off" title="원문 페이지에서 본문을 가져오지 못해 네이버 발췌문으로 썼어요">
+                      {' '}
+                      · 발췌문으로 작성
+                    </span>
+                  )}
                 </div>
                 {a.url && (
                   <a href={a.url} target="_blank" rel="noreferrer">
