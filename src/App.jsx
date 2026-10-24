@@ -3,6 +3,7 @@ import './App.css'
 import {
   deleteReportApi,
   fetchArticles,
+  fetchFavorites,
   fetchHealth,
   fetchKeywords,
   fetchLists,
@@ -11,11 +12,13 @@ import {
   importReports,
   lookupSummaries,
   runRefresh,
+  saveFavoritesApi,
   saveKeywordsApi,
   saveListsApi,
   saveRefreshSettings,
   searchNewsApi,
 } from './api.js'
+import FavoritesRail from './FavoritesRail.jsx'
 import ListsPanel from './ListsPanel.jsx'
 import Pager from './Pager.jsx'
 import ProgressPanel from './ProgressPanel.jsx'
@@ -109,6 +112,7 @@ function App() {
   const [excludeOwn, setExcludeOwn] = useState(() => load(EXCLUDE_OWN_KEY, false))
   const [showLow, setShowLow] = useState(() => load(SHOW_LOW_KEY, false)) // 관련도 낮은 기사도 보기 (F4)
   const [sentimentFilter, setSentimentFilter] = useState('all') // 호재·악재 거르기 (F5)
+  const [favorites, setFavorites] = useState([]) // 즐겨찾는 검색어 (F3, 팀 공용)
   const [pageSize, setPageSize] = useState(() => load(PAGE_SIZE_KEY, 20))
   const [sort, setSort] = useState('latest')
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
@@ -130,6 +134,9 @@ function App() {
     reloadArticles().catch(() => {})
     fetchLists()
       .then(setLists)
+      .catch(() => {})
+    fetchFavorites()
+      .then(setFavorites)
       .catch(() => {})
   }, [reloadArticles])
 
@@ -390,8 +397,12 @@ function App() {
   // 「기사 찾기」: 등록 키워드와 상관없이 네이버에서 바로 찾는다
   async function handleSearch(e) {
     e.preventDefault()
-    const q = query.trim()
+    await runSearch(query.trim())
+  }
+
+  async function runSearch(q) {
     if (!q || search?.loading) return
+    setQuery(q)
     setSearch({ query: q, loading: true })
     try {
       const result = await searchNewsApi(q)
@@ -399,6 +410,15 @@ function App() {
       setSort('relevance')
     } catch (err) {
       setSearch({ query: q, error: err.message })
+    }
+  }
+
+  async function changeFavorites(next) {
+    setFavorites(next)
+    try {
+      setFavorites(await saveFavoritesApi(next))
+    } catch (err) {
+      setSearch((prev) => (prev ? { ...prev, error: err.message } : prev))
     }
   }
 
@@ -547,7 +567,7 @@ function App() {
           queue={queue}
         />
       ) : (
-        <main className="page">
+        <main className="page page-wide">
           <header className="page-header with-actions">
             <div>
               <h1>뉴스 수집 현황</h1>
@@ -591,7 +611,13 @@ function App() {
             </div>
           </section>
 
-          <div className="content">
+          <div className="content with-favs">
+            <FavoritesRail
+              favorites={favorites}
+              active={search?.query}
+              onSearch={runSearch}
+              onRemove={(q) => changeFavorites(favorites.filter((f) => f !== q))}
+            />
             <section className="panel list-panel">
               <div className="filters">
                 <form className="search-form" onSubmit={handleSearch}>
@@ -639,6 +665,20 @@ function App() {
                     <strong>‘{search.query}’</strong> 네이버 찾기 결과
                     {search.articles && ` · 이슈 ${visible.length}개 · 기사 ${countArticles(visible)}건`}
                     {search.loading && ' · 찾는 중…'}
+                    {' '}
+                    <button
+                      type="button"
+                      className={favorites.includes(search.query) ? 'fav-star on' : 'fav-star'}
+                      onClick={() =>
+                        changeFavorites(
+                          favorites.includes(search.query) ? favorites.filter((f) => f !== search.query) : [...favorites, search.query],
+                        )
+                      }
+                      aria-pressed={favorites.includes(search.query)}
+                      title="즐겨찾는 검색어 (자동 수집과 별개)"
+                    >
+                      {favorites.includes(search.query) ? '★ 즐겨찾기됨' : '☆ 즐겨찾기'}
+                    </button>
                     <span className="search-note"> · 수집 목록에는 쌓이지 않아요. 선별·요약하면 그 기사만 남아요</span>
                   </span>
                   <button type="button" className="btn" onClick={closeSearch}>

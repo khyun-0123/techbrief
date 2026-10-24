@@ -6,6 +6,7 @@ import { collect, listArticles, searchArticles } from './collector/index.js'
 import { similarity } from './collector/dedupe.js'
 import { fetchBodies } from './collector/fulltext.js'
 import { getLists, saveLists } from './collector/lists.js'
+import { getSetting, setSetting } from './db/store.js'
 import { dbEnabled, dbStatus } from './db/index.js'
 import {
   deleteReport,
@@ -191,6 +192,16 @@ export async function handleApi(req, res) {
     if (req.method === 'POST' && req.url === '/api/search') {
       const { query } = await readJson(req)
       return send(res, 200, await searchArticles(query))
+    }
+    if (req.method === 'GET' && req.url === '/api/favorites') {
+      return send(res, 200, { favorites: await getSetting('favorite_queries', []) })
+    }
+    if (req.method === 'PUT' && req.url === '/api/favorites') {
+      // 즐겨찾는 검색어 (13 문서 F3). 자동 수집 키워드와 별개, 팀 공용, 최대 30개
+      const { favorites = [] } = await readJson(req)
+      const list = [...new Set(favorites.map((q) => String(q).trim().slice(0, 50)).filter(Boolean))].slice(0, 30)
+      await setSetting('favorite_queries', list)
+      return send(res, 200, { favorites: list })
     }
     if (req.method === 'GET' && req.url === '/api/lists') {
       return send(res, 200, await getLists())
