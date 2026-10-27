@@ -18,6 +18,7 @@ import {
   saveRefreshSettings,
   searchNewsApi,
   selectLlmProvider,
+  unlockRefresh,
 } from './api.js'
 import FavoritesRail from './FavoritesRail.jsx'
 import ListsPanel from './ListsPanel.jsx'
@@ -471,10 +472,10 @@ function App() {
     }
   }
 
-  async function handleRefreshSettings(settings) {
+  async function handleRefreshSettings(settings, password) {
     setRefreshError('')
     try {
-      setRefresh(await saveRefreshSettings(settings))
+      setRefresh(await saveRefreshSettings(settings, password))
     } catch (err) {
       setRefreshError(err.message)
     }
@@ -940,6 +941,7 @@ function App() {
                 disabled={keywords.length === 0}
                 onRun={handleRefresh}
                 onSave={handleRefreshSettings}
+                onUnlock={unlockRefresh}
               />
               <ListsPanel lists={lists} onSave={saveLists} error={listsError} />
               {isSample && <p className="hint">샘플 기사에는 생성형 AI · 반도체 · 클라우드 · OLED 키워드가 있어요.</p>}

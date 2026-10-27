@@ -73,11 +73,16 @@ export function runRefresh(keywords) {
   return postJson('/api/refresh/run', { keywords })
 }
 
-export async function saveRefreshSettings(settings) {
+// 자동 최신화 설정 잠금 해제: 비밀번호만 확인한다
+export function unlockRefresh(password) {
+  return postJson('/api/refresh/unlock', { password })
+}
+
+export async function saveRefreshSettings(settings, password) {
   const res = await fetch('/api/refresh/settings', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(settings),
+    body: JSON.stringify({ ...settings, password }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)

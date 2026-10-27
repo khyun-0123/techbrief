@@ -28,7 +28,8 @@ export function normalizeSettings(input = {}) {
     mode: ['off', 'daily', 'interval'].includes(s.mode) ? s.mode : 'off',
     time: /^([01]\d|2[0-3]):[0-5]\d$/.test(s.time) ? s.time : DEFAULT_SETTINGS.time,
     hours: HOUR_OPTIONS.includes(Number(s.hours)) ? Number(s.hours) : DEFAULT_SETTINGS.hours,
-    perRun: Math.min(10, Math.max(0, Math.round(Number(s.perRun)))) || 0,
+    // 1~10건. 예전에 저장한 0(하지 않음)은 기본값으로 바꾼다 (끄려면 주기를 '꺼짐'으로)
+    perRun: Math.min(10, Math.max(0, Math.round(Number(s.perRun)))) || DEFAULT_SETTINGS.perRun,
     enabledAt: s.enabledAt ?? null, // 켠 시각. 켜기 전에 지난 예정은 따라잡지 않는다
   }
 }
@@ -70,7 +71,16 @@ export async function refreshStatus() {
   }
 }
 
+// 자동 최신화 설정은 비밀번호를 아는 사람만 바꾼다 (팀원이 모르고 바꾸지 않게).
+// .env.local의 REFRESH_PASSWORD, 없으면 'password'. 「지금 최신화」는 누구나 누를 수 있다
+export function checkRefreshPassword(password) {
+  if (password !== (process.env.REFRESH_PASSWORD || 'password')) {
+    throw Object.assign(new Error('비밀번호가 맞지 않아요.'), { status: 401 })
+  }
+}
+
 export async function saveRefreshSettings(input) {
+  checkRefreshPassword(input.password)
   const before = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
   const settings = normalizeSettings({ ...input, enabledAt: before.enabledAt })
   // 꺼짐→켜짐이거나 주기를 바꾸면 지금부터 센다

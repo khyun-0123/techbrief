@@ -1278,6 +1278,39 @@ a.btn {
   margin-top: 10px;
 }
 
+.refresh-lock {
+  margin-left: 6px;
+  color: #5b6677;
+  font-size: 13px;
+  font-weight: normal;
+}
+
+/* 자동 최신화 설정 잠금 해제 */
+.refresh-unlock {
+  display: flex;
+  gap: 6px;
+}
+
+.refresh-unlock input {
+  flex: 1;
+  min-width: 0;
+}
+
+.refresh-unlock .btn,
+.refresh-relock {
+  white-space: nowrap;
+}
+
+.refresh-relock {
+  font-size: 13px;
+}
+
+.refresh-settings select:disabled,
+.refresh-settings input[type='time']:disabled {
+  background: #f3f5f8;
+  color: #8a94a3;
+}
+
 .refresh-settings select,
 .refresh-settings input {
   width: 100%;
