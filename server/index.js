@@ -26,7 +26,7 @@ import {
   SECTION_KEYS,
   SECTION_SCHEMA,
 } from './llm/reportPrompts.js'
-import { refreshStatus, saveRefreshSettings, startRefresh, startScheduler } from './refresh.js'
+import { checkRefreshPassword, refreshStatus, saveRefreshSettings, startRefresh, startScheduler } from './refresh.js'
 import { summarizeArticle } from './summarize.js'
 
 const REPORT_TIMEOUT_MS = 240_000 // 보고서는 출력이 길어 요약보다 오래 걸린다
@@ -185,6 +185,11 @@ export async function handleApi(req, res) {
     }
     if (req.method === 'GET' && req.url === '/api/refresh') {
       return send(res, 200, await refreshStatus())
+    }
+    if (req.method === 'POST' && req.url === '/api/refresh/unlock') {
+      // 설정 잠금 해제 전에 비밀번호만 확인한다. 실제 저장(PUT)에서도 다시 확인한다
+      checkRefreshPassword((await readJson(req)).password)
+      return send(res, 200, { ok: true })
     }
     if (req.method === 'PUT' && req.url === '/api/refresh/settings') {
       return send(res, 200, await saveRefreshSettings(await readJson(req)))
