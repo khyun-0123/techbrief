@@ -1055,7 +1055,16 @@ a.btn {
   gap: 10px;
 }
 
-/* AI 서버 선택 (맥미니 / OpenRouter) */
+/* AI 모델 선택 (맥미니 Qwen / OpenRouter) */
+.llm-pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #c8d0dc;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .llm-select {
   padding: 3px 6px;
   border: 1px solid #4a5a78;
