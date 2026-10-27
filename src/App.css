@@ -1489,11 +1489,38 @@ a.btn {
 .lists-panel summary {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
+  list-style: none;
+}
+
+.lists-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+/* 오른쪽 끝 펼치기 버튼 (▾ 펼치기 / ▴ 접기) */
+.lists-panel summary::after {
+  content: '▾ 펼치기';
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid #d5dbe3;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  font-size: 12px;
+  font-weight: normal;
+  white-space: nowrap;
+}
+
+.lists-panel[open] summary::after {
+  content: '▴ 접기';
+}
+
+.lists-panel summary:hover::after {
+  background: #f3f5f8;
 }
 
 .list-count {
