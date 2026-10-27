@@ -28,7 +28,8 @@ export function normalizeSettings(input = {}) {
     mode: ['off', 'daily', 'interval'].includes(s.mode) ? s.mode : 'off',
     time: /^([01]\d|2[0-3]):[0-5]\d$/.test(s.time) ? s.time : DEFAULT_SETTINGS.time,
     hours: HOUR_OPTIONS.includes(Number(s.hours)) ? Number(s.hours) : DEFAULT_SETTINGS.hours,
-    perRun: Math.min(10, Math.max(0, Math.round(Number(s.perRun)))) || 0,
+    // 1~10건. 예전에 저장한 0(하지 않음)은 기본값으로 바꾼다 (끄려면 주기를 '꺼짐'으로)
+    perRun: Math.min(10, Math.max(0, Math.round(Number(s.perRun)))) || DEFAULT_SETTINGS.perRun,
     enabledAt: s.enabledAt ?? null, // 켠 시각. 켜기 전에 지난 예정은 따라잡지 않는다
   }
 }

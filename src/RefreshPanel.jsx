@@ -3,7 +3,8 @@
 import { useState } from 'react'
 
 const MODE_LABEL = { off: '꺼짐', daily: '매일 정해진 시각', interval: '몇 시간마다' }
-const PER_RUN_OPTIONS = [0, 3, 5, 10]
+// 자동 최신화를 끄려면 주기를 '꺼짐'으로 한다. 그래서 '미리 요약 안 함' 칸은 두지 않는다
+const PER_RUN_OPTIONS = [3, 5, 10]
 
 function formatTime(iso) {
   if (!iso) return '-'
@@ -73,7 +74,8 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, onUnlo
         </div>
       ) : (
         <p className="hint">
-          키워드마다 네이버 뉴스 최신 100건을 모으고, 제목에 키워드가 들어간 중요한 기사는 미리 요약해 둬요.
+          키워드마다 네이버 뉴스 최신 100건을 모으고, 모은 기사를 요약해요. 100건을 매번 모두 요약하면 자원 낭비가
+          심해서, 지금은 중요한 기사 {settings?.perRun ?? 5}건씩만 요약해요.
         </p>
       )}
 
@@ -135,7 +137,7 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, onUnlo
           <select id="refresh-per-run" disabled={locked} value={settings.perRun} onChange={(e) => change({ perRun: Number(e.target.value) })}>
             {PER_RUN_OPTIONS.map((n) => (
               <option key={n} value={n}>
-                {n === 0 ? '하지 않음' : `최대 ${n}건`}
+                최대 {n}건
               </option>
             ))}
           </select>
