@@ -17,7 +17,7 @@ import {
   setKeywords,
   updateReportSection,
 } from './db/store.js'
-import { chatJson, modelName, pingModel, reportModelName } from './llm/client.js'
+import { chatJson, llmProviders, modelName, pingModel, providerLabel, selectProvider } from './llm/client.js'
 import { evidenceOf, hasHan, isSupported, stripInlineRefs } from './llm/evidence.js'
 import {
   buildReportMessages,
@@ -119,7 +119,7 @@ async function handleReport(req, res) {
     messages: buildReportMessages(articles, { title, periodLabel: body.periodLabel ?? '오늘' }),
     schema: REPORT_SCHEMA,
     schemaName: 'report_draft',
-    model: reportModelName(),
+    report: true,
     timeoutMs: REPORT_TIMEOUT_MS,
   })
   const sections = Object.fromEntries(
@@ -150,7 +150,7 @@ async function handleReportSection(req, res) {
     messages: buildSectionMessages(articles, { key: body.key, report: body.report }),
     schema: SECTION_SCHEMA,
     schemaName: 'report_section',
-    model: reportModelName(),
+    report: true,
     timeoutMs: REPORT_TIMEOUT_MS,
   })
   const bullets = cleanBullets(data.bullets, articles)
@@ -165,7 +165,12 @@ export async function handleApi(req, res) {
   try {
     if (req.method === 'GET' && req.url === '/api/health') {
       const [modelReachable, db] = await Promise.all([pingModel(), dbStatus()])
-      return send(res, 200, { ok: true, model: modelName(), modelReachable, db })
+      return send(res, 200, { ok: true, model: modelName(), modelReachable, db, llm: llmProviders() })
+    }
+    if (req.method === 'PUT' && req.url === '/api/llm') {
+      // 상단에서 고른 AI 서버 (맥미니 / OpenRouter). 이 서버 메모리에만 저장
+      const { provider } = await readJson(req)
+      return send(res, 200, selectProvider(provider))
     }
     if (req.method === 'POST' && req.url === '/api/summaries') {
       return await handleSummary(req, res)
@@ -253,6 +258,6 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const port = Number(process.env.PORT ?? 3001)
   startScheduler()
   createServer(handleApi).listen(port, '127.0.0.1', () => {
-    console.log(`요약 API 서버: http://127.0.0.1:${port} (모델 ${modelName() || '설정 없음'})`)
+    console.log(`요약 API 서버: http://127.0.0.1:${port} (${providerLabel()} 모델 ${modelName() || '설정 없음'})`)
   })
 }
