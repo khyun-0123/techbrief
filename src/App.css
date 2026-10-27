@@ -1050,6 +1050,19 @@ a.btn {
 /* 상단 메뉴 오른쪽 */
 .topbar-side {
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* AI 서버 선택 (맥미니 / OpenRouter) */
+.llm-select {
+  padding: 3px 6px;
+  border: 1px solid #4a5a78;
+  border-radius: 6px;
+  background: #26324a;
+  color: #e2e8f0;
+  font-size: 13px;
 }
 
 .tab-count {

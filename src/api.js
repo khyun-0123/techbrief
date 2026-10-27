@@ -138,6 +138,18 @@ export async function fetchHealth() {
   return res.json()
 }
 
+// 상단에서 AI 서버(맥미니 / OpenRouter)를 바꾼다
+export async function selectLlmProvider(provider) {
+  const res = await fetch('/api/llm', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}
+
 // 보고서함 (DB). stored가 false면 DB가 없는 환경 → 화면이 브라우저에 저장한다
 export async function fetchReports() {
   const res = await fetch('/api/reports')

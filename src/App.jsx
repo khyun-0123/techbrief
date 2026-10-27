@@ -17,6 +17,7 @@ import {
   saveListsApi,
   saveRefreshSettings,
   searchNewsApi,
+  selectLlmProvider,
 } from './api.js'
 import FavoritesRail from './FavoritesRail.jsx'
 import ListsPanel from './ListsPanel.jsx'
@@ -206,6 +207,8 @@ function App() {
   }, [])
   const [health, setHealth] = useState(null) // { model, modelReachable } | { error }
 
+  const [switchingLlm, setSwitchingLlm] = useState(false)
+
   // 상단 메뉴 오른쪽의 AI 연결 상태 (1분마다 확인)
   useEffect(() => {
     let alive = true
@@ -220,6 +223,20 @@ function App() {
       clearInterval(timer)
     }
   }, [])
+
+  // 상단에서 AI 서버를 바꾸면 바로 연결 상태를 다시 확인한다
+  async function handleSelectLlm(provider) {
+    setSwitchingLlm(true)
+    try {
+      await selectLlmProvider(provider)
+      setHealth(await fetchHealth())
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setSwitchingLlm(false)
+    }
+  }
+  const llmLabel = health?.llm?.providers.find((p) => p.id === health.llm.current)?.label ?? 'AI 서버'
 
   // DB가 없을 때만 브라우저에 저장한다 (DB가 있으면 서버가 저장)
   function updateReports(update) {
@@ -532,6 +549,23 @@ function App() {
         </button>
         </div>
         <span className="topbar-side">
+          {health?.llm && (
+            <select
+              className="llm-select"
+              aria-label="AI 서버"
+              title="요약·보고서에 쓸 AI 서버"
+              value={health.llm.current}
+              disabled={switchingLlm}
+              onChange={(e) => handleSelectLlm(e.target.value)}
+            >
+              {health.llm.providers.map((p) => (
+                <option key={p.id} value={p.id} disabled={!p.ready}>
+                  {p.label}
+                  {p.ready ? '' : ' (설정 없음)'}
+                </option>
+              ))}
+            </select>
+          )}
           {health === null ? null : health.error ? (
             <span className="ai-status off">● 서버 연결 안 됨</span>
           ) : health.modelReachable ? (
@@ -544,7 +578,7 @@ function App() {
               )}
             </span>
           ) : (
-            <span className="ai-status off" title="맥미니(AI 서버)에 닿지 않아요. 요약·보고서를 만들 수 없어요">
+            <span className="ai-status off" title={`${llmLabel}(AI 서버)에 닿지 않아요. 요약·보고서를 만들 수 없어요`}>
               ● AI 연결 안 됨
             </span>
           )}
