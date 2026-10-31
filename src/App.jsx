@@ -44,6 +44,7 @@ const AI_SUMMARIES_KEY = 'techbrief-ai-summaries'
 const PAGE_SIZE_KEY = 'techbrief-page-size'
 const EXCLUDE_OWN_KEY = 'techbrief-exclude-own'
 const SHOW_LOW_KEY = 'techbrief-show-low'
+const SUMMARIZED_FIRST_KEY = 'techbrief-summarized-first'
 const RECENT_KEY = 'techbrief-recent-searches' // 최근 검색어 (이 브라우저에만)
 const RECENT_MAX = 10
 const EXTRA_KEY = 'techbrief-extra-articles' // 「기사 찾기」 결과에서 선별한 기사 (수집 목록에 없는 것)
@@ -115,6 +116,8 @@ function App() {
   const [listsError, setListsError] = useState('')
   const [excludeOwn, setExcludeOwn] = useState(() => load(EXCLUDE_OWN_KEY, false))
   const [showLow, setShowLow] = useState(() => load(SHOW_LOW_KEY, false)) // 관련도 낮은 기사도 보기 (F4)
+  // 요약된 기사 먼저: 지금 정렬은 그대로 두고 요약된 기사를 위로 (요약을 먼저 보고 고르게)
+  const [summarizedFirst, setSummarizedFirst] = useState(() => load(SUMMARIZED_FIRST_KEY, true))
   const [sentimentFilter, setSentimentFilter] = useState('all') // 긍정·중립·부정 거르기 (F5)
   const [favorites, setFavorites] = useState([]) // 즐겨찾는 검색어 (F3, 팀 공용)
   const [recent, setRecent] = useState(() => load(RECENT_KEY, [])) // 최근 검색어 (이 브라우저에만)
@@ -155,6 +158,11 @@ function App() {
     } catch (err) {
       setListsError(err.message)
     }
+  }
+
+  function toggleSummarizedFirst(on) {
+    setSummarizedFirst(on)
+    localStorage.setItem(SUMMARIZED_FIRST_KEY, JSON.stringify(on))
   }
 
   function toggleShowLow(on) {
@@ -378,7 +386,9 @@ function App() {
   const lowCount = listed.filter(isLow).length
   const ownCount = listed.filter(isOwnOnly).length
   const sentimentOf = (a) => sentimentLabel(pickSentiment(a, aiSummaries[a.id]?.summary))
-  const visible = listed.filter(
+  const hasSummary = (a) => Boolean(aiSummaries[a.id]?.summary)
+  const ordered = summarizedFirst ? [...listed.filter(hasSummary), ...listed.filter((a) => !hasSummary(a))] : listed
+  const visible = ordered.filter(
     (a) =>
       (showLow || !isLow(a)) &&
       !(excludeOwn && isOwnOnly(a)) &&
@@ -386,7 +396,7 @@ function App() {
   )
 
   // 정렬·필터·검색이 바뀌면 1페이지로 (13 문서 F2)
-  const listKey = [period, source, sort, q, search?.query ?? '', keywords.join(','), excludeOwn, showLow, sentimentFilter].join('|')
+  const listKey = [period, source, sort, q, search?.query ?? '', keywords.join(','), excludeOwn, showLow, sentimentFilter, summarizedFirst].join('|')
   useEffect(() => {
     setPage(1)
   }, [listKey])
@@ -732,6 +742,10 @@ function App() {
                 </p>
               )}
               <div className="list-tools">
+                <label className="own-toggle" title="지금 정렬은 그대로 두고, AI 요약이 있는 기사를 위로 올려요">
+                  <input type="checkbox" checked={summarizedFirst} onChange={(e) => toggleSummarizedFirst(e.target.checked)} />
+                  요약된 기사 먼저 <span className="own-count">{listed.filter(hasSummary).length}건</span>
+                </label>
                 <label className="own-toggle" title="키워드가 제목·발췌에 없거나, 정치·사회 섹션 기사예요">
                   <input type="checkbox" checked={showLow} onChange={(e) => toggleShowLow(e.target.checked)} />
                   관련도 낮은 기사도 보기 <span className="own-count">{lowCount}건</span>
