@@ -4,7 +4,6 @@
 // - 팀원마다 자기 포트로 앱을 켜도 DB는 같이 쓴다 → DB 잠금으로 한 곳에서만 실행한다
 // - 앱(npm run dev)이 켜져 있을 때만 돈다. 꺼져 있던 동안 지난 예정은 켜진 뒤 한 번 따라잡는다
 import { collect, listArticles } from './collector/index.js'
-import { findMention, getLists } from './collector/lists.js'
 import { db, dbEnabled } from './db/index.js'
 import { getKeywords, getSetting, getSummaries, setSetting } from './db/store.js'
 import { pingModel, PRIORITY, queueStatus } from './llm/client.js'
@@ -100,55 +99,40 @@ export async function saveRefreshSettings(input) {
   return refreshStatus()
 }
 
-// 제목에 키워드가 들어간 기사만 미리 요약한다 (본문에만 스치듯 나온 기사는 제외)
+// 제목에 키워드가 들어간 이슈만 자동 요약한다 (본문에만 스치듯 나온 기사는 제외)
+// 대표 기사 제목에 없어도 같은 이슈 기사 중 하나의 제목에 있으면 관련도 high (collector/index.js)
 function titleHasKeyword(article) {
-  const squash = (t) => String(t).toLowerCase().replace(/\s+/g, '')
-  return squash(article.title).includes(squash(article.keyword))
+  return article.relevance === 'high'
 }
 
 // ── 자동 요약 대기열 ──
-// 최신화가 끝나면 아직 요약 안 된 기사(제목에 키워드가 있는 대표 기사, 최근 7일)를 전부 대기열에 넣고
+// 최신화가 끝나면 아직 요약 안 된 기사(제목에 키워드가 있는 이슈, 최근 7일)를 전부 대기열에 넣고
 // 뒤에서 한 건씩 요약한다. 최신화와 따로 돌아서, 다음 최신화 때 새 기사를 반영해 순서를 다시 짠다
-// 순서: 최신·중요 → 지난·중요 → 최신·덜 중요 → 지난·덜 중요 (같은 칸 안에서는 최신부터)
+// 순서: 목록과 같은 중요도 점수(collector/score.js)가 높은 것부터, 같으면 최신부터. 최신성은 점수 안에 들어 있다
 const WORKER_LOCK_ID = LOCK_ID + 1 // 팀원 앱 여러 개가 같은 DB를 쓰면 한 곳에서만 요약한다
 const BACKLOG_KEY = 'summary_backlog'
-const RECENT_HOURS = 24 // 이보다 최근이면 '최신'
 
-// 제목으로 보는 중요도. 기사 대부분이 1건짜리 이슈라 보도량·경쟁사 점수만으로는 가려지지 않는다
-const TECH_WORDS = ['개발', '양산', '출시', '공개', '상용화', '최초', '특허', '수주', '공급', '투자', '인수', '합병', '협력', '표준', '공정', '수율', '신제품', '기술']
-const NOISE_WORDS = ['[포토]', '[사진]', '[인사]', '[부고]', '할인', '이벤트', '모집', '강좌', '특강', '경진대회', '[공시]', '마감시황', '코스피', '코스닥', '주가']
-// 자동 생성되는 주가 기사 (예: 'OO 7420원으로 2.62% 하락')
-const STOCK_PATTERN = /\d[\d,]*원으로|\d+(\.\d+)?% (상승|하락|급등|급락)|강보합|약보합|상한가|하한가|목표주가/
-const IMPORTANT_SCORE = 2
-
-export function titleImportance(article, lists) {
-  const title = article.title
-  let score = Math.min(2, article.sameIssue ?? 0) // 같은 이슈 기사 수
-  if (findMention(title, [...lists.competitors, ...lists.own])) score += 2 // 경쟁사·자사
-  if (findMention(title, lists.interests)) score += 2 // 관심 기술
-  score += Math.min(2, TECH_WORDS.filter((w) => title.includes(w)).length) // 기술·사업 사건
-  if (NOISE_WORDS.some((w) => title.includes(w)) || STOCK_PATTERN.test(title)) score -= 3 // 사진·인사·증시 시황·주가 등
-  return score
-}
+// 패널의 '중요 N건' 표시: 대상 기사(이미 요약된 것 포함) 중 점수 상위 20%
+// 남은 기사 안에서 매번 다시 자르면 기준이 계속 내려간다
+const IMPORTANT_SHARE = 0.2
 
 async function buildBacklog(articles) {
   const { autoSummary } = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
   if (autoSummary === 'off') return []
   const candidates = articles.filter(titleHasKeyword)
   const done = await getSummaries(candidates.map((a) => a.id))
-  const lists = await getLists()
-  const now = Date.now()
+  const scores = candidates.map((a) => a.importance ?? 0).sort((x, y) => y - x)
+  const cut = Math.max(1, scores[Math.floor(scores.length * IMPORTANT_SHARE)] ?? Infinity)
   return candidates
     .filter((a) => !done[a.id])
-    .map((a) => {
-      const important = titleImportance(a, lists) >= IMPORTANT_SCORE
-      const recent = now - Date.parse(a.publishedAt) < RECENT_HOURS * 3600_000
-      return { article: a, important, rank: (important ? 0 : 2) + (recent ? 0 : 1) }
-    })
-    .sort((x, y) => x.rank - y.rank || y.article.publishedAt.localeCompare(x.article.publishedAt))
+    .map((a) => ({ article: a, important: (a.importance ?? 0) >= cut }))
+    .sort(
+      (x, y) =>
+        (y.article.importance ?? 0) - (x.article.importance ?? 0) || y.article.publishedAt.localeCompare(x.article.publishedAt),
+    )
 }
 
-let backlog = [] // [{ article, important, rank }] 우선순위 순
+let backlog = [] // [{ article, important }] 중요도 점수 순
 let worker = null
 const stats = { done: 0, failed: 0, current: null, note: null }
 
