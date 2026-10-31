@@ -1322,6 +1322,68 @@ a.btn {
   font-size: 14px;
 }
 
+/* 자동 요약 켜기/끄기 스위치 */
+.refresh-switch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.refresh-settings .refresh-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.refresh-switch-track {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: #c3cad4;
+  transition: background 0.15s;
+}
+
+.refresh-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+
+.refresh-switch input:checked + .refresh-switch-track {
+  background: #1b6a96;
+}
+
+.refresh-switch input:checked + .refresh-switch-track::after {
+  transform: translateX(16px);
+}
+
+.refresh-switch input:focus-visible + .refresh-switch-track {
+  outline: 2px solid #1b6a96;
+  outline-offset: 2px;
+}
+
+.refresh-switch:has(input:disabled) {
+  color: #8a94a3;
+  cursor: not-allowed;
+}
+
+.refresh-switch input:disabled + .refresh-switch-track {
+  opacity: 0.6;
+}
+
 .refresh-info {
   margin: 14px 0 0;
   font-size: 13px;

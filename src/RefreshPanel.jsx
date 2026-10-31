@@ -1,5 +1,5 @@
 // 수집 설정 아래 「자동 최신화」: 지금 최신화 버튼, 주기 설정, 마지막·다음 실행과 진행 상황
-// 주기 설정은 잠겨 있고 비밀번호를 넣어야 바꿀 수 있다 (팀원이 모르고 바꾸지 않게). 비밀번호는 새로고침하면 다시 물어본다
+// 주기·자동 요약 설정은 잠겨 있고 비밀번호를 넣어야 바꿀 수 있다 (팀원이 모르고 바꾸지 않게). 비밀번호는 새로고침하면 다시 물어본다
 import { useState } from 'react'
 
 const MODE_LABEL = { off: '꺼짐', daily: '매일 정해진 시각', interval: '몇 시간마다' }
@@ -79,7 +79,7 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, onUnlo
         </div>
       ) : (
         <p className="hint">
-          키워드마다 네이버 뉴스에서 지난번 이후 새 기사를 빠짐없이 모으고, 제목에 키워드가 있는 기사는 뒤에서 전부 요약해요. 순서는 최신·중요 → 지난·중요 →
+          키워드마다 네이버 뉴스에서 지난번 이후 새 기사를 빠짐없이 모으고, 자동 요약을 켜 두면 제목에 키워드가 있는 기사를 뒤에서 전부 요약해요. 순서는 최신·중요 → 지난·중요 →
           최신·덜 중요 → 지난·덜 중요예요. 직접 누른 요약이 언제나 먼저예요.
         </p>
       )}
@@ -138,6 +138,18 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, onUnlo
               </select>
             </>
           )}
+          {/* 자동 요약 켜기/끄기. 개발 중에는 끄고, 시연·테스트 때 켠다 (켜면 제목에 키워드가 있는 기사 전부) */}
+          <label className="refresh-switch">
+            <input
+              type="checkbox"
+              role="switch"
+              disabled={locked}
+              checked={settings.autoSummary === 'all'}
+              onChange={(e) => change({ autoSummary: e.target.checked ? 'all' : 'off' })}
+            />
+            <span className="refresh-switch-track" aria-hidden="true" />
+            자동 요약 {settings.autoSummary === 'all' ? '켜짐' : '꺼짐 (직접 누를 때만)'}
+          </label>
           <dl className="refresh-info">
             <div>
               <dt>마지막 최신화</dt>
