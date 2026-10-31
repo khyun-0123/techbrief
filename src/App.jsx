@@ -135,7 +135,7 @@ function App() {
   const [favorites, setFavorites] = useState([]) // 즐겨찾는 검색어 (F3, 팀 공용)
   const [recent, setRecent] = useState(() => load(RECENT_KEY, [])) // 최근 검색어 (이 브라우저에만)
   const [pageSize, setPageSize] = useState(() => load(PAGE_SIZE_KEY, 20))
-  const [sort, setSort] = useState('latest')
+  const [sort, setSort] = useState('importance') // 기본은 중요도순, 최신순은 선택
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
   const [reports, setReports] = useState(() => loadReports())
   const [reportsInDb, setReportsInDb] = useState(false) // true면 보고서함을 서버 DB에 저장
@@ -144,10 +144,11 @@ function App() {
   const reloadArticles = useCallback(async () => {
     const result = await fetchArticles()
     if (result.articles.length === 0) return
-    const articles = result.articles.slice(0, MAX_SAVED)
-    setFetched(articles)
+    // 화면에는 서버가 준 기사 전부 (최근 7일). 브라우저 저장은 용량 때문에 최신 MAX_SAVED개만 (서버가 꺼졌을 때 보여 줄 용도)
+    // 예전에는 화면도 400개로 잘라서, 빠짐없이 수집한 뒤로는 최근 몇 시간 치만 보였다
+    setFetched(result.articles)
     setCollectedAt(result.lastCollectedAt)
-    localStorage.setItem(ARTICLES_KEY, JSON.stringify(articles))
+    localStorage.setItem(ARTICLES_KEY, JSON.stringify(result.articles.slice(0, MAX_SAVED)))
     localStorage.setItem(COLLECTED_AT_KEY, JSON.stringify(result.lastCollectedAt))
   }, [])
 
@@ -382,10 +383,10 @@ function App() {
   const isOwnOnly = (a) => Boolean(a.own) && !a.scoreParts?.competitorName
   const listed = searchArticles
     ? searchArticles
-        .map((a) => ({ ...byId.get(a.id), rank: a.rank }))
+        .map((a) => byId.get(a.id))
         .filter((a) => source === 'all' || a.source === source)
         .sort((a, b) =>
-          sort === 'relevance' ? a.rank - b.rank : sort === 'importance' ? b.importance - a.importance || a.hoursAgo - b.hoursAgo : a.hoursAgo - b.hoursAgo,
+          sort === 'importance' ? b.importance - a.importance || a.hoursAgo - b.hoursAgo : a.hoursAgo - b.hoursAgo,
         )
     : collected
     .filter(
@@ -464,7 +465,6 @@ function App() {
     try {
       const result = await searchNewsApi(q)
       setSearch({ query: result.query, articles: result.articles })
-      setSort('relevance')
     } catch (err) {
       setSearch({ query: q, error: err.message })
     }
@@ -482,7 +482,6 @@ function App() {
   function closeSearch() {
     setSearch(null)
     setQuery('')
-    if (sort === 'relevance') setSort('latest')
   }
 
   async function handleRefresh() {
@@ -731,9 +730,8 @@ function App() {
                   ))}
                 </select>
                 <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="정렬">
-                  {searchArticles && <option value="relevance">정확도순</option>}
-                  <option value="latest">최신순</option>
                   <option value="importance">중요도순</option>
+                  <option value="latest">최신순</option>
                 </select>
               </div>
               {search ? (
