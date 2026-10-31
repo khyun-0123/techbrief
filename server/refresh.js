@@ -18,7 +18,10 @@ const STALE_MS = 30 * 60_000 // 실행 중 표시가 이보다 오래되면 중�
 const KST = 9 * 3600_000 // 한국 시간 (서머타임 없음)
 
 export const HOUR_OPTIONS = [1, 2, 3, 4, 6, 8, 12]
-const DEFAULT_SETTINGS = { mode: 'off', time: '06:00', hours: 2, perRun: 5 }
+// autoSummary: 자동 요약 켜기/끄기. all(제목에 키워드가 있는 기사 전부) / off(직접 누를 때만)
+// 개발 중에는 off로 두고, 시연·테스트 때 all로 켠다
+export const AUTO_SUMMARY_OPTIONS = ['all', 'off']
+const DEFAULT_SETTINGS = { mode: 'off', time: '06:00', hours: 2, autoSummary: 'off' }
 
 let memoryKeywords = [] // DB가 없을 때 마지막으로 받은 키워드
 let localRun = null // 이 프로세스에서 도는 실행 { promise, progress }
@@ -29,8 +32,7 @@ export function normalizeSettings(input = {}) {
     mode: ['off', 'daily', 'interval'].includes(s.mode) ? s.mode : 'off',
     time: /^([01]\d|2[0-3]):[0-5]\d$/.test(s.time) ? s.time : DEFAULT_SETTINGS.time,
     hours: HOUR_OPTIONS.includes(Number(s.hours)) ? Number(s.hours) : DEFAULT_SETTINGS.hours,
-    // 예전 '미리 요약 건수'. 지금은 쓰지 않는다 (자동 요약은 대상 전부). 저장된 값과 맞추려고 남겨 둠
-    perRun: Math.min(10, Math.max(0, Math.round(Number(s.perRun)))) || DEFAULT_SETTINGS.perRun,
+    autoSummary: AUTO_SUMMARY_OPTIONS.includes(s.autoSummary) ? s.autoSummary : DEFAULT_SETTINGS.autoSummary,
     enabledAt: s.enabledAt ?? null, // 켠 시각. 켜기 전에 지난 예정은 따라잡지 않는다
   }
 }
@@ -73,7 +75,7 @@ export async function refreshStatus() {
   }
 }
 
-// 자동 최신화 설정은 비밀번호를 아는 사람만 바꾼다 (팀원이 모르고 바꾸지 않게).
+// 자동 최신화 설정(자동 요약 켜기/끄기 포함)은 비밀번호를 아는 사람만 바꾼다 (팀원이 모르고 바꾸지 않게).
 // .env.local의 REFRESH_PASSWORD, 없으면 'password'. 「지금 최신화」는 누구나 누를 수 있다
 export function checkRefreshPassword(password) {
   if (password !== (process.env.REFRESH_PASSWORD || 'password')) {
@@ -90,6 +92,11 @@ export async function saveRefreshSettings(input) {
     settings.enabledAt = new Date().toISOString()
   }
   await setSetting(SETTINGS_KEY, settings)
+  // 자동 요약을 켜거나 끄면 대기열을 바로 다시 짠다 (꺼짐이면 지금 요약 중인 1건까지만 하고 멈춤)
+  if (settings.autoSummary !== before.autoSummary) {
+    const { articles } = await listArticles()
+    await setBacklog(await buildBacklog(articles))
+  }
   return refreshStatus()
 }
 
@@ -125,6 +132,8 @@ export function titleImportance(article, lists) {
 }
 
 async function buildBacklog(articles) {
+  const { autoSummary } = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
+  if (autoSummary === 'off') return []
   const candidates = articles.filter(titleHasKeyword)
   const done = await getSummaries(candidates.map((a) => a.id))
   const lists = await getLists()
@@ -210,11 +219,9 @@ async function runWorker() {
   }
 }
 
-// 앱이 켜질 때: 밀린 요약이 있으면 이어서 한다 (자동 최신화가 켜져 있을 때만)
+// 앱이 켜질 때: 밀린 요약이 있으면 이어서 한다 (자동 요약이 꺼짐이면 대기열이 비어 아무것도 안 함)
 async function resumeBacklog() {
   try {
-    const settings = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
-    if (settings.mode === 'off') return
     const { articles } = await listArticles()
     const n = await setBacklog(await buildBacklog(articles))
     if (n) console.log(`[summary] 밀린 자동 요약 ${n}건 이어서 시작`)
