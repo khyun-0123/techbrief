@@ -34,11 +34,23 @@ async function saveToDb(articles) {
 
 async function loadRecentFromDb(days) {
   const { rows } = await query(
-    `SELECT id, url, title, description, source, keyword, published_at, section
-       FROM articles WHERE published_at > now() - make_interval(days => $1) ORDER BY published_at`,
+    `SELECT id, url, title, description, source, keyword, published_at, section, group_id
+       FROM articles WHERE published_at > now() - make_interval(days => $1) ORDER BY published_at, id`,
     [days],
   )
-  return rows.map((r) => ({ ...r, publishedAt: r.published_at.toISOString(), published_at: undefined }))
+  return rows.map(({ published_at, group_id, ...r }) => ({ ...r, publishedAt: published_at.toISOString(), groupId: group_id }))
+}
+
+// 같은 이슈 묶기를 다시 해서 바뀐 것만 저장한다. 수집이 끝날 때 한 번 (접속할 때마다 묶으면 느려서)
+async function regroupDb(stored) {
+  const changed = groupArticles(stored).filter((a, i) => a.groupId !== stored[i].groupId)
+  if (changed.length === 0) return stored
+  await query(
+    `UPDATE articles a SET group_id = c.group_id
+       FROM unnest($1::text[], $2::text[]) AS c(id, group_id) WHERE a.id = c.id`,
+    [changed.map((a) => a.id), changed.map((a) => a.groupId)],
+  )
+  return loadRecentFromDb(LIST_DAYS)
 }
 
 async function lastCollectedFromDb() {
@@ -115,7 +127,7 @@ export async function collect(keywords) {
     for (const [id, a] of memory) if (Date.parse(a.publishedAt) < cutoff) memory.delete(id)
   }
 
-  const list = await listArticles()
+  const list = await listArticles({ regroup: true })
   if (dbEnabled()) await updateDaily(list.articles)
   return { fetched, added, failed, ...list }
 }
@@ -136,17 +148,19 @@ export function relevanceOf(article) {
 const RANK = { low: 0, mid: 1, high: 2 }
 
 // lists: 자사·경쟁사 목록 → 중요도의 경쟁사 언급, 자사 기사 표시(own)
+// stored에 groupId가 모두 있으면(DB에 저장된 묶음) 그대로 쓰고, 아니면 여기서 묶는다
 function toIssues(stored, lists) {
-  const grouped = groupArticles(stored)
+  const grouped = stored.every((a) => a.groupId) ? stored : groupArticles(stored)
   const members = new Map()
   for (const a of grouped) {
     if (!members.has(a.groupId)) members.set(a.groupId, [])
     members.get(a.groupId).push(a)
   }
-  return grouped
-    .filter((a) => a.id === a.groupId)
-    .map((rep) => {
-      const group = members.get(rep.id)
+  // 대표 기사가 목록 기간(7일)을 지나 빠졌으면 남은 기사 중 가장 먼저 나온 기사가 대표
+  const earliest = (group) => group.reduce((x, y) => (y.publishedAt < x.publishedAt ? y : x))
+  return [...members.entries()]
+    .map(([groupId, group]) => [group.find((a) => a.id === groupId) ?? earliest(group), group])
+    .map(([rep, group]) => {
       const { score, level, parts } = scoreArticle(rep, group.length, lists.competitors)
       const own = findMention(`${rep.title} ${rep.description ?? ''}`, lists.own)
       // 같은 이슈 기사 중 가장 관련 높은 것을 이슈의 관련도로
@@ -161,8 +175,10 @@ function toIssues(stored, lists) {
 }
 
 // 대표 기사 목록 (최근 LIST_DAYS일)
-export async function listArticles() {
-  const stored = dbEnabled() ? await loadRecentFromDb(LIST_DAYS) : [...memory.values()]
+// regroup: 수집 직후처럼 기사가 바뀌었을 때 묶음을 다시 저장. 묶음이 없는 기사가 있어도 (처음 켰을 때) 다시 묶는다
+export async function listArticles({ regroup = false } = {}) {
+  let stored = dbEnabled() ? await loadRecentFromDb(LIST_DAYS) : [...memory.values()]
+  if (dbEnabled() && (regroup || stored.some((a) => !a.groupId))) stored = await regroupDb(stored)
   const articles = toIssues(stored, await getLists())
   const lastCollectedAt = dbEnabled() ? await lastCollectedFromDb() : memoryCollectedAt
   return { articles, total: stored.length, lastCollectedAt, storage: dbEnabled() ? 'db' : 'memory' }

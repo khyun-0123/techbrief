@@ -18,30 +18,34 @@ function bigrams(text) {
   return set
 }
 
-export function similarity(a, b) {
-  const A = bigrams(normalizeTitle(a))
-  const B = bigrams(normalizeTitle(b))
+function jaccard(A, B) {
   if (A.size === 0 || B.size === 0) return 0
   let common = 0
   for (const g of A) if (B.has(g)) common += 1
   return common / (A.size + B.size - common)
 }
 
+export function similarity(a, b) {
+  return jaccard(bigrams(normalizeTitle(a)), bigrams(normalizeTitle(b)))
+}
+
 // articles에 groupId를 붙여 돌려준다. 대표 기사는 그룹에서 가장 먼저 나온 기사
 export function groupArticles(articles) {
   const sorted = [...articles].sort((x, y) => x.publishedAt.localeCompare(y.publishedAt))
-  const reps = [] // { article, time }
+  const reps = [] // { article, time, grams }
   const groupOf = new Map()
 
   for (const a of sorted) {
     const time = Date.parse(a.publishedAt)
+    // 제목 조각은 기사마다 한 번만 만든다 (비교할 때마다 다시 만들면 2천여 건에 9초 걸림)
+    const grams = bigrams(normalizeTitle(a.title))
     const rep = reps.find(
-      (r) => Math.abs(time - r.time) <= WINDOW_HOURS * 3600_000 && similarity(a.title, r.article.title) >= SIMILARITY,
+      (r) => Math.abs(time - r.time) <= WINDOW_HOURS * 3600_000 && jaccard(grams, r.grams) >= SIMILARITY,
     )
     if (rep) {
       groupOf.set(a.id, rep.article.id)
     } else {
-      reps.push({ article: a, time })
+      reps.push({ article: a, time, grams })
       groupOf.set(a.id, a.id)
     }
   }
