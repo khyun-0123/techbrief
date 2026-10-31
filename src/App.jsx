@@ -31,7 +31,7 @@ import { loadReports, saveReports } from './reportStore.js'
 import { useSummaryQueue } from './summaryQueue.js'
 import { DEFAULT_KEYWORDS, SAMPLE_ARTICLES } from './sampleArticles.js'
 import SelectSummary from './SelectSummary.jsx'
-import SentimentBadge from './SentimentBadge.jsx'
+import SentimentBadge, { sentimentLabel, sentimentOf as pickSentiment } from './SentimentBadge.jsx'
 import SummaryItems from './SummaryItems.jsx'
 import { formatPublished, load } from './utils.js'
 
@@ -115,7 +115,7 @@ function App() {
   const [listsError, setListsError] = useState('')
   const [excludeOwn, setExcludeOwn] = useState(() => load(EXCLUDE_OWN_KEY, false))
   const [showLow, setShowLow] = useState(() => load(SHOW_LOW_KEY, false)) // 관련도 낮은 기사도 보기 (F4)
-  const [sentimentFilter, setSentimentFilter] = useState('all') // 호재·악재 거르기 (F5)
+  const [sentimentFilter, setSentimentFilter] = useState('all') // 긍정·중립·부정 거르기 (F5)
   const [favorites, setFavorites] = useState([]) // 즐겨찾는 검색어 (F3, 팀 공용)
   const [recent, setRecent] = useState(() => load(RECENT_KEY, [])) // 최근 검색어 (이 브라우저에만)
   const [pageSize, setPageSize] = useState(() => load(PAGE_SIZE_KEY, 20))
@@ -271,7 +271,9 @@ function App() {
   }, [selectedIds])
 
   // 목록 기사 중 미리 요약된 것을 가져온다 (자동 최신화·다른 팀원이 만든 요약)
+  // 자동 요약은 최신화와 따로 뒤에서 계속 돈다 → 진행 건수가 바뀌면 다시 가져온다
   const searchArticles = search?.articles
+  const backlogDone = refresh?.backlog?.done
   useEffect(() => {
     const ids = [...fetched, ...(searchArticles ?? [])].map((a) => a.id).filter((id) => !aiSummaries[id])
     if (ids.length === 0) return
@@ -288,7 +290,7 @@ function App() {
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetched, searchArticles])
+  }, [fetched, searchArticles, backlogDone])
 
   // 「선별 추가」하면 자동 요약 (08 13-1: 선별한 기사만 요약)
   const queue = useSummaryQueue({
@@ -375,7 +377,7 @@ function App() {
   const isLow = (a) => a.relevance === 'low'
   const lowCount = listed.filter(isLow).length
   const ownCount = listed.filter(isOwnOnly).length
-  const sentimentOf = (a) => aiSummaries[a.id]?.summary?.sentiment?.label
+  const sentimentOf = (a) => sentimentLabel(pickSentiment(a, aiSummaries[a.id]?.summary))
   const visible = listed.filter(
     (a) =>
       (showLow || !isLow(a)) &&
@@ -738,13 +740,13 @@ function App() {
                   className="sentiment-filter"
                   value={sentimentFilter}
                   onChange={(e) => setSentimentFilter(e.target.value)}
-                  aria-label="호재·악재 거르기"
-                  title="요약된 기사만 판정이 있어요. 선별할지 판단하는 보조 표시예요 (투자 판단용 아님)"
+                  aria-label="긍정·중립·부정 거르기"
+                  title="기사 속 소식 자체의 성격이에요. 요약 전에는 제목 기준, 요약 후에는 요약 기준이에요 (투자 판단용 아님)"
                 >
-                  <option value="all">호재·악재 전체</option>
-                  <option value="호재">○ 호재만</option>
+                  <option value="all">긍정·부정 전체</option>
+                  <option value="긍정">○ 긍정만</option>
                   <option value="중립">△ 중립만</option>
-                  <option value="악재">✕ 악재만</option>
+                  <option value="부정">✕ 부정만</option>
                 </select>
                 <label className="own-toggle" title="자사·자회사만 나온 기사를 숨겨요. 경쟁사도 함께 나오면 남겨요">
                   <input type="checkbox" checked={excludeOwn} onChange={(e) => toggleExcludeOwn(e.target.checked)} />
@@ -798,7 +800,7 @@ function App() {
                                 </span>
                               )}
                               {a.relevance === 'low' && <span className="badge-low">관련 낮음</span>}
-                              <SentimentBadge sentiment={ai?.summary?.sentiment} />
+                              <SentimentBadge sentiment={pickSentiment(a, ai?.summary)} />
                               {a.url ? (
                                 <a className="title-link" href={a.url} target="_blank" rel="noreferrer" title="원문 열기 (새 창)">
                                   <TitleWithIcon title={a.title} />

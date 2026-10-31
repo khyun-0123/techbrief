@@ -6,8 +6,10 @@ import { searchNews } from './naver.js'
 import { findMention, getLists } from './lists.js'
 import { toArticle } from './normalize.js'
 import { scoreArticle } from './score.js'
+import { titleSentiment } from './sentiment.js'
 
 const MAX_KEYWORDS = 10 // API 호출 수를 지키기 위한 한도
+const MAX_PAGES = 10 // 키워드마다 100건씩 최대 10번(1,000건, 네이버 한도)까지 넘겨 받는다
 const LIST_DAYS = 7 // 화면 목록에 보여 주는 기간
 const KEEP_DAYS = 365 // DB 보관 기간. 요약된 기사·일자별 집계는 계속 보관 (08 13-2)
 
@@ -16,6 +18,13 @@ const memory = new Map()
 let memoryCollectedAt = null
 
 // ── 저장소: PostgreSQL ──
+// 이미 받아 둔 원문 주소 (넘겨 받다가 지난번에 받은 기사가 나오면 멈춘다)
+async function knownUrls(urls) {
+  if (!dbEnabled()) return new Set(urls.filter((u) => [...memory.values()].some((a) => a.url === u)))
+  const { rows } = await query('SELECT url FROM articles WHERE url = ANY($1)', [urls])
+  return new Set(rows.map((r) => r.url))
+}
+
 // 여러 건을 한 번에 넣는다. 이미 있는 기사는 마지막으로 본 시각만 갱신 (inserted로 새 기사 수를 센다)
 async function saveToDb(articles) {
   if (articles.length === 0) return 0
@@ -98,18 +107,24 @@ export async function collect(keywords) {
   const failed = []
   for (const word of words) {
     try {
-      const items = await searchNews(word)
-      fetched += items.length
-      const articles = items.map((item) => toArticle(item, word)).filter((a) => a.url && a.title)
-      // 한 번 받은 결과 안에서도 같은 원문이 겹칠 수 있다
-      const unique = [...new Map(articles.map((a) => [a.url, a])).values()]
-      if (dbEnabled()) {
-        added += await saveToDb(unique)
-      } else {
-        for (const a of unique) {
-          if (!memory.has(a.id)) added += 1
-          memory.set(a.id, { ...memory.get(a.id), ...a })
+      // 최신순 100건씩 넘겨 받는다. 지난번에 받은 기사가 나오면 그 뒤는 이미 있으므로 멈춘다
+      // (100건만 받으면 기사가 많은 낮 시간에는 2시간 중 앞부분을 놓친다)
+      for (let page = 0; page < MAX_PAGES; page += 1) {
+        const items = await searchNews(word, { start: page * 100 + 1 })
+        fetched += items.length
+        const articles = items.map((item) => toArticle(item, word)).filter((a) => a.url && a.title)
+        // 한 번 받은 결과 안에서도 같은 원문이 겹칠 수 있다
+        const unique = [...new Map(articles.map((a) => [a.url, a])).values()]
+        const reachedKnown = (await knownUrls(unique.map((a) => a.url))).size > 0
+        if (dbEnabled()) {
+          added += await saveToDb(unique)
+        } else {
+          for (const a of unique) {
+            if (!memory.has(a.id)) added += 1
+            memory.set(a.id, { ...memory.get(a.id), ...a })
+          }
         }
+        if (reachedKnown || items.length < 100) break
       }
     } catch (err) {
       failed.push({ keyword: word, error: err.message })
@@ -169,7 +184,17 @@ function toIssues(stored, lists) {
         .filter((a) => a.id !== rep.id)
         .slice(0, 4)
         .map(({ id, title, source, description, url }) => ({ id, title, source, description, url }))
-      return { ...rep, sameIssue: group.length - 1, importance: score, importanceLevel: level, scoreParts: parts, related, own, relevance }
+      return {
+        ...rep,
+        sameIssue: group.length - 1,
+        importance: score,
+        importanceLevel: level,
+        scoreParts: parts,
+        related,
+        own,
+        relevance,
+        titleSentiment: titleSentiment(rep.title),
+      }
     })
     .sort((x, y) => y.publishedAt.localeCompare(x.publishedAt))
 }
