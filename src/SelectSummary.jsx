@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { SAMPLE_SUMMARIES } from './sampleArticles.js'
-import SentimentBadge from './SentimentBadge.jsx'
+import SentimentBadge, { sentimentOf } from './SentimentBadge.jsx'
 import SummaryItems from './SummaryItems.jsx'
 import { formatPublished } from './utils.js'
 
@@ -130,10 +130,10 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
                         {a.source} · {formatPublished(a.hoursAgo)}
                         {a.sameIssue > 0 && ` · 같은 이슈 ${a.sameIssue}건`}
                         {jobStatus === 'done' && <span className="summary-state done"> · 요약 완료</span>}
-                        {aiSummaries[a.id]?.summary?.sentiment && (
+                        {sentimentOf(a, aiSummaries[a.id]?.summary) && (
                           <>
                             {' · '}
-                            <SentimentBadge sentiment={aiSummaries[a.id].summary.sentiment} />
+                            <SentimentBadge sentiment={sentimentOf(a, aiSummaries[a.id]?.summary)} />
                           </>
                         )}
                         {jobStatus && jobStatus !== 'done' && (

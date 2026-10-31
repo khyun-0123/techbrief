@@ -1,9 +1,10 @@
 // 자동 최신화: 등록 키워드로 기사를 모으고, 중요한 기사 몇 건은 미리 요약해 둔다
 // - 주기: 꺼짐(기본) / 매일 정해진 시각 / N시간마다. 「지금 최신화」로 바로 실행할 수도 있다
-// - 미리 요약은 한 번에 최대 perRun건(기본 5). 나머지는 「선별에 추가」를 누를 때 요약한다
+// - 최신화가 끝나면 제목에 키워드가 있는 새 기사를 전부 자동 요약 대기열에 넣는다 (아래 '자동 요약 대기열')
 // - 팀원마다 자기 포트로 앱을 켜도 DB는 같이 쓴다 → DB 잠금으로 한 곳에서만 실행한다
 // - 앱(npm run dev)이 켜져 있을 때만 돈다. 꺼져 있던 동안 지난 예정은 켜진 뒤 한 번 따라잡는다
-import { collect } from './collector/index.js'
+import { collect, listArticles } from './collector/index.js'
+import { findMention, getLists } from './collector/lists.js'
 import { db, dbEnabled } from './db/index.js'
 import { getKeywords, getSetting, getSummaries, setSetting } from './db/store.js'
 import { pingModel, PRIORITY, queueStatus } from './llm/client.js'
@@ -28,7 +29,7 @@ export function normalizeSettings(input = {}) {
     mode: ['off', 'daily', 'interval'].includes(s.mode) ? s.mode : 'off',
     time: /^([01]\d|2[0-3]):[0-5]\d$/.test(s.time) ? s.time : DEFAULT_SETTINGS.time,
     hours: HOUR_OPTIONS.includes(Number(s.hours)) ? Number(s.hours) : DEFAULT_SETTINGS.hours,
-    // 1~10건. 예전에 저장한 0(하지 않음)은 기본값으로 바꾼다 (끄려면 주기를 '꺼짐'으로)
+    // 예전 '미리 요약 건수'. 지금은 쓰지 않는다 (자동 요약은 대상 전부). 저장된 값과 맞추려고 남겨 둠
     perRun: Math.min(10, Math.max(0, Math.round(Number(s.perRun)))) || DEFAULT_SETTINGS.perRun,
     enabledAt: s.enabledAt ?? null, // 켠 시각. 켜기 전에 지난 예정은 따라잡지 않는다
   }
@@ -58,13 +59,14 @@ async function loadState() {
 export async function refreshStatus() {
   const settings = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
   const state = await loadState()
-  const running = Boolean(state.running && Date.now() - Date.parse(state.running.startedAt) < STALE_MS)
+  const running = Boolean(state.running && Date.now() - Date.parse(state.running.updatedAt ?? state.running.startedAt) < STALE_MS)
   const next = nextRunAt(settings, state.lastRunAt)
   return {
     settings,
     hourOptions: HOUR_OPTIONS,
     running: running ? state.running : null,
     queue: queueStatus(),
+    backlog: await getSetting(BACKLOG_KEY, null), // 자동 요약 대기열 { remaining, important, current, done, failed, note }
     lastRunAt: state.lastRunAt ?? null,
     lastResult: state.lastResult ?? null,
     nextRunAt: next ? next.toISOString() : null,
@@ -97,25 +99,128 @@ function titleHasKeyword(article) {
   return squash(article.title).includes(squash(article.keyword))
 }
 
-// 키워드를 돌아가며 중요도 높은 순으로 고른다 (한 키워드가 몫을 다 가져가지 않게)
-async function pickForSummary(articles, limit) {
-  if (limit <= 0) return []
+// ── 자동 요약 대기열 ──
+// 최신화가 끝나면 아직 요약 안 된 기사(제목에 키워드가 있는 대표 기사, 최근 7일)를 전부 대기열에 넣고
+// 뒤에서 한 건씩 요약한다. 최신화와 따로 돌아서, 다음 최신화 때 새 기사를 반영해 순서를 다시 짠다
+// 순서: 최신·중요 → 지난·중요 → 최신·덜 중요 → 지난·덜 중요 (같은 칸 안에서는 최신부터)
+const WORKER_LOCK_ID = LOCK_ID + 1 // 팀원 앱 여러 개가 같은 DB를 쓰면 한 곳에서만 요약한다
+const BACKLOG_KEY = 'summary_backlog'
+const RECENT_HOURS = 24 // 이보다 최근이면 '최신'
+
+// 제목으로 보는 중요도. 기사 대부분이 1건짜리 이슈라 보도량·경쟁사 점수만으로는 가려지지 않는다
+const TECH_WORDS = ['개발', '양산', '출시', '공개', '상용화', '최초', '특허', '수주', '공급', '투자', '인수', '합병', '협력', '표준', '공정', '수율', '신제품', '기술']
+const NOISE_WORDS = ['[포토]', '[사진]', '[인사]', '[부고]', '할인', '이벤트', '모집', '강좌', '특강', '경진대회', '[공시]', '마감시황', '코스피', '코스닥', '주가']
+// 자동 생성되는 주가 기사 (예: 'OO 7420원으로 2.62% 하락')
+const STOCK_PATTERN = /\d[\d,]*원으로|\d+(\.\d+)?% (상승|하락|급등|급락)|강보합|약보합|상한가|하한가|목표주가/
+const IMPORTANT_SCORE = 2
+
+export function titleImportance(article, lists) {
+  const title = article.title
+  let score = Math.min(2, article.sameIssue ?? 0) // 같은 이슈 기사 수
+  if (findMention(title, [...lists.competitors, ...lists.own])) score += 2 // 경쟁사·자사
+  if (findMention(title, lists.interests)) score += 2 // 관심 기술
+  score += Math.min(2, TECH_WORDS.filter((w) => title.includes(w)).length) // 기술·사업 사건
+  if (NOISE_WORDS.some((w) => title.includes(w)) || STOCK_PATTERN.test(title)) score -= 3 // 사진·인사·증시 시황·주가 등
+  return score
+}
+
+async function buildBacklog(articles) {
   const candidates = articles.filter(titleHasKeyword)
   const done = await getSummaries(candidates.map((a) => a.id))
-  const byKeyword = new Map()
-  for (const a of candidates) {
-    if (done[a.id]) continue
-    if (!byKeyword.has(a.keyword)) byKeyword.set(a.keyword, [])
-    byKeyword.get(a.keyword).push(a)
+  const lists = await getLists()
+  const now = Date.now()
+  return candidates
+    .filter((a) => !done[a.id])
+    .map((a) => {
+      const important = titleImportance(a, lists) >= IMPORTANT_SCORE
+      const recent = now - Date.parse(a.publishedAt) < RECENT_HOURS * 3600_000
+      return { article: a, important, rank: (important ? 0 : 2) + (recent ? 0 : 1) }
+    })
+    .sort((x, y) => x.rank - y.rank || y.article.publishedAt.localeCompare(x.article.publishedAt))
+}
+
+let backlog = [] // [{ article, important, rank }] 우선순위 순
+let worker = null
+const stats = { done: 0, failed: 0, current: null, note: null }
+
+function saveBacklogStatus() {
+  return setSetting(BACKLOG_KEY, {
+    remaining: backlog.length,
+    important: backlog.filter((b) => b.important).length,
+    ...stats,
+    updatedAt: new Date().toISOString(),
+  }).catch(() => {})
+}
+
+async function setBacklog(list) {
+  backlog = list
+  await saveBacklogStatus()
+  if (!worker && backlog.length) worker = runWorker().finally(() => (worker = null))
+  return backlog.length
+}
+
+async function runWorker() {
+  if (!(await pingModel())) {
+    stats.note = 'AI 모델에 연결되지 않아 자동 요약을 멈춤 (다음 최신화 때 다시 시도)'
+    return saveBacklogStatus()
   }
-  const queues = [...byKeyword.values()].map((list) =>
-    list.sort((x, y) => y.importance - x.importance || y.publishedAt.localeCompare(x.publishedAt)),
-  )
-  const picked = []
-  while (picked.length < limit && queues.some((q) => q.length)) {
-    for (const q of queues) if (q.length && picked.length < limit) picked.push(q.shift())
+  const client = dbEnabled() ? await (await db()).connect() : null
+  try {
+    if (client && !(await client.query('SELECT pg_try_advisory_lock($1) AS ok', [WORKER_LOCK_ID])).rows[0].ok) return
+    stats.note = null
+    let failedInRow = 0
+    let summarizedInPass = true
+    for (;;) {
+      // 다 했으면 한 번 더 확인한다 (다른 팀원 앱이 최신화해 새 기사가 생겼을 수 있음)
+      // 다시 짠 목록에서 새로 요약한 게 없었으면 멈춘다 (같은 기사를 계속 도는 것 방지)
+      if (!backlog.length) {
+        if (!summarizedInPass) break
+        backlog = await buildBacklog((await listArticles()).articles)
+        summarizedInPass = false
+      }
+      if (!backlog.length) break
+      const { article } = backlog.shift()
+      stats.current = article.title
+      await saveBacklogStatus()
+      try {
+        // 사람이 누른 요약이 있으면 그것부터 처리된다 (자동 요약은 가장 낮은 우선순위). 이미 요약됐으면 바로 넘어감
+        const result = await summarizeArticle(article, article.related, { priority: PRIORITY.BACKGROUND })
+        if (!result.cached) {
+          stats.done += 1
+          summarizedInPass = true
+        }
+        failedInRow = 0
+      } catch (err) {
+        stats.failed += 1
+        failedInRow += 1
+        console.error(`[summary] 자동 요약 실패: ${err.message}`)
+        if (failedInRow >= 3) {
+          stats.note = `요약이 연달아 실패해 멈춤 (${err.message}) · 다음 최신화 때 다시 시도`
+          break
+        }
+      }
+    }
+  } finally {
+    stats.current = null
+    await saveBacklogStatus()
+    if (client) {
+      await client.query('SELECT pg_advisory_unlock($1)', [WORKER_LOCK_ID]).catch(() => {})
+      client.release()
+    }
   }
-  return picked
+}
+
+// 앱이 켜질 때: 밀린 요약이 있으면 이어서 한다 (자동 최신화가 켜져 있을 때만)
+async function resumeBacklog() {
+  try {
+    const settings = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
+    if (settings.mode === 'off') return
+    const { articles } = await listArticles()
+    const n = await setBacklog(await buildBacklog(articles))
+    if (n) console.log(`[summary] 밀린 자동 요약 ${n}건 이어서 시작`)
+  } catch (err) {
+    console.error(`[summary] 자동 요약 시작 실패: ${err.message}`)
+  }
 }
 
 async function withLock(fn) {
@@ -136,53 +241,27 @@ async function withLock(fn) {
 
 async function execute({ trigger, keywords }) {
   const startedAt = new Date().toISOString()
-  const settings = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
   const progress = { trigger, startedAt, phase: 'collect', done: 0, total: 0, current: null, by: process.env.PORT ?? null }
   localRun.progress = progress
   const prev = await loadState()
-  const saveProgress = () => setSetting(STATE_KEY, { ...prev, running: progress })
+  // updatedAt: 키워드가 많으면 요약이 30분을 넘길 수 있어, 멈춤 판단은 마지막 진행 시각으로 한다
+  const saveProgress = () => setSetting(STATE_KEY, { ...prev, running: { ...progress, updatedAt: new Date().toISOString() } })
   await saveProgress()
 
-  const result = { trigger, startedAt, fetched: 0, added: 0, summarized: 0, summaryFailed: 0, failedKeywords: [], note: null }
+  const result = { trigger, startedAt, fetched: 0, added: 0, queued: 0, failedKeywords: [], note: null }
   try {
     const collected = await collect(keywords)
     Object.assign(result, { fetched: collected.fetched, added: collected.added })
     result.failedKeywords = collected.failed.map((f) => f.keyword)
 
-    const picked = await pickForSummary(collected.articles, settings.perRun)
-    if (picked.length && !(await pingModel())) {
-      result.note = 'AI 모델에 연결되지 않아 미리 요약은 건너뜀'
-    } else {
-      Object.assign(progress, { phase: 'summarize', total: picked.length })
-      await saveProgress()
-      let failedInRow = 0
-      for (const article of picked) {
-        progress.current = article.title
-        await saveProgress()
-        try {
-          // 사람이 누른 요약이 있으면 그것부터 처리된다 (자동 요약은 가장 낮은 우선순위)
-          await summarizeArticle(article, article.related, { priority: PRIORITY.BACKGROUND })
-          result.summarized += 1
-          failedInRow = 0
-        } catch (err) {
-          result.summaryFailed += 1
-          failedInRow += 1
-          console.error(`[refresh] 요약 실패: ${err.message}`)
-          if (failedInRow >= 2) {
-            result.note = `요약이 연달아 실패해 멈춤 (${err.message})`
-            break
-          }
-        }
-        progress.done += 1
-      }
-    }
+    result.queued = await setBacklog(await buildBacklog(collected.articles))
   } catch (err) {
     result.error = err.message
   }
   result.finishedAt = new Date().toISOString()
   // 실패해도 마지막 실행 시각은 남긴다 (실패한 채로 1분마다 다시 도는 것을 막음)
   await setSetting(STATE_KEY, { lastRunAt: startedAt, lastResult: result, running: null })
-  console.log(`[refresh] ${trigger} 완료: 새 기사 ${result.added}건, 미리 요약 ${result.summarized}건${result.error ? `, 오류 ${result.error}` : ''}`)
+  console.log(`[refresh] ${trigger} 완료: 새 기사 ${result.added}건, 자동 요약 대기 ${result.queued}건${result.error ? `, 오류 ${result.error}` : ''}`)
   return result
 }
 
@@ -254,4 +333,5 @@ export function startScheduler() {
   globalThis.__techbriefScheduler = setInterval(tick, TICK_MS)
   globalThis.__techbriefScheduler.unref?.()
   setTimeout(tick, 5_000).unref?.()
+  setTimeout(resumeBacklog, 15_000).unref?.()
 }

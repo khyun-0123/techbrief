@@ -3,7 +3,8 @@
 
 const DEFAULT_URL = 'https://naverapihub.apigw.ntruss.com/search/v1/news'
 
-export async function searchNews(keyword, { display = 100, sort = 'date' } = {}) {
+// start: 몇 번째 기사부터 (1~1000). 100건씩 넘겨 받을 때 101, 201, …
+export async function searchNews(keyword, { display = 100, sort = 'date', start = 1 } = {}) {
   const id = process.env.NAVER_CLIENT_ID
   const secret = process.env.NAVER_CLIENT_SECRET
   if (!id || !secret) {
@@ -13,6 +14,7 @@ export async function searchNews(keyword, { display = 100, sort = 'date' } = {})
   url.searchParams.set('query', keyword)
   url.searchParams.set('display', String(display))
   url.searchParams.set('sort', sort)
+  if (start > 1) url.searchParams.set('start', String(start))
 
   const res = await fetch(url, {
     headers: { 'X-NCP-APIGW-API-KEY-ID': id, 'X-NCP-APIGW-API-KEY': secret },

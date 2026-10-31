@@ -3,8 +3,6 @@
 import { useState } from 'react'
 
 const MODE_LABEL = { off: '꺼짐', daily: '매일 정해진 시각', interval: '몇 시간마다' }
-// 자동 최신화를 끄려면 주기를 '꺼짐'으로 한다. 그래서 '미리 요약 안 함' 칸은 두지 않는다
-const PER_RUN_OPTIONS = [3, 5, 10]
 
 function formatTime(iso) {
   if (!iso) return '-'
@@ -14,8 +12,9 @@ function formatTime(iso) {
 function resultText(r) {
   if (!r) return ''
   if (r.error) return `실패: ${r.error}`
-  const parts = [`새 기사 ${r.added}건`, `미리 요약 ${r.summarized}건`]
-  if (r.summaryFailed) parts.push(`요약 실패 ${r.summaryFailed}건`)
+  const parts = [`새 기사 ${r.added}건`]
+  if (r.queued != null) parts.push(`자동 요약 대기 ${r.queued}건`)
+  else if (r.summarized != null) parts.push(`미리 요약 ${r.summarized}건`) // 예전 결과
   if (r.failedKeywords?.length) parts.push(`수집 실패 키워드: ${r.failedKeywords.join(', ')}`)
   if (r.note) parts.push(r.note)
   return parts.join(' · ')
@@ -23,8 +22,14 @@ function resultText(r) {
 
 function progressText(running) {
   if (running.phase === 'collect') return '기사 모으는 중…'
-  if (running.total === 0) return '정리 중…'
-  return `미리 요약 중 ${running.done}/${running.total}`
+  return '정리 중…'
+}
+
+// 자동 요약 대기열: 최신화와 따로 뒤에서 돈다
+function backlogText(b) {
+  if (b.current) return `자동 요약 중 · 남은 ${b.remaining + 1}건 (중요 ${b.important}건)`
+  if (b.remaining > 0) return `자동 요약 대기 ${b.remaining}건`
+  return '자동 요약 대기 없음'
 }
 
 function RefreshPanel({ status, error, starting, disabled, onRun, onSave, onUnlock }) {
@@ -74,8 +79,8 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, onUnlo
         </div>
       ) : (
         <p className="hint">
-          키워드마다 네이버 뉴스 최신 100건을 모으고, 모은 기사를 요약해요. 100건을 매번 모두 요약하면 자원 낭비가
-          심해서, 지금은 중요한 기사 {settings?.perRun ?? 5}건씩만 요약해요.
+          키워드마다 네이버 뉴스에서 지난번 이후 새 기사를 빠짐없이 모으고, 제목에 키워드가 있는 기사는 뒤에서 전부 요약해요. 순서는 최신·중요 → 지난·중요 →
+          최신·덜 중요 → 지난·덜 중요예요. 직접 누른 요약이 언제나 먼저예요.
         </p>
       )}
 
@@ -133,14 +138,6 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, onUnlo
               </select>
             </>
           )}
-          <label htmlFor="refresh-per-run">미리 요약 (한 번에)</label>
-          <select id="refresh-per-run" disabled={locked} value={settings.perRun} onChange={(e) => change({ perRun: Number(e.target.value) })}>
-            {PER_RUN_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                최대 {n}건
-              </option>
-            ))}
-          </select>
           <dl className="refresh-info">
             <div>
               <dt>마지막 최신화</dt>
@@ -150,6 +147,16 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, onUnlo
               <div>
                 <dt>결과</dt>
                 <dd>{resultText(status.lastResult)}</dd>
+              </div>
+            )}
+            {status.backlog && (
+              <div>
+                <dt>자동 요약</dt>
+                <dd>
+                  {backlogText(status.backlog)}
+                  {status.backlog.current && <span className="refresh-current"> · {status.backlog.current}</span>}
+                  {status.backlog.note && <span className="refresh-current"> · {status.backlog.note}</span>}
+                </dd>
               </div>
             )}
             <div>

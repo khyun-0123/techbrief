@@ -25,11 +25,12 @@ export const SUMMARY_SCHEMA = {
     },
     keywords: { type: 'array', items: { type: 'string' } },
     warnings: { type: 'array', items: { type: 'string' } },
-    // 호재·악재 (13 문서 F5): 기사를 선별할지 빠르게 판단하는 보조 표시. 보고서에는 넣지 않는다
+    // 긍정·중립·부정 (13 문서 F5): 기사를 선별할지 빠르게 판단하는 보조 표시. 보고서에는 넣지 않는다
+    // 예전 요약에는 호재·중립·악재로 저장돼 있다 (화면에서 긍정·부정으로 바꿔 보여 줌)
     sentiment: {
       type: 'object',
       properties: {
-        label: { type: 'string', enum: ['호재', '중립', '악재'] },
+        label: { type: 'string', enum: ['긍정', '중립', '부정'] },
         reason: { type: 'string' },
       },
       required: ['label', 'reason'],
@@ -57,8 +58,8 @@ const SYSTEM = `너는 기술 동향 보고 담당자를 돕는 분석가다.
 - 기사에 직접 나오지 않는 설명(원리·일반적인 장단점 등)은 basis를 반드시 'ai_background'로.
 - 기사 정보가 부족해 보충했다면 warnings에 한 줄로 적는다.
 - keywords는 핵심 키워드 3개.
-- sentiment: 이 소식이 해당 기술과 관련 기업에 좋은 소식인지(호재), 나쁜 소식인지(악재), 섞였거나 불분명한지(중립) 판단한다.
-  주식시장에서 이 기사를 읽는 느낌으로 판단하고, reason에 근거를 기사 내용으로 한 문장(30자 안팎) 쓴다.
+- sentiment: 기사 속 소식 자체가 해당 기술과 관련 기업에 긍정적인지(긍정), 부정적인지(부정), 섞였거나 불분명한지(중립) 판단한다.
+  읽는 회사 입장의 유불리가 아니라 기사 내용의 성격으로 판단하고, reason에 근거를 기사 내용으로 한 문장(30자 안팎) 쓴다.
 - 출력은 JSON만.`
 
 // articles: [{ title, source, keyword, description? }] — 첫 기사가 대표, 나머지는 같은 이슈 기사
