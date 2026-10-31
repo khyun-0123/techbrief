@@ -25,6 +25,16 @@ function jaccard(A, B) {
   return common / (A.size + B.size - common)
 }
 
+// 제목 조각 (같은 제목을 여러 번 비교할 때 한 번만 만들어 둔다)
+export function titleGrams(title) {
+  return bigrams(normalizeTitle(title))
+}
+
+// 같은 이슈인지: 48시간 안 + 제목 조각이 기준 이상 겹침 (groupArticles와 같은 규칙)
+export function sameIssue(a, b) {
+  return Math.abs(a.time - b.time) <= WINDOW_HOURS * 3600_000 && jaccard(a.grams, b.grams) >= SIMILARITY
+}
+
 export function similarity(a, b) {
   return jaccard(bigrams(normalizeTitle(a)), bigrams(normalizeTitle(b)))
 }

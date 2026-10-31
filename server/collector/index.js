@@ -1,7 +1,7 @@
 // 수집 흐름: 키워드별 검색 → 정리 → 원문 주소로 중복 제외 → 저장 → 같은 이슈 묶기 → 중요도 점수
 // 저장: DATABASE_URL이 있으면 PostgreSQL, 없으면 서버 메모리 (서버를 끄면 비워짐)
 import { dbEnabled, query } from '../db/index.js'
-import { groupArticles } from './dedupe.js'
+import { groupArticles, sameIssue, titleGrams } from './dedupe.js'
 import { searchNews } from './naver.js'
 import { findMention, getLists } from './lists.js'
 import { toArticle } from './normalize.js'
@@ -217,5 +217,25 @@ export async function searchArticles(query) {
   const items = await searchNews(q, { sort: 'sim' })
   const articles = items.map((item, i) => ({ ...toArticle(item, q), rank: i + 1 })).filter((a) => a.url && a.title)
   const unique = [...new Map(articles.map((a) => [a.url, a])).values()]
-  return { query: q, fetched: items.length, articles: toIssues(unique, await getLists()) }
+  const issues = toIssues(unique, await getLists())
+  if (dbEnabled()) await linkToCollected(issues)
+  return { query: q, fetched: items.length, articles: issues }
+}
+
+// 찾기 결과 중 이미 모은 기사와 같은 이슈인 것은 그 이슈의 요약(summaryId)과 점수를 함께 쓴다
+// (같은 소식이라도 다른 언론사 기사면 주소가 달라 요약이 연결되지 않고, 점수도 찾기 결과 100건 안에서만 계산된다)
+async function linkToCollected(issues) {
+  const { articles: collected } = await listArticles()
+  const byId = new Map(collected.map((a) => [a.id, a]))
+  const keyOf = (a) => ({ time: Date.parse(a.publishedAt), grams: titleGrams(a.title) })
+  const reps = collected.map((a) => ({ rep: a, ...keyOf(a) }))
+  for (const issue of issues) {
+    const key = keyOf(issue)
+    const rep = byId.get(issue.id) ?? reps.find((r) => sameIssue(key, r))?.rep
+    if (!rep) continue
+    issue.summaryId = rep.id
+    if ((rep.importance ?? 0) > (issue.importance ?? 0)) {
+      Object.assign(issue, { importance: rep.importance, importanceLevel: rep.importanceLevel, scoreParts: rep.scoreParts })
+    }
+  }
 }

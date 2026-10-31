@@ -296,8 +296,10 @@ function App() {
   // 자동 요약은 최신화와 따로 뒤에서 계속 돈다 → 진행 건수가 바뀌면 다시 가져온다
   const searchArticles = search?.articles
   const backlogDone = refresh?.backlog?.done
+  // 「네이버에서 찾기」 결과가 이미 모은 기사와 같은 이슈면 서버가 summaryId로 알려 준다 → 그 요약을 함께 쓴다
   useEffect(() => {
-    const ids = [...fetched, ...(searchArticles ?? [])].map((a) => a.id).filter((id) => !aiSummaries[id])
+    const missing = [...fetched, ...(searchArticles ?? [])].filter((a) => !aiSummaries[a.id])
+    const ids = [...new Set(missing.flatMap((a) => (a.summaryId && a.summaryId !== a.id ? [a.id, a.summaryId] : [a.id])))]
     if (ids.length === 0) return
     let alive = true
     const chunks = []
@@ -305,6 +307,7 @@ function App() {
     Promise.all(chunks.map((c) => lookupSummaries(c)))
       .then((results) => {
         const found = Object.assign({}, ...results.map((r) => r.summaries))
+        for (const a of missing) if (!found[a.id] && a.summaryId && found[a.summaryId]) found[a.id] = found[a.summaryId]
         if (alive && Object.keys(found).length) setAiSummaries((prev) => ({ ...found, ...prev }))
       })
       .catch(() => {})
