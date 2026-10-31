@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS articles (
 );
 -- 네이버 뉴스 섹션 (정치·경제·사회·IT/과학 등). 네이버 제휴 언론사 기사만 있음 → 관련도 판단 (13 F4)
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS section text;
+-- 같은 이슈 묶음 (대표 기사 id). 수집이 끝날 때 다시 묶어 저장하고, 목록은 이 값을 그대로 쓴다
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS group_id text;
 CREATE INDEX IF NOT EXISTS articles_published_idx ON articles (published_at DESC);
 CREATE INDEX IF NOT EXISTS articles_keyword_idx ON articles (keyword, published_at DESC);
 
