@@ -73,18 +73,31 @@ function TitleWithIcon({ title }) {
 }
 
 // 왜 중요한지 (13 문서 F7). 보도량(같은 이슈 N건)과 최신성(발행 칸)은 이미 줄에 보이므로
-// 선별에 도움이 되는 전문 매체·경쟁사 언급만 글로 보여 준다. 점수 전체는 마우스를 올리면
+// 선별에 도움이 되는 전문 매체·경쟁사·관심 기술·기술 소식만 글로 보여 준다. 점수 전체는 마우스를 올리면
 function importanceReasons(a) {
   const p = a.scoreParts ?? {}
   const out = []
-  if (p.expert) out.push('전문 매체')
   if (p.competitorName) out.push(`경쟁사 ${p.competitorName} 언급`)
+  if (p.interestName) out.push(`관심 기술 ${p.interestName}`)
+  if (p.eventWords?.length) out.push(`${p.eventWords.join('·')} 소식`)
+  if (p.expert) out.push('전문 매체')
   return out
 }
 
 function scoreTitle(a) {
   const p = a.scoreParts ?? {}
-  return `중요도 ${a.importance ?? 0}점 = 보도량 ${p.coverage ?? 0} + 전문 매체 ${p.expert ?? 0} + 경쟁사 ${p.competitor ?? 0} + 최신성 ${p.recency ?? 0} (60점 이상 중요)`
+  const parts = [
+    `보도량 ${p.coverage ?? 0}`,
+    `전문 매체 ${p.expert ?? 0}`,
+    `경쟁사 ${p.competitor ?? 0}`,
+    `관심 기술 ${p.interest ?? 0}`,
+    `기술·사업 소식 ${p.event ?? 0}`,
+    `최신성 ${p.recency ?? 0}`,
+  ]
+  if (p.noise) parts.push(`시황·홍보성 ${p.noise}`)
+  const weight = p.weight ?? 1
+  const relevance = weight < 1 ? ` × 관련도 ${weight} (제목에 키워드 없음)` : ''
+  return `중요도 ${a.importance ?? 0}점 = (${parts.join(' + ')})${relevance} · 60점 이상이면 중요`
 }
 
 const PERIODS = [
@@ -837,9 +850,9 @@ function App() {
                                 ) : (
                                   <span className="same-issue">같은 이슈 기사 {a.sameIssue}건</span>
                                 ))}
-                              {reasons.length > 0 && (
+                              {(reasons.length > 0 || sort === 'importance') && (
                                 <span className="why-important" title={scoreTitle(a)}>
-                                  {reasons.join(' · ')}
+                                  {[sort === 'importance' && `중요도 ${a.importance ?? 0}점`, ...reasons].filter(Boolean).join(' · ')}
                                 </span>
                               )}
                             </div>

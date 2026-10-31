@@ -176,10 +176,10 @@ function toIssues(stored, lists) {
   return [...members.entries()]
     .map(([groupId, group]) => [group.find((a) => a.id === groupId) ?? earliest(group), group])
     .map(([rep, group]) => {
-      const { score, level, parts } = scoreArticle(rep, group.length, lists.competitors)
-      const own = findMention(`${rep.title} ${rep.description ?? ''}`, lists.own)
-      // 같은 이슈 기사 중 가장 관련 높은 것을 이슈의 관련도로
+      // 같은 이슈 기사 중 가장 관련 높은 것을 이슈의 관련도로 (중요도 점수의 배수로도 쓴다)
       const relevance = group.map(relevanceOf).reduce((a, b) => (RANK[b] > RANK[a] ? b : a), 'low')
+      const { score, level, parts } = scoreArticle(rep, group.length, lists.competitors, { relevance, interests: lists.interests })
+      const own = findMention(`${rep.title} ${rep.description ?? ''}`, lists.own)
       const related = group
         .filter((a) => a.id !== rep.id)
         .slice(0, 4)
