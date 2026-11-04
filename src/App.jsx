@@ -374,8 +374,8 @@ function App() {
   }, [isSample, fetched, extraArticles, searchArticles])
   const sources = useMemo(() => [...new Set(pool.map((a) => a.source))].sort(), [pool])
 
-  // 수집 대상: 등록한 키워드에 해당하는 기사
-  const collected = (isSample ? SAMPLE_ARTICLES : fetched.map(toView)).filter((a) => keywords.includes(a.keyword))
+  // 수집 대상: 등록한 키워드에 해당하는 기사. 샘플은 키워드와 상관없이 모두 보여 준다 (샘플 키워드가 기본 키워드와 다름)
+  const collected = isSample ? SAMPLE_ARTICLES : fetched.map(toView).filter((a) => keywords.includes(a.keyword))
   const todayIssues = collected.filter((a) => a.hoursAgo < 24)
   const countArticles = (list) => list.reduce((n, a) => n + 1 + (a.sameIssue ?? 0), 0)
 
@@ -974,7 +974,7 @@ function App() {
                 onUnlock={unlockRefresh}
               />
               <ListsPanel lists={lists} onSave={saveLists} error={listsError} />
-              {isSample && <p className="hint">샘플 기사에는 생성형 AI · 반도체 · 클라우드 · OLED 키워드가 있어요.</p>}
+              {isSample && <p className="hint">샘플 기사는 화면 확인용이라 등록 키워드와 상관없이 모두 보여요.</p>}
             </aside>
           </div>
         </main>
