@@ -1798,6 +1798,11 @@ a.btn {
   grid-template-columns: 184px 1fr 280px;
 }
 
+/* 수집 설정은 관리자 화면으로 옮김 → 오른쪽 칸 없이 목록을 넓게 */
+.content.with-favs.no-settings {
+  grid-template-columns: 184px 1fr;
+}
+
 .fav-rail {
   display: flex;
   flex-direction: column;
@@ -1902,6 +1907,10 @@ a.btn {
 @media (max-width: 1399px) {
   .content.with-favs {
     grid-template-columns: 1fr 280px;
+  }
+
+  .content.with-favs.no-settings {
+    grid-template-columns: 1fr;
   }
 
   .fav-rail {
