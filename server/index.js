@@ -28,7 +28,8 @@ import {
 } from './llm/reportPrompts.js'
 import { adminConfigured, adminOf, changeLog, diffWords, login, logChange, logout, requireAdmin } from './admin.js'
 import { refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
-import { summarizeArticle } from './summarize.js'
+import { featureList, FEATURES, getFeatures, saveFeatures } from './features.js'
+import { summarizeArticle, summarizeOnly } from './summarize.js'
 
 const REPORT_TIMEOUT_MS = 240_000 // 보고서는 출력이 길어 요약보다 오래 걸린다
 const MAX_REPORT_ARTICLES = 10
@@ -211,6 +212,27 @@ export async function handleApi(req, res) {
     }
     if (req.method === 'POST' && req.url === '/api/admin/logout') {
       return send(res, 200, { ok: true }, { 'Set-Cookie': logout(req) })
+    }
+    // 실험 기능: 누구나 읽고(화면이 무엇을 보일지 정함), 관리자만 바꾼다
+    if (req.method === 'GET' && req.url === '/api/features') {
+      return send(res, 200, { features: await getFeatures(), list: featureList() })
+    }
+    if (req.method === 'PUT' && req.url === '/api/features') {
+      const admin = requireAdmin(req)
+      const before = await getFeatures()
+      const after = await saveFeatures(await readJson(req))
+      const STATE = { off: '꺼짐', test: '테스트에서만', all: '모두에게' }
+      for (const f of FEATURES) {
+        if (before[f.key] !== after[f.key]) await logChange(admin, '실험 기능', `${f.label}: ${STATE[before[f.key]]} → ${STATE[after[f.key]]}`)
+      }
+      return send(res, 200, { features: after, list: featureList() })
+    }
+    // 테스트 페이지 「요약 시험」: 저장하지 않고 고른 AI 서버로 요약 (관리자만, AI 비용이 들어서)
+    if (req.method === 'POST' && req.url === '/api/admin/test/summary') {
+      requireAdmin(req)
+      const { article, related = [], provider } = await readJson(req)
+      if (!article?.title) return send(res, 400, { error: 'article.title이 필요해요.' })
+      return send(res, 200, await summarizeOnly(article, related.slice(0, 5), { provider }))
     }
     if (req.method === 'GET' && req.url === '/api/admin/log') {
       requireAdmin(req)

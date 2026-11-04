@@ -5,12 +5,15 @@ import {
   fetchAdminMe,
   fetchArticles,
   fetchFavorites,
+  fetchFeatures,
   fetchHealth,
   fetchKeywords,
+  fetchLists,
   fetchRefresh,
   fetchReports,
   importReports,
   lookupSummaries,
+  runRefresh,
   saveFavoritesApi,
   searchNewsApi,
 } from './api.js'
@@ -23,7 +26,10 @@ import { loadReports, saveReports } from './reportStore.js'
 import { useSummaryQueue } from './summaryQueue.js'
 import { DEFAULT_KEYWORDS, SAMPLE_ARTICLES } from './sampleArticles.js'
 import SelectSummary from './SelectSummary.jsx'
-import { SHOW_SENTIMENT } from './display.js'
+import { enabledFeatures, FeaturesContext } from './features.js'
+import ListsPanel from './ListsPanel.jsx'
+import RefreshPanel from './RefreshPanel.jsx'
+import TestTools from './TestTools.jsx'
 import SentimentBadge, { sentimentLabel, sentimentOf as pickSentiment } from './SentimentBadge.jsx'
 import SummaryItems from './SummaryItems.jsx'
 import { formatPublished, load } from './utils.js'
@@ -106,7 +112,14 @@ function searchScope(period) {
   return '기간 전체 · 정확도 높은 100건'
 }
 
-function App() {
+// mode: 'normal'(일반 접속 /) | 'test'(관리자 테스트 페이지 /admin/test). 테스트에서는 '테스트에서만' 실험 기능까지 켠다
+function App({ mode = 'normal' }) {
+  const isTest = mode === 'test'
+  const [featureStates, setFeatureStates] = useState({}) // 실험 기능 { key: 'off' | 'test' | 'all' }
+  const features = useMemo(() => enabledFeatures(featureStates, mode), [featureStates, mode])
+  const [lists, setLists] = useState(null) // 자사·경쟁사·관심 기술 (「수집 설정」 칸 실험 기능에서 보기만)
+  const [refreshError, setRefreshError] = useState('')
+  const [starting, setStarting] = useState(false)
   const [keywords, setKeywords] = useState(() => load(KEYWORDS_KEY, DEFAULT_KEYWORDS))
   const [selectedIds, setSelectedIds] = useState(() => load(SELECTED_KEY, []))
   const [includedIds, setIncludedIds] = useState(() => load(INCLUDED_KEY, []))
@@ -152,7 +165,26 @@ function App() {
     fetchFavorites()
       .then(setFavorites)
       .catch(() => {})
+    fetchFeatures()
+      .then((f) => setFeatureStates(f.features))
+      .catch(() => {})
+    fetchLists()
+      .then(setLists)
+      .catch(() => {})
   }, [reloadArticles])
+
+  // 「지금 최신화」 (실험 기능 refreshButton). 일반 사용자는 서버가 10분에 한 번으로 막는다
+  async function handleRefresh() {
+    setStarting(true)
+    setRefreshError('')
+    try {
+      setRefresh(await runRefresh(keywords))
+    } catch (err) {
+      setRefreshError(err.message)
+    } finally {
+      setStarting(false)
+    }
+  }
 
   function toggleSummarizedFirst(on) {
     setSummarizedFirst(on)
@@ -373,7 +405,7 @@ function App() {
     (a) =>
       (showLow || !isLow(a)) &&
       !(excludeOwn && isOwnOnly(a)) &&
-      (!SHOW_SENTIMENT || sentimentFilter === 'all' || sentimentOf(a) === sentimentFilter),
+      (!features.has('sentiment') || sentimentFilter === 'all' || sentimentOf(a) === sentimentFilter),
   )
 
   // 정렬·필터·검색이 바뀌면 1페이지로 (13 문서 F2)
@@ -487,9 +519,17 @@ function App() {
   const reportArticles = included.map((id) => candidates.find((a) => a.id === id)).filter(Boolean)
 
   return (
-    <div className="app">
+    <FeaturesContext.Provider value={features}>
+    <div className={isTest ? 'app app-test' : 'app'}>
+      {isTest && (
+        <div className="test-banner">
+          <strong>테스트 페이지</strong> · 실험 기능 {features.size}개 켜짐 ({[...features].join(', ') || '없음'}) · 일반 사용자에게는 「모두에게」로 정한 기능만 보여요
+          <a href="/admin#features">실험 기능 설정 →</a>
+          <a href="/admin">관리 페이지 →</a>
+        </div>
+      )}
       <nav className="topbar">
-        <span className="brand">테크브리프</span>
+        <span className="brand">테크브리프{isTest && <small className="brand-test"> 테스트</small>}</span>
         <div className="tabs">
         <button
           type="button"
@@ -519,6 +559,11 @@ function App() {
         >
           보고서함{reports.length > 0 && <span className="tab-count">{reports.length}</span>}
         </button>
+        {isTest && (
+          <button type="button" className={screen === 'tools' ? 'tab active' : 'tab'} onClick={() => setScreen('tools')}>
+            시험 도구
+          </button>
+        )}
         </div>
         <span className="topbar-side">
           {/* AI 모델은 모두에게 적용되므로 관리자 화면에서 고른다. 여기서는 보기만 (17 문서) */}
@@ -549,7 +594,9 @@ function App() {
         </span>
       </nav>
 
-      {screen === 'archive' ? (
+      {screen === 'tools' && isTest ? (
+        <TestTools providers={health?.llm?.providers ?? []} />
+      ) : screen === 'archive' ? (
         <ReportArchive
           reports={reports}
           onDelete={canDeleteReport ? handleDeleteReport : undefined}
@@ -594,6 +641,11 @@ function App() {
                 {refreshRunning ? '최신화 중…' : collectedAt ? `마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 수집 전'}
                 {' · '}선별 <strong>{selectedIds.length}건</strong>
               </span>
+              {features.has('refreshButton') && (
+                <button type="button" className="btn" onClick={handleRefresh} disabled={starting || refreshRunning || keywords.length === 0}>
+                  {starting || refreshRunning ? '최신화 중…' : '지금 최신화'}
+                </button>
+              )}
               <button
                 type="button"
                 className="btn primary"
@@ -605,6 +657,7 @@ function App() {
               </button>
             </div>
           </header>
+          {refreshError && <p className="ai-error">{refreshError}</p>}
 
           <section className="stats">
             <div className="stat">
@@ -624,7 +677,7 @@ function App() {
             </div>
           </section>
 
-          <div className="content with-favs no-settings">
+          <div className={features.has('collectPanel') ? 'content with-favs' : 'content with-favs no-settings'}>
             <FavoritesRail
               favorites={favorites}
               recent={recent}
@@ -704,7 +757,7 @@ function App() {
                   <input type="checkbox" checked={showLow} onChange={(e) => toggleShowLow(e.target.checked)} />
                   관련도 낮은 기사도 보기 <span className="own-count">{lowCount}건</span>
                 </label>
-                {SHOW_SENTIMENT && (
+                {features.has('sentiment') && (
                 <select
                   className="sentiment-filter"
                   value={sentimentFilter}
@@ -893,11 +946,29 @@ function App() {
               )}
             </section>
 
+            {/* 실험 기능 collectPanel: 수집 설정을 보기 전용으로 (바꾸는 곳은 관리 페이지) */}
+            {features.has('collectPanel') && (
+              <aside className="panel settings">
+                <h2>수집 설정</h2>
+                <p className="list-label">자동 수집 키워드</p>
+                <div className="chips">
+                  {keywords.map((k) => (
+                    <span key={k} className="chip">
+                      {k}
+                    </span>
+                  ))}
+                </div>
+                <p className="list-hint">관리자가 정해요.</p>
+                <RefreshPanel status={refresh} starting={starting} disabled={keywords.length === 0} onRun={handleRefresh} showRun={features.has('refreshButton')} />
+                <ListsPanel lists={lists} />
+              </aside>
+            )}
           </div>
         </main>
       )}
       <ProgressPanel queue={queue} />
     </div>
+    </FeaturesContext.Provider>
   )
 }
 

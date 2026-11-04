@@ -10,11 +10,13 @@ import {
   adminLogout,
   fetchAdminLog,
   fetchAdminMe,
+  fetchFeatures,
   fetchHealth,
   fetchKeywords,
   fetchLists,
   fetchRefresh,
   runRefresh,
+  saveFeaturesApi,
   saveKeywordsApi,
   saveListsApi,
   saveRefreshSettings,
@@ -28,9 +30,21 @@ const SECTIONS = [
   ['targets', '수집 대상', '무엇을 모으고, 어떤 회사·기술을 중요하게 볼지 정해요. 다음 최신화부터 반영되고, 이미 모은 기사는 그대로예요.'],
   ['refresh', '자동 최신화', '언제 기사를 모으고, 자동 요약을 할지 정해요.'],
   ['llm', 'AI 모델', '요약·보고서에 쓸 AI 서버를 골라요. 모든 사용자에게 바로 적용돼요.'],
+  ['features', '실험 기능', '새 기능을 테스트 페이지에서 먼저 써 보고, 괜찮으면 모두에게 켜요.'],
   ['log', '변경 기록', '언제 누가 무엇을 바꿨는지 최근 200건까지 남아요.'],
 ]
 const STALE_HOURS = 24 // 이 시간 넘게 수집이 없으면 경고
+const FEATURE_STATES = [
+  ['off', '꺼짐'],
+  ['test', '테스트 페이지에서만'],
+  ['all', '모두에게'],
+]
+
+// 로그인 뒤 돌아갈 곳 (테스트 페이지에서 로그인하러 온 경우). 사이트 안 주소만 받는다
+function nextPath() {
+  const next = new URLSearchParams(window.location.search).get('next')
+  return next === '/admin/test' ? next : null
+}
 
 function formatAt(iso, withDate = true) {
   if (!iso) return '-'
@@ -72,7 +86,7 @@ function buildAlerts({ health, refresh, keywords, lists }) {
 }
 
 function LoginPage({ configured, onLogin }) {
-  const [name, setName] = useState('')
+  const [id, setId] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -82,7 +96,7 @@ function LoginPage({ configured, onLogin }) {
     setBusy(true)
     setError('')
     try {
-      onLogin((await adminLogin(password, name)).admin)
+      onLogin((await adminLogin(id, password)).admin)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -97,19 +111,18 @@ function LoginPage({ configured, onLogin }) {
         <form className="adm-login" onSubmit={submit}>
           <h1>테크브리프 관리자</h1>
           <p>수집 키워드·관심 기술·자동 최신화·AI 모델을 정하는 곳이에요.</p>
-          <label htmlFor="admin-name">이름 (선택 · 변경 기록에 남아요)</label>
-          <input id="admin-name" type="text" maxLength={20} placeholder="예: 김재현" value={name} onChange={(e) => setName(e.target.value)} />
+          <label htmlFor="admin-id">아이디</label>
+          <input id="admin-id" type="text" autoComplete="username" autoFocus value={id} onChange={(e) => setId(e.target.value)} />
           <label htmlFor="admin-password">비밀번호</label>
           <input
             id="admin-password"
             type="password"
             autoComplete="current-password"
-            autoFocus
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
           {error && <p className="ai-error">{error}</p>}
-          <button type="submit" className="adm-btn primary" disabled={!password || busy}>
+          <button type="submit" className="adm-btn primary" disabled={!id.trim() || !password || busy}>
             {busy ? '확인 중…' : '로그인'}
           </button>
           <p className="adm-login-foot">
@@ -147,6 +160,7 @@ function AdminApp() {
   const [refresh, setRefresh] = useState(null)
   const [health, setHealth] = useState(null)
   const [log, setLog] = useState([])
+  const [features, setFeatures] = useState(null) // { features: { key: state }, list }
   const [toast, setToast] = useState(null) // { text, error }
   const [starting, setStarting] = useState(false)
 
@@ -164,8 +178,15 @@ function AdminApp() {
   // 로그인하면 지금 설정을 한 번에 불러온다
   useEffect(() => {
     if (!admin) return
-    Promise.all([fetchKeywords(), fetchLists(), fetchRefresh(), fetchHealth().catch(() => ({ error: true })), fetchAdminLog()])
-      .then(([k, l, r, h, g]) => {
+    // 테스트 페이지에서 로그인하러 왔으면 로그인 뒤 그리로 돌려보낸다
+    const next = nextPath()
+    if (next) {
+      window.location.replace(next)
+      return
+    }
+    Promise.all([fetchKeywords(), fetchLists(), fetchRefresh(), fetchHealth().catch(() => ({ error: true })), fetchAdminLog(), fetchFeatures()])
+      .then(([k, l, r, h, g, f]) => {
+        setFeatures(f)
         setKeywords(k)
         setLists(l)
         setRefresh(r)
@@ -258,9 +279,10 @@ function AdminApp() {
         <div className="adm-side-foot">
           <span className="adm-who">
             {admin.name}
-            <small>로그인 중 · 8시간 유지</small>
+            <small>관리자로 로그인 중 · 8시간 유지</small>
           </span>
-          <a href="/">테크브리프로 →</a>
+          <a href="/admin/test">테스트 페이지 →</a>
+          <a href="/">일반 화면 →</a>
           <button type="button" onClick={handleLogout}>
             로그아웃
           </button>
@@ -439,6 +461,41 @@ function AdminApp() {
                 </button>
               ))}
             </div>
+          </section>
+        )}
+
+        {section === 'features' && features && (
+          <section className="adm-card">
+            <h2>기능별 공개 범위</h2>
+            <p className="adm-desc">
+              「테스트 페이지에서만」은 관리자 테스트 페이지(<a href="/admin/test">/admin/test</a>)에서만 보여요. 「모두에게」로 바꾸면 일반 화면에도 바로 보여요.
+            </p>
+            <ul className="adm-features">
+              {features.list.map((f) => (
+                <li key={f.key}>
+                  <div>
+                    <strong>{f.label}</strong>
+                    <span>{f.desc}</span>
+                  </div>
+                  <div className="adm-segment" role="radiogroup" aria-label={`${f.label} 공개 범위`}>
+                    {FEATURE_STATES.map(([state, label]) => (
+                      <button
+                        key={state}
+                        type="button"
+                        role="radio"
+                        aria-checked={features.features[f.key] === state}
+                        onClick={() =>
+                          features.features[f.key] !== state &&
+                          save(async () => setFeatures(await saveFeaturesApi({ [f.key]: state })), `「${f.label}」을(를) ${label}(으)로 바꿨어요.`)
+                        }
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
 

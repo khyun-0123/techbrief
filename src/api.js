@@ -198,8 +198,8 @@ export async function fetchAdminMe() {
   return res.json()
 }
 
-export function adminLogin(password, name) {
-  return postJson('/api/admin/login', { password, name })
+export function adminLogin(id, password) {
+  return postJson('/api/admin/login', { id, password })
 }
 
 export function adminLogout() {
@@ -211,4 +211,31 @@ export async function fetchAdminLog() {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error ?? '변경 기록을 불러오지 못했어요')
   return data.log
+}
+
+// 실험 기능 상태 { features: { key: 'off'|'test'|'all' }, list: [{ key, label, desc }] }
+export async function fetchFeatures() {
+  const res = await fetch('/api/features')
+  if (!res.ok) throw new Error('실험 기능 설정을 불러오지 못했어요')
+  return res.json()
+}
+
+export async function saveFeaturesApi(features) {
+  const res = await fetch('/api/features', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(features),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}
+
+// 테스트 페이지 「요약 시험」: 저장하지 않고 고른 AI 서버로 요약 (관리자만)
+export function testSummaryApi(article, related, provider) {
+  return postJson('/api/admin/test/summary', {
+    article: { id: article.id, title: article.title, source: article.source, keyword: article.keyword, description: article.description },
+    related: (related ?? []).map(({ id, title, source, description }) => ({ id, title, source, description })),
+    provider,
+  })
 }

@@ -46,8 +46,10 @@ function currentId() {
   return PROVIDER_IDS.find((id) => isReady(providerConfig(id))) ?? 'local'
 }
 
-function config() {
-  const c = providerConfig(currentId())
+// id를 주면 그 AI 서버로 (관리자 테스트 페이지의 서버 비교용), 없으면 지금 고른 서버
+function config(id = currentId()) {
+  if (!PROVIDER_IDS.includes(id)) throw Object.assign(new Error('없는 AI 서버예요.'), { status: 400 })
+  const c = providerConfig(id)
   if (!isReady(c)) {
     throw new Error(`${c.label} AI 설정이 없어요. .env.local에 ${c.envHint}를 넣어 주세요.`)
   }
@@ -196,8 +198,8 @@ async function callChat(cfg, { messages, schema, schemaName, report = false, tim
 // 질문 하나를 보내고 JSON으로 받는다
 // report·timeoutMs는 선택 (보고서는 *_REPORT_MODEL과 더 긴 시간), priority는 PRIORITY 중 하나 (기본: 사람 요청)
 // AI 서버는 요청한 순간에 고른 곳을 쓴다 (기다리는 동안 상단에서 바꿔도 그대로)
-export async function chatJson({ messages, schema, schemaName = 'result', report, timeoutMs, priority = PRIORITY.USER }) {
-  const cfg = config()
+export async function chatJson({ messages, schema, schemaName = 'result', report, timeoutMs, priority = PRIORITY.USER, provider }) {
+  const cfg = config(provider)
   return enqueue(async () => {
     const { content, model: used, usage } = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs })
     try {

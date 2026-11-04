@@ -535,3 +535,69 @@
     padding: 20px 16px 60px;
   }
 }
+
+/* 실험 기능: 기능마다 공개 범위 고르기 */
+.adm-features {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-features li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 0;
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-features li:first-child {
+  border-top: none;
+}
+
+.adm-features strong {
+  display: block;
+  font-size: 15px;
+}
+
+.adm-features span {
+  display: block;
+  margin-top: 4px;
+  color: var(--adm-muted);
+  font-size: 13px;
+}
+
+.adm-segment {
+  display: inline-flex;
+  flex: none;
+  padding: 3px;
+  border-radius: 10px;
+  background: #eef1f5;
+}
+
+.adm-segment button {
+  padding: 7px 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--adm-muted);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.adm-segment button[aria-checked='true'] {
+  background: #fff;
+  color: var(--adm-ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+}
+
+@media (max-width: 860px) {
+  .adm-features li {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
