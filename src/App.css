@@ -166,7 +166,7 @@ select {
 }
 
 .col-time {
-  width: 64px;
+  width: 96px; /* '25년 3월 14일'까지 한 줄 */
 }
 
 .col-keyword {
