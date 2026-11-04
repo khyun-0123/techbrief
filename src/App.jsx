@@ -7,20 +7,16 @@ import {
   fetchFavorites,
   fetchHealth,
   fetchKeywords,
-  fetchLists,
   fetchRefresh,
   fetchReports,
   importReports,
   lookupSummaries,
-  runRefresh,
   saveFavoritesApi,
   searchNewsApi,
 } from './api.js'
 import FavoritesRail from './FavoritesRail.jsx'
-import ListsPanel from './ListsPanel.jsx'
 import Pager from './Pager.jsx'
 import ProgressPanel from './ProgressPanel.jsx'
-import RefreshPanel from './RefreshPanel.jsx'
 import ReportArchive from './ReportArchive.jsx'
 import ReportDraft from './ReportDraft.jsx'
 import { loadReports, saveReports } from './reportStore.js'
@@ -121,14 +117,11 @@ function App() {
   const [fetched, setFetched] = useState(() => load(ARTICLES_KEY, []))
   const [collectedAt, setCollectedAt] = useState(() => load(COLLECTED_AT_KEY, null))
   const [refresh, setRefresh] = useState(null) // 자동 최신화 상태 (서버)
-  const [refreshError, setRefreshError] = useState('')
-  const [starting, setStarting] = useState(false)
   const [openSummaryId, setOpenSummaryId] = useState(null) // 목록에서 요약을 펼친 기사
   const [openGroupId, setOpenGroupId] = useState(null) // 같은 이슈 기사를 펼친 기사
   const [search, setSearch] = useState(null) // 네이버 기사 찾기 { query, articles?, loading?, error? }
   const [extraArticles, setExtraArticles] = useState(() => load(EXTRA_KEY, []))
   const [page, setPage] = useState(1)
-  const [lists, setLists] = useState(null) // 자사·경쟁사·관심 기술 (팀 공용)
   const [excludeOwn, setExcludeOwn] = useState(() => load(EXCLUDE_OWN_KEY, false))
   const [showLow, setShowLow] = useState(() => load(SHOW_LOW_KEY, false)) // 관련도 낮은 기사도 보기 (F4)
   // 요약된 기사 먼저: 지금 정렬은 그대로 두고 요약된 기사를 위로 (요약을 먼저 보고 고르게)
@@ -156,9 +149,6 @@ function App() {
 
   useEffect(() => {
     reloadArticles().catch(() => {})
-    fetchLists()
-      .then(setLists)
-      .catch(() => {})
     fetchFavorites()
       .then(setFavorites)
       .catch(() => {})
@@ -194,12 +184,12 @@ function App() {
         })
         .catch(() => {})
     check()
-    const timer = setInterval(check, refreshRunning || starting ? 3_000 : 30_000)
+    const timer = setInterval(check, refreshRunning ? 3_000 : 30_000)
     return () => {
       alive = false
       clearInterval(timer)
     }
-  }, [refreshRunning, starting, reloadArticles])
+  }, [refreshRunning, reloadArticles])
 
   // 보고서함: DB가 있으면 서버에서 불러온다. 처음 한 번은 브라우저에 있던 보고서를 DB로 옮긴다
   useEffect(() => {
@@ -462,18 +452,6 @@ function App() {
     setQuery('')
   }
 
-  async function handleRefresh() {
-    setStarting(true)
-    setRefreshError('')
-    try {
-      setRefresh(await runRefresh(keywords))
-    } catch (err) {
-      setRefreshError(err.message)
-    } finally {
-      setStarting(false)
-    }
-  }
-
   function toggleSelected(article) {
     const { id } = article
     if (selectedIds.includes(id)) {
@@ -635,8 +613,9 @@ function App() {
                 {todayIssues.length}개 <small>· 기사 {countArticles(todayIssues)}건</small>
               </strong>
             </div>
-            <div className="stat">
-              <span className="stat-label">등록한 키워드</span>
+            {/* 자동 수집 키워드·자동 최신화·회사/관심 기술은 관리자 화면(/admin)에서만 보고 바꾼다 */}
+            <div className="stat" title={keywords.join(' · ')}>
+              <span className="stat-label">자동 수집 키워드</span>
               <strong>{keywords.length}개</strong>
             </div>
             <div className="stat">
@@ -645,7 +624,7 @@ function App() {
             </div>
           </section>
 
-          <div className="content with-favs">
+          <div className="content with-favs no-settings">
             <FavoritesRail
               favorites={favorites}
               recent={recent}
@@ -914,27 +893,6 @@ function App() {
               )}
             </section>
 
-            <aside className="panel settings">
-              <h2>수집 설정</h2>
-              <p className="list-label">자동 수집 키워드</p>
-              <div className="chips">
-                {keywords.map((k) => (
-                  <span key={k} className="chip">
-                    {k}
-                  </span>
-                ))}
-              </div>
-              <p className="list-hint">모두가 같이 쓰는 목록이라 관리자가 정해요. 다른 말은 「네이버에서 찾기」로 찾아보세요.</p>
-              <RefreshPanel
-                status={refresh}
-                error={refreshError}
-                starting={starting}
-                disabled={keywords.length === 0}
-                onRun={handleRefresh}
-              />
-              <ListsPanel lists={lists} />
-              {isSample && <p className="hint">샘플 기사는 화면 확인용이라 등록 키워드와 상관없이 모두 보여요.</p>}
-            </aside>
           </div>
         </main>
       )}
