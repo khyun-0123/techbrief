@@ -52,3 +52,18 @@ export async function summarizeArticle(article, related = [], { refresh = false,
   await saveSummary(id, result, related.map((r) => (r.id || r.url ? idOf(r) : null)))
   return result
 }
+
+// 관리자 테스트 페이지(/admin/test)의 「요약 시험」: 저장하지 않고 지정한 AI 서버로 한 번 요약해 걸린 시간과 함께 돌려준다
+// 공용 DB의 요약에는 영향이 없다. 사람이 누른 요약과 같은 순서로 대기열에 들어간다
+export async function summarizeOnly(article, related = [], { provider } = {}) {
+  const articles = [article, ...related]
+  const started = Date.now()
+  const { data, model, usage } = await chatJson({
+    messages: buildSummaryMessages(articles),
+    schema: SUMMARY_SCHEMA,
+    schemaName: 'article_summary',
+    priority: PRIORITY.USER,
+    provider,
+  })
+  return { summary: checkBasis(data, articles), model, usage: usage ?? null, ms: Date.now() - started }
+}

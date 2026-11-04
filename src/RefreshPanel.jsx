@@ -31,7 +31,8 @@ function backlogText(b) {
   return '자동 요약 대기 없음'
 }
 
-function RefreshPanel({ status, error, starting, disabled, onRun, onSave, canEdit = false }) {
+// showRun: 「지금 최신화」 버튼을 보일지 (일반 화면은 실험 기능 refreshButton을 따름)
+function RefreshPanel({ status, error, starting, disabled, onRun, onSave, canEdit = false, showRun = true }) {
   const settings = status?.settings
   const running = status?.running
   const busy = starting || Boolean(running)
@@ -43,9 +44,11 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, canEdi
 
   return (
     <div className="refresh">
-      <button type="button" className="btn primary collect-btn" onClick={onRun} disabled={busy || disabled}>
-        {busy ? '최신화 중…' : '지금 최신화'}
-      </button>
+      {showRun && (
+        <button type="button" className="btn primary collect-btn" onClick={onRun} disabled={busy || disabled}>
+          {busy ? '최신화 중…' : '지금 최신화'}
+        </button>
+      )}
       {running ? (
         <div className="refresh-progress">
           <p className="hint">
