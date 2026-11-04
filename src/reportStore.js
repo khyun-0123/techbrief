@@ -25,6 +25,11 @@ export function articleKey(ids) {
   return [...ids].sort().join('|')
 }
 
+// 기사에서 확인된 사실(fact)인지 AI 해설·제안(ai)인지 (15 문서 F15). 예전 보고서는 근거 번호로 판단
+export function kindOf(b) {
+  return b.kind ?? (b.refs?.length ? 'fact' : 'ai')
+}
+
 export const SECTIONS = [
   ['summary', '핵심 요약'],
   ['tech', '기술 개요'],
@@ -46,8 +51,13 @@ export function toPlainText(saved) {
   const lines = [`${report.title} (${formatDate(createdAt)} · 기사 ${articles.length}건 기준)`, '']
   for (const [key, label] of SECTIONS) {
     lines.push(`■ ${label}`)
-    for (const b of report.sections[key]?.bullets ?? []) {
-      lines.push(` - ${b.text}${b.refs.length ? ` [${b.refs.join('][')}]` : ' (근거 확인 필요)'}`)
+    const bullets = report.sections[key]?.bullets ?? []
+    const facts = bullets.filter((b) => kindOf(b) === 'fact')
+    const ai = bullets.filter((b) => kindOf(b) === 'ai')
+    for (const b of facts) lines.push(` - ${b.text} [${b.refs.join('][')}]`)
+    if (ai.length) {
+      lines.push('  (AI 해설·제안 — 기사에서 확인된 내용 아님, 확인 필요)')
+      for (const b of ai) lines.push(`  · ${b.text}`)
     }
     lines.push('')
   }

@@ -18,7 +18,7 @@ import {
   updateReportSection,
 } from './db/store.js'
 import { chatJson, llmProviders, modelName, pingModel, providerLabel, selectProvider } from './llm/client.js'
-import { evidenceOf, hasHan, isSupported, stripInlineRefs } from './llm/evidence.js'
+import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
   buildReportMessages,
   buildSectionMessages,
@@ -63,20 +63,34 @@ async function handleSummary(req, res) {
 const SAME_BULLET = 0.3
 
 // 글머리의 근거 번호를 정리한다: 범위 밖 번호를 지우고, 그 기사 원문과 맞지 않는 번호도 지운다
+// kind: 기사에서 확인된 사실(fact)과 AI 해설·제안(ai)을 나눈다 (15 문서 F15).
+// 모델의 분류만 믿지 않고 규칙과 함께 정한다. 실측: 모델은 업계 동향의 기사 사실도 ai·근거 없음으로 자주 표시하고,
+// 글자 겹침만으로는 원문 단어를 많이 쓴 제안 문장(~할 수 있음)과 사실을 가르지 못함
+// - 제안·전망 끝맺음(~할 수 있음, 기대됨, 필요함 …) → ai
+// - 모델이 fact라고 한 문장: 원문과 맞는 근거(겹침 0.35 이상)가 있으면 fact
+// - 모델이 ai라고 한 문장: 원문과 아주 많이 겹치면(0.6 이상) 사실로 보고 fact
+// - 그 밖은 ai (원리 설명·일반 지식·제안)
 function cleanBullets(bullets, articles) {
   const kept = []
   for (const b of bullets ?? []) {
     if (!b?.text?.trim()) continue
     const text = stripInlineRefs(b.text)
     const claimed = [...new Set((b.refs ?? []).filter((n) => Number.isInteger(n) && n >= 1 && n <= articles.length))]
-    const refs = claimed.filter((n) => isSupported(text, evidenceOf(articles[n - 1]))).sort((x, y) => x - y)
-    const dup = kept.find((k) => similarity(k.text, text) >= SAME_BULLET)
+    const all = articles.map((_, i) => i + 1)
+    const min = b.kind === 'ai' ? STRONG_OVERLAP : undefined
+    let verified = b.kind === 'ai' ? [] : claimed.filter((n) => isSupported(text, evidenceOf(articles[n - 1])))
+    if (verified.length === 0) verified = all.filter((n) => isSupported(text, evidenceOf(articles[n - 1]), min))
+    if (isProposal(text)) verified = []
+    verified.sort((x, y) => x - y)
+    const kind = verified.length ? 'fact' : 'ai'
+    const refs = kind === 'fact' ? verified : []
+    const dup = kept.find((k) => k.kind === kind && similarity(k.text, text) >= SAME_BULLET)
     if (dup) {
       // 비슷한 글머리는 합치고 근거 번호만 모은다
       dup.refs = [...new Set([...dup.refs, ...refs])].sort((x, y) => x - y)
       continue
     }
-    kept.push({ text, refs, removedRefs: claimed.filter((n) => !refs.includes(n)), han: hasHan(text) })
+    kept.push({ text, refs, kind, removedRefs: claimed.filter((n) => !refs.includes(n)), han: hasHan(text) })
   }
   return kept
 }
@@ -84,8 +98,8 @@ function cleanBullets(bullets, articles) {
 function reportWarnings(sections) {
   const all = Object.values(sections).flatMap((s) => s.bullets)
   const warnings = []
-  const unsupported = all.filter((b) => b.refs.length === 0).length
-  if (unsupported) warnings.push(`근거 기사가 확인되지 않은 문장 ${unsupported}개 — 확인 후 고치거나 지우세요`)
+  const ai = all.filter((b) => b.kind === 'ai').length
+  if (ai) warnings.push(`AI 해설·제안 ${ai}개는 기사에서 확인된 내용이 아니에요 — 확인 후 쓰세요`)
   if (all.some((b) => b.han)) warnings.push('한자·중국어가 섞인 문장이 있어요 — 한글로 고치세요')
   return warnings
 }

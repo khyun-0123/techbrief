@@ -1941,3 +1941,29 @@ a.btn {
     border: 1px solid #dde2ea;
   }
 }
+
+/* 보고서: AI 해설·제안은 기사 사실과 나눠 다른 바탕으로 (F15) */
+.report-ai {
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-left: 3px solid #e0a100;
+  border-radius: 0 8px 8px 0;
+  background: #fffaf0;
+}
+
+.report-ai-label {
+  margin: 0 0 4px;
+  color: #8a5a00;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.report-ai .report-bullets {
+  color: #4b5563;
+}
+
+@media print {
+  body.printing-report .report-ai {
+    break-inside: avoid;
+  }
+}

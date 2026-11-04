@@ -23,8 +23,19 @@ export function overlap(text, evidence) {
   return common / A.size
 }
 
-export function isSupported(text, evidence) {
-  return overlap(text, evidence) >= MIN_OVERLAP
+export function isSupported(text, evidence, min = MIN_OVERLAP) {
+  return overlap(text, evidence) >= min
+}
+
+// 원문 본문처럼 긴 근거와 대조할 때, 모델이 'AI 해설'이라고 한 문장을 사실로 옮기는 기준 (15 문서 F15)
+// 실측(기사 3건 원문): 기사 사실 0.66~0.77, 원문에 없는 일반 설명 0.47~0.51 → 0.6
+export const STRONG_OVERLAP = 0.6
+
+// 제안·전망 문장 (끝맺음으로 판단). 원문 단어를 많이 써도 AI 해설·제안으로 둔다
+const PROPOSAL = /(수 있음|수 있다|기대됨|기대된다|기대할 수|필요함|필요하다|바람직|검토|해야 함|해야 한다|가능함|가능하다|전망됨|전망이다|예상됨|예상된다|것임|것이다)[.\s]*$/
+
+export function isProposal(text) {
+  return PROPOSAL.test(text.trim())
 }
 
 // 기사 하나의 원래 텍스트

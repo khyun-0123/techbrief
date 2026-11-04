@@ -1,7 +1,7 @@
 // 완성된 보고서 한 건을 보여 준다 (보고서 초안·보고서함 공용)
 import { useState } from 'react'
 import { exportPptx, printReport } from './reportExport.js'
-import { formatDate, SECTIONS } from './reportStore.js'
+import { formatDate, kindOf, SECTIONS } from './reportStore.js'
 
 // tools: 보고서 맨 위 오른쪽 도구 줄 (복사·지우기 등)
 function ReportView({ saved, onRegenerate, regenKey, busy, tools }) {
@@ -59,25 +59,45 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools }) {
                 </button>
               )}
             </div>
-            <ul className="report-bullets">
-              {(report.sections[key]?.bullets ?? []).map((b) => (
-                <li key={b.text}>
-                  {b.text}
-                  {b.refs.length > 0 ? (
-                    b.refs.map((n) => (
-                      <a key={n} className="report-ref" href={`#ref-${saved.id}-${n}`} title={saved.articles[n - 1]?.title}>
-                        [{n}]
-                      </a>
-                    ))
-                  ) : (
-                    <span className="basis basis-ai_background" title="원래 기사 내용에서 확인되지 않은 문장">
-                      근거 없음 · 확인 필요
-                    </span>
+            {/* 기사에서 확인된 내용과 AI 해설·제안을 섞지 않고 나눠 보여 준다 (15 문서 F15) */}
+            {(() => {
+              const list = report.sections[key]?.bullets ?? []
+              const facts = list.filter((b) => kindOf(b) === 'fact')
+              const ai = list.filter((b) => kindOf(b) === 'ai')
+              return (
+                <>
+                  {facts.length > 0 && (
+                    <ul className="report-bullets">
+                      {facts.map((b) => (
+                        <li key={b.text}>
+                          {b.text}
+                          {b.refs.map((n) => (
+                            <a key={n} className="report-ref" href={`#ref-${saved.id}-${n}`} title={saved.articles[n - 1]?.title}>
+                              [{n}]
+                            </a>
+                          ))}
+                          {b.han && <span className="basis basis-ai_background">한자 확인</span>}
+                        </li>
+                      ))}
+                    </ul>
                   )}
-                  {b.han && <span className="basis basis-ai_background">한자 확인</span>}
-                </li>
-              ))}
-            </ul>
+                  {ai.length > 0 && (
+                    <div className="report-ai">
+                      <p className="report-ai-label">AI 해설·제안 · 기사에서 확인된 내용이 아니에요, 확인 후 쓰세요</p>
+                      <ul className="report-bullets">
+                        {ai.map((b) => (
+                          <li key={b.text}>
+                            {b.text}
+                            {b.han && <span className="basis basis-ai_background">한자 확인</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {facts.length === 0 && ai.length === 0 && <p className="hint">내용 없음</p>}
+                </>
+              )
+            })()}
           </section>
         ))}
 
