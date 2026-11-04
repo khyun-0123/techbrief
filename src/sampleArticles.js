@@ -13,7 +13,8 @@ export const SAMPLE_ARTICLES = [
   { id: 10, title: '기업용 AI 에이전트 보안 가이드라인 공개', source: 'IT뉴스룸', keyword: '생성형 AI', hoursAgo: 120, sameIssue: 0 },
 ]
 
-export const DEFAULT_KEYWORDS = ['생성형 AI', '반도체', '클라우드']
+// 고객사(LG디스플레이) 담당자님이 요즘 자주 본다고 한 기술 (14 문서). DB에 키워드가 없을 때 처음 한 번 쓰인다
+export const DEFAULT_KEYWORDS = ['마이크로LED', '마이크로 디스플레이', 'OLED']
 
 // AI 요약 연결 전까지 쓰는 샘플 요약 (06 와이어프레임 「뉴스 선별 요약」 화면 기준)
 // importance: 'high' | 'normal'
