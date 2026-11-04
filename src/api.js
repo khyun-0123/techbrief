@@ -21,8 +21,9 @@ export async function fetchArticles() {
 }
 
 // 기사 찾기: 등록 키워드와 상관없이 네이버에서 바로 찾는다 (DB에 쌓지 않음)
-export function searchNewsApi(query) {
-  return postJson('/api/search', { query })
+// period: 'today' | 'week' | 'all' (18 문서)
+export function searchNewsApi(query, period = 'all') {
+  return postJson('/api/search', { query, period })
 }
 
 // 즐겨찾는 검색어 (팀 공용, 자동 수집과 별개)
