@@ -74,16 +74,12 @@ export function runRefresh(keywords) {
   return postJson('/api/refresh/run', { keywords })
 }
 
-// 자동 최신화 설정 잠금 해제: 비밀번호만 확인한다
-export function unlockRefresh(password) {
-  return postJson('/api/refresh/unlock', { password })
-}
-
-export async function saveRefreshSettings(settings, password) {
+// 자동 최신화 설정: 관리자만 (17 문서). 로그인 쿠키가 같이 간다
+export async function saveRefreshSettings(settings) {
   const res = await fetch('/api/refresh/settings', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...settings, password }),
+    body: JSON.stringify(settings),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
@@ -169,7 +165,7 @@ export function importReports(reports) {
 
 export async function deleteReportApi(id) {
   const res = await fetch(`/api/reports/${encodeURIComponent(id)}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error('보고서를 지우지 못했어요')
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '보고서를 지우지 못했어요')
 }
 
 // DB에 저장된 요약 (다른 브라우저에서 만든 요약도 보이게)
@@ -190,6 +186,29 @@ export async function saveKeywordsApi(keywords) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ keywords }),
   })
-  if (!res.ok) throw new Error('키워드를 저장하지 못했어요')
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '키워드를 저장하지 못했어요')
   return res.json()
+}
+
+// ── 관리자 (17 문서) ──
+// { configured: 관리자 비밀번호가 서버에 있는지, admin: { name } | null }
+export async function fetchAdminMe() {
+  const res = await fetch('/api/admin/me')
+  if (!res.ok) throw new Error('관리자 상태를 불러오지 못했어요')
+  return res.json()
+}
+
+export function adminLogin(password, name) {
+  return postJson('/api/admin/login', { password, name })
+}
+
+export function adminLogout() {
+  return postJson('/api/admin/logout', {})
+}
+
+export async function fetchAdminLog() {
+  const res = await fetch('/api/admin/log')
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? '변경 기록을 불러오지 못했어요')
+  return data.log
 }

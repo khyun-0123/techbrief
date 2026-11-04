@@ -1,6 +1,5 @@
-// 수집 설정 아래 「자동 최신화」: 지금 최신화 버튼, 주기 설정, 마지막·다음 실행과 진행 상황
-// 주기·자동 요약 설정은 잠겨 있고 비밀번호를 넣어야 바꿀 수 있다 (팀원이 모르고 바꾸지 않게). 비밀번호는 새로고침하면 다시 물어본다
-import { useState } from 'react'
+// 「자동 최신화」: 지금 최신화 버튼, 주기 설정, 마지막·다음 실행과 진행 상황
+// 주기·자동 요약 설정은 모두에게 영향을 주므로 관리자 화면(canEdit)에서만 바꾼다. 일반 화면은 보기만 (17 문서)
 
 const MODE_LABEL = { off: '꺼짐', daily: '매일 정해진 시각', interval: '몇 시간마다' }
 
@@ -32,29 +31,14 @@ function backlogText(b) {
   return '자동 요약 대기 없음'
 }
 
-function RefreshPanel({ status, error, starting, disabled, onRun, onSave, onUnlock }) {
+function RefreshPanel({ status, error, starting, disabled, onRun, onSave, canEdit = false }) {
   const settings = status?.settings
   const running = status?.running
   const busy = starting || Boolean(running)
-  const [password, setPassword] = useState(null) // 잠금을 푼 비밀번호 (null이면 잠김)
-  const [typed, setTyped] = useState('')
-  const [unlockError, setUnlockError] = useState('')
-  const locked = password === null
+  const locked = !canEdit
 
   function change(patch) {
-    onSave({ ...settings, ...patch }, password)
-  }
-
-  async function unlock(e) {
-    e.preventDefault()
-    setUnlockError('')
-    try {
-      await onUnlock(typed)
-      setPassword(typed)
-      setTyped('')
-    } catch (err) {
-      setUnlockError(err.message)
-    }
+    onSave({ ...settings, ...patch })
   }
 
   return (
@@ -85,26 +69,7 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, onUnlo
 
       {settings && (
         <div className="refresh-settings">
-          <h3>자동 최신화{locked && <span className="refresh-lock"> 🔒 잠김</span>}</h3>
-          {locked ? (
-            <form className="refresh-unlock" onSubmit={unlock}>
-              <input
-                type="password"
-                aria-label="설정 비밀번호"
-                placeholder="비밀번호를 넣으면 설정을 바꿀 수 있어요"
-                value={typed}
-                onChange={(e) => setTyped(e.target.value)}
-              />
-              <button type="submit" className="btn" disabled={!typed}>
-                잠금 해제
-              </button>
-            </form>
-          ) : (
-            <button type="button" className="btn refresh-relock" onClick={() => setPassword(null)}>
-              다시 잠그기
-            </button>
-          )}
-          {unlockError && <p className="ai-error">{unlockError}</p>}
+          <h3>자동 최신화{locked && <span className="refresh-lock"> 관리자가 정해요</span>}</h3>
           <label htmlFor="refresh-mode">주기</label>
           <select id="refresh-mode" disabled={locked} value={settings.mode} onChange={(e) => change({ mode: e.target.value })}>
             {Object.entries(MODE_LABEL).map(([value, label]) => (

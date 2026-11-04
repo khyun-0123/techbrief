@@ -74,16 +74,9 @@ export async function refreshStatus() {
   }
 }
 
-// 자동 최신화 설정(자동 요약 켜기/끄기 포함)은 비밀번호를 아는 사람만 바꾼다 (팀원이 모르고 바꾸지 않게).
-// .env.local의 REFRESH_PASSWORD, 없으면 'password'. 「지금 최신화」는 누구나 누를 수 있다
-export function checkRefreshPassword(password) {
-  if (password !== (process.env.REFRESH_PASSWORD || 'password')) {
-    throw Object.assign(new Error('비밀번호가 맞지 않아요.'), { status: 401 })
-  }
-}
-
+// 자동 최신화 설정(자동 요약 켜기/끄기 포함)은 관리자만 바꾼다 — 권한 확인은 API(server/index.js)에서 (17 문서)
+// 「지금 최신화」는 누구나 누를 수 있다 (일반 사용자는 10분에 한 번)
 export async function saveRefreshSettings(input) {
-  checkRefreshPassword(input.password)
   const before = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
   const settings = normalizeSettings({ ...input, enabledAt: before.enabledAt })
   // 꺼짐→켜짐이거나 주기를 바꾸면 지금부터 센다

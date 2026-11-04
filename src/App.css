@@ -1291,26 +1291,6 @@ a.btn {
   font-weight: normal;
 }
 
-/* 자동 최신화 설정 잠금 해제 */
-.refresh-unlock {
-  display: flex;
-  gap: 6px;
-}
-
-.refresh-unlock input {
-  flex: 1;
-  min-width: 0;
-}
-
-.refresh-unlock .btn,
-.refresh-relock {
-  white-space: nowrap;
-}
-
-.refresh-relock {
-  font-size: 13px;
-}
-
 .refresh-settings select:disabled,
 .refresh-settings input[type='time']:disabled {
   background: #f3f5f8;
@@ -1599,6 +1579,13 @@ a.btn {
 
 .list-group {
   margin-top: 14px;
+}
+
+/* 일반 화면: 보기만 하는 목록의 이름 (17 문서) */
+.list-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .list-hint {
@@ -1972,4 +1959,81 @@ a.btn {
   body.printing-report .report-ai {
     break-inside: avoid;
   }
+}
+
+/* ── 관리자 (17 문서) ── */
+.admin-link {
+  margin-left: 12px;
+  color: #5b6677;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.admin-login {
+  display: grid;
+  gap: 8px;
+  max-width: 360px;
+  margin: 40px auto;
+  padding: 24px;
+}
+
+.admin-login h2 {
+  margin: 0 0 4px;
+}
+
+.admin-login .btn {
+  margin-top: 8px;
+}
+
+.admin-who {
+  margin-right: 8px;
+  color: #5b6677;
+  font-size: 13px;
+}
+
+.admin-notice {
+  margin: 0 0 12px;
+  color: #0f766e;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.admin-card {
+  padding: 20px;
+}
+
+.admin-card h2 {
+  margin-top: 0;
+}
+
+.admin-card select {
+  width: 100%;
+}
+
+.admin-log {
+  grid-column: 1 / -1;
+}
+
+.admin-log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin-log-table th,
+.admin-log-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #e5e8ee;
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-log-table td.time {
+  white-space: nowrap;
+  color: #5b6677;
 }

@@ -26,7 +26,8 @@ import {
   SECTION_KEYS,
   SECTION_SCHEMA,
 } from './llm/reportPrompts.js'
-import { checkRefreshPassword, refreshStatus, saveRefreshSettings, startRefresh, startScheduler } from './refresh.js'
+import { adminConfigured, adminOf, changeLog, diffWords, login, logChange, logout, requireAdmin } from './admin.js'
+import { refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
 import { summarizeArticle } from './summarize.js'
 
 const REPORT_TIMEOUT_MS = 240_000 // 보고서는 출력이 길어 요약보다 오래 걸린다
@@ -34,8 +35,8 @@ const MAX_REPORT_ARTICLES = 10
 
 const MAX_BODY = 1_000_000 // 보고서 요청·보고서함 옮기기에는 기사 요약 여러 건이 들어간다
 
-function send(res, status, data) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' })
+function send(res, status, data, headers = {}) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', ...headers })
   res.end(JSON.stringify(data))
 }
 
@@ -172,7 +173,26 @@ async function handleReportSection(req, res) {
   send(res, 200, { key: body.key, bullets, model })
 }
 
-export { startScheduler }
+// 서버가 켜질 때: 관리자가 고른 AI 서버를 되살리고(17 문서 3-3) 자동 최신화 예약을 시작한다
+const LLM_SETTING = 'llm_provider'
+export function startScheduler() {
+  getSetting(LLM_SETTING, null)
+    .then((id) => id && selectProvider(id))
+    .catch((err) => console.warn(`[llm] 저장된 AI 서버를 쓸 수 없어 기본값으로: ${err.message}`))
+  startRefreshScheduler()
+}
+
+// 일반 사용자의 「지금 최신화」는 10분에 한 번 (17 문서 3-2). 관리자는 제한 없음
+const RUN_COOLDOWN_MS = 10 * 60_000
+async function checkRunCooldown(req) {
+  if (adminOf(req)) return
+  const { lastRunAt, running } = await refreshStatus()
+  if (running) return // 이미 돌고 있으면 startRefresh가 알아서 합친다
+  const wait = lastRunAt ? Date.parse(lastRunAt) + RUN_COOLDOWN_MS - Date.now() : 0
+  if (wait > 0) {
+    throw Object.assign(new Error(`방금 최신화했어요. ${Math.ceil(wait / 60_000)}분 뒤 다시 누를 수 있어요.`), { status: 429 })
+  }
+}
 
 // /api 요청을 처리한다. Vite 개발 서버와 단독 서버가 같이 쓴다
 export async function handleApi(req, res) {
@@ -181,10 +201,29 @@ export async function handleApi(req, res) {
       const [modelReachable, db] = await Promise.all([pingModel(), dbStatus()])
       return send(res, 200, { ok: true, model: modelName(), modelReachable, db, llm: llmProviders() })
     }
+    // ── 관리자 (17 문서) ──
+    if (req.method === 'GET' && req.url === '/api/admin/me') {
+      return send(res, 200, { configured: adminConfigured(), admin: adminOf(req) })
+    }
+    if (req.method === 'POST' && req.url === '/api/admin/login') {
+      const { cookie, name } = login(await readJson(req))
+      return send(res, 200, { admin: { name } }, { 'Set-Cookie': cookie })
+    }
+    if (req.method === 'POST' && req.url === '/api/admin/logout') {
+      return send(res, 200, { ok: true }, { 'Set-Cookie': logout(req) })
+    }
+    if (req.method === 'GET' && req.url === '/api/admin/log') {
+      requireAdmin(req)
+      return send(res, 200, { log: await changeLog() })
+    }
     if (req.method === 'PUT' && req.url === '/api/llm') {
-      // 상단에서 고른 AI 서버 (맥미니 / OpenRouter). 이 서버 메모리에만 저장
+      // AI 서버 (맥미니 / OpenRouter). 모두에게 적용되므로 관리자만, DB에 저장해 다시 켜도 유지
+      const admin = requireAdmin(req)
       const { provider } = await readJson(req)
-      return send(res, 200, selectProvider(provider))
+      const result = selectProvider(provider)
+      await setSetting(LLM_SETTING, provider)
+      await logChange(admin, 'AI 모델', providerLabel())
+      return send(res, 200, result)
     }
     if (req.method === 'POST' && req.url === '/api/summaries') {
       return await handleSummary(req, res)
@@ -194,21 +233,25 @@ export async function handleApi(req, res) {
       return send(res, 200, { summaries: await getSummaries(ids.slice(0, 200).map(String)) })
     }
     if (req.method === 'POST' && req.url === '/api/collect') {
+      // 화면에서는 쓰지 않는 예전 API. 아무 키워드나 DB에 쌓을 수 있어 관리자만
+      requireAdmin(req)
       const { keywords = [] } = await readJson(req)
       return send(res, 200, await collect(keywords))
     }
     if (req.method === 'GET' && req.url === '/api/refresh') {
       return send(res, 200, await refreshStatus())
     }
-    if (req.method === 'POST' && req.url === '/api/refresh/unlock') {
-      // 설정 잠금 해제 전에 비밀번호만 확인한다. 실제 저장(PUT)에서도 다시 확인한다
-      checkRefreshPassword((await readJson(req)).password)
-      return send(res, 200, { ok: true })
-    }
     if (req.method === 'PUT' && req.url === '/api/refresh/settings') {
-      return send(res, 200, await saveRefreshSettings(await readJson(req)))
+      // 자동 최신화 주기·자동 요약: 관리자만 (예전 비밀번호 잠금을 대신함)
+      const admin = requireAdmin(req)
+      const status = await saveRefreshSettings(await readJson(req))
+      const s = status.settings
+      const mode = s.mode === 'daily' ? `매일 ${s.time}` : s.mode === 'interval' ? `${s.hours}시간마다` : '꺼짐'
+      await logChange(admin, '자동 최신화', `${mode} · 자동 요약 ${s.autoSummary === 'off' ? '꺼짐' : '켜짐'}`)
+      return send(res, 200, status)
     }
     if (req.method === 'POST' && req.url === '/api/refresh/run') {
+      await checkRunCooldown(req)
       const { keywords = [] } = await readJson(req)
       await startRefresh(keywords.map(String).slice(0, 20))
       return send(res, 202, await refreshStatus())
@@ -231,7 +274,16 @@ export async function handleApi(req, res) {
       return send(res, 200, await getLists())
     }
     if (req.method === 'PUT' && req.url === '/api/lists') {
-      return send(res, 200, await saveLists(await readJson(req)))
+      // 자사·경쟁사·관심 기술: 중요도 점수에 쓰여 모두에게 영향 → 관리자만
+      const admin = requireAdmin(req)
+      const before = await getLists()
+      const saved = await saveLists(await readJson(req))
+      const names = { own: '자사·자회사', competitors: '경쟁사', interests: '관심 기술' }
+      for (const [key, label] of Object.entries(names)) {
+        const d = diffWords(before[key], saved[key])
+        if (d !== '변경 없음') await logChange(admin, label, d)
+      }
+      return send(res, 200, saved)
     }
     if (req.method === 'GET' && req.url === '/api/articles') {
       return send(res, 200, await listArticles())
@@ -240,9 +292,14 @@ export async function handleApi(req, res) {
       return send(res, 200, { stored: dbEnabled(), keywords: dbEnabled() ? await getKeywords() : [] })
     }
     if (req.method === 'PUT' && req.url === '/api/keywords') {
+      // 자동 수집 키워드: 관리자만
+      const admin = requireAdmin(req)
       if (!dbEnabled()) return send(res, 400, { error: 'DB가 설정되지 않았어요.' })
+      const before = await getKeywords()
       const { keywords = [] } = await readJson(req)
-      return send(res, 200, { keywords: await setKeywords(keywords) })
+      const saved = await setKeywords(keywords)
+      await logChange(admin, '자동 수집 키워드', diffWords(before, saved))
+      return send(res, 200, { keywords: saved })
     }
     if (req.method === 'GET' && req.url === '/api/reports') {
       return send(res, 200, { stored: dbEnabled(), reports: dbEnabled() ? await listReports() : [] })
@@ -255,7 +312,11 @@ export async function handleApi(req, res) {
       return send(res, 200, { reports: await listReports() })
     }
     if (req.method === 'DELETE' && req.url.startsWith('/api/reports/')) {
-      await deleteReport(decodeURIComponent(req.url.slice('/api/reports/'.length)))
+      // 공용 보고서함에서 지우면 되돌릴 수 없어 관리자만 (17 문서 3-3)
+      const admin = requireAdmin(req)
+      const id = decodeURIComponent(req.url.slice('/api/reports/'.length))
+      await deleteReport(id)
+      await logChange(admin, '보고서 삭제', id)
       return send(res, 200, { ok: true })
     }
     if (req.method === 'POST' && req.url === '/api/reports') {
