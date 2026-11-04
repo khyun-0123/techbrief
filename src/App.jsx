@@ -31,6 +31,7 @@ import { loadReports, saveReports } from './reportStore.js'
 import { useSummaryQueue } from './summaryQueue.js'
 import { DEFAULT_KEYWORDS, SAMPLE_ARTICLES } from './sampleArticles.js'
 import SelectSummary from './SelectSummary.jsx'
+import { SHOW_SENTIMENT } from './display.js'
 import SentimentBadge, { sentimentLabel, sentimentOf as pickSentiment } from './SentimentBadge.jsx'
 import SummaryItems from './SummaryItems.jsx'
 import { formatPublished, load } from './utils.js'
@@ -409,7 +410,7 @@ function App() {
     (a) =>
       (showLow || !isLow(a)) &&
       !(excludeOwn && isOwnOnly(a)) &&
-      (sentimentFilter === 'all' || sentimentOf(a) === sentimentFilter),
+      (!SHOW_SENTIMENT || sentimentFilter === 'all' || sentimentOf(a) === sentimentFilter),
   )
 
   // 정렬·필터·검색이 바뀌면 1페이지로 (13 문서 F2)
@@ -764,6 +765,7 @@ function App() {
                   <input type="checkbox" checked={showLow} onChange={(e) => toggleShowLow(e.target.checked)} />
                   관련도 낮은 기사도 보기 <span className="own-count">{lowCount}건</span>
                 </label>
+                {SHOW_SENTIMENT && (
                 <select
                   className="sentiment-filter"
                   value={sentimentFilter}
@@ -776,6 +778,7 @@ function App() {
                   <option value="중립">△ 중립만</option>
                   <option value="부정">✕ 부정만</option>
                 </select>
+                )}
                 <label className="own-toggle" title="자사·자회사만 나온 기사를 숨겨요. 경쟁사도 함께 나오면 남겨요">
                   <input type="checkbox" checked={excludeOwn} onChange={(e) => toggleExcludeOwn(e.target.checked)} />
                   자사·자회사 기사 제외 <span className="own-count">{ownCount}건</span>
