@@ -1,6 +1,8 @@
 // 긍정·중립·부정 ○ △ ✕ (13 문서 F5). 선별할지 빠르게 판단하는 보조 표시 — 투자 판단용이 아님
 // 기사 속 소식 자체의 성격 (우리 회사 입장의 유불리가 아님)
 // by: 'title'이면 제목 단어로 빠르게 판단한 것, 없으면 AI 요약의 판단
+import { SHOW_SENTIMENT } from './display.js'
+
 const MARK = { 긍정: '○', 중립: '△', 부정: '✕' }
 const CLASS = { 긍정: 'good', 중립: 'neutral', 부정: 'bad' }
 const OLD_LABEL = { 호재: '긍정', 악재: '부정' } // 예전 요약에 저장된 이름
@@ -17,7 +19,7 @@ export function sentimentOf(article, summary) {
 
 function SentimentBadge({ sentiment }) {
   const label = sentimentLabel(sentiment)
-  if (!MARK[label]) return null
+  if (!SHOW_SENTIMENT || !MARK[label]) return null
   const byTitle = sentiment.by === 'title'
   const title = byTitle
     ? '제목 단어로 빠르게 판단했어요. AI 요약이 끝나면 요약 기준으로 바뀌어요'
