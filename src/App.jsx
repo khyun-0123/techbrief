@@ -107,6 +107,13 @@ const PERIODS = [
   { value: 'all', label: '전체', hours: Infinity },
 ]
 
+// 찾기 결과가 어떤 기준인지 (18 문서)
+function searchScope(period) {
+  if (period === 'today') return '최근 24시간 · 최신순'
+  if (period === 'week') return '최근 7일 · 최신순'
+  return '기간 전체 · 정확도 높은 100건'
+}
+
 function App() {
   const [keywords, setKeywords] = useState(() => load(KEYWORDS_KEY, DEFAULT_KEYWORDS))
   const [selectedIds, setSelectedIds] = useState(() => load(SELECTED_KEY, []))
@@ -388,7 +395,7 @@ function App() {
   const listed = searchArticles
     ? searchArticles
         .map((a) => byId.get(a.id))
-        .filter((a) => source === 'all' || a.source === source)
+        .filter((a) => a.hoursAgo < maxHours && (source === 'all' || a.source === source))
         .sort((a, b) =>
           sort === 'importance' ? b.importance - a.importance || a.hoursAgo - b.hoursAgo : a.hoursAgo - b.hoursAgo,
         )
@@ -460,18 +467,30 @@ function App() {
     }
   }
 
-  async function runSearch(q) {
-    if (!q || search?.loading) return
+  // 기간(p)도 함께 보낸다: 오늘·7일은 최신순으로 그 기간만, 전체는 정확도순 100건 (18 문서)
+  // 찾는 중에 기간을 바꾸면 새 요청을 보내고, 늦게 온 이전 응답은 버린다
+  const searchSeq = useRef(0)
+  async function runSearch(q, p = period) {
+    if (!q) return
+    const seq = ++searchSeq.current
     setQuery(q)
     // 찾은 말은 최근 검색어 맨 위로 (같은 말은 하나만)
     saveRecent([q, ...recent.filter((r) => r !== q)].slice(0, RECENT_MAX))
-    setSearch({ query: q, loading: true })
+    setSearch({ query: q, period: p, loading: true })
     try {
-      const result = await searchNewsApi(q)
-      setSearch({ query: result.query, articles: result.articles })
+      const result = await searchNewsApi(q, p)
+      if (seq !== searchSeq.current) return
+      setSearch({ query: result.query, period: result.period, articles: result.articles, truncated: result.truncated, oldestAt: result.oldestAt })
     } catch (err) {
-      setSearch({ query: q, error: err.message })
+      if (seq !== searchSeq.current) return
+      setSearch({ query: q, period: p, error: err.message })
     }
+  }
+
+  // 기간을 바꾸면: 모은 기사는 화면에서 바로 거르고, 찾기 결과를 보고 있으면 그 기간으로 다시 찾는다
+  function changePeriod(p) {
+    setPeriod(p)
+    if (search?.query) runSearch(search.query, p)
   }
 
   async function changeFavorites(next) {
@@ -484,6 +503,7 @@ function App() {
   }
 
   function closeSearch() {
+    searchSeq.current++ // 찾는 중에 닫으면 늦게 온 응답이 다시 열지 않게
     setSearch(null)
     setQuery('')
   }
@@ -714,10 +734,9 @@ function App() {
                 </form>
                 <select
                   value={period}
-                  onChange={(e) => setPeriod(e.target.value)}
+                  onChange={(e) => changePeriod(e.target.value)}
                   aria-label="기간"
-                  disabled={Boolean(searchArticles)}
-                  title={searchArticles ? '찾기 결과에는 기간을 적용하지 않아요' : undefined}
+                  title={search ? '바꾸면 이 기간으로 네이버에서 다시 찾아요' : undefined}
                 >
                   {PERIODS.map((p) => (
                     <option key={p.value} value={p.value}>
@@ -741,9 +760,14 @@ function App() {
               {search ? (
                 <div className="search-banner">
                   <span>
-                    <strong>‘{search.query}’</strong> 네이버 찾기 결과
+                    <strong>‘{search.query}’</strong> 네이버 찾기 결과 · {searchScope(search.period)}
                     {search.articles && ` · 이슈 ${visible.length}개 · 기사 ${countArticles(visible)}건`}
                     {search.loading && ' · 찾는 중…'}
+                    {search.truncated && (
+                      <span className="search-note">
+                        {' '}· 기사가 많아 {new Date(search.oldestAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} 이후 것만 가져왔어요. 더 구체적인 말로 찾아보세요
+                      </span>
+                    )}
                     <span className="search-note"> · 수집 목록에는 쌓이지 않아요. 선별·요약하면 그 기사만 남아요</span>
                   </span>
                   <button type="button" className="btn" onClick={closeSearch}>
@@ -791,8 +815,17 @@ function App() {
                   {search
                     ? search.loading
                       ? '네이버에서 찾는 중이에요…'
-                      : '찾은 기사가 없어요. 다른 말로 찾아보세요.'
+                      : search.error
+                        ? '찾지 못했어요. 잠시 뒤 다시 찾아보세요.'
+                        : search.period !== 'all'
+                          ? '이 기간에는 찾은 기사가 없어요.'
+                          : '찾은 기사가 없어요. 다른 말로 찾아보세요.'
                     : '조건에 맞는 기사가 없어요. 기간을 넓히거나 「네이버에서 찾기」를 눌러 보세요.'}
+                  {search?.articles && search.period !== 'all' && (
+                    <button type="button" className="btn outline empty-action" onClick={() => changePeriod('all')}>
+                      전체 기간으로 다시 찾기
+                    </button>
+                  )}
                 </p>
               ) : (
                 <table className="articles">

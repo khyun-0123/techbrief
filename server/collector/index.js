@@ -209,17 +209,41 @@ export async function listArticles({ regroup = false } = {}) {
   return { articles, total: stored.length, lastCollectedAt, storage: dbEnabled() ? 'db' : 'memory' }
 }
 
-// 「기사 찾기」: 등록 키워드와 상관없이 네이버에서 바로 찾는다. 정확도순 100건
+// 「기사 찾기」: 등록 키워드와 상관없이 네이버에서 바로 찾는다
 // 수집이 아니라 찾아보기라서 DB에 쌓지 않는다 (추이 집계에도 넣지 않음). 요약하면 요약만 저장된다
-export async function searchArticles(query) {
+// period (18 문서): 네이버 검색 API에는 기간 조건이 없다
+// - 'all': 정확도순 100건 (기간 제한 없음)
+// - 'today'·'week': 최신순으로 100건씩 넘겨 받다가 기간을 벗어나면 멈춘다. 호출 한도를 생각해 최대 SEARCH_PAGES쪽까지
+export const SEARCH_PERIODS = { today: 24, week: 24 * 7, all: null }
+const SEARCH_PAGES = { today: 3, week: 5 }
+
+export async function searchArticles(query, { period = 'all' } = {}) {
   const q = String(query ?? '').trim().slice(0, 50)
   if (!q) throw Object.assign(new Error('찾을 말을 입력해 주세요.'), { status: 400 })
-  const items = await searchNews(q, { sort: 'sim' })
+  if (!(period in SEARCH_PERIODS)) period = 'all'
+  const hours = SEARCH_PERIODS[period]
+  let items = []
+  let truncated = false
+  if (hours === null) {
+    items = await searchNews(q, { sort: 'sim' })
+  } else {
+    const since = Date.now() - hours * 3600_000
+    const inPeriod = (item) => Date.parse(item.pubDate) >= since
+    for (let page = 0; page < SEARCH_PAGES[period]; page++) {
+      const batch = await searchNews(q, { sort: 'date', start: page * 100 + 1 })
+      items.push(...batch.filter(inPeriod))
+      const reachedEnd = batch.length < 100 || !batch.every(inPeriod)
+      if (reachedEnd) break
+      if (page === SEARCH_PAGES[period] - 1) truncated = true // 기간 안 기사가 더 있지만 여기까지만
+    }
+  }
   const articles = items.map((item, i) => ({ ...toArticle(item, q), rank: i + 1 })).filter((a) => a.url && a.title)
   const unique = [...new Map(articles.map((a) => [a.url, a])).values()]
   const issues = toIssues(unique, await getLists())
   if (dbEnabled()) await linkToCollected(issues)
-  return { query: q, fetched: items.length, articles: issues }
+  // truncated일 때 실제로 어디까지 가져왔는지 (예: '반도체' 7일 → 최신 500건이 약 7시간치)
+  const oldestAt = truncated ? items.map((i) => new Date(i.pubDate).toISOString()).sort()[0] : null
+  return { query: q, period, fetched: items.length, truncated, oldestAt, articles: issues }
 }
 
 // 찾기 결과 중 이미 모은 기사와 같은 이슈인 것은 그 이슈의 요약(summaryId)과 점수를 함께 쓴다

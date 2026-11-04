@@ -214,8 +214,8 @@ export async function handleApi(req, res) {
       return send(res, 202, await refreshStatus())
     }
     if (req.method === 'POST' && req.url === '/api/search') {
-      const { query } = await readJson(req)
-      return send(res, 200, await searchArticles(query))
+      const { query, period } = await readJson(req)
+      return send(res, 200, await searchArticles(query, { period }))
     }
     if (req.method === 'GET' && req.url === '/api/favorites') {
       return send(res, 200, { favorites: await getSetting('favorite_queries', []) })
