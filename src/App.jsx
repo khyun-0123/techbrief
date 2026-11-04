@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import './App.css'
 import {
   deleteReportApi,
+  fetchAdminMe,
   fetchArticles,
   fetchFavorites,
   fetchHealth,
@@ -13,12 +14,7 @@ import {
   lookupSummaries,
   runRefresh,
   saveFavoritesApi,
-  saveKeywordsApi,
-  saveListsApi,
-  saveRefreshSettings,
   searchNewsApi,
-  selectLlmProvider,
-  unlockRefresh,
 } from './api.js'
 import FavoritesRail from './FavoritesRail.jsx'
 import ListsPanel from './ListsPanel.jsx'
@@ -111,7 +107,6 @@ function App() {
   const [selectedIds, setSelectedIds] = useState(() => load(SELECTED_KEY, []))
   const [includedIds, setIncludedIds] = useState(() => load(INCLUDED_KEY, []))
   const [screen, setScreen] = useState('collect')
-  const [keywordInput, setKeywordInput] = useState('')
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState('today')
   const [source, setSource] = useState('all')
@@ -126,7 +121,6 @@ function App() {
   const [extraArticles, setExtraArticles] = useState(() => load(EXTRA_KEY, []))
   const [page, setPage] = useState(1)
   const [lists, setLists] = useState(null) // 자사·경쟁사·관심 기술 (팀 공용)
-  const [listsError, setListsError] = useState('')
   const [excludeOwn, setExcludeOwn] = useState(() => load(EXCLUDE_OWN_KEY, false))
   const [showLow, setShowLow] = useState(() => load(SHOW_LOW_KEY, false)) // 관련도 낮은 기사도 보기 (F4)
   // 요약된 기사 먼저: 지금 정렬은 그대로 두고 요약된 기사를 위로 (요약을 먼저 보고 고르게)
@@ -161,18 +155,6 @@ function App() {
       .then(setFavorites)
       .catch(() => {})
   }, [reloadArticles])
-
-  // 목록을 바꾸면 저장하고 기사(중요도·자사 표시)를 다시 계산해 받는다
-  async function saveLists(next) {
-    setLists(next)
-    setListsError('')
-    try {
-      setLists(await saveListsApi(next))
-      await reloadArticles()
-    } catch (err) {
-      setListsError(err.message)
-    }
-  }
 
   function toggleSummarizedFirst(on) {
     setSummarizedFirst(on)
@@ -230,7 +212,13 @@ function App() {
   }, [])
   const [health, setHealth] = useState(null) // { model, modelReachable } | { error }
 
-  const [switchingLlm, setSwitchingLlm] = useState(false)
+  // 관리자로 로그인했는지 (쿠키). 공용 보고서 지우기 같은 관리자 전용 버튼에 쓴다 (17 문서)
+  const [admin, setAdmin] = useState(null)
+  useEffect(() => {
+    fetchAdminMe()
+      .then((me) => setAdmin(me.admin))
+      .catch(() => {})
+  }, [])
 
   // 상단 메뉴 오른쪽의 AI 연결 상태 (1분마다 확인)
   useEffect(() => {
@@ -247,18 +235,6 @@ function App() {
     }
   }, [])
 
-  // 상단에서 AI 서버를 바꾸면 바로 연결 상태를 다시 확인한다
-  async function handleSelectLlm(provider) {
-    setSwitchingLlm(true)
-    try {
-      await selectLlmProvider(provider)
-      setHealth(await fetchHealth())
-    } catch (err) {
-      alert(err.message)
-    } finally {
-      setSwitchingLlm(false)
-    }
-  }
   const llmLabel = health?.llm?.providers.find((p) => p.id === health.llm.current)?.label ?? 'AI 서버'
 
   // DB가 없을 때만 브라우저에 저장한다 (DB가 있으면 서버가 저장)
@@ -274,6 +250,8 @@ function App() {
     if (reportsInDb) await deleteReportApi(id)
     updateReports((list) => list.filter((r) => r.id !== id))
   }
+  // 공용 보고서함(DB)은 관리자만 지운다. 브라우저에만 있는 보고서함은 각자 지움
+  const canDeleteReport = !reportsInDb || Boolean(admin)
 
   useEffect(() => {
     localStorage.setItem(AI_SUMMARIES_KEY, JSON.stringify(aiSummaries))
@@ -322,34 +300,22 @@ function App() {
     onDone: (id, result) => setAiSummaries((prev) => ({ ...prev, [id]: result })),
   })
 
-  const [keywordsInDb, setKeywordsInDb] = useState(false)
-
   useEffect(() => {
     localStorage.setItem(KEYWORDS_KEY, JSON.stringify(keywords))
   }, [keywords])
 
-  // 키워드: DB가 있으면 팀이 같이 쓰는 목록을 불러온다. DB가 비어 있으면 이 브라우저의 키워드를 올린다
+  // 자동 수집 키워드: 관리자가 정한 팀 공용 목록(DB)을 불러온다. 바꾸는 곳은 관리자 화면 (17 문서)
   useEffect(() => {
     let alive = true
     fetchKeywords()
-      .then(async ({ stored, keywords: serverWords }) => {
-        if (!alive || !stored) return
-        const words = serverWords.length ? serverWords : (await saveKeywordsApi(load(KEYWORDS_KEY, DEFAULT_KEYWORDS))).keywords
-        if (!alive) return
-        setKeywords(words)
-        setKeywordsInDb(true)
+      .then(({ stored, keywords: serverWords }) => {
+        if (alive && stored && serverWords.length) setKeywords(serverWords)
       })
       .catch(() => {})
     return () => {
       alive = false
     }
   }, [])
-
-  // 키워드를 바꾸면 DB에도 저장
-  function changeKeywords(next) {
-    setKeywords(next)
-    if (keywordsInDb) saveKeywordsApi(next).catch((err) => setRefreshError(err.message))
-  }
 
   useEffect(() => {
     localStorage.setItem(SELECTED_KEY, JSON.stringify(selectedIds))
@@ -432,18 +398,6 @@ function App() {
     document.querySelector('.list-panel')?.scrollIntoView({ block: 'start' })
   }
 
-  function handleAddKeyword(e) {
-    e.preventDefault()
-    const word = keywordInput.trim()
-    if (!word || keywords.includes(word)) return
-    changeKeywords([...keywords, word])
-    setKeywordInput('')
-  }
-
-  function handleRemoveKeyword(word) {
-    changeKeywords(keywords.filter((k) => k !== word))
-  }
-
   // 「기사 찾기」: 등록 키워드와 상관없이 네이버에서 바로 찾는다
   async function handleSearch(e) {
     e.preventDefault()
@@ -496,15 +450,6 @@ function App() {
       setRefreshError(err.message)
     } finally {
       setStarting(false)
-    }
-  }
-
-  async function handleRefreshSettings(settings, password) {
-    setRefreshError('')
-    try {
-      setRefresh(await saveRefreshSettings(settings, password))
-    } catch (err) {
-      setRefreshError(err.message)
     }
   }
 
@@ -577,23 +522,11 @@ function App() {
         </button>
         </div>
         <span className="topbar-side">
+          {/* AI 모델은 모두에게 적용되므로 관리자 화면에서 고른다. 여기서는 보기만 (17 문서) */}
           {health?.llm && (
-            <label className="llm-pick" title="요약·보고서에 쓸 AI 모델">
-              AI 모델
-              <select
-                className="llm-select"
-                value={health.llm.current}
-                disabled={switchingLlm}
-                onChange={(e) => handleSelectLlm(e.target.value)}
-              >
-                {health.llm.providers.map((p) => (
-                  <option key={p.id} value={p.id} disabled={!p.ready}>
-                    {/* 예: 맥미니 · qwen3:14b, OpenRouter · dots-3-note-preview:free (회사 이름 앞부분은 줄임) */}
-                    {p.label} · {p.ready ? p.model.split('/').pop() : '설정 없음'}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <span className="llm-pick" title="요약·보고서에 쓰는 AI 모델 (관리자가 정해요)">
+              AI 모델 {llmLabel} · {health.llm.providers.find((p) => p.id === health.llm.current)?.model.split('/').pop() || '설정 없음'}
+            </span>
           )}
           {health === null ? null : health.error ? (
             <span className="ai-status off">● 서버 연결 안 됨</span>
@@ -617,7 +550,7 @@ function App() {
       {screen === 'archive' ? (
         <ReportArchive
           reports={reports}
-          onDelete={handleDeleteReport}
+          onDelete={canDeleteReport ? handleDeleteReport : undefined}
           onGoDraft={() => setScreen(reportArticles.length ? 'report' : 'select')}
         />
       ) : screen === 'report' ? (
@@ -944,36 +877,23 @@ function App() {
 
             <aside className="panel settings">
               <h2>수집 설정</h2>
-              <form onSubmit={handleAddKeyword}>
-                <label htmlFor="keyword">키워드</label>
-                <input
-                  id="keyword"
-                  type="text"
-                  placeholder="키워드를 입력하고 Enter"
-                  value={keywordInput}
-                  onChange={(e) => setKeywordInput(e.target.value)}
-                />
-              </form>
+              <p className="list-label">자동 수집 키워드</p>
               <div className="chips">
                 {keywords.map((k) => (
                   <span key={k} className="chip">
                     {k}
-                    <button type="button" onClick={() => handleRemoveKeyword(k)} aria-label={`${k} 삭제`}>
-                      ×
-                    </button>
                   </span>
                 ))}
               </div>
+              <p className="list-hint">모두가 같이 쓰는 목록이라 관리자가 정해요. 다른 말은 「네이버에서 찾기」로 찾아보세요.</p>
               <RefreshPanel
                 status={refresh}
                 error={refreshError}
                 starting={starting}
                 disabled={keywords.length === 0}
                 onRun={handleRefresh}
-                onSave={handleRefreshSettings}
-                onUnlock={unlockRefresh}
               />
-              <ListsPanel lists={lists} onSave={saveLists} error={listsError} />
+              <ListsPanel lists={lists} />
               {isSample && <p className="hint">샘플 기사는 화면 확인용이라 등록 키워드와 상관없이 모두 보여요.</p>}
             </aside>
           </div>

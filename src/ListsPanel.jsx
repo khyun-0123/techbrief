@@ -1,4 +1,5 @@
-// 수집 설정 아래 「회사·관심 기술」: 자사·자회사 / 경쟁사 / 관심 기술 목록 (13 문서 F6, 팀 공용)
+// 「회사·관심 기술」: 자사·자회사 / 경쟁사 / 관심 기술 목록 (13 문서 F6, 팀 공용)
+// 중요도 점수에 쓰여 모두에게 영향을 주므로 관리자 화면에서만 바꾼다. 일반 화면은 보기만 (17 문서)
 import { useState } from 'react'
 
 const GROUPS = [
@@ -7,7 +8,8 @@ const GROUPS = [
   ['interests', '관심 기술', '관련도·중요도 판단에 쓸 예정이에요', '예: 마이크로LED'],
 ]
 
-function ChipList({ id, label, hint, placeholder, words, onChange }) {
+// onChange가 없으면 보기만
+export function ChipList({ id, label, hint, placeholder, words, onChange }) {
   const [input, setInput] = useState('')
   function add(e) {
     e.preventDefault()
@@ -17,19 +19,25 @@ function ChipList({ id, label, hint, placeholder, words, onChange }) {
   }
   return (
     <div className="list-group">
-      <form onSubmit={add}>
-        <label htmlFor={`list-${id}`}>{label}</label>
-        <input id={`list-${id}`} type="text" placeholder={placeholder} value={input} onChange={(e) => setInput(e.target.value)} />
-      </form>
+      {onChange ? (
+        <form onSubmit={add}>
+          <label htmlFor={`list-${id}`}>{label}</label>
+          <input id={`list-${id}`} type="text" placeholder={placeholder} value={input} onChange={(e) => setInput(e.target.value)} />
+        </form>
+      ) : (
+        <p className="list-label">{label}</p>
+      )}
       <p className="list-hint">{hint}</p>
       <div className="chips">
         {words.length === 0 && <span className="list-empty">아직 없어요</span>}
         {words.map((w) => (
           <span key={w} className="chip">
             {w}
-            <button type="button" onClick={() => onChange(words.filter((x) => x !== w))} aria-label={`${w} 삭제`}>
-              ×
-            </button>
+            {onChange && (
+              <button type="button" onClick={() => onChange(words.filter((x) => x !== w))} aria-label={`${w} 삭제`}>
+                ×
+              </button>
+            )}
           </span>
         ))}
       </div>
@@ -37,7 +45,8 @@ function ChipList({ id, label, hint, placeholder, words, onChange }) {
   )
 }
 
-function ListsPanel({ lists, onSave, error }) {
+// 일반 화면: 보기만. 바꾸는 곳은 관리자 화면(AdminApp)
+function ListsPanel({ lists }) {
   if (!lists) return null
   return (
     <details className="lists-panel">
@@ -52,13 +61,26 @@ function ListsPanel({ lists, onSave, error }) {
           hint={hint}
           placeholder={placeholder}
           words={lists[key]}
-          onChange={(next) => onSave({ ...lists, [key]: next })}
         />
       ))}
-      <p className="hint">팀이 같이 쓰는 목록이에요. 바꾸면 모두에게 적용돼요.</p>
-      {error && <p className="ai-error">{error}</p>}
+      <p className="hint">팀이 같이 쓰는 목록이라 관리자가 정해요.</p>
     </details>
   )
+}
+
+// 관리자 화면: 세 목록을 바꿔 저장 (17 문서)
+export function ListsEditor({ lists, onSave }) {
+  return GROUPS.map(([key, label, hint, placeholder]) => (
+    <ChipList
+      key={key}
+      id={key}
+      label={label}
+      hint={hint}
+      placeholder={placeholder}
+      words={lists[key]}
+      onChange={(next) => onSave({ ...lists, [key]: next })}
+    />
+  ))
 }
 
 export default ListsPanel

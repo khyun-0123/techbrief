@@ -1,4 +1,5 @@
 // 보고서함 — 지금까지 만든 보고서 목록
+// onDelete가 없으면 「지우기」를 숨긴다 (공용 보고서함은 관리자만 지움, 17 문서)
 import { useState } from 'react'
 import { copyText, formatDate, toPlainText } from './reportStore.js'
 import ReportView from './ReportView.jsx'
@@ -13,11 +14,15 @@ function ReportArchive({ reports, onDelete, onGoDraft }) {
     setNotice('개조식 텍스트를 복사했어요.')
   }
 
-  function handleDelete() {
-    if (!window.confirm(`「${open.report.title}」 보고서를 지울까요?`)) return
-    onDelete(open.id)
-    setOpenId(null)
-    setNotice('')
+  async function handleDelete() {
+    if (!window.confirm(`「${open.report.title}」 보고서를 지울까요? 모두의 보고서함에서 지워지고 되돌릴 수 없어요.`)) return
+    try {
+      await onDelete(open.id)
+      setOpenId(null)
+      setNotice('')
+    } catch (err) {
+      setNotice(err.message)
+    }
   }
 
   return (
@@ -68,9 +73,11 @@ function ReportArchive({ reports, onDelete, onGoDraft }) {
                   <button type="button" className="btn" onClick={handleCopy}>
                     텍스트 복사
                   </button>
-                  <button type="button" className="btn-text danger" onClick={handleDelete}>
-                    지우기
-                  </button>
+                  {onDelete && (
+                    <button type="button" className="btn-text danger" onClick={handleDelete}>
+                      지우기
+                    </button>
+                  )}
                 </>
               }
             />
