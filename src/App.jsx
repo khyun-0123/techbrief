@@ -544,6 +544,9 @@ function App() {
               ● AI 연결 안 됨
             </span>
           )}
+          <a className="admin-link" href="/admin" title="키워드·회사·관심 기술·자동 최신화·AI 모델 설정">
+            {admin ? `관리자 (${admin.name})` : '관리자'}
+          </a>
         </span>
       </nav>
 

@@ -1957,10 +1957,10 @@ a.btn {
 
 /* ── 관리자 (17 문서) ── */
 .admin-link {
-  display: inline-block;
-  margin-top: 16px;
+  margin-left: 12px;
   color: #5b6677;
   font-size: 13px;
+  white-space: nowrap;
 }
 
 .admin-login {
