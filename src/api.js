@@ -281,3 +281,22 @@ export async function restartServerApi() {
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
   return data
 }
+
+// 수집 출처 (관리자): 네이버 밖 출처 목록 · 끈 출처 · 지난 수집 결과 (14 문서 4-B)
+export async function fetchSources() {
+  const res = await fetch('/api/admin/sources')
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? '수집 출처를 불러오지 못했어요')
+  return data
+}
+
+export async function saveSourcesApi(disabled) {
+  const res = await fetch('/api/admin/sources', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ disabled }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}

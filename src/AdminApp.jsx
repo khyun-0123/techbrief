@@ -28,6 +28,7 @@ import LogoMark from './Logo.jsx'
 import AdminRefresh from './AdminRefresh.jsx'
 import AdminUsage from './AdminUsage.jsx'
 import AdminOps from './AdminOps.jsx'
+import AdminSources from './AdminSources.jsx'
 import { OPS_LABEL } from './ops.js'
 
 const SECTIONS = [
@@ -690,6 +691,10 @@ function AdminApp() {
               <h2>회사 · 관심 기술</h2>
               <p className="adm-desc">중요도 점수(경쟁사 언급·관심 기술)와 「자사·자회사 기사 제외」에 쓰여요.</p>
               {view.lists && <ListsEditor lists={view.lists} onSave={(next) => change('lists', next)} />}
+            </section>
+            <section className="adm-card adm-span">
+              <h2>수집 출처</h2>
+              <AdminSources onToast={setToast} />
             </section>
           </div>
         )}

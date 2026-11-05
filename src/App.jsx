@@ -49,6 +49,8 @@ const SHOW_LOW_KEY = 'techbrief-show-low'
 const SUMMARIZED_FIRST_KEY = 'techbrief-summarized-first'
 const RECENT_KEY = 'techbrief-recent-searches' // 최근 검색어 (이 브라우저에만)
 const RECENT_MAX = 10
+// 출처 단계 (14 문서 4-B). 서버 collector/feeds.js와 같은 구분
+const TIER_TITLE = { 1: '1차 출처: 기업 발표·학회·논문', 2: '2차 출처: 전문매체', 3: '3차 출처: 일반 뉴스' }
 const EXTRA_KEY = 'techbrief-extra-articles' // 「기사 찾기」 결과에서 선별한 기사 (수집 목록에 없는 것)
 const MAX_SAVED = 400
 
@@ -385,6 +387,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     return [...base, ...more.map(toView)]
   }, [isSample, fetched, extraArticles, searchArticles])
   const sources = useMemo(() => [...new Set(pool.map((a) => a.source))].sort(), [pool])
+  // 출처 거르기: 'all' · 'tier:1'(1차 기업·학회·논문) · 'tier:2'(2차 전문매체) · 'tier:3'(3차 일반 뉴스) · 매체 이름
+  const sourceMatch = (a) => source === 'all' || (source.startsWith('tier:') ? String(a.tier ?? 3) === source.slice(5) : a.source === source)
 
   // 수집 대상: 등록한 키워드에 해당하는 기사. 샘플은 키워드와 상관없이 모두 보여 준다 (샘플 키워드가 기본 키워드와 다름)
   const collected = isSample ? SAMPLE_ARTICLES : fetched.map(toView).filter((a) => keywords.includes(a.keyword))
@@ -399,7 +403,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const listed = searchArticles
     ? searchArticles
         .map((a) => byId.get(a.id))
-        .filter((a) => a.hoursAgo < maxHours && (source === 'all' || a.source === source))
+        .filter((a) => a.hoursAgo < maxHours && sourceMatch(a))
         .sort((a, b) =>
           sort === 'importance' ? b.importance - a.importance || a.hoursAgo - b.hoursAgo : a.hoursAgo - b.hoursAgo,
         )
@@ -407,7 +411,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     .filter(
       (a) =>
         a.hoursAgo < maxHours &&
-        (source === 'all' || a.source === source) &&
+        sourceMatch(a) &&
         (!q || a.title.toLowerCase().includes(q) || a.keyword.toLowerCase().includes(q)),
     )
     .sort((a, b) => (sort === 'importance' ? (b.importance ?? 0) - (a.importance ?? 0) : 0) || a.hoursAgo - b.hoursAgo)
@@ -685,7 +689,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               <p>
                 {isSample
                   ? '키워드로 기사를 모아 보여 줘요. 아직 수집 전이라 샘플 기사를 보여 줘요.'
-                  : '네이버 뉴스에서 모은 기사예요. 같은 이슈 기사는 하나로 묶었어요.'}
+                  : '네이버 뉴스와 전문매체 · 기업 발표 · 학회에서 모은 기사예요. 같은 이슈 기사는 하나로 묶었어요.'}
               </p>
             </div>
             <div className="header-actions">
@@ -766,11 +770,18 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 </select>
                 <select value={source} onChange={(e) => setSource(e.target.value)} aria-label="출처">
                   <option value="all">모든 출처</option>
-                  {sources.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
+                  <optgroup label="출처 단계">
+                    <option value="tier:1">1차 · 기업 발표·학회·논문</option>
+                    <option value="tier:2">2차 · 전문매체</option>
+                    <option value="tier:3">3차 · 일반 뉴스</option>
+                  </optgroup>
+                  <optgroup label="매체">
+                    {sources.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
                 <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="정렬">
                   <option value="importance">중요도순</option>
@@ -914,7 +925,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                               )}
                             </div>
                           </td>
-                          <td className="source" title={a.source}>
+                          <td className="source" title={`${a.source} · ${TIER_TITLE[a.tier ?? 3]}`}>
+                            {a.tier && a.tier <= 2 && <span className={`tier tier-${a.tier}`}>{a.tier}차</span>}
                             {a.source}
                           </td>
                           <td className="time">{formatPublished(a.hoursAgo)}</td>

@@ -2,7 +2,8 @@
 // API만 따로 시험할 때: npm run server. 키는 .env.local에서 읽고 브라우저로 보내지 않는다
 import { createServer } from 'node:http'
 import { pathToFileURL } from 'node:url'
-import { collect, listArticles, searchArticles } from './collector/index.js'
+import { collect, getSources, listArticles, saveSources, searchArticles } from './collector/index.js'
+import { feedList } from './collector/feeds.js'
 import { similarity } from './collector/dedupe.js'
 import { fetchBodies } from './collector/fulltext.js'
 import { getLists, saveLists } from './collector/lists.js'
@@ -270,6 +271,23 @@ export async function handleApi(req, res) {
         if (before[f.key] !== after[f.key]) await logChange(admin, '실험 기능', `${f.label}: ${STATE[before[f.key]]} → ${STATE[after[f.key]]}`)
       }
       return send(res, 200, { features: after, list: featureList() })
+    }
+    // 수집 출처 (14 문서 4-B): 네이버 밖 출처 목록 · 켜기/끄기 · 지난 수집 결과. 관리자만
+    if (req.method === 'GET' && req.url === '/api/admin/sources') {
+      requireAdmin(req)
+      return send(res, 200, { list: feedList(), ...(await getSources()) })
+    }
+    if (req.method === 'PUT' && req.url === '/api/admin/sources') {
+      const admin = requireAdmin(req)
+      const before = (await getSources()).disabled
+      const after = await saveSources(await readJson(req))
+      const names = Object.fromEntries(feedList().map((f) => [f.id, f.name]))
+      for (const f of feedList()) {
+        const was = !before.includes(f.id)
+        const now = !after.disabled.includes(f.id)
+        if (was !== now) await logChange(admin, '수집 출처', `${names[f.id]}: ${was ? '켜짐' : '꺼짐'} → ${now ? '켜짐' : '꺼짐'}`)
+      }
+      return send(res, 200, { list: feedList(), ...after })
     }
     // 테스트 페이지 「요약 시험」: 저장하지 않고 고른 AI 서버로 요약 (관리자만, AI 비용이 들어서)
     if (req.method === 'POST' && req.url === '/api/admin/test/summary') {

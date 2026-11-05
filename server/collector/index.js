@@ -1,10 +1,13 @@
 // 수집 흐름: 키워드별 검색 → 정리 → 원문 주소로 중복 제외 → 저장 → 같은 이슈 묶기 → 중요도 점수
 // 저장: DATABASE_URL이 있으면 PostgreSQL, 없으면 서버 메모리 (서버를 끄면 비워짐)
 import { dbEnabled, query } from '../db/index.js'
+import { getSetting, setSetting } from '../db/store.js'
+import { hasKeyword } from './aliases.js'
 import { groupArticles, sameIssue, titleGrams } from './dedupe.js'
+import { collectFeeds, FEEDS, tierOf } from './feeds.js'
 import { searchNews } from './naver.js'
 import { findMention, getLists } from './lists.js'
-import { toArticle } from './normalize.js'
+import { EXPERT_SOURCES, toArticle } from './normalize.js'
 import { scoreArticle } from './score.js'
 import { titleSentiment } from './sentiment.js'
 
@@ -98,6 +101,38 @@ async function cleanupDb() {
   )
 }
 
+// 네이버 밖 출처 (feeds.js). 관리자가 끈 출처와 지난 수집 결과는 app_settings에 둔다
+const SOURCES_KEY = 'feed_sources' // { disabled: [id] }
+const SOURCES_STATUS_KEY = 'feed_sources_status' // { at, results: [{ id, ok, items, matched, added, error }] }
+
+export async function getSources() {
+  const saved = await getSetting(SOURCES_KEY, { disabled: [] })
+  const disabled = (saved.disabled ?? []).filter((id) => FEEDS.some((f) => f.id === id))
+  return { disabled, status: await getSetting(SOURCES_STATUS_KEY, null) }
+}
+
+export async function saveSources(input = {}) {
+  const disabled = [...new Set((input.disabled ?? []).map(String))].filter((id) => FEEDS.some((f) => f.id === id))
+  await setSetting(SOURCES_KEY, { disabled })
+  return getSources()
+}
+
+// 피드 기사 저장 (네이버와 같은 표). 출처마다 새로 넣은 수를 센다
+async function collectFromFeeds(words) {
+  const { disabled } = await getSources()
+  const { articles, results } = await collectFeeds(words, { disabled })
+  for (const r of results) {
+    const mine = articles.filter((a) => a.section === `feed:${r.id}`)
+    if (dbEnabled()) r.added = await saveToDb(mine)
+    else {
+      r.added = mine.filter((a) => !memory.has(a.id)).length
+      for (const a of mine) memory.set(a.id, { ...memory.get(a.id), ...a })
+    }
+  }
+  await setSetting(SOURCES_STATUS_KEY, { at: new Date().toISOString(), results }) // DB가 없으면 서버 메모리에
+  return results
+}
+
 export async function collect(keywords) {
   const words = [...new Set(keywords.map((k) => String(k).trim()).filter(Boolean))].slice(0, MAX_KEYWORDS)
   if (words.length === 0) throw Object.assign(new Error('수집할 키워드가 없어요.'), { status: 400 })
@@ -130,7 +165,16 @@ export async function collect(keywords) {
       failed.push({ keyword: word, error: err.message })
     }
   }
-  if (failed.length === words.length) {
+  // 네이버 밖 출처: 실패해도 네이버 수집은 그대로 (출처별 결과는 관리 화면 「수집 대상」에)
+  let sources = []
+  try {
+    sources = await collectFromFeeds(words)
+    fetched += sources.reduce((n, r) => n + (r.items ?? 0), 0)
+    added += sources.reduce((n, r) => n + (r.added ?? 0), 0)
+  } catch (err) {
+    console.warn(`[collect] 네이버 밖 출처 수집 실패: ${err.message}`)
+  }
+  if (failed.length === words.length && !sources.some((r) => r.added)) {
     throw Object.assign(new Error(failed[0].error), { status: 502 })
   }
 
@@ -144,18 +188,16 @@ export async function collect(keywords) {
 
   const list = await listArticles({ regroup: true })
   if (dbEnabled()) await updateDaily(list.articles)
-  return { fetched, added, failed, ...list }
+  return { fetched, added, failed, sources, ...list }
 }
 
 // 같은 이슈를 묶고 대표 기사에 중요도 점수를 매긴다. 같은 이슈 기사는 related로 붙인다
 // 관련도 (13 문서 F4). 네이버 검색은 본문 어딘가에 단어가 한 번만 나와도 결과로 준다
 // high: 제목에 키워드 / mid: 발췌에만 / low: 발췌에도 없거나, 발췌에만 있고 네이버 섹션이 정치·사회·생활·세계
 const OFF_TOPIC_SECTIONS = new Set(['100', '102', '103', '104'])
-const squash = (t) => String(t ?? '').toLowerCase().replace(/\s+/g, '')
-
+// 키워드의 다른 표기(영문 등, aliases.js)도 같은 키워드로 본다
 export function relevanceOf(article) {
-  const words = String(article.keyword).split(/\s+/).filter(Boolean).map(squash)
-  const has = (text) => words.every((w) => squash(text).includes(w))
+  const has = (text) => hasKeyword(text, article.keyword)
   if (has(article.title)) return 'high'
   if (has(`${article.title} ${article.description ?? ''}`)) return OFF_TOPIC_SECTIONS.has(article.section) ? 'low' : 'mid'
   return 'low'
@@ -175,7 +217,9 @@ function toIssues(stored, lists) {
   const earliest = (group) => group.reduce((x, y) => (y.publishedAt < x.publishedAt ? y : x))
   return [...members.entries()]
     .map(([groupId, group]) => [group.find((a) => a.id === groupId) ?? earliest(group), group])
-    .map(([rep, group]) => {
+    .map(([groupRep, group]) => {
+      // 출처 단계 (14 문서 4-B): 1차 기업·학회·논문 / 2차 전문매체 / 3차 일반 뉴스
+      const rep = { ...groupRep, tier: tierOf(groupRep, EXPERT_SOURCES) }
       // 같은 이슈 기사 중 가장 관련 높은 것을 이슈의 관련도로 (중요도 점수의 배수로도 쓴다)
       const relevance = group.map(relevanceOf).reduce((a, b) => (RANK[b] > RANK[a] ? b : a), 'low')
       const { score, level, parts } = scoreArticle(rep, group.length, lists.competitors, { relevance, interests: lists.interests })
@@ -183,7 +227,7 @@ function toIssues(stored, lists) {
       const related = group
         .filter((a) => a.id !== rep.id)
         .slice(0, 4)
-        .map(({ id, title, source, description, url }) => ({ id, title, source, description, url }))
+        .map((a) => ({ id: a.id, title: a.title, source: a.source, description: a.description, url: a.url, tier: tierOf(a, EXPERT_SOURCES) }))
       return {
         ...rep,
         sameIssue: group.length - 1,

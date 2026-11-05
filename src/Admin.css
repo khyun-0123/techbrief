@@ -1950,3 +1950,82 @@ a.adm-brand:focus-visible {
   outline-offset: 2px;
   border-radius: 8px;
 }
+
+/* 수집 대상 › 수집 출처 (AdminSources.jsx) */
+.adm-span {
+  grid-column: 1 / -1;
+}
+
+.adm-sources-group h3 {
+  margin: 16px 0 6px;
+  font-size: var(--fs-md);
+}
+
+.adm-sources {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-sources li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--tb-color-line);
+  font-size: var(--fs-md);
+}
+
+.adm-sources li.is-off .name {
+  color: var(--tb-color-text-faint);
+  text-decoration: line-through;
+}
+
+.adm-sources label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.adm-sources .lang {
+  font-size: var(--fs-xs);
+  color: var(--tb-color-text-sub);
+  padding: 1px 8px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-bg-strong);
+}
+
+.adm-sources .result {
+  font-size: var(--fs-sm);
+  color: var(--tb-color-text-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-sources .result .muted {
+  color: var(--tb-color-text-faint);
+}
+
+.adm-sources-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+@media (max-width: 860px) {
+  .adm-sources {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adm-sources-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
