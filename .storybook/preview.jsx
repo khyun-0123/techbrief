@@ -15,8 +15,8 @@ const preview = {
         title: '기본 버튼',
         icon: 'paintbrush',
         items: [
-          { value: 'black', title: '검정 안 (LG전자 사이트)' },
-          { value: 'red', title: '레드 안 (LG UI Kit 토큰)' },
+          { value: 'black', title: '검정 안 (결정)' },
+          { value: 'red', title: '레드 안 (비교용)' },
         ],
         dynamicTitle: true,
       },

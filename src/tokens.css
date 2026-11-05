@@ -42,7 +42,7 @@
   --tb-color-danger: var(--primitive-color-active-red-35);
   --tb-color-danger-soft: var(--primitive-color-active-red-95);
 
-  /* ── 기본 버튼: 두 안 (data-primary로 고름) ── */
+  /* ── 기본 버튼: 검정 안으로 결정 (11/05). 레드 안은 Storybook 비교용 data-primary='red' ── */
   --tb-color-primary: var(--primitive-color-warm-gray-10); /* 기본: 검정 안 (LG전자 사이트) */
   --tb-color-primary-hover: var(--primitive-color-black);
   --tb-color-on-primary: var(--primitive-color-white);
