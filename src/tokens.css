@@ -1,0 +1,80 @@
+/*
+ * 테크브리프 디자인 토큰 — LG UI Kit 공개 토큰(@enovaui/web-tokens, Apache-2.0)의 lg-brand 테마를 바탕으로 한다
+ * 세 단계: primitive(LG 원래 값) → semantic(LG 의미 이름) → --tb-*(우리 화면에서 쓰는 이름)
+ * 화면 코드는 --tb-* 만 쓴다. LG 값이 바뀌면 패키지 버전만 올리면 된다
+ * Storybook 「Foundations」에서 모든 값을 볼 수 있다
+ */
+@import '@enovaui/core-tokens/css/spacing-primitive.css';
+@import '@enovaui/core-tokens/css/radius-primitive.css';
+@import '@enovaui/web-tokens/css/color-semantic-lg-brand.css';
+@import '@enovaui/web-tokens/css/radius-semantic.css';
+
+:root {
+  /* ── 색: 바탕과 면 ── */
+  --tb-color-bg: var(--primitive-color-warm-gray-95); /* 페이지 바탕 #faf9f5 (LG 사이트처럼 흰색에 가까운 따뜻한 회색) */
+  --tb-color-bg-strong: var(--semantic-color-background-main); /* 구역 구분 #f0ece4 Warm Grey */
+  --tb-color-surface: var(--semantic-color-surface-main); /* 카드 #fff */
+  --tb-color-surface-hover: var(--semantic-color-surface-main-hover);
+  --tb-color-surface-inverse: var(--primitive-color-warm-gray-10); /* 어두운 면: 관리 메뉴, 저장 막대 #262626 */
+
+  /* ── 색: 글자 ── */
+  --tb-color-text: var(--semantic-color-on-surface-main); /* #000 */
+  --tb-color-text-sub: var(--semantic-color-on-surface-sub); /* #646464 */
+  --tb-color-text-faint: var(--semantic-color-on-surface-text-field-assistive); /* #878580 */
+  --tb-color-text-inverse: var(--primitive-color-white);
+
+  /* ── 색: 선 ── */
+  --tb-color-line: var(--semantic-color-stroke-main); /* #cbc8c2 */
+  --tb-color-line-soft: var(--primitive-color-warm-gray-85); /* 카드 테두리 #f0ece4 */
+  --tb-color-line-focus: var(--semantic-color-stroke-main-focused); /* #5c5b5a */
+
+  /* ── 색: 브랜드 레드 — 강조에만 (LG 사이트: 레드는 로고·선택 표시·알림처럼 작은 곳에) ── */
+  --tb-color-accent: var(--semantic-color-surface-accent); /* Active Red #ea1917 — 점, 선택 표시, 새 신호 */
+  --tb-color-accent-soft: var(--primitive-color-active-red-95); /* 연한 레드 바탕 */
+  --tb-color-highlight: var(--semantic-color-on-background-highlight); /* Heritage Red #a50034 — 강조 글자 (흰 바탕 대비 7.9:1) */
+
+  /* ── 색: 상태 ── */
+  --tb-color-success: var(--semantic-color-surface-default-success);
+  --tb-color-success-soft: var(--primitive-color-green-95);
+  --tb-color-warning: var(--primitive-color-orange-50);
+  --tb-color-warning-soft: var(--primitive-color-orange-95);
+  /* 오류는 강조 레드와 헷갈리지 않게 더 어두운 레드 + 아이콘·문구로 구분 */
+  --tb-color-danger: var(--primitive-color-active-red-35);
+  --tb-color-danger-soft: var(--primitive-color-active-red-95);
+
+  /* ── 기본 버튼: 두 안 (data-primary로 고름) ── */
+  --tb-color-primary: var(--primitive-color-warm-gray-10); /* 기본: 검정 안 (LG전자 사이트) */
+  --tb-color-primary-hover: var(--primitive-color-black);
+  --tb-color-on-primary: var(--primitive-color-white);
+
+  /* ── 간격 (LG spacing) ── */
+  --tb-space-1: var(--primitive-spacing-4);
+  --tb-space-2: var(--primitive-spacing-8);
+  --tb-space-3: var(--primitive-spacing-12);
+  --tb-space-4: var(--primitive-spacing-16);
+  --tb-space-5: var(--primitive-spacing-20);
+  --tb-space-6: var(--primitive-spacing-24);
+  --tb-space-8: var(--primitive-spacing-32);
+  --tb-space-10: var(--primitive-spacing-40);
+
+  /* ── 모서리 (LG radius-semantic) ── */
+  --tb-radius-button: var(--semantic-radius-button-m); /* 8 */
+  --tb-radius-input: var(--semantic-radius-button-m); /* 8 */
+  --tb-radius-card: var(--semantic-radius-card-l); /* 16 */
+  --tb-radius-card-s: var(--semantic-radius-card-m); /* 12 */
+  --tb-radius-dialog: var(--semantic-radius-dialog-popup-s); /* 16 */
+  --tb-radius-full: var(--semantic-radius-chip-full); /* 999 — 칩, 배지, 스위치, 검색창 */
+
+  /* ── 그림자 ── */
+  --tb-shadow-card: 0 1px 2px rgb(0 0 0 / 4%);
+  --tb-shadow-pop: 0 18px 40px -12px rgb(0 0 0 / 28%);
+
+  /* 글자 크기·줄 간격(--fs-*, --lh-*)은 index.css */
+}
+
+/* 레드 안: 기본 버튼까지 Active Red (LG UI Kit 토큰 기본값) */
+[data-primary='red'] {
+  --tb-color-primary: var(--semantic-color-surface-button-primary);
+  --tb-color-primary-hover: var(--primitive-color-active-red-45);
+  --tb-color-on-primary: var(--semantic-color-on-surface-button-primary);
+}

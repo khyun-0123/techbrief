@@ -1,0 +1,35 @@
+import { Meta } from '@storybook/addon-docs/blocks'
+
+<Meta title="소개" />
+
+# 테크브리프 디자인 시스템
+
+테크뉴스 자동 수집과 보고서 초안 생성(5조)의 화면 부품과 디자인 값을 모아 둔 곳입니다.
+
+## 바탕이 된 LG 자료
+
+- [LG UI Kit 디자인 토큰](https://github.com/enovaui/design-tokens) (`@enovaui/web-tokens` 3.8.0, Apache-2.0) — `lg-brand` 테마의 색, 간격, 모서리 값
+- [LG Color & Gradient](https://www.lg.com/global/our-identity/color/) — Active Red `#FD312E` · Heritage Red `#A50034` · Warm Grey `#F0ECE4`
+- LG전자 사이트(lge.co.kr) — 화면 대부분은 흑백 · 넓은 여백, 레드는 로고 · 선택 · 알림처럼 작은 강조에만
+
+LG 로고와 LG 전용 서체(LG EI)는 사용 규정 때문에 쓰지 않습니다. 글꼴은 Pretendard(SIL OFL)입니다.
+
+## 원칙
+
+1. **레드는 강조에만.** 점 · 선택 표시 · 새 신호 · 켜진 스위치. 큰 면을 칠하지 않습니다.
+2. **오류는 강조 레드와 다르게.** 더 어두운 레드 + 문구로 구분합니다.
+3. **한 화면에 기본 버튼은 하나.** 기본 버튼 색은 위 도구막대 「기본 버튼」에서 검정 안 / 레드 안을 비교해 고릅니다.
+4. **값은 토큰으로만.** 화면 코드는 `--tb-*`(색 · 간격 · 모서리)와 `--fs-*`(글자 크기)만 씁니다. 값은 `src/tokens.css`, `src/index.css`.
+
+## 구성
+
+- **Foundations** — 색, 글자, 간격과 모서리
+- **Components** — 새 기본 부품 (`src/ui`). 다음 단계에서 앱 화면에 바꿔 끼웁니다
+- **App (현재 화면 부품)** — 지금 앱에 들어 있는 부품. 새 부품과 비교용
+
+## 실행
+
+```bash
+npm run storybook          # http://localhost:6006
+STORYBOOK_PORT=6038 npm run storybook   # 공용 서버에서는 계정별 포트
+```

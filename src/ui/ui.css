@@ -1,0 +1,522 @@
+/* 테크브리프 기본 부품 — 값은 모두 tokens.css(--tb-*)와 index.css(--fs-*)에서 가져온다
+   이름은 tb- 로 시작해 기존 App.css·Admin.css와 겹치지 않게 한다 */
+
+/* ── Button ── */
+.tb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--tb-space-2);
+  height: 40px;
+  padding: 0 var(--tb-space-4);
+  border: 1px solid transparent;
+  border-radius: var(--tb-radius-button);
+  font: inherit;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.tb-btn:focus-visible {
+  outline: 2px solid var(--tb-color-line-focus);
+  outline-offset: 2px;
+}
+
+.tb-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tb-btn-sm {
+  height: 32px;
+  padding: 0 var(--tb-space-3);
+  font-size: var(--fs-sm);
+}
+
+.tb-btn-lg {
+  height: 48px;
+  padding: 0 var(--tb-space-6);
+  font-size: var(--fs-base);
+}
+
+.tb-btn-primary {
+  background: var(--tb-color-primary);
+  color: var(--tb-color-on-primary);
+}
+
+.tb-btn-primary:hover:not(:disabled) {
+  background: var(--tb-color-primary-hover);
+}
+
+.tb-btn-secondary {
+  border-color: var(--tb-color-line);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+}
+
+.tb-btn-secondary:hover:not(:disabled) {
+  border-color: var(--tb-color-text);
+}
+
+.tb-btn-ghost {
+  background: none;
+  color: var(--tb-color-text);
+}
+
+.tb-btn-ghost:hover:not(:disabled) {
+  background: var(--tb-color-bg-strong);
+}
+
+.tb-btn-danger {
+  background: none;
+  color: var(--tb-color-danger);
+}
+
+.tb-btn-danger:hover:not(:disabled) {
+  background: var(--tb-color-danger-soft);
+}
+
+/* ── Badge (작은 꼬리표) ── */
+.tb-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 var(--tb-space-2);
+  border-radius: var(--tb-radius-full);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tb-badge-neutral {
+  background: var(--tb-color-bg-strong);
+  color: var(--tb-color-text-sub);
+}
+
+.tb-badge-accent {
+  background: var(--tb-color-accent-soft);
+  color: var(--tb-color-highlight);
+}
+
+.tb-badge-solid {
+  background: var(--tb-color-accent);
+  color: var(--tb-color-text-inverse);
+}
+
+.tb-badge-success {
+  background: var(--tb-color-success-soft);
+  color: var(--primitive-color-green-40);
+}
+
+.tb-badge-warning {
+  background: var(--tb-color-warning-soft);
+  color: var(--primitive-color-orange-40);
+}
+
+.tb-badge-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ── Chip (지울 수 있는 값) ── */
+.tb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 var(--tb-space-3);
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.tb-chip button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--tb-color-text-sub);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tb-chip button:hover {
+  background: var(--tb-color-bg-strong);
+  color: var(--tb-color-text);
+}
+
+/* ── TextField ── */
+.tb-field {
+  display: grid;
+  gap: 6px;
+}
+
+.tb-field-label {
+  color: var(--tb-color-text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.tb-field-row {
+  display: flex;
+  gap: var(--tb-space-2);
+}
+
+.tb-input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 var(--tb-space-3);
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-md);
+}
+
+.tb-input::placeholder {
+  color: var(--tb-color-text-faint);
+}
+
+.tb-input:focus {
+  outline: none;
+  border-color: var(--tb-color-line-focus);
+  box-shadow: 0 0 0 3px var(--tb-color-bg-strong);
+}
+
+.tb-input[aria-invalid='true'] {
+  border-color: var(--tb-color-danger);
+}
+
+.tb-field-hint {
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+}
+
+.tb-field-hint.error {
+  color: var(--tb-color-danger);
+}
+
+/* ── Segmented (하나만 고르는 칸 버튼) ── */
+.tb-segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-bg-strong);
+}
+
+.tb-segmented button {
+  flex: 1;
+  height: 32px;
+  padding: 0 var(--tb-space-4);
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--tb-color-text-sub);
+  font: inherit;
+  font-size: var(--fs-md);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tb-segmented button[aria-checked='true'] {
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+}
+
+/* ── Pills (값 하나 고르기) ── */
+.tb-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tb-space-2);
+}
+
+.tb-pills button {
+  height: 34px;
+  min-width: 64px;
+  padding: 0 var(--tb-space-3);
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-md);
+  cursor: pointer;
+}
+
+.tb-pills button:hover {
+  border-color: var(--tb-color-text);
+}
+
+.tb-pills button[aria-checked='true'] {
+  border-color: var(--tb-color-text);
+  background: var(--tb-color-text);
+  color: var(--tb-color-text-inverse);
+  font-weight: 600;
+}
+
+/* ── Switch ── */
+.tb-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--tb-space-2);
+  font-size: var(--fs-md);
+  cursor: pointer;
+}
+
+.tb-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.tb-switch-track {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-line);
+  transition: background 0.15s;
+}
+
+.tb-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 20%);
+  transition: transform 0.15s;
+}
+
+/* 켜짐 = Active Red (LG 토큰: selection-active) */
+.tb-switch input:checked + .tb-switch-track {
+  background: var(--tb-color-accent);
+}
+
+.tb-switch input:checked + .tb-switch-track::after {
+  transform: translateX(18px);
+}
+
+.tb-switch input:focus-visible + .tb-switch-track {
+  outline: 2px solid var(--tb-color-line-focus);
+  outline-offset: 2px;
+}
+
+.tb-switch input:disabled + .tb-switch-track {
+  opacity: 0.45;
+}
+
+/* ── Card ── */
+.tb-card {
+  padding: var(--tb-space-6);
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: var(--tb-radius-card);
+  background: var(--tb-color-surface);
+  box-shadow: var(--tb-shadow-card);
+}
+
+.tb-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tb-space-3);
+}
+
+.tb-card h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
+.tb-card-desc {
+  margin: 4px 0 var(--tb-space-4);
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-md);
+}
+
+/* ── StatTile (숫자 카드) ── */
+.tb-stat {
+  padding: var(--tb-space-4) var(--tb-space-5);
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: var(--tb-radius-card-s);
+  background: var(--tb-color-surface);
+}
+
+.tb-stat-label {
+  display: block;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-md);
+}
+
+.tb-stat-value {
+  display: block;
+  margin: 6px 0 2px;
+  font-size: var(--fs-stat);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+}
+
+.tb-stat-sub {
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-sm);
+}
+
+/* ── Tabs (LG 사이트: 선택 = 굵은 검정 + 밑줄) ── */
+.tb-tabs {
+  display: flex;
+  gap: var(--tb-space-6);
+  border-bottom: 1px solid var(--tb-color-line);
+}
+
+.tb-tabs button {
+  position: relative;
+  padding: var(--tb-space-3) 0;
+  border: none;
+  background: none;
+  color: var(--tb-color-text-faint);
+  font: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tb-tabs button[aria-selected='true'] {
+  color: var(--tb-color-text);
+  font-weight: 700;
+}
+
+.tb-tabs button[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 3px;
+  background: var(--tb-color-text);
+}
+
+/* ── Alert (확인할 일) ── */
+.tb-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tb-space-3);
+  padding: var(--tb-space-3) var(--tb-space-4);
+  border-left: 4px solid;
+  border-radius: var(--tb-radius-input);
+  font-size: var(--fs-base);
+}
+
+.tb-alert-info {
+  border-color: var(--tb-color-text-sub);
+  background: var(--tb-color-bg-strong);
+}
+
+.tb-alert-success {
+  border-color: var(--tb-color-success);
+  background: var(--tb-color-success-soft);
+}
+
+.tb-alert-warning {
+  border-color: var(--tb-color-warning);
+  background: var(--tb-color-warning-soft);
+}
+
+.tb-alert-danger {
+  border-color: var(--tb-color-danger);
+  background: var(--tb-color-danger-soft);
+}
+
+/* ── SaveBar ── */
+.tb-savebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tb-space-3);
+  padding: var(--tb-space-3) var(--tb-space-4) var(--tb-space-3) var(--tb-space-5);
+  border-radius: var(--tb-radius-card-s);
+  background: var(--tb-color-surface-inverse);
+  color: var(--tb-color-text-inverse);
+  font-size: var(--fs-md);
+  box-shadow: var(--tb-shadow-pop);
+}
+
+.tb-savebar-actions {
+  display: flex;
+  gap: var(--tb-space-2);
+}
+
+.tb-savebar .tb-btn-secondary {
+  border-color: rgb(255 255 255 / 25%);
+  background: none;
+  color: #fff;
+}
+
+/* 어두운 막대 위 기본 버튼은 흰색 (검정 안에서도 보이게) */
+.tb-savebar .tb-btn-primary {
+  background: #fff;
+  color: var(--tb-color-text);
+}
+
+[data-primary='red'] .tb-savebar .tb-btn-primary {
+  background: var(--tb-color-primary);
+  color: var(--tb-color-on-primary);
+}
+
+/* ── Dialog ── */
+.tb-dialog {
+  width: 100%;
+  max-width: 440px;
+  padding: var(--tb-space-6);
+  border-radius: var(--tb-radius-dialog);
+  background: var(--tb-color-surface);
+  box-shadow: var(--tb-shadow-pop);
+}
+
+.tb-dialog h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
+.tb-dialog p {
+  margin: var(--tb-space-2) 0 var(--tb-space-4);
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-md);
+}
+
+.tb-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tb-space-2);
+}
+
+.tb-dialog-actions .tb-spacer {
+  flex: 1;
+}
