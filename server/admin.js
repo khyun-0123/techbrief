@@ -1,6 +1,7 @@
 // 관리자 로그인과 권한 확인 (17 문서). 관리자 계정 하나: 아이디 + 비밀번호
 // - 아이디: .env.local의 ADMIN_ID (없으면 admin)
 // - 비밀번호: .env.local의 ADMIN_PASSWORD (예전 REFRESH_PASSWORD도 받음). 둘 다 없으면 관리자 기능이 잠긴다
+// - 잠금 리셋: 로그인 칸에 ADMIN_RESET_ID / ADMIN_RESET_PASSWORD를 넣으면 로그인 대기만 풀린다 (로그인은 안 됨, 19 문서)
 // - 로그인하면 httpOnly 쿠키로 세션을 준다. 비밀번호는 브라우저에 남기지 않는다
 // - 모두에게 영향을 주는 설정을 바꾸는 API는 handleApi에서 requireAdmin으로 막는다 (화면에서 숨기는 것만으로는 못 막음)
 import { randomBytes, timingSafeEqual } from 'node:crypto'
@@ -16,9 +17,17 @@ const LOG_MAX = 200
 const sessions = new Map() // token → { name(아이디), expiresAt }. 서버를 다시 켜면 다시 로그인
 let fails = 0
 let lockedUntil = 0
+const reset = { fails: 0, lockedUntil: 0 } // 리셋 조합도 따로 횟수를 막는다 (맞혀서 무한히 풀지 못하게)
 
 function adminId() {
   return process.env.ADMIN_ID || 'admin'
+}
+
+// 잠금 리셋 조합. 둘 다 있어야 켜진다 (코드에 적지 않고 .env.local에만)
+function resetPair() {
+  const id = process.env.ADMIN_RESET_ID
+  const password = process.env.ADMIN_RESET_PASSWORD
+  return id && password ? { id, password } : null
 }
 
 function adminPassword() {
@@ -65,14 +74,40 @@ export function requireAdmin(req) {
   return admin
 }
 
-// 성공하면 Set-Cookie 값과 아이디를 돌려준다
+const wrong = (left) =>
+  Object.assign(new Error(`아이디 또는 비밀번호가 맞지 않아요.${left > 0 ? ` (남은 시도 ${left}번)` : ''}`), { status: 401 })
+
+// 잠금 리셋 조합이면 처리하고 결과를 돌려준다. 아니면 null
+// 잠겨 있어도 받는다 — 관리자 비밀번호와 다른 비밀이라 관리자 비밀번호를 맞혀 보는 통로가 되지 않는다
+function tryReset(id, password) {
+  const pair = resetPair()
+  if (!pair || !samePassword(String(id ?? '').trim(), pair.id)) return null
+  if (Date.now() < reset.lockedUntil) throw wrong(0) // 리셋도 막혀 있으면 이유를 드러내지 않는다
+  if (!samePassword(password, pair.password)) {
+    reset.fails += 1
+    if (reset.fails >= MAX_FAILS) {
+      reset.fails = 0
+      reset.lockedUntil = Date.now() + LOCK_MS
+    }
+    throw wrong(0)
+  }
+  reset.fails = 0
+  fails = 0
+  lockedUntil = 0
+  console.log('[admin] 로그인 대기를 리셋했어요')
+  return { reset: true }
+}
+
+// 성공하면 { cookie, name }, 잠금 리셋이면 { reset: true }
 export function login({ id, password }) {
   if (!adminConfigured()) {
     throw Object.assign(new Error('관리자 비밀번호가 설정되지 않았어요. 서버 .env.local에 ADMIN_PASSWORD를 넣어 주세요.'), { status: 503 })
   }
+  const resetResult = tryReset(id, password)
+  if (resetResult) return resetResult
   if (Date.now() < lockedUntil) {
     const min = Math.ceil((lockedUntil - Date.now()) / 60_000)
-    throw Object.assign(new Error(`비밀번호를 여러 번 틀려 잠겼어요. ${min}분 뒤 다시 해 주세요.`), { status: 429 })
+    throw Object.assign(new Error(`비밀번호를 여러 번 틀려 로그인이 ${min}분 동안 막혔어요.`), { status: 429, locked: true })
   }
   // 아이디와 비밀번호를 둘 다 비교한다 (어느 쪽이 틀렸는지는 알려 주지 않음)
   const idOk = samePassword(String(id ?? '').trim(), adminId())
@@ -82,8 +117,9 @@ export function login({ id, password }) {
     if (fails >= MAX_FAILS) {
       fails = 0
       lockedUntil = Date.now() + LOCK_MS
+      throw Object.assign(new Error(`비밀번호를 ${MAX_FAILS}번 틀려 로그인이 ${LOCK_MS / 60_000}분 동안 막혔어요.`), { status: 429, locked: true })
     }
-    throw Object.assign(new Error('아이디 또는 비밀번호가 맞지 않아요.'), { status: 401 })
+    throw wrong(MAX_FAILS - fails)
   }
   fails = 0
   const token = randomBytes(32).toString('hex')

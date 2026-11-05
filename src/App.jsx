@@ -28,6 +28,7 @@ import { DEFAULT_KEYWORDS, SAMPLE_ARTICLES } from './sampleArticles.js'
 import SelectSummary from './SelectSummary.jsx'
 import { enabledFeatures, FeaturesContext } from './features.js'
 import ListsPanel from './ListsPanel.jsx'
+import LogoMark from './Logo.jsx'
 import RefreshPanel from './RefreshPanel.jsx'
 import TestTools from './TestTools.jsx'
 import SentimentBadge, { sentimentLabel, sentimentOf as pickSentiment } from './SentimentBadge.jsx'
@@ -116,6 +117,7 @@ function searchScope(period) {
 function App({ mode = 'normal' }) {
   const isTest = mode === 'test'
   const [featureStates, setFeatureStates] = useState({}) // 실험 기능 { key: 'off' | 'test' | 'all' }
+  const [featureList, setFeatureList] = useState([]) // [{ key, label }] 테스트 띠에 한글 이름으로 보여 줄 때
   const features = useMemo(() => enabledFeatures(featureStates, mode), [featureStates, mode])
   const [lists, setLists] = useState(null) // 자사·경쟁사·관심 기술 (「수집 설정」 칸 실험 기능에서 보기만)
   const [refreshError, setRefreshError] = useState('')
@@ -166,7 +168,10 @@ function App({ mode = 'normal' }) {
       .then(setFavorites)
       .catch(() => {})
     fetchFeatures()
-      .then((f) => setFeatureStates(f.features))
+      .then((f) => {
+        setFeatureStates(f.features)
+        setFeatureList(f.list)
+      })
       .catch(() => {})
     fetchLists()
       .then(setLists)
@@ -523,13 +528,20 @@ function App({ mode = 'normal' }) {
     <div className={isTest ? 'app app-test' : 'app'}>
       {isTest && (
         <div className="test-banner">
-          <strong>테스트 페이지</strong> · 실험 기능 {features.size}개 켜짐 ({[...features].join(', ') || '없음'}) · 일반 사용자에게는 「모두에게」로 정한 기능만 보여요
+          <strong>테스트 페이지</strong>
+          <span title={featureList.filter((f) => features.has(f.key)).map((f) => f.label).join(' · ') || '켜진 실험 기능 없음'}>
+            실험 기능 {features.size}개 켜짐
+          </span>
+          <span className="test-banner-note">일반 화면에는 「모두에게」로 정한 기능만 보여요</span>
           <a href="/admin#features">실험 기능 설정 →</a>
           <a href="/admin">관리 페이지 →</a>
         </div>
       )}
       <nav className="topbar">
-        <span className="brand">테크브리프{isTest && <small className="brand-test"> 테스트</small>}</span>
+        <span className="brand">
+          <LogoMark size={28} className="brand-mark" />
+          테크브리프{isTest && <small className="brand-test"> 테스트</small>}
+        </span>
         <div className="tabs">
         <button
           type="button"

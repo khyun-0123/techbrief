@@ -198,8 +198,16 @@ export async function fetchAdminMe() {
   return res.json()
 }
 
-export function adminLogin(id, password) {
-  return postJson('/api/admin/login', { id, password })
+// 성공하면 { admin }, 잠금 리셋 조합이면 { reset: true }. 실패하면 Error (잠겼으면 err.locked)
+export async function adminLogin(id, password) {
+  const res = await fetch('/api/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, password }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw Object.assign(new Error(data.error ?? `서버 오류 (${res.status})`), { locked: Boolean(data.locked) })
+  return data
 }
 
 export function adminLogout() {

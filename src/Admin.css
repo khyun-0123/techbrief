@@ -22,7 +22,14 @@
   min-height: 100vh;
   background: var(--adm-bg);
   color: var(--adm-ink);
-  font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif;
+  font-family: var(--font-sans);
+  word-break: keep-all; /* 한글을 단어 중간에서 끊지 않게 */
+  overflow-wrap: break-word; /* 긴 모델 이름·주소는 칸을 넘을 때만 접기 */
+  font-size: var(--fs-base);
+}
+
+.adm > * {
+  min-width: 0; /* 좁은 화면에서 내용이 칸을 밀어 넓히지 않게 */
 }
 
 /* ── 왼쪽 메뉴 ── */
@@ -38,20 +45,27 @@
 }
 
 .adm-brand {
-  padding: 0 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 20px;
   border-bottom: 1px solid #2a3647;
   color: #fff;
-  font-size: 18px;
+  font-size: var(--fs-brand);
   font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.adm-brand svg {
+  flex: none;
 }
 
 .adm-brand small {
   display: block;
-  margin-top: 2px;
+  margin-top: 1px;
   color: #7d8a9c;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   font-weight: 500;
-  letter-spacing: 0.02em;
 }
 
 .adm-nav {
@@ -70,7 +84,7 @@
   background: none;
   color: inherit;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--fs-base);
   text-align: left;
   cursor: pointer;
 }
@@ -98,7 +112,7 @@
   margin-top: auto;
   padding: 14px 10px 0;
   border-top: 1px solid #2a3647;
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 
 .adm-who {
@@ -145,13 +159,13 @@
 
 .adm-head h1 {
   margin: 0 0 4px;
-  font-size: 24px;
+  font-size: var(--fs-h1);
 }
 
 .adm-head p {
   margin: 0;
   color: var(--adm-muted);
-  font-size: 14px;
+  font-size: var(--fs-base);
 }
 
 .adm-toast {
@@ -181,13 +195,23 @@
 
 .adm-card h2 {
   margin: 0 0 4px;
-  font-size: 16px;
+  font-size: var(--fs-lg);
 }
 
 .adm-card > .adm-desc {
   margin: 0 0 16px;
   color: var(--adm-muted);
-  font-size: 13px;
+  font-size: var(--fs-md);
+}
+
+.adm-desc a {
+  color: var(--adm-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.adm-desc a:hover {
+  text-decoration: underline;
 }
 
 .adm-cols {
@@ -198,6 +222,11 @@
 
 .adm-cols .adm-card + .adm-card {
   margin-top: 0;
+}
+
+.adm-card + .adm-cols,
+.adm-cols + .adm-card {
+  margin-top: 16px;
 }
 
 /* ── 개요: 상태 카드 ── */
@@ -218,19 +247,20 @@
 .adm-tile-label {
   display: block;
   color: var(--adm-muted);
-  font-size: 13px;
+  font-size: var(--fs-md);
 }
 
 .adm-tile-value {
   display: block;
   margin: 6px 0 2px;
-  font-size: 22px;
+  font-size: var(--fs-stat);
   font-weight: 700;
+  line-height: var(--lh-tight);
 }
 
 .adm-tile-sub {
   color: var(--adm-faint);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .adm-state {
@@ -264,7 +294,7 @@
 .adm-alerts {
   display: grid;
   gap: 8px;
-  margin: 0 0 16px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -278,7 +308,7 @@
   border-left: 4px solid var(--adm-warn);
   border-radius: 8px;
   background: var(--adm-warn-soft);
-  font-size: 14px;
+  font-size: var(--fs-base);
 }
 
 .adm-alerts li.bad {
@@ -436,6 +466,51 @@
   white-space: nowrap;
 }
 
+/* 좁은 화면: 표 대신 한 건씩 쌓기 — 첫 줄 [무엇을] 언제 · 누가, 둘째 줄 내용 */
+@media (max-width: 860px) {
+  .adm-table thead {
+    display: none;
+  }
+
+  .adm-table,
+  .adm-table tbody {
+    display: block;
+  }
+
+  .adm-table tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--adm-line);
+  }
+
+  .adm-table tr:last-child {
+    border-bottom: none;
+  }
+
+  .adm-table td {
+    padding: 0;
+    border: none;
+    font-size: 13px;
+  }
+
+  .adm-table .adm-log-action {
+    order: -1;
+  }
+
+  .adm-table .adm-log-who::before {
+    content: '· ';
+  }
+
+  .adm-table .adm-log-detail {
+    flex-basis: 100%;
+    color: var(--adm-ink);
+    font-size: 14px;
+  }
+}
+
 .adm-tag {
   display: inline-block;
   padding: 2px 8px;
@@ -453,89 +528,421 @@
   font-size: 14px;
 }
 
-/* ── 로그인 ── */
+/* ── 로그인: 왼쪽 브랜드 · 오른쪽 폼 ── */
 .adm-login-page {
   display: grid;
   place-items: center;
   min-height: 100vh;
   padding: 24px 16px;
-  background: linear-gradient(160deg, #16202e 0%, #24344b 100%);
-  font-family: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif;
+  background: #eef2f6;
+  color: #1c2533;
+  font-family: var(--font-sans);
 }
 
 .adm-login {
-  width: 100%;
-  max-width: 380px;
-  padding: 32px 28px;
-  border-radius: 16px;
+  display: grid;
+  /* 브랜드 : 폼 ≈ 39 : 61 — 폼이 주인공 (분할 로그인 레퍼런스: 폼 칸 약 400px, 브랜드는 보조) */
+  grid-template-columns: 340px 540px;
+  overflow: hidden;
+  border-radius: 20px;
   background: #fff;
-  color: #1c2533;
-  box-shadow: 0 20px 50px rgb(0 0 0 / 25%);
+  box-shadow:
+    0 1px 2px rgb(16 24 40 / 6%),
+    0 24px 48px -12px rgb(16 24 40 / 18%);
 }
 
-.adm-login h1 {
+.adm-login-single {
+  grid-template-columns: 540px;
+}
+
+/* 왼쪽: 브랜드 영역 — 희미한 점 격자 + 빛 번짐 위에 소개와 미리보기 카드 */
+.adm-login-side {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 36px 32px 28px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 85% 10%, rgb(255 255 255 / 14%), transparent 40%),
+    radial-gradient(circle at 10% 95%, rgb(245 176 65 / 16%), transparent 45%),
+    radial-gradient(rgb(255 255 255 / 9%) 1px, transparent 1px) 0 0 / 18px 18px,
+    linear-gradient(160deg, #1b6a96 0%, #124566 100%);
+  color: #fff;
+}
+
+.adm-login-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.adm-login-logo svg {
+  flex: none;
+  border-radius: 10px;
+  box-shadow: 0 0 0 2px rgb(255 255 255 / 25%);
+}
+
+.adm-login-badge {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 16%);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.adm-login-pitch h2 {
+  margin: 0 0 10px;
+  font-size: 20px;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+}
+
+.adm-login-pitch h2 span {
+  display: block;
+  white-space: nowrap;
+}
+
+.adm-login-pitch p {
   margin: 0;
-  font-size: 22px;
+  color: rgb(255 255 255 / 78%);
+  font-size: 14px;
+  line-height: 1.55;
 }
 
-.adm-login > p {
-  margin: 6px 0 18px;
+/* 미리보기 카드: 살짝 기울여 떠 있는 느낌 */
+.adm-login-preview {
+  display: grid;
+  gap: 10px;
+  margin-top: auto;
+  padding: 16px 16px 14px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 14px;
+  background: rgb(255 255 255 / 10%);
+  box-shadow: 0 18px 40px -12px rgb(0 0 0 / 35%);
+  backdrop-filter: blur(6px);
+  transform: rotate(-1.5deg);
+}
+
+.adm-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.adm-preview-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.adm-preview-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(245 176 65 / 22%);
+  color: #ffd38a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.adm-preview-line {
+  height: 8px;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 85%);
+}
+
+.adm-preview-line.w100 {
+  width: 100%;
+}
+
+.adm-preview-line.w80 {
+  width: 78%;
+  opacity: 0.75;
+}
+
+.adm-preview-line.w55 {
+  width: 52%;
+  opacity: 0.55;
+}
+
+.adm-preview-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.adm-preview-chip {
+  width: 64px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 18%);
+}
+
+.adm-preview-chip.short {
+  width: 44px;
+}
+
+.adm-preview-dot {
+  width: 10px;
+  height: 10px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: #f5b041;
+  box-shadow: 0 0 0 4px rgb(245 176 65 / 25%);
+}
+
+.adm-login-back {
+  color: rgb(255 255 255 / 75%);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.adm-login-back:hover {
+  color: #fff;
+}
+
+/* 오른쪽: 폼 */
+.adm-login-main {
+  padding: 52px 70px 48px; /* 폼 안쪽 폭 400px */
+}
+
+.adm-login-main h1 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.01em;
+}
+
+.adm-login-sub {
+  margin: 6px 0 28px;
   color: #5b6677;
   font-size: 14px;
+  line-height: 1.5;
+  word-break: keep-all;
 }
 
-.adm-login .adm-btn {
-  width: 100%;
-  margin-top: 20px;
-  padding: 11px;
+.adm-field + .adm-field {
+  margin-top: 18px;
 }
 
-.adm-login-foot {
-  margin-top: 16px;
-  text-align: center;
+.adm-field label {
+  display: block;
+  margin-bottom: 6px;
+  color: #3b4657;
   font-size: 13px;
+  font-weight: 600;
 }
 
-.adm-login-foot a {
+.adm-field input {
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid #cfd6e0;
+  border-radius: 10px;
+  background: #fff;
+  color: #1c2533;
+  font: inherit;
+  font-size: 15px;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.adm-field input:hover {
+  border-color: #b4bfcd;
+}
+
+.adm-field input:focus {
+  outline: none;
+  border-color: #1b6a96;
+  box-shadow: 0 0 0 3px rgb(27 106 150 / 16%);
+}
+
+.adm-field input[aria-invalid='true'] {
+  border-color: #dc2626;
+}
+
+.adm-pw {
+  position: relative;
+}
+
+.adm-pw input {
+  padding-right: 72px;
+}
+
+.adm-pw-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
   color: #5b6677;
+  font: inherit;
+  font-size: 13px;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.adm-pw-toggle:hover {
+  background: #eef1f5;
+  color: #1c2533;
+}
+
+.adm-field-note {
+  margin: 6px 0 0;
+  color: #b45309;
+  font-size: 12px;
+}
+
+.adm-field-note.error {
+  color: #dc2626;
+}
+
+.adm-login-alert {
+  display: grid;
+  gap: 2px;
+  margin-top: 20px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.adm-login-alert strong {
+  font-weight: 600;
+}
+
+.adm-login-alert.error {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.adm-login-alert.error span {
+  color: #7f1d1d;
+}
+
+.adm-login-alert.ok {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.adm-login-submit {
+  width: 100%;
+  height: 48px;
+  margin-top: 28px;
+  border: none;
+  border-radius: 10px;
+  background: #1b6a96;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.adm-login-submit:hover:not(:disabled) {
+  background: #155a80;
+}
+
+.adm-login-submit:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(27 106 150 / 35%);
+}
+
+.adm-login-submit:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+@media (max-width: 900px) {
+  .adm-login {
+    grid-template-columns: minmax(0, 460px);
+  }
+
+  .adm-login-side {
+    gap: 16px;
+    padding: 24px 28px;
+  }
+
+  .adm-login-pitch,
+  .adm-login-preview {
+    display: none;
+  }
+
+  .adm-login-back {
+    margin-top: 0;
+  }
+
+  .adm-login-main {
+    padding: 32px 28px;
+  }
 }
 
 /* ── 좁은 화면: 왼쪽 메뉴를 위로 ── */
 @media (max-width: 860px) {
   .adm {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start; /* 내용이 짧아도 위 메뉴가 늘어나지 않게 */
   }
 
   .adm-side {
     position: static;
     height: auto;
-    padding: 14px;
+    gap: 10px;
+    padding: 14px 16px;
   }
 
   .adm-brand {
     padding-bottom: 12px;
   }
 
+  /* 메뉴는 한 줄로 두고 넘치면 옆으로 밀어서 본다 */
   .adm-nav {
-    grid-auto-flow: column;
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
     overflow-x: auto;
+    scrollbar-width: none;
   }
 
   .adm-nav button {
+    flex: none;
     white-space: nowrap;
   }
 
+  /* 아이디 · 링크들: 한 줄에 놓고 모자라면 다음 줄로 */
   .adm-side-foot {
-    grid-auto-flow: column;
-    justify-content: start;
-    gap: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    padding-top: 10px;
+  }
+
+  .adm-who small {
+    display: none;
+  }
+
+  .adm-side-foot a,
+  .adm-side-foot button {
+    white-space: nowrap;
   }
 
   .adm-main {
     padding: 20px 16px 60px;
   }
-}
 
+  .adm-alerts li {
+    flex-wrap: wrap;
+  }
+}
 /* 실험 기능: 기능마다 공개 범위 고르기 */
 .adm-features {
   margin: 0;
@@ -583,7 +990,7 @@
   background: none;
   color: var(--adm-muted);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-md);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -598,6 +1005,509 @@
 @media (max-width: 860px) {
   .adm-features li {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  /* 버튼 묶음을 카드 폭에 맞춰 세 칸으로 */
+  .adm-segment {
+    display: flex;
+  }
+
+  .adm-segment button {
+    flex: 1;
+    padding: 7px 4px;
+  }
+
+  .adm-card {
+    padding: 18px 16px;
+  }
+}
+
+/* ── 검토 반영 (11/05) ── */
+/* 「자동 요약」 스위치: .adm label(블록)이 스위치 모양을 덮어쓰던 문제 */
+.adm .refresh-switch {
+  display: flex;
+  margin: 18px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* 목록 입력 + 「추가」 버튼 */
+.chip-add {
+  display: flex;
+  gap: 8px;
+}
+
+.chip-add input {
+  flex: 1;
+  min-width: 0;
+}
+
+.chip-add-btn {
+  flex: none;
+  padding: 0 16px;
+  border: 1px solid var(--adm-accent);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--adm-accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip-add-btn:disabled {
+  border-color: #c8d0dc;
+  color: #a3acb9;
+  cursor: not-allowed;
+}
+
+/* 저장 안내 + 되돌리기 */
+.adm-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.adm-toast-undo {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* 카드 머리: 제목 + 오른쪽 버튼 */
+.adm-card-head {
+  display: flex;
+  flex-wrap: wrap; /* 좁으면 버튼이 제목 아래로 */
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.adm-card-head .adm-btn {
+  margin: -6px 0; /* 버튼이 있어도 제목 위치가 다른 카드와 같게 */
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* AI 모델: 사용 중 배지 */
+.adm-choice .adm-choice-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--adm-accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+
+/* ── 자동 최신화 (AdminRefresh) ── */
+.adm-refresh-cols {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); /* 다른 메뉴의 두 칸과 같은 1:1 */
+}
+
+.adm-field-label {
+  display: block;
+  margin: 18px 0 8px;
+  color: var(--adm-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.adm-desc + .adm-field-label {
+  margin-top: 0;
+}
+
+.adm-segment-wide {
+  display: flex;
+  width: 100%;
+  max-width: 420px;
+}
+
+.adm-segment-wide button {
+  flex: 1;
+}
+
+/* 간격: 알약 버튼 */
+.adm-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.adm-pills button {
+  min-width: 64px;
+  padding: 8px 12px;
+  border: 1px solid #cfd6e0;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--adm-ink);
+  font: inherit;
+  font-size: var(--fs-md);
+  cursor: pointer;
+}
+
+.adm-pills button:hover {
+  border-color: var(--adm-accent);
+}
+
+.adm-pills button[aria-checked='true'] {
+  border-color: var(--adm-accent);
+  background: var(--adm-accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.adm input.adm-time {
+  width: 160px;
+}
+
+.adm-note {
+  margin: 14px 0 0;
+  color: var(--adm-muted);
+  font-size: 13px;
+}
+
+/* 자동 요약: 설명 | 스위치 */
+.adm-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-switch-row strong {
+  display: block;
+  font-size: 14px;
+}
+
+.adm-switch-row span {
+  display: block;
+  margin-top: 4px;
+  color: var(--adm-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.adm .adm-switch {
+  flex: none;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.adm-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+/* 상태 */
+.adm-status {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 20px;
+  margin: 0;
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--adm-bg);
+}
+
+.adm-status dt {
+  color: var(--adm-muted);
+  font-size: var(--fs-sm);
+}
+
+.adm-status dd {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.adm-status dd.bad {
+  color: var(--adm-bad);
+}
+
+.adm-status-wide {
+  grid-column: 1 / -1;
+}
+
+.adm-status-wide dd {
+  font-weight: 500;
+}
+
+.adm-progress {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  color: var(--adm-accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* 사파리·크롬 기본 선택 상자 모양을 끄고 화면에 맞춘 모양으로 */
+.adm select,
+.adm input[type='time'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 42px;
+  padding: 0 14px;
+  border: 1px solid #cfd6e0;
+  border-radius: 10px;
+  background-color: #fff;
+  color: var(--adm-ink);
+  font: inherit;
+  font-size: 14px;
+}
+
+.adm select {
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%235b6677' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+}
+
+@media (max-width: 1100px) {
+  .adm-refresh-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 자동 최신화: 왼쪽 카드 두 장 쌓기, 제목 옆 꼬리표 */
+.adm-stack {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-width: 0;
+}
+
+.adm-stack .adm-card + .adm-card {
+  margin-top: 0;
+}
+
+.adm-card h2 .adm-tag {
+  margin-left: 6px;
+  vertical-align: 2px;
+}
+
+.adm-tag-muted {
+  background: #eef1f5;
+  color: var(--adm-muted);
+}
+
+.adm-tag-warn {
+  background: var(--adm-warn-soft);
+  color: var(--adm-warn);
+}
+
+.adm-switch-row h2 {
+  margin: 0;
+}
+
+.adm-stack .adm-card:last-child .adm-switch-row {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.adm-switch-row h2 .adm-tag {
+  display: inline-block;
+  margin-top: 0;
+  font-size: 12px;
+  line-height: normal;
+}
+
+.adm-switch-row .adm-tag-warn {
+  color: var(--adm-warn);
+}
+
+/* 상태 카드는 왼쪽 두 카드를 합친 높이에 맞추고, 안내 문구는 바닥에 */
+.adm-refresh-cols {
+  align-items: stretch;
+}
+
+.adm-refresh-cols > .adm-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.adm-refresh-cols > .adm-card > .adm-note:last-child {
+  margin-top: auto; /* 남는 높이는 위쪽 내용 아래로, 안내는 바닥에 */
+  padding-top: 16px;
+}
+
+.adm-next-keywords {
+  margin-top: 18px;
+}
+
+.adm-next-keywords .adm-field-label {
+  margin: 0;
+}
+
+.adm-next-keywords .chips {
+  margin-top: 10px;
+}
+
+.adm-link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--adm-accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.adm-link-btn:hover {
+  text-decoration: underline;
+}
+
+/* ── 저장 전 변경 ── */
+.adm-nav .adm-dot-edit {
+  background: #5eb3e4;
+}
+
+.adm-savebar {
+  position: sticky;
+  bottom: 16px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-top: 20px;
+  padding: 12px 16px 12px 20px;
+  border-radius: 12px;
+  background: #16202e;
+  color: #e6ebf2;
+  font-size: 14px;
+  box-shadow: 0 12px 30px -8px rgb(16 24 40 / 45%);
+}
+
+.adm-savebar strong {
+  color: #fff;
+}
+
+.adm-savebar > div {
+  display: flex;
+  gap: 8px;
+}
+
+.adm-savebar .adm-btn {
+  border-color: #3a4a62;
+  background: transparent;
+  color: #e6ebf2;
+}
+
+.adm-savebar .adm-btn.primary {
+  border-color: #2386bd;
+  background: #2386bd;
+  color: #fff;
+  font-weight: 700;
+}
+
+.adm-choice .adm-choice-badge.pending {
+  background: var(--adm-warn-soft);
+  color: var(--adm-warn);
+}
+
+/* ── 떠나기 확인 창 ── */
+.adm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(16 24 40 / 45%);
+}
+
+.adm-modal {
+  width: 100%;
+  max-width: 460px;
+  padding: 24px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 30%);
+}
+
+.adm-modal h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.adm-modal p {
+  margin: 8px 0 12px;
+  color: var(--adm-muted);
+  font-size: 14px;
+}
+
+.adm-modal ul {
+  margin: 0;
+  padding: 12px 16px 12px 32px;
+  border-radius: 10px;
+  background: var(--adm-bg);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.adm-modal li + li {
+  margin-top: 4px;
+}
+
+.adm-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.adm-modal-spacer {
+  flex: 1;
+}
+
+.adm-btn.danger-text {
+  padding-left: 0;
+  padding-right: 0;
+  border-color: transparent;
+  background: none;
+  color: var(--adm-bad);
+}
+
+.adm-btn.danger-text:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 480px) {
+  .adm-modal-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .adm-modal-spacer {
+    display: none;
+  }
+
+  .adm-btn.danger-text {
+    text-align: center;
   }
 }
