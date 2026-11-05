@@ -943,6 +943,96 @@ a.btn {
 
 
 
+/* 기사가 10건을 넘을 때 고르기 (21 문서 6-3) */
+.report-mode {
+  margin-top: 16px;
+  padding: 16px;
+}
+
+.report-mode-head h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
+.report-mode-head p {
+  margin: 4px 0 0;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-md);
+}
+
+.report-mode-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.report-mode-choice {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 2px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-card-s);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.report-mode-choice:hover:not(:disabled) {
+  border-color: var(--tb-color-line-focus);
+}
+
+.report-mode-choice[aria-checked='true'] {
+  border-color: var(--tb-color-primary);
+  background: var(--tb-color-bg);
+}
+
+.report-mode-choice:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.report-mode-choice strong {
+  font-size: var(--fs-base);
+}
+
+.report-mode-choice span {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.report-left-out {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--tb-color-line);
+}
+
+.report-left-out h4 {
+  margin: 0 0 6px;
+  font-size: var(--fs-sm);
+  color: var(--tb-color-text-sub);
+}
+
+.report-left-out ul {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-sm);
+}
+
+.report-left-out li + li {
+  margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .report-mode-choices {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .report-notice {
   margin: 16px 0 0;
   padding: 12px 16px;

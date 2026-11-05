@@ -20,6 +20,7 @@ import {
 import { chatJson, llmProviders, modelName, pingModel, providerLabel, selectProvider } from './llm/client.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
+  buildMergeMessages,
   buildReportMessages,
   buildSectionMessages,
   REPORT_SCHEMA,
@@ -40,7 +41,11 @@ const SUPERVISED = process.env.TECHBRIEF_SUPERVISED === '1'
 const RESTART_EXIT_CODE = 75
 
 const REPORT_TIMEOUT_MS = 240_000 // 보고서는 출력이 길어 요약보다 오래 걸린다
+// 보고서 한 번에 넣는 기사 수 (맥미니 문맥 크기 기준). 넘으면 화면이 고르게 한다 (21 문서 6-3)
+// - 중요도 높은 10건만 (빠름) / 전부 (REPORT_CHUNK건씩 나눠 쓰고 합침, 오래 걸림, 최대 MAX_REPORT_ALL건)
 const MAX_REPORT_ARTICLES = 10
+const MAX_REPORT_ALL = 40
+const REPORT_CHUNK = 8
 
 const MAX_BODY = 1_000_000 // 보고서 요청·보고서함 옮기기에는 기사 요약 여러 건이 들어간다
 
@@ -125,8 +130,12 @@ async function attachBodies(articles) {
   return articles
 }
 
-function readReportArticles(body) {
-  const articles = (body.articles ?? []).slice(0, MAX_REPORT_ARTICLES).map((a, i) => ({ ...a, n: i + 1 }))
+function readReportArticles(body, max = MAX_REPORT_ARTICLES) {
+  const all = body.articles ?? []
+  if (all.length > max) {
+    throw Object.assign(new Error(`기사가 너무 많아요 (${all.length}건). ${max}건 이하로 골라 주세요.`), { status: 400 })
+  }
+  const articles = all.map((a, i) => ({ ...a, n: i + 1 }))
   if (articles.length === 0) throw Object.assign(new Error('보고서에 넣을 기사가 없어요.'), { status: 400 })
   const missing = articles.filter((a) => !a.summary?.items)
   if (missing.length) {
@@ -135,17 +144,46 @@ function readReportArticles(body) {
   return articles
 }
 
-async function handleReport(req, res) {
-  const body = await readJson(req)
-  const articles = await attachBodies(readReportArticles(body))
-  const title = body.title?.trim() || '테크 동향 브리핑'
-  const { data, model } = await chatJson({
-    messages: buildReportMessages(articles, { title, periodLabel: body.periodLabel ?? '오늘' }),
+// 보고서 초안 한 번 (기사 10건 이하)
+function draftReport(articles, opts) {
+  return chatJson({
+    messages: buildReportMessages(articles, opts),
     schema: REPORT_SCHEMA,
     schemaName: 'report_draft',
     report: true,
     timeoutMs: REPORT_TIMEOUT_MS,
   })
+}
+
+// 기사가 많을 때: REPORT_CHUNK건씩 나눠 초안 조각을 쓰고(원문 본문은 묶음마다 나눠 붙임), 조각을 한 보고서로 합친다
+// 번호(n)는 처음부터 전체 기사 번호라 조각을 합쳐도 근거 번호가 그대로 맞는다
+async function draftLongReport(articles, opts) {
+  const parts = []
+  for (let i = 0; i < articles.length; i += REPORT_CHUNK) {
+    const chunk = await attachBodies(articles.slice(i, i + REPORT_CHUNK))
+    const { data } = await draftReport(chunk, opts)
+    parts.push(data)
+  }
+  const merged = await chatJson({
+    messages: buildMergeMessages(articles, parts, opts),
+    schema: REPORT_SCHEMA,
+    schemaName: 'report_draft',
+    report: true,
+    timeoutMs: REPORT_TIMEOUT_MS,
+  })
+  const notes = parts.flatMap((p) => p.warnings ?? [])
+  return { ...merged, data: { ...merged.data, warnings: [...new Set([...(merged.data.warnings ?? []), ...notes])] } }
+}
+
+async function handleReport(req, res) {
+  const body = await readJson(req)
+  const all = body.mode === 'all'
+  const picked = readReportArticles(body, all ? MAX_REPORT_ALL : MAX_REPORT_ARTICLES)
+  const title = body.title?.trim() || '테크 동향 브리핑'
+  const opts = { title, periodLabel: body.periodLabel ?? '오늘' }
+  const long = picked.length > MAX_REPORT_ARTICLES
+  const articles = long ? picked : await attachBodies(picked)
+  const { data, model } = long ? await draftLongReport(articles, opts) : await draftReport(articles, opts)
   const sections = Object.fromEntries(
     SECTION_KEYS.map((k) => [k, { bullets: cleanBullets(data.sections?.[k]?.bullets, articles) }]),
   )
@@ -158,6 +196,7 @@ async function handleReport(req, res) {
     model,
     createdAt,
     periodLabel: body.periodLabel ?? '오늘',
+    ...(long ? { chunks: Math.ceil(articles.length / REPORT_CHUNK) } : {}),
     // fulltext: 원문 본문을 반영했는지 (화면 근거 기사 목록에 표시). 본문 자체는 저장하지 않는다
     articles: articles.map(({ title: t, source, url, publishedAt, body: b }) => ({ title: t, source, url, publishedAt, fulltext: Boolean(b) })),
     inputs: articles.map(({ n: _n, body: _b, ...rest }) => rest),
@@ -168,7 +207,9 @@ async function handleReport(req, res) {
 
 async function handleReportSection(req, res) {
   const body = await readJson(req)
-  const articles = await attachBodies(readReportArticles(body))
+  // 기사가 많은 보고서(전부 넣기)는 원문 본문 없이 이 섹션의 요약 항목만으로 다시 쓴다 (문맥 크기)
+  const picked = readReportArticles(body, MAX_REPORT_ALL)
+  const articles = picked.length > MAX_REPORT_ARTICLES ? picked : await attachBodies(picked)
   if (!SECTION_KEYS.includes(body.key)) return send(res, 400, { error: '없는 섹션이에요.' })
   const { data, model } = await chatJson({
     messages: buildSectionMessages(articles, { key: body.key, report: body.report }),
