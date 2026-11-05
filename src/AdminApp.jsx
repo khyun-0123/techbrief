@@ -512,13 +512,24 @@ function AdminApp() {
   return (
     <div className="adm">
       <aside className="adm-side">
-        <div className="adm-brand">
+        {/* 로고를 누르면 개요로 */}
+        <a
+          className="adm-brand"
+          href="/admin#overview"
+          title="개요로"
+          onClick={(e) => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+            e.preventDefault()
+            go('overview')
+            window.scrollTo({ top: 0 })
+          }}
+        >
           <LogoMark size={28} />
           <span>
             테크브리프
             <small>관리 페이지</small>
           </span>
-        </div>
+        </a>
         <nav className="adm-nav" aria-label="관리 메뉴">
           {SECTIONS.map(([key, label]) => (
             <button key={key} type="button" aria-current={section === key ? 'page' : undefined} onClick={() => go(key)}>

@@ -552,10 +552,22 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         </div>
       )}
       <nav className="topbar">
-        <span className="brand">
+        {/* 로고를 누르면 첫 화면(수집 현황 맨 위)으로. 새 탭(Ctrl·⌘ 클릭)은 주소로 그대로 열림 */}
+        <a
+          className="brand"
+          href={isTest ? '/admin/test' : '/'}
+          title="첫 화면으로"
+          onClick={(e) => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+            e.preventDefault()
+            setScreen('collect')
+            closeSearch()
+            window.scrollTo({ top: 0 })
+          }}
+        >
           <LogoMark size={28} className="brand-mark" />
           테크브리프{isTest && <small className="brand-test"> 테스트</small>}
-        </span>
+        </a>
         <div className="tabs">
         <button
           type="button"
