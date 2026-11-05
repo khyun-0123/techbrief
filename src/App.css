@@ -2407,3 +2407,19 @@ a.btn {
   color: var(--tb-color-text-faint);
   font-size: var(--fs-sm);
 }
+
+/* 로고 = 첫 화면 링크 */
+a.brand {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+a.brand:hover .brand-mark {
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 45%);
+}
+
+a.brand:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+  border-radius: 6px;
+}
