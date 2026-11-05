@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { requestReport, requestReportSection } from './api.js'
 import { articleKey, copyText, SECTIONS, toPlainText } from './reportStore.js'
+import { track } from './usage.js'
 import ReportView from './ReportView.jsx'
 import { load } from './utils.js'
 
@@ -54,6 +55,7 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
     try {
       // 서버가 보고서함 한 건(entry)을 만들어 준다. DB가 있으면 서버에 이미 저장됨
       const { entry } = await requestReport({ articles, aiSummaries, title, periodLabel: PERIODS[period] })
+      track('report')
       entry.articleKey = key
       onSaved(entry)
       setLastId(entry.id)
@@ -92,6 +94,7 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
 
   async function handleCopy() {
     await copyText(toPlainText(current))
+    track('export', 'copy')
     setNotice('개조식 텍스트를 복사했어요. 업무 문서에 붙여 넣으세요.')
   }
 

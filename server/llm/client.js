@@ -2,6 +2,8 @@
 // OpenAI 호환 /chat/completions 주소를 쓰므로 Ollama(맥미니)와 상용 API 모두 같은 코드로 부른다.
 // AI 서버는 두 곳(맥미니·OpenRouter)이고 화면 상단에서 고른다. 고른 값은 이 서버 메모리에만 둔다 (팀원 서버와 별개)
 
+import { recordAiCall } from '../usage.js'
+
 const TIMEOUT_MS = 120_000 // 요약 기본값. 보고서처럼 긴 출력은 호출할 때 늘린다
 
 const PROVIDER_IDS = ['local', 'openrouter']
@@ -201,12 +203,23 @@ async function callChat(cfg, { messages, schema, schemaName, report = false, tim
 export async function chatJson({ messages, schema, schemaName = 'result', report, timeoutMs, priority = PRIORITY.USER, provider }) {
   const cfg = config(provider)
   return enqueue(async () => {
-    const { content, model: used, usage } = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs })
+    // 사용 현황(17 문서 4장)에 AI 호출 수·실패·걸린 시간을 남긴다. 대기열에서 기다린 시간은 빼고 잰다
+    const startedAt = Date.now()
+    const kind = provider ? 'test' : report ? 'report' : 'summary'
     try {
-      // 일부 모델은 JSON을 ```json … ``` 으로 감싸 보낸다
-      return { data: JSON.parse(content.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '')), model: used, usage }
-    } catch {
-      throw new Error('AI 응답이 JSON 형식이 아니에요.')
+      const { content, model: used, usage } = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs })
+      let data
+      try {
+        // 일부 모델은 JSON을 ```json … ``` 으로 감싸 보낸다
+        data = JSON.parse(content.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, ''))
+      } catch {
+        throw new Error('AI 응답이 JSON 형식이 아니에요.')
+      }
+      recordAiCall(kind, true, Date.now() - startedAt)
+      return { data, model: used, usage }
+    } catch (err) {
+      recordAiCall(kind, false, Date.now() - startedAt)
+      throw err
     }
   }, priority)
 }

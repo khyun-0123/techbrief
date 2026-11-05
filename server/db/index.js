@@ -69,6 +69,18 @@ CREATE TABLE IF NOT EXISTS keyword_daily (
   PRIMARY KEY (keyword, day)
 );
 
+-- 사용 현황 (17 문서 4장). 개인 정보 없음: client_id는 브라우저가 만든 무작위 값, IP·User-Agent 저장 안 함
+-- 원본은 90일 보관 (server/usage.js)
+CREATE TABLE IF NOT EXISTS usage_events (
+  id         bigserial PRIMARY KEY,
+  type       text NOT NULL,
+  detail     text,
+  client_id  text,
+  value      integer,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS usage_events_created_idx ON usage_events (created_at);
+
 -- 앱 설정·상태 (자동 최신화 주기, 마지막 실행 시각 등). 팀원 앱이 같이 본다
 CREATE TABLE IF NOT EXISTS app_settings (
   key        text PRIMARY KEY,

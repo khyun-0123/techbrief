@@ -1571,3 +1571,222 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* ── 사용 현황 (17 문서 4장) ── */
+.adm-usage.is-loading {
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.adm-usage-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tb-space-3);
+  margin-bottom: var(--tb-space-4);
+}
+
+.adm-usage-bar .adm-note {
+  margin: 0;
+}
+
+.adm-sub {
+  margin: var(--tb-space-4) 0 var(--tb-space-2);
+  color: var(--adm-muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.adm-desc + .adm-sub {
+  margin-top: 0;
+}
+
+/* 세로 막대 (한 계열: 범례 없이 제목으로 이름, 값은 마우스를 올리면) */
+.adm-bars-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--tb-space-6);
+}
+
+.adm-bars {
+  min-width: 0;
+  margin: 0;
+}
+
+.adm-bars figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--tb-space-2);
+  margin-bottom: var(--tb-space-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.adm-bars-max {
+  color: var(--adm-faint);
+  font-weight: 400;
+}
+
+.adm-bars-plot,
+.adm-bars-axis {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  gap: 2px;
+}
+
+.adm-bars-plot {
+  align-items: end;
+  height: 120px;
+  border-bottom: 1px solid var(--tb-color-line);
+}
+
+.adm-bar {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+}
+
+.adm-bar-fill {
+  width: 100%;
+  max-width: 28px;
+  margin: 0 auto;
+  border-radius: 4px 4px 0 0;
+  background: var(--tb-color-surface-inverse);
+}
+
+.adm-bar:hover .adm-bar-fill {
+  background: var(--tb-color-accent);
+}
+
+.adm-bar:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  z-index: 2;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--tb-color-surface-inverse);
+  color: #fff;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.adm-bars-axis span {
+  overflow: visible;
+  padding-top: 4px;
+  color: var(--adm-faint);
+  font-size: var(--fs-xs);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* 순위 목록 */
+.adm-rank {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-rank li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) minmax(40px, 30%) auto auto;
+  align-items: center;
+  gap: var(--tb-space-2);
+  min-height: 32px;
+  font-size: var(--fs-md);
+}
+
+.adm-rank-no {
+  color: var(--adm-faint);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.adm-rank-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adm-rank-meter {
+  height: 6px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-bg-strong);
+}
+
+.adm-rank-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--tb-color-surface-inverse);
+}
+
+.adm-rank-count {
+  color: var(--adm-muted);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.adm-rank .adm-link-btn,
+.adm-rank .adm-tag {
+  white-space: nowrap;
+}
+
+.adm-usage-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--tb-space-2) var(--tb-space-4);
+  margin: 0;
+  font-size: var(--fs-md);
+}
+
+.adm-usage-dl dt {
+  color: var(--adm-muted);
+}
+
+.adm-usage-dl dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.adm-usage-privacy ul {
+  margin: var(--tb-space-2) 0 0;
+  padding-left: 18px;
+  color: var(--adm-muted);
+  font-size: var(--fs-md);
+}
+
+.adm-usage-privacy li + li {
+  margin-top: 4px;
+}
+
+@media (max-width: 480px) {
+  .adm-rank li {
+    grid-template-columns: 22px minmax(0, 1fr) auto auto;
+  }
+
+  .adm-rank-meter {
+    display: none;
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.adm-usage .adm-tiles {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}

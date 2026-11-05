@@ -247,3 +247,11 @@ export function testSummaryApi(article, related, provider) {
     provider,
   })
 }
+
+// 사용 현황 (관리자만, 17 문서 4장). days: 1(오늘) · 7 · 30
+export async function fetchUsage(days) {
+  const res = await fetch(`/api/admin/usage?days=${days}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? '사용 현황을 불러오지 못했어요')
+  return data
+}
