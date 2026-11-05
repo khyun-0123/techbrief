@@ -6,7 +6,7 @@ import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css'
 import './index.css'
 import './tokens.css' // LG UI Kit 기반 디자인 토큰 (Storybook 「Foundations」)
 import AdminApp from './AdminApp.jsx'
-import App from './App.jsx'
+import OpsGate from './OpsGate.jsx'
 import TestPage from './TestPage.jsx'
 
 // 페이지 3개 (라우터 없이 주소만 본다)
@@ -14,7 +14,8 @@ import TestPage from './TestPage.jsx'
 // /admin       관리 페이지: 설정·상태·실험 기능·변경 기록
 // /admin/test  관리자 테스트 페이지: 실험 기능을 켠 뉴스 화면 + 시험 도구
 const path = window.location.pathname.replace(/\/+$/, '') || '/'
-const Page = path === '/admin/test' ? TestPage : path === '/admin' ? AdminApp : App
+// 일반 화면은 운영 상태(점검 중 등)를 먼저 확인한다 (OpsGate)
+const Page = path === '/admin/test' ? TestPage : path === '/admin' ? AdminApp : OpsGate
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

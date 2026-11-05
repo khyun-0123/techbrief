@@ -2,7 +2,7 @@
 // 일반 화면과 같은 뉴스 화면에 '테스트에서만' 실험 기능을 켜고, 「시험 도구」 탭을 더한다
 import { useEffect, useState } from 'react'
 import { fetchAdminMe } from './api.js'
-import App from './App.jsx'
+import OpsGate from './OpsGate.jsx'
 
 function TestPage() {
   const [state, setState] = useState('checking') // checking | ok | offline
@@ -14,8 +14,8 @@ function TestPage() {
       })
       .catch(() => setState('offline'))
   }, [])
-  if (state === 'ok') return <App mode="test" />
-  if (state === 'offline') return <p style={{ padding: 24 }}>서버에 연결되지 않아요. npm run dev가 켜져 있는지 확인해 주세요.</p>
+  if (state === 'ok') return <OpsGate mode="test" />
+  if (state === 'offline') return <p style={{ padding: 24 }}>서버에 연결되지 않아요. npm run dev(또는 npm run serve)가 켜져 있는지 확인해 주세요.</p>
   return null
 }
 

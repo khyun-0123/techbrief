@@ -31,6 +31,13 @@ import { refreshStatus, saveRefreshSettings, startRefresh, startScheduler as sta
 import { featureList, FEATURES, getFeatures, saveFeatures } from './features.js'
 import { summarizeArticle, summarizeOnly } from './summarize.js'
 import { pruneUsage, recordClientEvent, usageStats } from './usage.js'
+import { checkOps, getOps, OPS_LABEL, publicOps, saveOps } from './ops.js'
+
+// 서버가 켜진 시각: 관리 페이지가 「다시 켜기」 뒤 새로 켜졌는지 알아보는 데 쓴다
+const STARTED_AT = new Date().toISOString()
+// npm run serve(scripts/serve.mjs)로 켰을 때만 「다시 켜기」를 할 수 있다. 이 종료 코드면 serve가 다시 켠다
+const SUPERVISED = process.env.TECHBRIEF_SUPERVISED === '1'
+const RESTART_EXIT_CODE = 75
 
 const REPORT_TIMEOUT_MS = 240_000 // 보고서는 출력이 길어 요약보다 오래 걸린다
 const MAX_REPORT_ARTICLES = 10
@@ -203,9 +210,40 @@ async function checkRunCooldown(req) {
 // /api 요청을 처리한다. Vite 개발 서버와 단독 서버가 같이 쓴다
 export async function handleApi(req, res) {
   try {
+    // 운영 상태(점검 중 · AI 정지)면 일반 사용자의 요청을 막는다. 관리자는 그대로 (19 문서 6장)
+    if (!adminOf(req)) await checkOps(req)
     if (req.method === 'GET' && req.url === '/api/health') {
       const [modelReachable, db] = await Promise.all([pingModel(), dbStatus()])
-      return send(res, 200, { ok: true, model: modelName(), modelReachable, db, llm: llmProviders() })
+      return send(res, 200, {
+        ok: true,
+        model: modelName(),
+        modelReachable,
+        db,
+        llm: llmProviders(),
+        server: { startedAt: STARTED_AT, supervised: SUPERVISED },
+      })
+    }
+    if (req.method === 'GET' && req.url === '/api/ops') {
+      return send(res, 200, publicOps(await getOps()))
+    }
+    if (req.method === 'PUT' && req.url === '/api/admin/ops') {
+      const admin = requireAdmin(req)
+      const saved = await saveOps(await readJson(req), admin.name)
+      const extra = [saved.message && `「${saved.message}」`, saved.until && `${saved.until} 재개 예정`].filter(Boolean).join(' · ')
+      await logChange(admin, '운영 상태', `${OPS_LABEL[saved.mode]}${extra ? ` · ${extra}` : ''}`)
+      return send(res, 200, publicOps(saved))
+    }
+    if (req.method === 'POST' && req.url === '/api/admin/restart') {
+      // 서버 다시 켜기: 이 프로세스를 끝내면 npm run serve가 다시 켠다 (npm run dev로 켰으면 꺼진 채 남으므로 막음)
+      const admin = requireAdmin(req)
+      if (!SUPERVISED) {
+        return send(res, 409, { error: '이 서버는 npm run dev로 켜져 있어 여기서 다시 켤 수 없어요. 서버 PC에서 npm run serve로 켜 주세요.' })
+      }
+      await logChange(admin, '서버', '다시 켜기')
+      send(res, 202, { ok: true, startedAt: STARTED_AT })
+      console.log(`[server] ${admin.name}이(가) 관리 페이지에서 다시 켜기를 눌렀어요`)
+      setTimeout(() => process.exit(RESTART_EXIT_CODE), 300)
+      return
     }
     // ── 관리자 (17 문서) ──
     if (req.method === 'GET' && req.url === '/api/admin/me') {
@@ -368,7 +406,7 @@ export async function handleApi(req, res) {
   } catch (err) {
     const status = err.status ?? (err.name === 'TimeoutError' ? 504 : 502)
     console.error(`[api] ${req.method} ${req.url} → ${status}: ${err.message}`)
-    send(res, status, { error: err.message, ...(err.locked && { locked: true }) })
+    send(res, status, { error: err.message, ...(err.locked && { locked: true }), ...(err.ops && { ops: true }) })
   }
 }
 

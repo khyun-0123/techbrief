@@ -255,3 +255,29 @@ export async function fetchUsage(days) {
   if (!res.ok) throw new Error(data.error ?? '사용 현황을 불러오지 못했어요')
   return data
 }
+
+// 운영 상태 { mode: normal|notice|ai_off|maintenance, message, until } — 누구나 읽음 (19 문서 6장)
+export async function fetchOps() {
+  const res = await fetch('/api/ops')
+  if (!res.ok) throw new Error('운영 상태를 불러오지 못했어요')
+  return res.json()
+}
+
+export async function saveOpsApi(ops) {
+  const res = await fetch('/api/admin/ops', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(ops),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}
+
+// 서버 다시 켜기 (npm run serve로 켰을 때만)
+export async function restartServerApi() {
+  const res = await fetch('/api/admin/restart', { method: 'POST' })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}
