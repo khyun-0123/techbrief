@@ -84,7 +84,7 @@
   justify-content: space-between;
   padding: 10px 12px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--tb-radius-button);
   background: none;
   color: inherit;
   font: inherit;
@@ -187,7 +187,7 @@
 .adm-toast {
   margin: 0 0 16px;
   padding: 10px 14px;
-  border-radius: 8px;
+  border-radius: var(--tb-radius-input);
   background: var(--adm-ok-soft);
   color: var(--adm-ok);
   font-size: 14px;
@@ -201,7 +201,7 @@
 .adm-card {
   padding: 22px 24px;
   border: 1px solid var(--adm-line);
-  border-radius: 12px;
+  border-radius: var(--tb-radius-card);
   background: #fff;
 }
 
@@ -256,7 +256,7 @@
 .adm-tile {
   padding: 16px 18px;
   border: 1px solid var(--adm-line);
-  border-radius: 12px;
+  border-radius: var(--tb-radius-card-s);
   background: #fff;
 }
 
@@ -322,7 +322,7 @@
   gap: 12px;
   padding: 12px 16px;
   border-left: 4px solid var(--adm-warn);
-  border-radius: 8px;
+  border-radius: var(--tb-radius-input);
   background: var(--adm-warn-soft);
   font-size: var(--fs-base);
 }
@@ -356,7 +356,7 @@
   width: 100%;
   padding: 9px 12px;
   border: 1px solid var(--tb-color-line);
-  border-radius: 8px;
+  border-radius: var(--tb-radius-input);
   background: #fff;
   font: inherit;
   font-size: 14px;
@@ -391,14 +391,16 @@
 }
 
 .adm-btn {
-  padding: 8px 14px;
+  padding: 8px 16px;
   border: 1px solid var(--tb-color-line);
-  border-radius: 8px;
+  border-radius: var(--tb-radius-button);
   background: #fff;
   color: var(--adm-ink);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--fs-md);
   cursor: pointer;
+  min-height: 40px;
+  font-weight: 600;
 }
 
 .adm-btn.primary {
@@ -424,7 +426,7 @@
   gap: 4px;
   padding: 16px;
   border: 2px solid var(--adm-line);
-  border-radius: 12px;
+  border-radius: var(--tb-radius-card-s);
   background: #fff;
   font: inherit;
   text-align: left;
@@ -530,7 +532,7 @@
 .adm-tag {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--tb-radius-full);
   background: var(--tb-color-bg-strong);
   color: var(--tb-color-text-sub);
   font-size: 12px;
@@ -757,7 +759,7 @@
   height: 46px;
   padding: 0 14px;
   border: 1px solid var(--tb-color-line);
-  border-radius: 10px;
+  border-radius: var(--tb-radius-input);
   background: #fff;
   color: var(--tb-color-text);
   font: inherit;
@@ -824,7 +826,7 @@
   gap: 2px;
   margin-top: 20px;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--tb-radius-input);
   font-size: 13px;
   line-height: 1.5;
   word-break: keep-all;
@@ -853,7 +855,7 @@
   height: 48px;
   margin-top: 28px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--tb-radius-button);
   background: var(--tb-color-primary);
   color: #fff;
   font: inherit;
@@ -995,20 +997,21 @@
   display: inline-flex;
   flex: none;
   padding: 3px;
-  border-radius: 10px;
+  border-radius: var(--tb-radius-input);
   background: var(--tb-color-bg-strong);
 }
 
 .adm-segment button {
-  padding: 7px 12px;
+  padding: 0 16px;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: none;
   color: var(--adm-muted);
   font: inherit;
   font-size: var(--fs-md);
   white-space: nowrap;
   cursor: pointer;
+  height: 32px;
 }
 
 .adm-segment button[aria-checked='true'] {
@@ -1032,7 +1035,7 @@
 
   .adm-segment button {
     flex: 1;
-    padding: 7px 4px;
+    padding: 0 4px;
   }
 
   .adm-card {
@@ -1064,13 +1067,14 @@
   flex: none;
   padding: 0 16px;
   border: 1px solid var(--adm-accent);
-  border-radius: 8px;
+  border-radius: var(--tb-radius-button);
   background: #fff;
   color: var(--adm-accent);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--fs-md);
   font-weight: 600;
   cursor: pointer;
+  min-height: 40px;
 }
 
 .chip-add-btn:disabled {
@@ -1121,7 +1125,7 @@
   display: inline-block;
   margin-left: 8px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--tb-radius-full);
   background: var(--adm-accent);
   color: #fff;
   font-size: 11px;
@@ -1166,14 +1170,15 @@
 
 .adm-pills button {
   min-width: 64px;
-  padding: 8px 12px;
+  padding: 0 12px;
   border: 1px solid var(--tb-color-line);
-  border-radius: 999px;
+  border-radius: var(--tb-radius-full);
   background: #fff;
   color: var(--adm-ink);
   font: inherit;
   font-size: var(--fs-md);
   cursor: pointer;
+  height: 34px;
 }
 
 .adm-pills button:hover {
@@ -1241,7 +1246,7 @@
   gap: 14px 20px;
   margin: 0;
   padding: 16px;
-  border-radius: 10px;
+  border-radius: var(--tb-radius-card-s);
   background: var(--adm-bg);
 }
 
@@ -1282,14 +1287,14 @@
 .adm input[type='time'] {
   -webkit-appearance: none;
   appearance: none;
-  height: 42px;
-  padding: 0 14px;
+  height: 40px;
+  padding: 0 12px;
   border: 1px solid var(--tb-color-line);
-  border-radius: 10px;
+  border-radius: var(--tb-radius-input);
   background-color: #fff;
   color: var(--adm-ink);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--fs-md);
 }
 
 .adm select {
@@ -1411,7 +1416,7 @@
   gap: 10px 16px;
   margin-top: 20px;
   padding: 12px 16px 12px 20px;
-  border-radius: 12px;
+  border-radius: var(--tb-radius-card-s);
   background: var(--tb-color-surface-inverse);
   color: rgb(255 255 255 / 88%);
   font-size: 14px;
@@ -1461,7 +1466,7 @@
   width: 100%;
   max-width: 460px;
   padding: 24px;
-  border-radius: 14px;
+  border-radius: var(--tb-radius-dialog);
   background: #fff;
   box-shadow: 0 24px 60px rgb(0 0 0 / 30%);
 }
@@ -1480,7 +1485,7 @@
 .adm-modal ul {
   margin: 0;
   padding: 12px 16px 12px 32px;
-  border-radius: 10px;
+  border-radius: var(--tb-radius-input);
   background: var(--adm-bg);
   font-size: 14px;
   font-weight: 600;
