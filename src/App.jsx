@@ -27,6 +27,7 @@ import { useSummaryQueue } from './summaryQueue.js'
 import { DEFAULT_KEYWORDS, SAMPLE_ARTICLES } from './sampleArticles.js'
 import SelectSummary from './SelectSummary.jsx'
 import { enabledFeatures, FeaturesContext } from './features.js'
+import { AI_BLOCKED_TITLE, OPS_LABEL, OpsContext } from './ops.js'
 import ListsPanel from './ListsPanel.jsx'
 import LogoMark from './Logo.jsx'
 import RefreshPanel from './RefreshPanel.jsx'
@@ -115,8 +116,10 @@ function searchScope(period) {
 }
 
 // mode: 'normal'(일반 접속 /) | 'test'(관리자 테스트 페이지 /admin/test). 테스트에서는 '테스트에서만' 실험 기능까지 켠다
-function App({ mode = 'normal' }) {
+function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const isTest = mode === 'test'
+  // 운영 상태 (19 문서 6장): AI 기능 정지면 일반 화면의 요약·보고서 버튼을 막는다. 테스트 페이지(관리자)는 그대로
+  const opsValue = useMemo(() => ({ ...ops, aiBlocked: !isTest && ops.mode === 'ai_off' }), [ops, isTest])
   const [featureStates, setFeatureStates] = useState({}) // 실험 기능 { key: 'off' | 'test' | 'all' }
   const [featureList, setFeatureList] = useState([]) // [{ key, label }] 테스트 띠에 한글 이름으로 보여 줄 때
   const features = useMemo(() => enabledFeatures(featureStates, mode), [featureStates, mode])
@@ -515,7 +518,7 @@ function App({ mode = 'normal' }) {
         const { hoursAgo, ...plain } = article
         setExtraArticles((prev) => [...prev.filter((x) => x.id !== id), plain].slice(-100))
       }
-      if (!aiSummaries[id]) queue.enqueue(article)
+      if (!aiSummaries[id] && !opsValue.aiBlocked) queue.enqueue(article)
     }
   }
 
@@ -534,6 +537,7 @@ function App({ mode = 'normal' }) {
   const reportArticles = included.map((id) => candidates.find((a) => a.id === id)).filter(Boolean)
 
   return (
+    <OpsContext.Provider value={opsValue}>
     <FeaturesContext.Provider value={features}>
     <div className={isTest ? 'app app-test' : 'app'}>
       {isTest && (
@@ -615,6 +619,20 @@ function App({ mode = 'normal' }) {
           </a>
         </span>
       </nav>
+      {ops.mode !== 'normal' && (isTest || ops.mode !== 'maintenance') && (
+        <div className={`ops-banner ops-${ops.mode}`} role="status">
+          <strong>{isTest ? `운영 상태: ${OPS_LABEL[ops.mode]}` : ops.mode === 'ai_off' ? 'AI 요약·보고서 잠시 멈춤' : '공지'}</strong>
+          <span>
+            {isTest && ops.mode === 'maintenance'
+              ? '일반 사용자에게는 점검 화면이 보여요. 관리자는 여기서 그대로 확인할 수 있어요.'
+              : isTest && ops.mode === 'ai_off'
+                ? '일반 사용자는 요약·보고서를 쓸 수 없어요. 관리자는 그대로 쓸 수 있어요.'
+                : ops.message || (ops.mode === 'ai_off' ? '기사 보기와 찾기는 그대로 쓸 수 있어요.' : '')}
+            {!isTest && ops.until && ` · ${ops.until} 재개 예정`}
+          </span>
+          {isTest && <a href="/admin#ops">운영 설정 →</a>}
+        </div>
+      )}
 
       {screen === 'tools' && isTest ? (
         <TestTools providers={health?.llm?.providers ?? []} />
@@ -909,7 +927,8 @@ function App({ mode = 'normal' }) {
                               <button
                                 type="button"
                                 className="btn outline summary-btn"
-                                title={job?.status === 'error' ? `요약 오류: ${job.error}` : 'AI로 6항목 요약 (선별하지 않아도 됨)'}
+                                title={opsValue.aiBlocked ? AI_BLOCKED_TITLE : job?.status === 'error' ? `요약 오류: ${job.error}` : 'AI로 6항목 요약 (선별하지 않아도 됨)'}
+                                disabled={opsValue.aiBlocked}
                                 onClick={() => queue.enqueue(a)}
                               >
                                 {job?.status === 'error' ? '요약 재시도' : '요약 추가'}
@@ -991,6 +1010,7 @@ function App({ mode = 'normal' }) {
       <ProgressPanel queue={queue} />
     </div>
     </FeaturesContext.Provider>
+    </OpsContext.Provider>
   )
 }
 

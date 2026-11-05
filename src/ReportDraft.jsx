@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { requestReport, requestReportSection } from './api.js'
 import { articleKey, copyText, SECTIONS, toPlainText } from './reportStore.js'
 import { track } from './usage.js'
+import { AI_BLOCKED_TITLE, useOps } from './ops.js'
 import ReportView from './ReportView.jsx'
 import { load } from './utils.js'
 
@@ -44,7 +45,8 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
   const missing = articles.filter((a) => !aiSummaries[a.id])
   const jobOf = (id) => queue.jobs.find((j) => j.id === id)
   const pending = missing.filter((a) => ['queued', 'running'].includes(jobOf(a.id)?.status))
-  const canGenerate = articles.length > 0 && missing.length === 0 && !generating
+  const { aiBlocked } = useOps() // 운영 상태 「AI 기능 정지」 (19 문서 6장)
+  const canGenerate = articles.length > 0 && missing.length === 0 && !generating && !aiBlocked
 
   async function handleGenerate() {
     const startedAt = Date.now()
@@ -147,7 +149,7 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
         {error && <p className="ai-error">{error}</p>}
         <ReportView
           saved={current}
-          onRegenerate={handleRegenerate}
+          onRegenerate={aiBlocked ? undefined : handleRegenerate}
           regenKey={regenKey}
           busy={Boolean(regenKey)}
           tools={
@@ -172,7 +174,7 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
           <p>선별·요약에서 체크한 기사 {articles.length}건으로 만들어요. 아래는 보고서에 담길 재료예요.</p>
         </div>
         <div className="header-actions">
-          <button type="button" className="btn primary" onClick={handleGenerate} disabled={!canGenerate}>
+          <button type="button" className="btn primary" onClick={handleGenerate} disabled={!canGenerate} title={aiBlocked ? AI_BLOCKED_TITLE : undefined}>
             {generating ? '초안 만드는 중…' : '초안 생성'}
           </button>
         </div>
@@ -200,7 +202,7 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
           AI 요약이 아직 없는 기사가 {missing.length}건 있어요
           {pending.length > 0 ? ` (${pending.length}건 요약 중 — 진행 창 참고)` : ''}. 요약이 끝나면 초안을 만들 수 있어요.{' '}
           {pending.length < missing.length && (
-            <button type="button" className="btn" onClick={() => missing.forEach((a) => queue.enqueue(a))}>
+            <button type="button" className="btn" onClick={() => missing.forEach((a) => queue.enqueue(a))} disabled={aiBlocked} title={aiBlocked ? AI_BLOCKED_TITLE : undefined}>
               남은 기사 요약하기
             </button>
           )}

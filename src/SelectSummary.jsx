@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { SAMPLE_SUMMARIES } from './sampleArticles.js'
 import { useFeature } from './features.js'
+import { AI_BLOCKED_TITLE, useOps } from './ops.js'
 import SentimentBadge, { sentimentOf } from './SentimentBadge.jsx'
 import SummaryItems from './SummaryItems.jsx'
 import { formatPublished } from './utils.js'
@@ -15,6 +16,7 @@ function importanceOf(article) {
 
 // aiSummaries·queue는 App이 관리한다 (「선별 추가」하면 자동 요약)
 function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onGoCollect, onGoReport, aiSummaries, queue }) {
+  const { aiBlocked } = useOps() // 운영 상태 「AI 기능 정지」 (19 문서 6장)
   const [sort, setSort] = useState('importance')
   const showSentiment = useFeature('sentiment') // 실험 기능
   const [activeId, setActiveId] = useState(null)
@@ -210,7 +212,13 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
                     <p className="hint">이 기사는 아직 요약이 없어요.</p>
                   )}
                   {!activeBusy && (
-                    <button type="button" className="btn outline" onClick={() => queue.enqueue(active)}>
+                    <button
+                      type="button"
+                      className="btn outline"
+                      onClick={() => queue.enqueue(active)}
+                      disabled={aiBlocked}
+                      title={aiBlocked ? AI_BLOCKED_TITLE : undefined}
+                    >
                       AI 요약 만들기
                     </button>
                   )}

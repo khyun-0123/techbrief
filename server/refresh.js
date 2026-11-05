@@ -8,6 +8,7 @@ import { db, dbEnabled } from './db/index.js'
 import { getKeywords, getSetting, getSummaries, setSetting } from './db/store.js'
 import { pingModel, PRIORITY, queueStatus } from './llm/client.js'
 import { summarizeArticle } from './summarize.js'
+import { aiPaused } from './ops.js'
 
 const SETTINGS_KEY = 'refresh_settings'
 const STATE_KEY = 'refresh_state'
@@ -165,6 +166,11 @@ async function runWorker() {
         summarizedInPass = false
       }
       if (!backlog.length) break
+      // 운영 상태가 AI 기능 정지 · 점검 중이면 멈춘다 (재개 뒤 다음 최신화 때 이어서)
+      if (await aiPaused()) {
+        stats.note = '운영 상태(AI 기능 정지 · 점검 중) 때문에 자동 요약을 멈춤 · 재개 뒤 다음 최신화 때 이어서'
+        break
+      }
       const { article } = backlog.shift()
       stats.current = article.title
       await saveBacklogStatus()

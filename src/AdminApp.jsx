@@ -14,6 +14,7 @@ import {
   fetchHealth,
   fetchKeywords,
   fetchLists,
+  fetchOps,
   fetchRefresh,
   runRefresh,
   saveFeaturesApi,
@@ -26,6 +27,8 @@ import { ChipList, ListsEditor } from './ListsPanel.jsx'
 import LogoMark from './Logo.jsx'
 import AdminRefresh from './AdminRefresh.jsx'
 import AdminUsage from './AdminUsage.jsx'
+import AdminOps from './AdminOps.jsx'
+import { OPS_LABEL } from './ops.js'
 
 const SECTIONS = [
   ['overview', '개요', '시스템 상태와 확인할 일을 한눈에 봐요.'],
@@ -34,6 +37,7 @@ const SECTIONS = [
   ['refresh', '자동 최신화', '언제 기사를 모으고, 자동 요약을 할지 정해요.'],
   ['llm', 'AI 모델', '요약·보고서에 쓸 AI 서버를 골라요. 모든 사용자에게 바로 적용돼요.'],
   ['features', '실험 기능', '새 기능을 테스트 페이지에서 먼저 써 보고, 괜찮으면 모두에게 켜요.'],
+  ['ops', '운영', '일반 화면을 점검 중 · AI 기능 정지 · 공지로 바꾸고, 서버를 다시 켜요.'],
   ['log', '변경 기록', '언제 누가 무엇을 바꿨는지 최근 200건까지 남아요.'],
 ]
 const STALE_HOURS = 24 // 이 시간 넘게 수집이 없으면 경고
@@ -81,8 +85,9 @@ function sectionFromHash() {
 }
 
 // 확인할 일: 연결 끊김, 수집 실패, 오래 수집 안 됨, 설정 빈칸
-function buildAlerts({ health, refresh, keywords, lists }) {
+function buildAlerts({ health, refresh, keywords, lists, ops }) {
   const alerts = []
+  if (ops && ops.mode !== 'normal') alerts.push({ level: ops.mode === 'notice' ? 'warn' : 'bad', text: `일반 화면이 「${OPS_LABEL[ops.mode]}」 상태예요.`, go: 'ops' })
   if (health?.error) alerts.push({ level: 'bad', text: '서버에 연결되지 않아요.' })
   else if (health && !health.modelReachable) alerts.push({ level: 'bad', text: 'AI 서버에 연결되지 않아 요약·보고서를 만들 수 없어요.', go: 'llm' })
   if (health?.db?.enabled && !health.db.ok) alerts.push({ level: 'bad', text: `DB 오류: ${health.db.error}` })
@@ -282,6 +287,7 @@ function AdminApp() {
   const [health, setHealth] = useState(null)
   const [log, setLog] = useState([])
   const [features, setFeatures] = useState(null) // { features: { key: state }, list }
+  const [ops, setOps] = useState(null) // 일반 화면 운영 상태 (19 문서 6장)
   const [toast, setToast] = useState(readFlash) // { text, error } — 저장 뒤 새로고침했으면 결과 안내로 시작
   const [starting, setStarting] = useState(false)
   // 저장 전 변경: 바꾼 것만 담는다 { keywords?, lists?, refresh?, llm?, features? }. 「저장」을 눌러야 서버에 저장
@@ -319,8 +325,17 @@ function AdminApp() {
       window.location.replace(next)
       return
     }
-    Promise.all([fetchKeywords(), fetchLists(), fetchRefresh(), fetchHealth().catch(() => ({ error: true })), fetchAdminLog(), fetchFeatures()])
-      .then(([k, l, r, h, g, f]) => {
+    Promise.all([
+      fetchKeywords(),
+      fetchLists(),
+      fetchRefresh(),
+      fetchHealth().catch(() => ({ error: true })),
+      fetchAdminLog(),
+      fetchFeatures(),
+      fetchOps().catch(() => null),
+    ])
+      .then(([k, l, r, h, g, f, o]) => {
+        setOps(o)
         setFeatures(f)
         setKeywords(k)
         setLists(l)
@@ -336,6 +351,7 @@ function AdminApp() {
     if (!admin) return
     const timer = setInterval(() => {
       fetchRefresh().then(setRefresh).catch(() => {})
+      fetchOps().then(setOps).catch(() => {}) // 다른 관리자가 바꾼 운영 상태도 반영
       fetchHealth()
         .then(setHealth)
         .catch(() => setHealth({ error: true }))
@@ -489,7 +505,7 @@ function AdminApp() {
   }
   if (!admin) return <LoginPage configured={me.configured} onLogin={(a) => setMe((prev) => ({ ...prev, admin: a }))} />
 
-  const alerts = buildAlerts({ health, refresh, keywords, lists })
+  const alerts = buildAlerts({ health, refresh, keywords, lists, ops })
   const [, title, desc] = SECTIONS.find(([key]) => key === section)
   const current = health?.llm?.providers.find((p) => p.id === health.llm.current)
 
@@ -508,6 +524,7 @@ function AdminApp() {
             <button key={key} type="button" aria-current={section === key ? 'page' : undefined} onClick={() => go(key)}>
               {label}
               {key === 'overview' && alerts.some((a) => a.level === 'bad') && <span className="adm-dot" aria-label="확인할 일 있음" />}
+              {key === 'ops' && ops && ops.mode !== 'normal' && <span className="adm-dot" aria-label={`운영 상태: ${OPS_LABEL[ops.mode]}`} />}
               {dirtySections.has(key) && <span className="adm-dot adm-dot-edit" aria-label="저장하지 않은 변경 있음" />}
             </button>
           ))}
@@ -741,6 +758,21 @@ function AdminApp() {
               ))}
             </ul>
           </section>
+        )}
+
+        {section === 'ops' && ops && (
+          <AdminOps
+            key={ops.updatedAt ?? 'initial'} // 운영 상태가 바뀌면(다른 관리자 포함) 입력칸을 새 상태로
+            ops={ops}
+            onOps={(o) => {
+              setOps(o)
+              fetchAdminLog().then(setLog).catch(() => {})
+            }}
+            onToast={setToast}
+            health={health}
+            refreshRunning={Boolean(refresh?.running)}
+            dirtyCount={dirty.length}
+          />
         )}
 
         {section === 'log' && (

@@ -2300,3 +2300,110 @@ a.btn {
   border-radius: 8px;
   box-shadow: 0 0 0 1px rgb(255 255 255 / 22%);
 }
+
+/* ── 운영 상태 (19 문서 6장) ── */
+.ops-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 10px 32px;
+  border-bottom: 1px solid var(--tb-color-line-soft);
+  background: var(--tb-color-bg-strong);
+  color: var(--tb-color-text);
+  font-size: var(--fs-md);
+}
+
+.ops-banner strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ops-banner strong::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tb-color-text-sub);
+}
+
+.ops-banner.ops-ai_off,
+.ops-banner.ops-maintenance {
+  background: var(--tb-color-warning-soft);
+}
+
+.ops-banner.ops-ai_off strong::before,
+.ops-banner.ops-maintenance strong::before {
+  background: var(--tb-color-warning);
+}
+
+.ops-banner span {
+  color: var(--tb-color-text-sub);
+}
+
+.ops-banner a {
+  margin-left: auto;
+  color: var(--tb-color-text);
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .ops-banner {
+    padding: 10px 16px;
+  }
+}
+
+/* 점검 중 안내 화면 */
+.maint {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px 16px;
+  background: var(--tb-color-bg);
+}
+
+.maint-card {
+  width: min(480px, 100%);
+  padding: 40px 32px;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: var(--tb-radius-card);
+  background: var(--tb-color-surface);
+  text-align: center;
+}
+
+.maint-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 28px;
+  font-size: var(--fs-brand);
+  font-weight: 700;
+}
+
+.maint h1 {
+  margin: 0 0 12px;
+  font-size: var(--fs-h1);
+}
+
+.maint-msg {
+  margin: 0;
+  font-size: var(--fs-base);
+  white-space: pre-line;
+}
+
+.maint-until {
+  display: inline-block;
+  margin: 16px 0 0;
+  padding: 4px 12px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-bg-strong);
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.maint-note {
+  margin: 24px 0 0;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-sm);
+}
