@@ -95,7 +95,7 @@
 .panel {
   background: #fff;
   border: 1px solid var(--primitive-color-warm-gray-80);
-  border-radius: 10px;
+  border-radius: var(--tb-radius-card);
 }
 
 .stat {
@@ -169,7 +169,7 @@ input,
 select {
   padding: 10px 12px;
   border: 1px solid var(--tb-color-line);
-  border-radius: 6px;
+  border-radius: var(--tb-radius-input);
   font: inherit;
   font-size: var(--fs-md); /* 버튼과 같은 크기 (관리 페이지와 같음) */
   background: #fff;
@@ -246,8 +246,8 @@ select {
 .badge-important {
   display: inline-block;
   margin-right: 6px;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 1px 8px;
+  border-radius: var(--tb-radius-full);
   background: var(--tb-color-accent-soft);
   color: var(--tb-color-highlight);
   font-size: 12px;
@@ -258,8 +258,8 @@ select {
 .badge-low {
   display: inline-block;
   margin-right: 6px;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 1px 8px;
+  border-radius: var(--tb-radius-full);
   background: var(--tb-color-bg-strong);
   color: var(--tb-color-text-sub);
   font-size: 12px;
@@ -339,14 +339,16 @@ tr.row-open td {
 }
 
 .btn {
-  padding: 8px 12px;
+  padding: 8px 16px;
   margin-right: 6px;
   border: 1px solid var(--tb-color-line);
-  border-radius: 6px;
+  border-radius: var(--tb-radius-button);
   background: #fff;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--fs-md);
   cursor: pointer;
+  min-height: 40px;
+  font-weight: 600;
 }
 
 .btn:disabled {
@@ -378,20 +380,28 @@ tr.row-open td {
   white-space: nowrap; /* 키워드는 한 줄로 */
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 999px;
+  gap: 6px;
+  padding: 0 6px 0 12px;
+  border-radius: var(--tb-radius-full);
   background: var(--tb-color-surface);
   color: var(--tb-color-text);
-  font-size: 13px;
+  font-size: var(--fs-sm);
+  min-height: 30px;
 }
 
 .chip button {
   border: none;
   background: none;
-  color: inherit;
-  font-size: 15px;
+  color: var(--tb-color-text-sub);
+  font-size: 14px;
   cursor: pointer;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  line-height: 1;
 }
 
 .empty {
@@ -568,7 +578,7 @@ tr.row-open td {
 .btn-text {
   padding: 4px 8px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--tb-radius-button);
   background: none;
   color: var(--tb-color-text-sub);
   font: inherit;
@@ -654,8 +664,8 @@ tr.row-open td {
 .basis {
   display: inline-block;
   margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 1px 8px;
+  border-radius: var(--tb-radius-full);
   font-size: 11px;
   vertical-align: middle;
 }
@@ -730,7 +740,7 @@ a.btn {
 /* 게이지 (요약·보고서 진행) */
 .gauge {
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--tb-radius-full);
   background: var(--primitive-color-warm-gray-80);
   overflow: hidden;
 }
@@ -767,7 +777,7 @@ a.btn {
   padding: 14px 16px;
   background: #fff;
   border: 1px solid var(--primitive-color-warm-gray-80);
-  border-radius: 12px;
+  border-radius: var(--tb-radius-card-s);
   box-shadow: 0 10px 30px rgba(28, 37, 51, 0.18);
 }
 
@@ -936,7 +946,7 @@ a.btn {
 .report-notice {
   margin: 16px 0 0;
   padding: 12px 16px;
-  border-radius: 8px;
+  border-radius: var(--tb-radius-input);
   background: var(--tb-color-warning-soft);
   color: var(--tb-color-warning);
   font-size: 14px;
@@ -991,7 +1001,7 @@ a.btn {
 .report-warnings {
   margin: 14px 0 0;
   padding: 10px 14px;
-  border-radius: 8px;
+  border-radius: var(--tb-radius-input);
   background: var(--tb-color-warning-soft);
   color: var(--tb-color-warning);
   font-size: 13px;
@@ -1103,7 +1113,7 @@ a.btn {
 .llm-select {
   padding: 3px 6px;
   border: 1px solid rgb(255 255 255 / 25%);
-  border-radius: 6px;
+  border-radius: var(--tb-radius-input);
   background: rgb(255 255 255 / 8%);
   color: var(--primitive-color-warm-gray-80);
   font-size: 13px;
@@ -1112,7 +1122,7 @@ a.btn {
 .tab-count {
   margin-left: 6px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--tb-radius-full);
   background: rgb(255 255 255 / 14%);
   color: var(--tb-color-line);
   font-size: 12px;
@@ -1207,7 +1217,7 @@ a.btn {
 .section-sources {
   margin: 0;
   padding: 10px 12px 10px 28px;
-  border-radius: 8px;
+  border-radius: var(--tb-radius-input);
   background: var(--tb-color-bg);
   color: var(--tb-color-text-sub);
   font-size: 13px;
@@ -1250,7 +1260,7 @@ a.btn {
   width: 100%;
   padding: 12px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--tb-radius-card-s);
   background: none;
   font: inherit;
   text-align: left;
@@ -1331,11 +1341,12 @@ a.btn {
 .refresh-settings input {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid var(--primitive-color-warm-gray-75);
-  border-radius: 6px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
   background: #fff;
   font: inherit;
   font-size: 14px;
+  min-height: 40px;
 }
 
 /* 자동 요약 켜기/끄기 스위치 */
@@ -1492,8 +1503,8 @@ a.btn {
   min-width: 34px;
   height: 34px;
   padding: 0 8px;
-  border: 1px solid var(--primitive-color-warm-gray-75);
-  border-radius: 6px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-button);
   background: #fff;
   color: var(--tb-color-text);
   font: inherit;
@@ -1774,8 +1785,8 @@ a.btn {
 .sentiment {
   display: inline-block;
   margin-right: 6px;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 1px 8px;
+  border-radius: var(--tb-radius-full);
   font-size: 12px;
   font-weight: 700;
   vertical-align: 1px;
@@ -1865,7 +1876,7 @@ a.btn {
 .fav-item {
   display: flex;
   align-items: center;
-  border-radius: 6px;
+  border-radius: var(--tb-radius-input);
 }
 
 .fav-item:hover,
@@ -2105,7 +2116,7 @@ a.btn {
 .brand-test {
   margin-left: 6px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--tb-radius-full);
   background: var(--tb-color-accent);
   color: #fff;
   font-size: 12px;
@@ -2201,7 +2212,7 @@ a.btn {
 .tools-result {
   padding: 16px;
   border: 1px solid var(--primitive-color-warm-gray-80);
-  border-radius: 10px;
+  border-radius: var(--tb-radius-card-s);
 }
 
 .tools-result h3 {
