@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 // 화면에 쓰인 글자 묶음만 그때그때 받는다 (dynamic subset). SIL OFL 1.1
 import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css'
 import './index.css'
+import './tokens.css' // LG UI Kit 기반 디자인 토큰 (Storybook 「Foundations」)
 import AdminApp from './AdminApp.jsx'
 import App from './App.jsx'
 import TestPage from './TestPage.jsx'

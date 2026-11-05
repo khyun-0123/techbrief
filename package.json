@@ -8,9 +8,13 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "server": "node --env-file-if-exists=.env.local server/index.js"
+    "server": "node --env-file-if-exists=.env.local server/index.js",
+    "storybook": "storybook dev -p ${STORYBOOK_PORT:-6006} --no-open",
+    "build-storybook": "storybook build -o storybook-static"
   },
   "dependencies": {
+    "@enovaui/core-tokens": "3.8.0",
+    "@enovaui/web-tokens": "3.8.0",
     "@mozilla/readability": "^0.6.0",
     "jsdom": "^26.1.0",
     "pg": "^8.23.1",
@@ -20,10 +24,13 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@storybook/addon-docs": "10.6.5",
+    "@storybook/react-vite": "10.6.5",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
+    "storybook": "10.6.5",
     "vite": "^8.3.0"
   }
 }
