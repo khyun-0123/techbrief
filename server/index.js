@@ -207,8 +207,9 @@ export async function handleApi(req, res) {
       return send(res, 200, { configured: adminConfigured(), admin: adminOf(req) })
     }
     if (req.method === 'POST' && req.url === '/api/admin/login') {
-      const { cookie, name } = login(await readJson(req))
-      return send(res, 200, { admin: { name } }, { 'Set-Cookie': cookie })
+      const result = login(await readJson(req))
+      if (result.reset) return send(res, 200, { reset: true }) // 잠금 리셋: 로그인은 하지 않음
+      return send(res, 200, { admin: { name: result.name } }, { 'Set-Cookie': result.cookie })
     }
     if (req.method === 'POST' && req.url === '/api/admin/logout') {
       return send(res, 200, { ok: true }, { 'Set-Cookie': logout(req) })
@@ -351,7 +352,7 @@ export async function handleApi(req, res) {
   } catch (err) {
     const status = err.status ?? (err.name === 'TimeoutError' ? 504 : 502)
     console.error(`[api] ${req.method} ${req.url} → ${status}: ${err.message}`)
-    send(res, status, { error: err.message })
+    send(res, status, { error: err.message, ...(err.locked && { locked: true }) })
   }
 }
 

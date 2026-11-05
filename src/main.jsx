@@ -1,5 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+// 글꼴: Pretendard를 서버에서 직접 제공 (컴퓨터에 설치돼 있지 않아도, 외부 글꼴 서버가 막혀도 보이게)
+// 화면에 쓰인 글자 묶음만 그때그때 받는다 (dynamic subset). SIL OFL 1.1
+import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css'
 import './index.css'
 import AdminApp from './AdminApp.jsx'
 import App from './App.jsx'

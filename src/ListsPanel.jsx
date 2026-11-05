@@ -5,7 +5,7 @@ import { useState } from 'react'
 const GROUPS = [
   ['own', '자사·자회사', '「자사·자회사 기사 제외」에 쓰여요', '예: LG디스플레이'],
   ['competitors', '경쟁사', '중요도의 경쟁사 언급에 쓰여요', '예: 삼성디스플레이'],
-  ['interests', '관심 기술', '관련도·중요도 판단에 쓸 예정이에요', '예: 마이크로LED'],
+  ['interests', '관심 기술', '제목에 나오면 중요도 점수가 올라가요', '예: 마이크로LED'],
 ]
 
 // onChange가 없으면 보기만
@@ -22,7 +22,13 @@ export function ChipList({ id, label, hint, placeholder, words, onChange }) {
       {onChange ? (
         <form onSubmit={add}>
           <label htmlFor={`list-${id}`}>{label}</label>
-          <input id={`list-${id}`} type="text" placeholder={placeholder} value={input} onChange={(e) => setInput(e.target.value)} />
+          {/* Enter만으로는 알기 어려워 「추가」 버튼을 함께 둔다 */}
+          <div className="chip-add">
+            <input id={`list-${id}`} type="text" placeholder={placeholder} value={input} onChange={(e) => setInput(e.target.value)} />
+            <button type="submit" className="chip-add-btn" disabled={!input.trim()}>
+              추가
+            </button>
+          </div>
         </form>
       ) : (
         <p className="list-label">{label}</p>
