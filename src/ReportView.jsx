@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { exportPptx, printReport } from './reportExport.js'
 import { formatDate, kindOf, SECTIONS } from './reportStore.js'
+import { track } from './usage.js'
 
 // tools: 보고서 맨 위 오른쪽 도구 줄 (복사·지우기 등)
 function ReportView({ saved, onRegenerate, regenKey, busy, tools }) {
@@ -14,6 +15,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools }) {
     setExportError('')
     try {
       await exportPptx(saved)
+      track('export', 'ppt')
     } catch (err) {
       setExportError(`PPT를 만들지 못했어요: ${err.message}`)
     } finally {
@@ -26,7 +28,10 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools }) {
       <article className="panel report-doc">
         <div className="report-toolbar">
           {exportError && <span className="toolbar-error">{exportError}</span>}
-          <button type="button" className="btn" onClick={printReport} title="인쇄 창에서 'PDF로 저장'을 고르세요">
+          <button type="button" className="btn" onClick={() => {
+              track('export', 'pdf')
+              printReport()
+            }} title="인쇄 창에서 'PDF로 저장'을 고르세요">
             PDF로 저장
           </button>
           <button type="button" className="btn" onClick={handlePptx} disabled={exporting}>

@@ -25,9 +25,11 @@ import {
 import { ChipList, ListsEditor } from './ListsPanel.jsx'
 import LogoMark from './Logo.jsx'
 import AdminRefresh from './AdminRefresh.jsx'
+import AdminUsage from './AdminUsage.jsx'
 
 const SECTIONS = [
   ['overview', '개요', '시스템 상태와 확인할 일을 한눈에 봐요.'],
+  ['usage', '사용 현황', '누가 얼마나 쓰고, 무엇을 찾고, 보고서까지 이어지는지 봐요. 일반 화면에서 한 일만 세요.'],
   ['targets', '수집 대상', '무엇을 모으고, 어떤 회사·기술을 중요하게 볼지 정해요. 다음 최신화부터 반영되고, 이미 모은 기사는 그대로예요.'],
   ['refresh', '자동 최신화', '언제 기사를 모으고, 자동 요약을 할지 정해요.'],
   ['llm', 'AI 모델', '요약·보고서에 쓸 AI 서버를 골라요. 모든 사용자에게 바로 적용돼요.'],
@@ -630,6 +632,14 @@ function AdminApp() {
               </section>
             </div>
           </>
+        )}
+
+        {section === 'usage' && (
+          <AdminUsage
+            keywords={view.keywords ?? []}
+            onAddKeyword={keywords?.stored ? (word) => change('keywords', [...new Set([...(view.keywords ?? []), word])]) : undefined}
+            refresh={refresh}
+          />
         )}
 
         {section === 'targets' && (

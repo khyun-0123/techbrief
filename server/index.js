@@ -30,6 +30,7 @@ import { adminConfigured, adminOf, changeLog, diffWords, login, logChange, logou
 import { refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
 import { featureList, FEATURES, getFeatures, saveFeatures } from './features.js'
 import { summarizeArticle, summarizeOnly } from './summarize.js'
+import { pruneUsage, recordClientEvent, usageStats } from './usage.js'
 
 const REPORT_TIMEOUT_MS = 240_000 // 보고서는 출력이 길어 요약보다 오래 걸린다
 const MAX_REPORT_ARTICLES = 10
@@ -181,6 +182,10 @@ export function startScheduler() {
     .then((id) => id && selectProvider(id))
     .catch((err) => console.warn(`[llm] 저장된 AI 서버를 쓸 수 없어 기본값으로: ${err.message}`))
   startRefreshScheduler()
+  // 사용 현황 원본은 90일만 둔다: 켜질 때 한 번, 그 뒤 하루 한 번
+  const prune = () => pruneUsage().catch((err) => console.warn(`[usage] 오래된 기록 정리 실패: ${err.message}`))
+  prune()
+  setInterval(prune, 86_400_000).unref()
 }
 
 // 일반 사용자의 「지금 최신화」는 10분에 한 번 (17 문서 3-2). 관리자는 제한 없음
@@ -234,6 +239,17 @@ export async function handleApi(req, res) {
       const { article, related = [], provider } = await readJson(req)
       if (!article?.title) return send(res, 400, { error: 'article.title이 필요해요.' })
       return send(res, 200, await summarizeOnly(article, related.slice(0, 5), { provider }))
+    }
+    // 사용 현황 (17 문서 4장): 기록은 누구나 보내고(개인 정보 없음), 보기는 관리자만
+    if (req.method === 'POST' && req.url === '/api/usage') {
+      await recordClientEvent(await readJson(req))
+      return send(res, 200, { ok: true })
+    }
+    if (req.method === 'GET' && req.url.startsWith('/api/admin/usage')) {
+      requireAdmin(req)
+      const days = Number(new URL(req.url, 'http://x').searchParams.get('days'))
+      const keywords = dbEnabled() ? await getKeywords() : []
+      return send(res, 200, await usageStats(days, keywords))
     }
     if (req.method === 'GET' && req.url === '/api/admin/log') {
       requireAdmin(req)

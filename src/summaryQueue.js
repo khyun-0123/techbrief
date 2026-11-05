@@ -2,6 +2,7 @@
 // 모델은 진행률을 알려 주지 않으므로, 게이지는 지금까지 걸린 평균 시간으로 계산한 '예상' 값이다
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { requestSummary } from './api.js'
+import { track } from './usage.js'
 import { load } from './utils.js'
 
 const AVG_KEY = 'techbrief-summary-avg-ms'
@@ -37,6 +38,7 @@ export function useSummaryQueue({ onDone }) {
     // oxlint-disable-next-line react/set-state-in-effect
     setJobs((list) => list.map((j) => (j.id === next.id ? { ...j, status: 'running', startedAt } : j)))
 
+    track('summary', next.article.keyword ?? '')
     requestSummary(next.article, { refresh: next.refresh })
       .then((result) => {
         const took = Date.now() - startedAt

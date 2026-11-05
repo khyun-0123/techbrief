@@ -34,6 +34,7 @@ import TestTools from './TestTools.jsx'
 import SentimentBadge, { sentimentLabel, sentimentOf as pickSentiment } from './SentimentBadge.jsx'
 import SummaryItems from './SummaryItems.jsx'
 import { formatPublished, load } from './utils.js'
+import { enableUsage, track, trackVisit } from './usage.js'
 
 const KEYWORDS_KEY = 'techbrief-keywords'
 const SELECTED_KEY = 'techbrief-selected'
@@ -133,6 +134,13 @@ function App({ mode = 'normal' }) {
   const [collectedAt, setCollectedAt] = useState(() => load(COLLECTED_AT_KEY, null))
   const [refresh, setRefresh] = useState(null) // 자동 최신화 상태 (서버)
   const [openSummaryId, setOpenSummaryId] = useState(null) // 목록에서 요약을 펼친 기사
+
+  // 사용 현황 기록 (17 문서 4장): 일반 화면에서만. 테스트 페이지는 관리자 시험이라 빼고
+  useEffect(() => {
+    enableUsage(!isTest)
+    trackVisit()
+    return () => enableUsage(false)
+  }, [isTest])
   const [openGroupId, setOpenGroupId] = useState(null) // 같은 이슈 기사를 펼친 기사
   const [search, setSearch] = useState(null) // 네이버 기사 찾기 { query, articles?, loading?, error? }
   const [extraArticles, setExtraArticles] = useState(() => load(EXTRA_KEY, []))
@@ -454,6 +462,7 @@ function App({ mode = 'normal' }) {
   async function runSearch(q, p = period) {
     if (!q) return
     const seq = ++searchSeq.current
+    track('search', q)
     setQuery(q)
     // 찾은 말은 최근 검색어 맨 위로 (같은 말은 하나만)
     saveRecent([q, ...recent.filter((r) => r !== q)].slice(0, RECENT_MAX))
@@ -499,6 +508,7 @@ function App({ mode = 'normal' }) {
       queue.remove(id)
     } else {
       setSelectedIds((prev) => [...prev, id])
+      track('select', article.keyword || search?.query || '')
       // 수집 목록에 없는 기사(찾기 결과)는 따로 보관해 선별·보고서에서 계속 쓸 수 있게
       if (!fetched.some((x) => x.id === id)) {
         // eslint-disable-next-line no-unused-vars
@@ -846,7 +856,7 @@ function App({ mode = 'normal' }) {
                               {a.relevance === 'low' && <span className="badge-low">관련 낮음</span>}
                               <SentimentBadge sentiment={pickSentiment(a, ai?.summary)} />
                               {a.url ? (
-                                <a className="title-link" href={a.url} target="_blank" rel="noreferrer" title="원문 열기 (새 창)">
+                                <a className="title-link" href={a.url} target="_blank" rel="noreferrer" title="원문 열기 (새 창)" onClick={() => track('open', a.title)}>
                                   <TitleWithIcon title={a.title} />
                                 </a>
                               ) : (

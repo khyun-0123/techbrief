@@ -2,6 +2,7 @@
 // onDelete가 없으면 「지우기」를 숨긴다 (공용 보고서함은 관리자만 지움, 17 문서)
 import { useState } from 'react'
 import { copyText, formatDate, toPlainText } from './reportStore.js'
+import { track } from './usage.js'
 import ReportView from './ReportView.jsx'
 
 function ReportArchive({ reports, onDelete, onGoDraft }) {
@@ -11,6 +12,7 @@ function ReportArchive({ reports, onDelete, onGoDraft }) {
 
   async function handleCopy() {
     await copyText(toPlainText(open))
+    track('export', 'copy')
     setNotice('개조식 텍스트를 복사했어요.')
   }
 
