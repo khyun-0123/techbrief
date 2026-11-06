@@ -39,7 +39,7 @@ async function newsSeries(keywords) {
   return out
 }
 
-// 네이버 검색어 트렌드: 키워드 그룹 5개까지 한 번에. 주 단위 6개월, 구간 최댓값 = 100
+// 네이버 검색어 트렌드: 주 단위 6개월, 키워드마다 그 구간 최댓값 = 100
 async function naverSeries(keywords) {
   const id = process.env.NAVER_CLIENT_ID
   const secret = process.env.NAVER_CLIENT_SECRET
@@ -48,8 +48,9 @@ async function naverSeries(keywords) {
   const end = new Date(Date.now() - DAY)
   const start = new Date(end.getTime() - 182 * DAY)
   const out = {}
-  for (let i = 0; i < keywords.length; i += 5) {
-    const groups = keywords.slice(i, i + 5).map((k) => ({ groupName: k, keywords: [k] }))
+  // 키워드마다 따로 부른다: 같이 부르면 가장 많이 찾은 키워드 기준 100이 되어 작은 키워드 그래프가 바닥에 붙음
+  for (const keyword of keywords) {
+    const groups = [{ groupName: keyword, keywords: [keyword] }]
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-NCP-APIGW-API-KEY-ID': id, 'X-NCP-APIGW-API-KEY': secret },
@@ -59,7 +60,9 @@ async function naverSeries(keywords) {
     const data = await res.json().catch(() => ({}))
     if (res.status === 401) return { status: 'not_enabled' } // 앱에서 「검색어 트렌드」가 꺼져 있음
     if (!res.ok) return { status: 'error', error: data?.error?.message ?? `응답 ${res.status}` }
-    for (const r of data.results ?? []) out[r.title] = (r.data ?? []).map((p) => ({ t: p.period, v: p.ratio }))
+    // 이번 주(아직 안 끝난 주)는 줄어 보이므로 뺀다
+    const done = (p) => Date.parse(p.period) + 7 * DAY <= Date.now()
+    for (const r of data.results ?? []) out[r.title] = (r.data ?? []).filter(done).map((p) => ({ t: p.period, v: Math.round(p.ratio * 10) / 10 }))
   }
   return { status: 'ok', series: out }
 }
@@ -98,12 +101,12 @@ async function gdeltSeries(term, retry = true) {
 const BASELINE_SINCE = Date.parse('2026-11-06')
 
 export function surgeOf(all = []) {
-  const series = all.filter((p) => Date.parse(p.t) >= BASELINE_SINCE)
-  if (series.length === 0) return all.length ? { week: all.slice(-7).reduce((s, p) => s + p.v, 0), before: 0, enough: false, surge: false } : null
-  const last = Date.parse(series.at(-1).t)
-  const inRange = (from, to) => series.filter((p) => Date.parse(p.t) > last - to * DAY && Date.parse(p.t) <= last - from * DAY)
-  const week = inRange(0, 7).reduce((s, p) => s + p.v, 0)
-  const past = inRange(7, 28)
+  if (all.length === 0) return null
+  const last = Date.parse(all.at(-1).t)
+  const inRange = (list, from, to) => list.filter((p) => Date.parse(p.t) > last - to * DAY && Date.parse(p.t) <= last - from * DAY)
+  // 최근 7일 기사 수는 그대로 보여 주고, 비교(급증)는 기준일 이후 데이터로만
+  const week = inRange(all, 0, 7).reduce((s, p) => s + p.v, 0)
+  const past = inRange(all.filter((p) => Date.parse(p.t) >= BASELINE_SINCE), 7, 28)
   const before = past.reduce((s, p) => s + p.v, 0) / 3
   const enough = past.length >= 14
   return { week, before: Math.round(before * 10) / 10, enough, surge: enough && week >= 5 && before > 0 && week >= before * 1.5 }

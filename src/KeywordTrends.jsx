@@ -111,7 +111,7 @@ function TrendCard({ item, naverStatus }) {
           title="해외 보도량"
           unit="건"
           series={item.gdelt?.series}
-          note={item.gdelt ? `받지 못했어요${item.gdelt.error ? ` (${item.gdelt.error})` : ''}` : '영문 검색어가 정해지지 않은 키워드예요.'}
+          note={item.gdelt ? (item.gdelt.error === '요청 제한' ? 'GDELT 요청 제한에 걸렸어요. 6시간 뒤 다시 받아요.' : 'GDELT 서버가 응답하지 않았어요. 6시간 뒤 다시 받아요.') : '영문 검색어가 정해지지 않은 키워드예요.'}
           source={item.gdelt ? `GDELT 「${item.gdelt.term}」` : null}
         />
       </div>
