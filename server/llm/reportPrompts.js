@@ -119,7 +119,7 @@ export function buildReportMessages(articles, { title, periodLabel }) {
   return [
     {
       role: 'system',
-      content: `너는 기술 동향 보고서를 쓰는 담당자를 돕는다. 경영진에게 올라가는 1페이지 보고서 초안을 쓴다.\n\n${SECTION_GUIDE}\n\n${RULES}\n- warnings에는 근거가 약한 부분을 한 줄씩 적는다.\n- 출력은 JSON만.`,
+      content: `너는 기술 동향 보고서를 쓰는 담당자를 돕는다. 경영진에게 올라가는 보고서 초안 한 편을 쓴다. 처음부터 끝까지 그대로 읽히는 깔끔한 문서로 쓴다.\n\n${SECTION_GUIDE}\n\n${RULES}\n- warnings에는 근거가 약한 부분을 한 줄씩 적는다.\n- 출력은 JSON만.`,
     },
     {
       role: 'user',
@@ -141,7 +141,7 @@ export function buildMergeMessages(articles, parts, { title, periodLabel }) {
   return [
     {
       role: 'system',
-      content: `너는 기술 동향 보고서를 쓰는 담당자를 돕는다. 기사가 많아 몇 묶음으로 나눠 쓴 초안 조각들을 경영진용 1페이지 보고서 하나로 합친다.\n- 같은 내용은 하나의 글머리로 묶고 근거 번호를 모두 refs에 넣는다.\n- 근거 번호는 초안 조각에 적힌 번호를 그대로 쓴다 (전체 기사 번호). 새 번호를 만들지 않는다.\n- fact/ai 구분은 초안 조각의 표시를 따른다. fact와 ai를 한 글머리에 섞지 않는다.\n- 초안 조각에 없는 내용을 새로 지어내지 않는다.\n\n${SECTION_GUIDE}\n\n${RULES}\n- warnings에는 근거가 약한 부분을 한 줄씩 적는다.\n- 출력은 JSON만.`,
+      content: `너는 기술 동향 보고서를 쓰는 담당자를 돕는다. 기사가 많아 몇 묶음으로 나눠 쓴 초안 조각들을 경영진용 보고서 한 편으로 합친다.\n- 같은 내용은 하나의 글머리로 묶고 근거 번호를 모두 refs에 넣는다.\n- 근거 번호는 초안 조각에 적힌 번호를 그대로 쓴다 (전체 기사 번호). 새 번호를 만들지 않는다.\n- fact/ai 구분은 초안 조각의 표시를 따른다. fact와 ai를 한 글머리에 섞지 않는다.\n- 초안 조각에 없는 내용을 새로 지어내지 않는다.\n\n${SECTION_GUIDE}\n\n${RULES}\n- warnings에는 근거가 약한 부분을 한 줄씩 적는다.\n- 출력은 JSON만.`,
     },
     {
       role: 'user',
