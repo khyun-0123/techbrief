@@ -116,10 +116,12 @@ function reportArticle(article, aiSummary) {
   }
 }
 
-export function requestReport({ articles, aiSummaries, title, periodLabel }) {
+// mode: 'all'이면 10건이 넘어도 전부 넣는다 (서버가 나눠 쓰고 합침, 오래 걸림)
+export function requestReport({ articles, aiSummaries, title, periodLabel, mode }) {
   return postJson('/api/reports', {
     title,
     periodLabel,
+    mode,
     articles: articles.map((a) => reportArticle(a, aiSummaries[a.id])),
   })
 }
@@ -277,6 +279,25 @@ export async function saveOpsApi(ops) {
 // 서버 다시 켜기 (npm run serve로 켰을 때만)
 export async function restartServerApi() {
   const res = await fetch('/api/admin/restart', { method: 'POST' })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}
+
+// 수집 출처 (관리자): 네이버 밖 출처 목록 · 끈 출처 · 지난 수집 결과 (14 문서 4-B)
+export async function fetchSources() {
+  const res = await fetch('/api/admin/sources')
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? '수집 출처를 불러오지 못했어요')
+  return data
+}
+
+export async function saveSourcesApi(disabled) {
+  const res = await fetch('/api/admin/sources', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ disabled }),
+  })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
   return data

@@ -68,7 +68,7 @@ export async function refreshStatus() {
     hourOptions: HOUR_OPTIONS,
     running: running ? state.running : null,
     queue: queueStatus(),
-    backlog: await getSetting(BACKLOG_KEY, null), // 자동 요약 대기열 { remaining, important, current, done, failed, note }
+    backlog: await getSetting(BACKLOG_KEY, null), // 자동 요약 대기열 { remaining, important, current, done, failed, preempted, note }
     lastRunAt: state.lastRunAt ?? null,
     lastResult: state.lastResult ?? null,
     nextRunAt: next ? next.toISOString() : null,
@@ -128,7 +128,8 @@ async function buildBacklog(articles) {
 
 let backlog = [] // [{ article, important }] 중요도 점수 순
 let worker = null
-const stats = { done: 0, failed: 0, current: null, note: null }
+// preempted: 사람 요청에 자리를 내주느라 끊겨 대기열에 다시 넣은 횟수 (실패 아님, 저장 안 됨)
+const stats = { done: 0, failed: 0, preempted: 0, current: null, note: null }
 
 function saveBacklogStatus() {
   return setSetting(BACKLOG_KEY, {
@@ -171,7 +172,8 @@ async function runWorker() {
         stats.note = '운영 상태(AI 기능 정지 · 점검 중) 때문에 자동 요약을 멈춤 · 재개 뒤 다음 최신화 때 이어서'
         break
       }
-      const { article } = backlog.shift()
+      const item = backlog.shift()
+      const { article } = item
       stats.current = article.title
       await saveBacklogStatus()
       try {
@@ -183,6 +185,13 @@ async function runWorker() {
         }
         failedInRow = 0
       } catch (err) {
+        if (err.preempted) {
+          // 끊긴 요약은 저장되지 않았다 → 「요약 안 됨」 그대로. 원래 자리(맨 앞)에 다시 넣어 사람 요청 뒤에 바로 이어서 한다
+          // 그 사이 대기열을 새로 짰으면(최신화) 이미 들어 있으므로 중복으로 넣지 않는다
+          if (!backlog.some((b) => b.article.id === article.id)) backlog.unshift(item)
+          stats.preempted += 1
+          continue
+        }
         stats.failed += 1
         failedInRow += 1
         console.error(`[summary] 자동 요약 실패: ${err.message}`)
