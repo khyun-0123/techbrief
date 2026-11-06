@@ -33,3 +33,7 @@ dist-ssr
 
 # Storybook 빌드 결과
 storybook-static
+
+# Google Cloud 서비스 계정 키 (BigQuery 특허 추이) — 절대 커밋하지 않음
+gcp-key.json
+*-key.json
