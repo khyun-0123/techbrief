@@ -12,6 +12,28 @@ const REPORT_AVG_KEY = 'techbrief-report-avg-ms-v2' // 원문 반영 뒤 소요 
 const DEFAULT_REPORT_MS = 90_000 // 원문 본문을 읽고 쓰므로 실측 약 1분 30초 (기사 3건, 맥미니)
 const PERIODS = { today: '오늘', week: '이번 주', month: '이번 달' }
 
+// 한 번에 넣는 기사 수 (서버 MAX_REPORT_ARTICLES와 같음). 넘으면 고르게 한다 (21 문서 6-3)
+const REPORT_LIMIT = 10
+const REPORT_MAX_ALL = 40 // 서버 MAX_REPORT_ALL
+const REPORT_CHUNK = 8 // 서버 REPORT_CHUNK: 「전부」는 이만큼씩 나눠 쓰고 마지막에 합친다
+const chunkCalls = (n) => Math.ceil(n / REPORT_CHUNK) + 1
+
+// 중요도 높은 limit건 (고른 순서는 유지해 화면 번호가 크게 바뀌지 않게)
+function topByImportance(articles, limit) {
+  const keep = new Set(
+    [...articles]
+      .sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0) || (a.hoursAgo ?? 0) - (b.hoursAgo ?? 0))
+      .slice(0, limit)
+      .map((a) => a.id),
+  )
+  return articles.filter((a) => keep.has(a.id))
+}
+
+function minutes(ms) {
+  const m = Math.round(ms / 60_000)
+  return m < 1 ? '1분 안' : `약 ${m}분`
+}
+
 // 섹션마다 어떤 요약 항목이 재료가 되는지 (서버 reportPrompts.js와 같은 구성)
 const SECTION_PLAN = {
   summary: { desc: '경영진이 가장 먼저 알아야 할 내용, 3줄 이내', items: [] },
@@ -21,7 +43,7 @@ const SECTION_PLAN = {
 }
 const BASIS_SHORT = { article: '기사 근거', ai_background: 'AI 보충', ai_suggestion: 'AI 제안' }
 
-function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated, onGoSelect, onGoArchive, storageLabel }) {
+function ReportDraft({ articles: picked, aiSummaries, queue, reports, onSaved, onUpdated, onGoSelect, onGoArchive, storageLabel }) {
   const [title, setTitle] = useState('테크 동향 브리핑')
   const [period, setPeriod] = useState('today')
   const [generating, setGenerating] = useState(null) // { startedAt }
@@ -31,6 +53,15 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
   const [notice, setNotice] = useState('')
   const [avgMs, setAvgMs] = useState(() => load(REPORT_AVG_KEY, DEFAULT_REPORT_MS))
   const [now, setNow] = useState(() => Date.now())
+  const [mode, setMode] = useState('top') // 10건 초과일 때: top = 중요도 높은 10건 / all = 전부
+
+  const tooMany = picked.length > REPORT_LIMIT
+  const overMax = picked.length > REPORT_MAX_ALL
+  const useAll = tooMany && mode === 'all' && !overMax
+  // 이번 초안에 실제로 들어가는 기사 (번호 [n]도 이 순서)
+  const articles = tooMany && !useAll ? topByImportance(picked, REPORT_LIMIT) : picked
+  const leftOut = tooMany && !useAll ? picked.filter((a) => !articles.includes(a)) : []
+  const expectMs = useAll ? avgMs * chunkCalls(articles.length) : avgMs
 
   useEffect(() => {
     if (!generating) return undefined
@@ -38,7 +69,7 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
     return () => clearInterval(timer)
   }, [generating])
 
-  const key = articleKey(articles.map((a) => a.id))
+  const key = articleKey(picked.map((a) => a.id))
   // 방금 만든 보고서가 지금 체크한 기사와 같을 때만 결과를 보여 준다. 기사를 바꾸면 다시 '만들기 전' 화면
   const current = reports.find((r) => r.id === lastId && r.articleKey === key)
 
@@ -46,7 +77,7 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
   const jobOf = (id) => queue.jobs.find((j) => j.id === id)
   const pending = missing.filter((a) => ['queued', 'running'].includes(jobOf(a.id)?.status))
   const { aiBlocked } = useOps() // 운영 상태 「AI 기능 정지」 (19 문서 6장)
-  const canGenerate = articles.length > 0 && missing.length === 0 && !generating && !aiBlocked
+  const canGenerate = articles.length > 0 && missing.length === 0 && !generating && !aiBlocked && !(tooMany && mode === 'all' && overMax)
 
   async function handleGenerate() {
     const startedAt = Date.now()
@@ -56,12 +87,14 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
     setNotice('')
     try {
       // 서버가 보고서함 한 건(entry)을 만들어 준다. DB가 있으면 서버에 이미 저장됨
-      const { entry } = await requestReport({ articles, aiSummaries, title, periodLabel: PERIODS[period] })
+      const { entry } = await requestReport({ articles, aiSummaries, title, periodLabel: PERIODS[period], mode: useAll ? 'all' : undefined })
       track('report')
       entry.articleKey = key
       onSaved(entry)
       setLastId(entry.id)
-      const avg = Math.round(avgMs * 0.6 + (Date.now() - startedAt) * 0.4)
+      // 평균은 AI 한 번 부른 시간으로 잰다 (「전부」는 나눠 부른 횟수로 나눔)
+      const took = (Date.now() - startedAt) / (useAll ? chunkCalls(articles.length) : 1)
+      const avg = Math.round(avgMs * 0.6 + took * 0.4)
       setAvgMs(avg)
       localStorage.setItem(REPORT_AVG_KEY, JSON.stringify(avg))
     } catch (err) {
@@ -100,9 +133,9 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
     setNotice('개조식 텍스트를 복사했어요. 업무 문서에 붙여 넣으세요.')
   }
 
-  const progress = generating ? Math.min(95, Math.round(((now - generating.startedAt) / avgMs) * 100)) : 0
+  const progress = generating ? Math.min(95, Math.round(((now - generating.startedAt) / expectMs) * 100)) : 0
 
-  if (articles.length === 0) {
+  if (picked.length === 0) {
     return (
       <main className="page">
         <header className="page-header">
@@ -171,7 +204,9 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
       <header className="page-header with-actions">
         <div>
           <h1>보고서 초안</h1>
-          <p>선별·요약에서 체크한 기사 {articles.length}건으로 만들어요. 아래는 보고서에 담길 재료예요.</p>
+          <p>
+            선별·요약에서 체크한 기사 {picked.length}건{leftOut.length > 0 ? ` 중 중요도 높은 ${articles.length}건` : ''}으로 만들어요. 아래는 보고서에 담길 재료예요.
+          </p>
         </div>
         <div className="header-actions">
           <button type="button" className="btn primary" onClick={handleGenerate} disabled={!canGenerate} title={aiBlocked ? AI_BLOCKED_TITLE : undefined}>
@@ -197,6 +232,36 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
         </label>
       </section>
 
+      {tooMany && (
+        <section className="panel report-mode" aria-labelledby="report-mode-title">
+          <div className="report-mode-head">
+            <h2 id="report-mode-title">기사가 {picked.length}건이에요. 어떻게 만들까요?</h2>
+            <p>AI가 한 번에 읽을 수 있는 기사는 {REPORT_LIMIT}건이에요.</p>
+          </div>
+          <div className="report-mode-choices" role="radiogroup" aria-labelledby="report-mode-title">
+            <button type="button" role="radio" aria-checked={mode === 'top'} className="report-mode-choice" onClick={() => setMode('top')} disabled={Boolean(generating)}>
+              <strong>중요도 높은 {REPORT_LIMIT}건으로 만들기</strong>
+              <span>빠름 · {minutes(avgMs)}. 나머지 {picked.length - REPORT_LIMIT}건은 이번 초안에서 빠져요.</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={mode === 'all'}
+              className="report-mode-choice"
+              onClick={() => setMode('all')}
+              disabled={Boolean(generating) || overMax}
+            >
+              <strong>고른 {picked.length}건 모두 인용하기</strong>
+              <span>
+                {overMax
+                  ? `한 번에 ${REPORT_MAX_ALL}건까지만 돼요. 선별·요약에서 기사를 줄여 주세요.`
+                  : `오래 걸림 · ${minutes(avgMs * chunkCalls(picked.length))}. ${REPORT_CHUNK}건씩 ${Math.ceil(picked.length / REPORT_CHUNK)}번 나눠 쓰고 하나로 합쳐요.`}
+              </span>
+            </button>
+          </div>
+        </section>
+      )}
+
       {missing.length > 0 && (
         <p className="report-notice">
           AI 요약이 아직 없는 기사가 {missing.length}건 있어요
@@ -215,7 +280,9 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
             <div className="gauge-fill" style={{ width: `${progress}%` }} />
           </div>
           <span>
-            원문을 읽고 초안 쓰는 중 {progress}% (예상, 약 {Math.round(avgMs / 1000)}초)
+            {useAll
+              ? `기사 ${articles.length}건을 ${Math.ceil(articles.length / REPORT_CHUNK)}번 나눠 쓰고 합치는 중 ${progress}% (예상, ${minutes(expectMs)})`
+              : `원문을 읽고 초안 쓰는 중 ${progress}% (예상, 약 ${Math.round(expectMs / 1000)}초)`}
           </span>
         </div>
       )}
@@ -302,6 +369,18 @@ function ReportDraft({ articles, aiSummaries, queue, reports, onSaved, onUpdated
               )
             })}
           </ol>
+          {leftOut.length > 0 && (
+            <div className="report-left-out">
+              <h4>이번 초안에서 빠지는 기사 {leftOut.length}건</h4>
+              <ul>
+                {leftOut.map((a) => (
+                  <li key={a.id}>
+                    {a.title} <span className="meta">· 중요도 {a.importance ?? 0}점</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </aside>
       </div>
     </main>

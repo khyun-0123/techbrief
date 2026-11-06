@@ -77,13 +77,23 @@ const ITEM_LABELS = {
 const BASIS_TAG = { article: '', ai_background: ' [AI 보충]', ai_suggestion: ' [AI 제안]' }
 
 const DESC_MAX = 160 // 기사 요약문은 앞부분만 (원래 사실을 근거로 쓰게)
+const COMPACT_OVER = 10 // 이보다 기사가 많으면 섹션 다시 쓰기에서 재료를 줄인다
 const SAME_ITEM = 0.3 // 기사끼리 이 이상 비슷한 'AI 보충·제안' 항목은 처음 한 번만 넣는다
 
 // 보고서 입력을 압축한다 (10 보고서 계획 · '요약한 것을 또 요약'하는 부담 줄이기)
 // - 기사 근거 항목은 그대로, 기사 요약문(원래 사실)을 함께 넣는다
 // - 여러 기사에 반복되는 AI 보충·제안(같은 원리 설명 등)은 한 번만 넣는다
+// 섹션을 다시 쓸 때 기사가 많으면(10건 초과) 그 섹션의 재료 항목만 넣는다 (화면 ReportDraft의 SECTION_PLAN과 같은 구성)
+const SECTION_ITEMS = {
+  summary: ['concept', 'effect'],
+  tech: ['concept', 'principle'],
+  industry: ['competitors', 'pros_cons'],
+  implications: ['application', 'effect'],
+}
+
 // articles: [{ n, title, source, publishedAt, description, summary: { items: {...} } }]
-function describeArticles(articles) {
+// itemKeys: 넣을 요약 항목 (없으면 6항목 전부)
+function describeArticles(articles, itemKeys = Object.keys(ITEM_LABELS)) {
   const seenAi = [] // { label, text }
   return articles
     .map((a) => {
@@ -91,7 +101,7 @@ function describeArticles(articles) {
       const lines = [head]
       if (a.body) lines.push(`  - 원문 본문: ${a.body.replace(/\n+/g, ' ')}`)
       else if (a.description) lines.push(`  - 기사 요약문: ${a.description.slice(0, DESC_MAX)}`)
-      for (const [key, label] of Object.entries(ITEM_LABELS)) {
+      for (const [key, label] of Object.entries(ITEM_LABELS).filter(([k]) => itemKeys.includes(k))) {
         const item = a.summary?.items?.[key]
         if (!item?.text) continue
         if (item.basis !== 'article') {
@@ -118,6 +128,28 @@ export function buildReportMessages(articles, { title, periodLabel }) {
   ]
 }
 
+// 기사가 많아(10건 초과) 몇 건씩 나눠 쓴 초안 조각들을 한 보고서로 합친다 (21 문서 6-3)
+// parts: [{ sections: { summary: { bullets: [{ text, refs, kind }] }, ... } }] — refs는 처음부터 전체 기사 번호
+export function buildMergeMessages(articles, parts, { title, periodLabel }) {
+  const list = articles.map((a) => `[${a.n}] ${a.title} (${a.source ?? '매체 미상'})`).join('\n')
+  const drafts = SECTION_KEYS.map((k) => {
+    const lines = parts.flatMap((p) =>
+      (p.sections?.[k]?.bullets ?? []).map((b) => `  - (${b.kind === 'ai' ? 'ai' : 'fact'}${b.refs?.length ? `, 근거 ${b.refs.join(',')}` : ''}) ${b.text}`),
+    )
+    return `${k}(${SECTION_TITLES[k]}):\n${lines.join('\n') || '  - (없음)'}`
+  }).join('\n\n')
+  return [
+    {
+      role: 'system',
+      content: `너는 기술 동향 보고서를 쓰는 담당자를 돕는다. 기사가 많아 몇 묶음으로 나눠 쓴 초안 조각들을 경영진용 1페이지 보고서 하나로 합친다.\n- 같은 내용은 하나의 글머리로 묶고 근거 번호를 모두 refs에 넣는다.\n- 근거 번호는 초안 조각에 적힌 번호를 그대로 쓴다 (전체 기사 번호). 새 번호를 만들지 않는다.\n- fact/ai 구분은 초안 조각의 표시를 따른다. fact와 ai를 한 글머리에 섞지 않는다.\n- 초안 조각에 없는 내용을 새로 지어내지 않는다.\n\n${SECTION_GUIDE}\n\n${RULES}\n- warnings에는 근거가 약한 부분을 한 줄씩 적는다.\n- 출력은 JSON만.`,
+    },
+    {
+      role: 'user',
+      content: `보고서 제목: ${title}\n기간: ${periodLabel}\n\n전체 기사 목록\n${list}\n\n초안 조각 (섹션별로 모음)\n${drafts}`,
+    },
+  ]
+}
+
 export function buildSectionMessages(articles, { key, report }) {
   const others = SECTION_KEYS.filter((k) => k !== key)
     .map((k) => `${SECTION_TITLES[k]}: ${(report?.sections?.[k]?.bullets ?? []).map((b) => b.text).join(' / ')}`)
@@ -129,7 +161,8 @@ export function buildSectionMessages(articles, { key, report }) {
     },
     {
       role: 'user',
-      content: `다시 쓸 섹션: ${key}(${SECTION_TITLES[key]})\n\n다른 섹션(참고만):\n${others}\n\n기사와 6항목 요약\n${describeArticles(articles)}`,
+      // 기사가 많으면 문맥 크기를 넘지 않게 이 섹션의 재료 항목만 (원문 본문은 서버가 붙이지 않음)
+      content: `다시 쓸 섹션: ${key}(${SECTION_TITLES[key]})\n\n다른 섹션(참고만):\n${others}\n\n기사와 요약\n${describeArticles(articles, articles.length > COMPACT_OVER ? SECTION_ITEMS[key] : undefined)}`,
     },
   ]
 }

@@ -116,10 +116,12 @@ function reportArticle(article, aiSummary) {
   }
 }
 
-export function requestReport({ articles, aiSummaries, title, periodLabel }) {
+// mode: 'all'이면 10건이 넘어도 전부 넣는다 (서버가 나눠 쓰고 합침, 오래 걸림)
+export function requestReport({ articles, aiSummaries, title, periodLabel, mode }) {
   return postJson('/api/reports', {
     title,
     periodLabel,
+    mode,
     articles: articles.map((a) => reportArticle(a, aiSummaries[a.id])),
   })
 }
