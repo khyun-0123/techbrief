@@ -569,6 +569,28 @@ tr.row-open td {
   line-height: 1.7;
 }
 
+/* 출처 단계 표시 (1차 · 2차). 3차(일반 뉴스)는 표시 없음 */
+.tier {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: var(--tb-radius-full);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 18px;
+  vertical-align: 1px;
+}
+
+.tier-1 {
+  background: var(--tb-color-primary);
+  color: var(--tb-color-on-primary);
+}
+
+.tier-2 {
+  background: var(--tb-color-bg-strong);
+  color: var(--tb-color-text);
+}
+
 .source-link {
   margin: 18px 0 0;
   color: var(--tb-color-text-sub);
@@ -2512,4 +2534,14 @@ a.brand:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 4px;
   border-radius: 6px;
+}
+
+/* 목록의 키워드 칩: 긴 키워드(예: 마이크로 디스플레이)가 옆 버튼을 덮지 않게 */
+.articles td .chip {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
 }

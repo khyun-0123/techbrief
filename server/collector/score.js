@@ -21,7 +21,8 @@ export function scoreArticle(article, groupSize, competitors = [], { relevance =
   const title = article.title
   const text = `${title} ${article.description ?? ''}`
   const coverage = Math.min(40, (groupSize - 1) * 8)
-  const expert = EXPERT_SOURCES.has(article.source) ? 15 : 0
+  // 전문 매체: 1·2차 출처(기업 발표·학회·논문·전문매체, feeds.js)도 같은 점수. tier가 없으면 매체 이름으로
+  const expert = (article.tier ? article.tier <= 2 : EXPERT_SOURCES.has(article.source)) ? 15 : 0
   // 경쟁사: 제목에 나오면 25점, 발췌에만 스치면 10점 (예: '삼성디스플레이 근처 아파트')
   const competitorInTitle = findMention(title, competitors)
   const competitorName = competitorInTitle ?? findMention(text, competitors)
