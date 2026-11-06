@@ -24,8 +24,9 @@ export function progressText(running) {
 }
 
 // 자동 요약 대기열: 최신화와 따로 뒤에서 돈다
+// 완료·실패·양보(사람 요청에 자리를 내주고 다시 넣은 것, 저장 안 됨)는 서버를 켠 뒤 누적
 export function backlogText(b) {
-  if (b.current) return `자동 요약 중 · 남은 ${b.remaining + 1}건 (중요 ${b.important}건)`
-  if (b.remaining > 0) return `자동 요약 대기 ${b.remaining}건`
-  return '자동 요약 대기 없음'
+  const base = b.current ? `자동 요약 중 · 남은 ${b.remaining + 1}건 (중요 ${b.important}건)` : b.remaining > 0 ? `자동 요약 대기 ${b.remaining}건` : '자동 요약 대기 없음'
+  const counts = [b.done ? `완료 ${b.done}` : null, b.failed ? `실패 ${b.failed}` : null, b.preempted ? `사람 요청에 양보 ${b.preempted}(다시 넣음)` : null].filter(Boolean)
+  return counts.length ? `${base} · ${counts.join(' · ')}` : base
 }

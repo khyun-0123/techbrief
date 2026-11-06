@@ -80,20 +80,38 @@ export function selectProvider(id) {
 
 // 맥미니 메모리가 넉넉하지 않아 요청을 한 번에 하나씩 보낸다.
 // 기다리는 요청은 우선순위가 높은 것(숫자가 작은 것)부터, 같으면 먼저 온 순서로 꺼낸다.
-// 이미 돌고 있는 1건은 끝까지 둔다 (13 문서 F1)
+// 돌고 있는 것이 자동 요약(BACKGROUND)이고 사람 요청이 오면 자동 요약을 끊는다 (22 문서 3-3, 11/06 조장 결정)
+// - 끊긴 요약은 저장되지 않는다 (요약은 AI 응답이 끝까지 와야만 저장) → 「요약 안 됨」 그대로
+// - 끊긴 요청은 PreemptedError로 끝나고, 자동 요약 쪽(refresh.js)이 대기열 맨 앞에 다시 넣는다
+// 사람 요청 · 승인 요약끼리는 끊지 않는다 (13 문서 F1)
 export const PRIORITY = {
   USER: 1, // 사람이 누른 요약·보고서
   APPROVED: 2, // AI 추천을 위해 사람이 승인한 요약
   BACKGROUND: 3, // 자동 최신화의 미리 요약
 }
 
+// 사람 요청에 자리를 내주느라 끊긴 자동 요약. 실패가 아니다 (다시 요약해야 함)
+export class PreemptedError extends Error {
+  constructor() {
+    super('사람 요청을 먼저 처리하려고 자동 요약을 멈췄어요. 대기열에 다시 넣어요.')
+    this.name = 'PreemptedError'
+    this.preempted = true
+  }
+}
+
 const waiting = []
 let running = null // 지금 처리 중인 요청의 우선순위
+let runningAbort = null // 지금 처리 중인 요청을 끊는 스위치 (AbortController)
 let seq = 0
 
+// task(signal): signal이 끊기면 AI 서버 요청도 끊는다
 function enqueue(task, priority = PRIORITY.USER) {
   return new Promise((resolve, reject) => {
     waiting.push({ priority, order: seq++, task, resolve, reject })
+    if (running === PRIORITY.BACKGROUND && priority < PRIORITY.BACKGROUND && runningAbort) {
+      console.log('[llm] 사람 요청이 와서 자동 요약을 멈추고 뒤로 보냄')
+      runningAbort.abort(new PreemptedError())
+    }
     pump()
   })
 }
@@ -108,12 +126,18 @@ async function pump() {
   }
   const job = waiting.splice(next, 1)[0]
   running = job.priority
+  const controller = new AbortController()
+  runningAbort = controller
   try {
-    job.resolve(await job.task())
+    const value = await job.task(controller.signal)
+    // 끊겼는데 응답이 이미 와 있었던 경우도 끊긴 것으로 본다 (저장 여부를 한 가지 기준으로)
+    if (controller.signal.aborted) throw controller.signal.reason
+    job.resolve(value)
   } catch (err) {
-    job.reject(err)
+    job.reject(controller.signal.aborted ? controller.signal.reason : err)
   } finally {
     running = null
+    runningAbort = null
     pump()
   }
 }
@@ -126,7 +150,7 @@ export function queueStatus() {
 
 // Ollama는 OpenAI 호환 주소(/v1)로 부르면 입력을 약 2,000토큰까지만 읽는다 (실측: 더 긴 입력은 앞부분이 잘림).
 // LLM_NUM_CTX(예: 16384)가 있으면 Ollama 원래 API(/api/chat)로 불러 문맥 크기를 넘긴다. 상용 API는 비워 둔다
-async function callOllama({ baseUrl, apiKey, model, messages, schema, timeoutMs, numCtx }) {
+async function callOllama({ baseUrl, apiKey, model, messages, schema, timeoutMs, numCtx, signal }) {
   const root = baseUrl.replace(/\/v1$/, '')
   const body = { model, messages, stream: false, think: false, options: { num_ctx: numCtx, temperature: 0.2 } }
   if (schema) body.format = schema
@@ -135,13 +159,13 @@ async function callOllama({ baseUrl, apiKey, model, messages, schema, timeoutMs,
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: withAbort(timeoutMs, signal),
     })
   let res
   try {
     res = await send()
   } catch (err) {
-    if (err.name === 'TimeoutError') throw err
+    if (err.name === 'TimeoutError' || signal?.aborted) throw err
     console.warn(`[llm] 연결 실패, 다시 시도: ${err.message}`)
     await new Promise((r) => setTimeout(r, 2000))
     res = await send()
@@ -156,10 +180,16 @@ async function callOllama({ baseUrl, apiKey, model, messages, schema, timeoutMs,
   return { content: data.message?.content ?? '', model, usage }
 }
 
-async function callChat(cfg, { messages, schema, schemaName, report = false, timeoutMs = TIMEOUT_MS }) {
+// 시간 초과 + 사람 요청에 자리 내주기(끊기). 둘 중 먼저 오는 쪽으로 요청을 끊는다
+function withAbort(timeoutMs, signal) {
+  const timeout = AbortSignal.timeout(timeoutMs)
+  return signal ? AbortSignal.any([timeout, signal]) : timeout
+}
+
+async function callChat(cfg, { messages, schema, schemaName, report = false, timeoutMs = TIMEOUT_MS, signal }) {
   const { id, baseUrl, apiKey, numCtx, reasoningEffort } = cfg
   const model = (report && cfg.reportModel) || cfg.model
-  if (numCtx) return callOllama({ baseUrl, apiKey, model, messages, schema, timeoutMs, numCtx })
+  if (numCtx) return callOllama({ baseUrl, apiKey, model, messages, schema, timeoutMs, numCtx, signal })
   const body = { model, messages, temperature: 0.2 }
   if (schema) {
     body.response_format = { type: 'json_schema', json_schema: { name: schemaName, schema } }
@@ -176,14 +206,14 @@ async function callChat(cfg, { messages, schema, schemaName, report = false, tim
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: withAbort(timeoutMs, signal),
     })
   let res
   try {
     res = await send()
   } catch (err) {
-    // 맥미니까지 가는 연결이 순간 끊긴 경우(fetch failed)만 2초 뒤 한 번 더. 시간 초과는 다시 보내지 않는다
-    if (err.name === 'TimeoutError') throw err
+    // 맥미니까지 가는 연결이 순간 끊긴 경우(fetch failed)만 2초 뒤 한 번 더. 시간 초과·끊기는 다시 보내지 않는다
+    if (err.name === 'TimeoutError' || signal?.aborted) throw err
     console.warn(`[llm] 연결 실패, 다시 시도: ${err.message}`)
     await new Promise((r) => setTimeout(r, 2000))
     res = await send()
@@ -202,12 +232,12 @@ async function callChat(cfg, { messages, schema, schemaName, report = false, tim
 // AI 서버는 요청한 순간에 고른 곳을 쓴다 (기다리는 동안 상단에서 바꿔도 그대로)
 export async function chatJson({ messages, schema, schemaName = 'result', report, timeoutMs, priority = PRIORITY.USER, provider }) {
   const cfg = config(provider)
-  return enqueue(async () => {
+  return enqueue(async (signal) => {
     // 사용 현황(17 문서 4장)에 AI 호출 수·실패·걸린 시간을 남긴다. 대기열에서 기다린 시간은 빼고 잰다
     const startedAt = Date.now()
     const kind = provider ? 'test' : report ? 'report' : 'summary'
     try {
-      const { content, model: used, usage } = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs })
+      const { content, model: used, usage } = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs, signal })
       let data
       try {
         // 일부 모델은 JSON을 ```json … ``` 으로 감싸 보낸다
@@ -218,7 +248,8 @@ export async function chatJson({ messages, schema, schemaName = 'result', report
       recordAiCall(kind, true, Date.now() - startedAt)
       return { data, model: used, usage }
     } catch (err) {
-      recordAiCall(kind, false, Date.now() - startedAt)
+      // 사람 요청에 자리를 내준 것은 실패로 세지 않는다 (다시 요약됨)
+      if (!signal.aborted) recordAiCall(kind, false, Date.now() - startedAt)
       throw err
     }
   }, priority)
