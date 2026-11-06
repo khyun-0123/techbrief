@@ -7,6 +7,7 @@
 // 바깥 API는 느리고 제한이 있어 6시간 동안 기억해 두고, 오래되면 뒤에서 새로 받는다 (그동안은 지난 값)
 import { dbEnabled, query } from './db/index.js'
 import { getKeywords } from './db/store.js'
+import { getPatentTrends, patentPatternOf } from './patents.js'
 
 const CACHE_MS = 6 * 3600_000
 const UA = 'techbrief/0.1 (university team project; tech news briefing)'
@@ -116,6 +117,12 @@ async function build() {
   const keywords = dbEnabled() ? await getKeywords() : []
   const news = await newsSeries(keywords).catch(() => ({}))
   const naver = await naverSeries(keywords).catch((err) => ({ status: 'error', error: err.message }))
+  // 특허: 30일에 한 번 BigQuery로 받아 둔 값 (patents.js). 처음 받는 중이면 끝날 때까지 기다린다
+  let patents = await getPatentTrends(keywords).catch((err) => ({ status: 'error', error: err.message }))
+  if (patents.status === 'loading') {
+    await patents.wait
+    patents = await getPatentTrends(keywords).catch((err) => ({ status: 'error', error: err.message }))
+  }
   const items = []
   for (const keyword of keywords) {
     const g = globalOf(keyword)
@@ -126,9 +133,17 @@ async function build() {
       item.gdelt = { term: g.en }
       item.gdelt.series = await gdeltSeries(g.en).catch((err) => ((item.gdelt.error = err.message), []))
     }
+    item.patents = patents.status === 'ok' && patentPatternOf(keyword) ? patents.series[keyword] ?? [] : null
     items.push(item)
   }
-  return { items, naverStatus: naver.status, naverError: naver.error ?? null, updatedAt: new Date().toISOString() }
+  return {
+    items,
+    naverStatus: naver.status,
+    naverError: naver.error ?? null,
+    patentStatus: patents.status,
+    patentAt: patents.at ?? null,
+    updatedAt: new Date().toISOString(),
+  }
 }
 
 let cache = null

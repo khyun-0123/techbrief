@@ -9,13 +9,13 @@ const W = 240
 const H = 64
 const PAD = { t: 6, r: 6, b: 4, l: 2 }
 
-const fmtDay = (t) => {
-  const [, m, d] = t.split('-')
-  return `${Number(m)}월 ${Number(d)}일`
+const fmtDay = (t, monthly) => {
+  const [y, m, d] = t.split('-')
+  return monthly ? `${y.slice(2)}년 ${Number(m)}월` : `${Number(m)}월 ${Number(d)}일`
 }
 const fmtNum = (v) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}천` : String(Math.round(v * 10) / 10))
 
-function Spark({ title, unit, series, note, source }) {
+function Spark({ title, unit, series, note, source, monthly = false }) {
   const [hover, setHover] = useState(null)
   const pts = useMemo(() => {
     if (!series?.length) return []
@@ -44,7 +44,7 @@ function Spark({ title, unit, series, note, source }) {
         {shown && (
           <span className="trend-spark-value">
             <b>{fmtNum(shown.v)}</b>
-            {unit} <span className="trend-spark-date">{fmtDay(shown.t)}</span>
+            {unit} <span className="trend-spark-date">{fmtDay(shown.t, monthly)}</span>
           </span>
         )}
       </figcaption>
@@ -54,7 +54,7 @@ function Spark({ title, unit, series, note, source }) {
           viewBox={`0 0 ${W} ${H}`}
           preserveAspectRatio="none"
           role="img"
-          aria-label={`${title}: ${fmtDay(pts[0].t)}부터 ${fmtDay(last.t)}까지, 최근 ${fmtNum(last.v)}${unit}, 최대 ${fmtNum(Math.max(...pts.map((p) => p.v)))}${unit}`}
+          aria-label={`${title}: ${fmtDay(pts[0].t, monthly)}부터 ${fmtDay(last.t, monthly)}까지, 최근 ${fmtNum(last.v)}${unit}, 최대 ${fmtNum(Math.max(...pts.map((p) => p.v)))}${unit}`}
           onMouseMove={onMove}
           onMouseLeave={() => setHover(null)}
         >
@@ -82,7 +82,13 @@ const NAVER_NOTE = {
 // 오늘 기사 수는 하루가 끝나기 전이라 줄어 보이므로 그래프에서 뺀다
 const today = new Date().toLocaleDateString('sv-SE')
 
-function TrendCard({ item, naverStatus }) {
+const PATENT_NOTE = {
+  no_key: '관리자가 Google Cloud 키(gcp-key.json)를 넣으면 보여요.',
+  loading: '특허 집계 중이에요 (한 달에 한 번, 1~2분).',
+  error: '특허 집계를 받지 못했어요.',
+}
+
+function TrendCard({ item, naverStatus, patentStatus }) {
   const s = item.newsSurge
   return (
     <article className="trend-card">
@@ -114,6 +120,14 @@ function TrendCard({ item, naverStatus }) {
           note={item.gdelt ? (item.gdelt.error === '요청 제한' ? 'GDELT 요청 제한에 걸렸어요. 6시간 뒤 다시 받아요.' : 'GDELT 서버가 응답하지 않았어요. 6시간 뒤 다시 받아요.') : '영문 검색어가 정해지지 않은 키워드예요.'}
           source={item.gdelt ? `GDELT 「${item.gdelt.term}」` : null}
         />
+        <Spark
+          title="특허 공개 건수"
+          monthly
+          unit="건"
+          series={item.patents}
+          note={item.patents === null && patentStatus === 'ok' ? '특허 검색어가 정해지지 않은 키워드예요.' : PATENT_NOTE[patentStatus] ?? '아직 데이터가 없어요.'}
+          source="Google Patents · 월별, 영문 제목 · 최근 달은 덜 잡힘"
+        />
       </div>
     </article>
   )
@@ -143,7 +157,7 @@ function KeywordTrends() {
       </div>
       {open && data && (
         <div className="trend-cards">
-          {data.items.length === 0 ? <p className="trend-empty">자동 수집 키워드가 없어요.</p> : data.items.map((item) => <TrendCard key={item.keyword} item={item} naverStatus={data.naverStatus} />)}
+          {data.items.length === 0 ? <p className="trend-empty">자동 수집 키워드가 없어요.</p> : data.items.map((item) => <TrendCard key={item.keyword} item={item} naverStatus={data.naverStatus} patentStatus={data.patentStatus} />)}
         </div>
       )}
     </section>
