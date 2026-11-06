@@ -4,6 +4,7 @@ import { createServer } from 'node:http'
 import { pathToFileURL } from 'node:url'
 import { collect, getSources, listArticles, saveSources, searchArticles } from './collector/index.js'
 import { feedList } from './collector/feeds.js'
+import { getTrends } from './trends.js'
 import { similarity } from './collector/dedupe.js'
 import { fetchBodies } from './collector/fulltext.js'
 import { getLists, saveLists } from './collector/lists.js'
@@ -312,6 +313,10 @@ export async function handleApi(req, res) {
         if (before[f.key] !== after[f.key]) await logChange(admin, '실험 기능', `${f.label}: ${STATE[before[f.key]]} → ${STATE[after[f.key]]}`)
       }
       return send(res, 200, { features: after, list: featureList() })
+    }
+    // 키워드 추이 (22 문서 6-4): 뉴스 기사량 · 네이버 검색량 · Wikipedia 관심도 · GDELT 해외 보도량. 누구나 읽음
+    if (req.method === 'GET' && req.url === '/api/trends') {
+      return send(res, 200, await getTrends())
     }
     // 수집 출처 (14 문서 4-B): 네이버 밖 출처 목록 · 켜기/끄기 · 지난 수집 결과. 관리자만
     if (req.method === 'GET' && req.url === '/api/admin/sources') {

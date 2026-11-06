@@ -20,6 +20,13 @@ export const FEATURES = [
     default: 'test',
   },
   {
+    key: 'trends',
+    label: '키워드 추이',
+    // 22 문서 6-4, 21 문서 6-2(시각화). 먼저 테스트 페이지에서 데이터를 확인하고 모두에게 연다
+    desc: '수집 현황 위에 키워드마다 뉴스 기사량 · 네이버 검색량 · 전 세계 관심도 · 해외 보도량 작은 그래프',
+    default: 'test',
+  },
+  {
     key: 'refreshButton',
     label: '「지금 최신화」 버튼',
     desc: '수집 현황 위에 「지금 최신화」 버튼 (일반 사용자는 10분에 한 번)',
