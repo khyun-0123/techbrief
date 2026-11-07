@@ -178,3 +178,40 @@ export async function setSetting(key, value) {
     [key, JSON.stringify(value)],
   )
 }
+
+// ── 선별한 기사의 원문 본문 (article_texts) ──
+// 「선별 추가」로 요약을 요청한 기사만 저장한다. DB가 없으면 서버 메모리에 (서버를 끄면 비워짐)
+const TEXT_KEEP_DAYS = 90
+const memoryTexts = new Map() // id → { url, body, fetchedAt }
+
+export async function getArticleText(id) {
+  if (!id) return null
+  if (!dbEnabled()) return memoryTexts.get(id)?.body ?? null
+  const { rows } = await query('SELECT body FROM article_texts WHERE article_id = $1', [id])
+  return rows[0]?.body ?? null
+}
+
+export async function saveArticleText(id, url, body) {
+  if (!id || !body) return
+  if (!dbEnabled()) {
+    memoryTexts.set(id, { url, body, fetchedAt: Date.now() })
+    return
+  }
+  await query(
+    `INSERT INTO article_texts (article_id, url, body, fetched_at) VALUES ($1, $2, $3, now())
+     ON CONFLICT (article_id) DO UPDATE SET url = EXCLUDED.url, body = EXCLUDED.body, fetched_at = now()`,
+    [id, url ?? null, body],
+  )
+}
+
+// 수집 기사 id로 원문 주소 찾기 (화면이 url을 안 보낸 예전 요청용)
+export async function articleUrlOf(id) {
+  if (!id || !dbEnabled()) return null
+  const { rows } = await query('SELECT url FROM articles WHERE id = $1', [id])
+  return rows[0]?.url ?? null
+}
+
+export async function pruneArticleTexts() {
+  if (!dbEnabled()) return
+  await query(`DELETE FROM article_texts WHERE fetched_at < now() - interval '${TEXT_KEEP_DAYS} days'`)
+}

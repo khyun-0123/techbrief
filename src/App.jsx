@@ -523,7 +523,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         const { hoursAgo, ...plain } = article
         setExtraArticles((prev) => [...prev.filter((x) => x.id !== id), plain].slice(-100))
       }
-      if (!aiSummaries[id] && !opsValue.aiBlocked) queue.enqueue(article)
+      // 원문 기반(11/07): 요약이 없거나 발췌문 요약이면 선별 표시와 함께 요청 → 서버가 원문을 저장하고 원문으로 요약
+      if (aiSummaries[id]?.summary?.basisSource !== 'fulltext' && !opsValue.aiBlocked) queue.enqueue(article, { select: true })
     }
   }
 

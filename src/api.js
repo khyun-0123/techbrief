@@ -87,10 +87,13 @@ export async function saveRefreshSettings(settings) {
 }
 
 // 기사 요약문과 같은 이슈 기사를 함께 보내면 '기사 근거' 항목이 늘어난다
-export function requestSummary(article, { refresh = false } = {}) {
+// select: 「선별 추가」로 요청 → 서버가 원문을 저장한다 (선별한 기사만, 11/06 결정)
+export function requestSummary(article, { refresh = false, select = false } = {}) {
   return postJson('/api/summaries', {
+    select,
     article: {
       id: article.id,
+      url: article.url,
       title: article.title,
       source: article.source,
       keyword: article.keyword,

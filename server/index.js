@@ -9,7 +9,7 @@ import { getTechTrends, startTechTrends } from './techtrends.js'
 import { similarity } from './collector/dedupe.js'
 import { fetchBodies } from './collector/fulltext.js'
 import { getLists, saveLists } from './collector/lists.js'
-import { getSetting, setSetting } from './db/store.js'
+import { getArticleText, getSetting, pruneArticleTexts, setSetting } from './db/store.js'
 import { dbEnabled, dbStatus } from './db/index.js'
 import {
   deleteReport,
@@ -71,9 +71,9 @@ async function readJson(req) {
 }
 
 async function handleSummary(req, res) {
-  const { article, related = [], refresh = false } = await readJson(req)
+  const { article, related = [], refresh = false, select = false } = await readJson(req)
   if (!article?.title) return send(res, 400, { error: 'article.title이 필요해요.' })
-  send(res, 200, await summarizeArticle(article, related, { refresh }))
+  send(res, 200, await summarizeArticle(article, related, { refresh, select: Boolean(select) }))
 }
 
 // 같은 섹션에서 이 이상 비슷한 글머리는 하나로 합친다 (기사마다 같은 원리 설명이 반복되는 문제)
@@ -126,7 +126,10 @@ function reportWarnings(sections) {
 const BODY_BUDGET = 12_000 // 모든 기사 본문 합계(글자). LLM_NUM_CTX=16384 기준 여유 있게
 async function attachBodies(articles) {
   const per = Math.min(2_500, Math.floor(BODY_BUDGET / articles.length))
-  const bodies = await fetchBodies(articles.map((a) => a.url))
+  // 선별할 때 저장해 둔 원문이 있으면 그것을 쓰고, 없는 것만 가져온다
+  const stored = await Promise.all(articles.map((a) => getArticleText(a.id).catch(() => null)))
+  const fetched = await fetchBodies(articles.map((a, i) => (stored[i] ? null : a.url)))
+  const bodies = stored.map((t, i) => t ?? fetched[i])
   articles.forEach((a, i) => {
     a.body = bodies[i] ? bodies[i].slice(0, per) : null
   })
@@ -235,7 +238,10 @@ export function startScheduler() {
   startRefreshScheduler()
   startTechTrends() // 기술 트렌드: 켜진 뒤 1분, 그 뒤 하루마다 (TECH_TRENDS=off면 안 함)
   // 사용 현황 원본은 90일만 둔다: 켜질 때 한 번, 그 뒤 하루 한 번
-  const prune = () => pruneUsage().catch((err) => console.warn(`[usage] 오래된 기록 정리 실패: ${err.message}`))
+  const prune = () => {
+    pruneUsage().catch((err) => console.warn(`[usage] 오래된 기록 정리 실패: ${err.message}`))
+    pruneArticleTexts().catch((err) => console.warn(`[texts] 오래된 원문 정리 실패: ${err.message}`)) // 원문은 90일만
+  }
   prune()
   setInterval(prune, 86_400_000).unref()
 }

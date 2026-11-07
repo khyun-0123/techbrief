@@ -3107,6 +3107,11 @@ a.brand:focus-visible {
 .tt-from {
   margin-left: 6px;
   padding: 1px 6px;
+/* 요약 근거 원문/발췌문 (11/07). 발췌문은 확인이 필요하다는 뜻으로 글자를 진하게 */
+.summary-source {
+  display: inline-block;
+  margin: 0 0 6px;
+  padding: 1px 8px;
   border: 1px solid var(--tb-color-line);
   border-radius: var(--tb-radius-full);
   color: var(--tb-color-text-sub);
@@ -3122,4 +3127,10 @@ a.brand:focus-visible {
 
 .tt-namecell {
   min-width: 0;
+}
+}
+
+.summary-source-excerpt {
+  color: var(--tb-color-text);
+  font-weight: 600;
 }
