@@ -245,20 +245,30 @@ async function build() {
   }
 }
 
-let cache = null
-let building = null
+// 마지막으로 만든 추이 묶음은 DB(app_settings 'trends_cache')에도 둔다 (11/08 조장)
+// → 서버를 켠 직후에도 기다리지 않고 지난 값을 바로 보여 주고(언제 값인지 함께), 뒤에서 새로 받으면 바꾼다
+const CACHE_KEY = 'trends_cache'
+const G = (globalThis.__keywordTrends ??= { cache: null, building: null, loaded: false })
 
-// 오래된 값이 있으면 그것을 바로 주고 뒤에서 새로 받는다. 처음이면 기다린다
+// 오래된 값이 있으면 그것을 바로 주고 뒤에서 새로 받는다. 메모리 · DB 어디에도 값이 없을 때만 기다린다
 export async function getTrends({ fresh = false } = {}) {
-  const stale = !cache || fresh || Date.now() - Date.parse(cache.updatedAt) > CACHE_MS
-  if (stale && !building) {
-    building = build()
-      .then((v) => (cache = v))
-      .catch((err) => console.warn(`[trends] 추이 받기 실패: ${err.message}`))
-      .finally(() => (building = null))
+  if (!G.cache && !G.loaded) {
+    G.loaded = true
+    G.cache = await getSetting(CACHE_KEY, null).catch(() => null)
   }
-  if (!cache || fresh) await building
-  return cache ? withGdelt(cache) : { items: [], naverStatus: 'error', updatedAt: null }
+  const stale = !G.cache || fresh || Date.now() - Date.parse(G.cache.updatedAt) > CACHE_MS
+  if (stale && !G.building) {
+    G.building = build()
+      .then(async (v) => {
+        G.cache = v
+        await setSetting(CACHE_KEY, v).catch((err) => console.warn(`[trends] 지난 값 저장 실패: ${err.message}`))
+      })
+      .catch((err) => console.warn(`[trends] 추이 받기 실패: ${err.message}`))
+      .finally(() => (G.building = null))
+  }
+  if (!G.cache || fresh) await G.building
+  // refreshing: 지금 보여 주는 값은 지난 값이고 새 값을 받는 중 → 화면이 잠시 뒤 다시 불러 바꾼다
+  return G.cache ? { ...(await withGdelt(G.cache)), refreshing: Boolean(G.building) } : { items: [], naverStatus: 'error', updatedAt: null, refreshing: Boolean(G.building) }
 }
 
 // GDELT 칸은 30분마다 바뀌므로 6시간 묶음 위에 요청 때마다 덮어쓴다

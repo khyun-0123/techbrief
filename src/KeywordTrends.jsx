@@ -152,18 +152,33 @@ function KeywordTrends() {
   const [error, setError] = useState('')
   const [open, setOpen] = useState(true)
 
+  // 서버가 지난 값을 먼저 주고 뒤에서 새로 받는 중이면(refreshing) 20초마다 다시 불러 새 값으로 바꾼다 (11/08)
+  const [tick, setTick] = useState(0)
   useEffect(() => {
+    let alive = true
     fetchTrends()
-      .then(setData)
-      .catch((err) => setError(err.message))
-  }, [])
+      .then((d) => alive && setData(d))
+      .catch((err) => alive && setError(err.message))
+    return () => {
+      alive = false
+    }
+  }, [tick])
+  useEffect(() => {
+    if (!data?.refreshing) return undefined
+    const t = setTimeout(() => setTick((n) => n + 1), 20_000)
+    return () => clearTimeout(t)
+  }, [data])
 
   return (
     <section className="panel trends" aria-labelledby="trends-title">
       <div className="trends-head">
         <h2 id="trends-title">추적 중인 키워드 추이</h2>
         <span className="trends-meta">
-          {data?.updatedAt ? `${new Date(data.updatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 기준 · 6시간마다 새로` : error || '불러오는 중…'}
+          {data?.updatedAt
+            ? `${new Date(data.updatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 값${data.refreshing ? ' · 새 값 받는 중… (받으면 바뀌어요)' : ' · 6시간마다 새로'}`
+            : data?.refreshing
+              ? '처음 받는 중…'
+              : error || '불러오는 중…'}
         </span>
         <button type="button" className="btn-text" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
           {open ? '접기' : '펼치기'}

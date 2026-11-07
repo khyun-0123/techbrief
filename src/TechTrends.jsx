@@ -181,6 +181,8 @@ function TechTrends({ onPick }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
 
+  // 서버는 DB에 저장된 마지막 값을 바로 준다. 지금 갱신 중이면 1분마다 다시 불러 새 값으로 바꾼다 (11/08)
+  const [tick, setTick] = useState(0)
   useEffect(() => {
     if (period === 'custom' && !applied) return
     let alive = true
@@ -191,7 +193,12 @@ function TechTrends({ onPick }) {
     return () => {
       alive = false
     }
-  }, [period, applied])
+  }, [period, applied, tick])
+  useEffect(() => {
+    if (!data?.status?.running) return undefined
+    const t = setTimeout(() => setTick((n) => n + 1), 60_000)
+    return () => clearTimeout(t)
+  }, [data])
 
   const win = data?.window
   const src = data?.sources.find((s) => s.id === tab)
