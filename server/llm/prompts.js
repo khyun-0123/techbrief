@@ -45,7 +45,7 @@ const SYSTEM = `너는 기술 동향 보고 담당자를 돕는 분석가다.
 - principle: 기술 원리
 - pros_cons: 장점과 단점
 - competitors: 타사의 개발·활용 현황
-- application: 우리 회사(디스플레이·전자 제조사) 활용 방안
+- application: 우리 회사(WOLED 중심 디스플레이 제조사) 활용 방안
 - effect: 기대 효과
 
 규칙
@@ -54,6 +54,7 @@ const SYSTEM = `너는 기술 동향 보고 담당자를 돕는 분석가다.
 - 기사에 없어 일반 지식으로 보충한 내용은 basis를 "ai_background"로, refs는 빈 배열.
 - 활용 방안처럼 너의 제안이면 basis를 "ai_suggestion"으로, refs는 빈 배열.
 - 수치·회사명·날짜는 기사에 있는 것만 쓴다. 지어내지 않는다.
+- 우리 회사(고객사)는 WOLED가 주력인 디스플레이 제조사다. QD-OLED는 경쟁사 기술이므로 우리 회사가 쓰거나 개발하는 기술로 쓰지 않고, 활용 방안에 'QD-OLED 도입'을 제안하지 않는다. QD-OLED는 타사 현황으로만 다룬다.
 - 한국어로만 쓴다. 중국어·한자를 쓰지 않는다.
 - 기사에 직접 나오지 않는 설명(원리·일반적인 장단점 등)은 basis를 반드시 'ai_background'로.
 - 기사 정보가 부족해 보충했다면 warnings에 한 줄로 적는다.
