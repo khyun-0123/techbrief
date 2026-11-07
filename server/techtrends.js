@@ -343,10 +343,26 @@ async function discoverSearch() {
   const list = ((await res.json()).keywordList ?? [])
     .map((x) => ({ kw: x.relKeyword, n: (Number(x.monthlyPcQcCnt) || 5) + (Number(x.monthlyMobileQcCnt) || 5) }))
     .sort((a, b) => b.n - a.n)
-    .slice(0, 200)
-  // 검색어 목록을 AI가 기사 제목처럼 보고 기술 용어만 고른다
-  const { data } = await chatJson({ messages: termPrompt(list.map((x) => `${x.kw} (월 검색 ${x.n}회)`)), schema: TERM_SCHEMA, schemaName: 'tech_terms', priority: PRIORITY.BACKGROUND, timeoutMs: 180_000 })
-  for (const item of data.items ?? []) if (item.tech && CATEGORIES.includes(item.category)) upsertTerm(item, [], 'search')
+    .slice(0, 400)
+  // 연관 검색어 상위는 키오스크·65인치TV·전광판 같은 광고·쇼핑 검색어가 대부분 (11/07 실측: 1,200개)
+  // → 400개를 100개씩 AI에게 보여 기술 용어만 고른다 (검색수가 적은 기술 용어도 빠지지 않게)
+  const volumeOf = new Map(list.map((x) => [keyOf(x.kw), x.n]))
+  for (let i = 0; i < list.length; i += 100) {
+    const part = list.slice(i, i + 100)
+    let data
+    try {
+      ;({ data } = await chatJson({ messages: termPrompt(part.map((x) => `${x.kw} (월 검색 ${x.n}회)`)), schema: TERM_SCHEMA, schemaName: 'tech_terms', priority: PRIORITY.BACKGROUND, timeoutMs: 180_000 }))
+    } catch (err) {
+      if (!(err instanceof PreemptedError)) console.warn(`[techtrends] 검색어 후보 실패: ${err.message}`)
+      return // 다음 차례에 처음부터
+    }
+    for (const item of data.items ?? []) {
+      if (!item.tech || !CATEGORIES.includes(item.category)) continue
+      const t = upsertTerm(item, [], 'search')
+      const n = volumeOf.get(keyOf(item.term))
+      if (t && n) t.searchVolume = { n, at: ymd(Date.now()) } // 월 검색수(PC+모바일) 한 장면
+    }
+  }
   state.searchStatus = 'ok'
   state.runs.discoverSearch = new Date().toISOString()
   await save()
@@ -576,6 +592,17 @@ async function cycle(opts = {}) {
     await setPhase(null)
     status.finishedAt = new Date().toISOString()
   }
+}
+
+// 키를 새로 넣었을 때 검색어 갈래만 바로 한 번 (일주일 기다리지 않고). 검토까지 해서 돌려준다
+export async function discoverSearchNow() {
+  await load()
+  state.runs.discoverSearch = null
+  await discoverSearch()
+  await reviewTerms()
+  await save()
+  const found = Object.values(state.terms).filter((t) => (t.from ?? []).includes('search'))
+  return { status: state.searchStatus, found: found.map((t) => ({ name: t.name, category: t.category, hidden: Boolean(t.hidden), volume: t.searchVolume?.n ?? null })) }
 }
 
 // 관리 화면·스크립트에서 바로 한 번 돌리기
