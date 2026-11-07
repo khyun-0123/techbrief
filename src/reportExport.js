@@ -22,7 +22,7 @@ function fileName(saved, ext) {
   return `${title}_${date}.${ext}`
 }
 
-// 16:9 슬라이드 2장: ① 1페이지 보고서 (핵심 요약 + 기술 개요·업계 동향·시사점 3단) ② 근거 기사
+// 16:9 슬라이드 2장: ① 보고서 본문 (핵심 요약 + 기술 개요·업계 동향·시사점 3단) ② 근거 기사
 // 내용이 넘치면 PowerPoint가 글자를 줄여 상자에 맞춘다 (fit: shrink)
 export async function exportPptx(saved) {
   const { default: PptxGenJS } = await import('pptxgenjs')

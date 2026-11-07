@@ -27,6 +27,7 @@ import { useSummaryQueue } from './summaryQueue.js'
 import { DEFAULT_KEYWORDS, SAMPLE_ARTICLES } from './sampleArticles.js'
 import SelectSummary from './SelectSummary.jsx'
 import { enabledFeatures, FeaturesContext } from './features.js'
+import KeywordTrends from './KeywordTrends.jsx'
 import { AI_BLOCKED_TITLE, OPS_LABEL, OpsContext } from './ops.js'
 import ListsPanel from './ListsPanel.jsx'
 import LogoMark from './Logo.jsx'
@@ -732,6 +733,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               <strong>{selectedIds.length}건</strong>
             </div>
           </section>
+
+          {features.has('trends') && <KeywordTrends />}
 
           <div className={features.has('collectPanel') ? 'content with-favs' : 'content with-favs no-settings'}>
             <FavoritesRail

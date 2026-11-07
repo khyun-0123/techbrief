@@ -140,7 +140,7 @@ function ReportDraft({ articles: picked, aiSummaries, queue, reports, onSaved, o
       <main className="page">
         <header className="page-header">
           <h1>보고서 초안</h1>
-          <p>선별·요약에서 체크한 기사로 1페이지 개조식 초안을 만들어요.</p>
+          <p>선별·요약에서 체크한 기사로 개조식 보고서 초안 한 편을 만들어요.</p>
         </header>
         <section className="panel select-empty">
           <p className="empty">보고서에 넣을 기사가 없어요. 선별·요약에서 기사를 체크해 주세요.</p>
