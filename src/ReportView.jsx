@@ -50,7 +50,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
   async function reinforce(entry, key, index) {
     const b = entry.report.sections[key].bullets[index]
     const result = await reinforceApi({ text: b.text, inputs: entry.inputs ?? [], existing: entry.articles })
-    if (!result.found) return patchBullet(entry, key, index, { noRef: { at: new Date().toISOString(), tried: result.tried?.length ?? 0 } })
+    if (!result.found) return patchBullet(entry, key, index, { noRef: { tried: result.tried?.length ?? 0 } })
     const next = { ...entry, articles: [...entry.articles, ...result.added] }
     return patchBullet(next, key, index, { ...result.bullet, noRef: undefined })
   }
