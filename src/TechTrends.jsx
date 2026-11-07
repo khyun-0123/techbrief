@@ -30,7 +30,7 @@ const fmtDay = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`
 const fmtNum = (v) => (v >= 10000 ? `${Math.round(v / 1000)}천` : v >= 1000 ? `${(v / 1000).toFixed(1)}천` : String(Math.round(v * 10) / 10))
 
 function Change({ change, growth, cur }) {
-  if (change === null || change === undefined) return <span className="tt-chg up">{cur > 0 ? '▲ 새로' : '—'}</span>
+  if (change === null || change === undefined) return <span className="tt-chg up">{cur > 0 ? '▲ 신규' : '—'}</span>
   const dir = growth >= 1.15 ? 'up' : growth <= 0.87 ? 'down' : 'flat'
   return (
     <span className={`tt-chg ${dir}`}>
@@ -77,8 +77,9 @@ function Composite({ data, onPick }) {
             <th scope="col">기술</th>
             <th scope="col">종합 점수</th>
             {cols.map((s) => (
-              <th scope="col" key={s.id} title={`${s.axis} · ${s.note}`}>
+              <th scope="col" key={s.id} title={`${s.axis} · ${s.note}${s.basis ? ` · ${s.basis.note}` : ''}`}>
                 {s.label}
+                {s.basis && <small className="tt-th-basis"> ({s.basis.short})</small>}
               </th>
             ))}
           </tr>
@@ -113,6 +114,8 @@ function Composite({ data, onPick }) {
           {more ? '접기' : `${data.composite.length - SHOW}개 더 보기`}
         </button>
       )}
+      {/* 짧은 기간이면 논문 · 특허는 다른 기간으로 비교한 값이 들어간다 (탭과 같은 값) */}
+      {cols.some((s) => s.basis) && <p className="tt-foot">{cols.filter((s) => s.basis).map((s) => s.basis.note).join(' · ')}</p>}
     </div>
   )
 }
@@ -120,11 +123,21 @@ function Composite({ data, onPick }) {
 function SourceList({ src, win, onPick }) {
   const [more, setMore] = useState(false)
   if (src.unavailable) return <p className="tt-empty">{src.unavailable}</p>
+  // 월별 출처를 짧은 기간에 볼 때: 어느 기간끼리 비교했는지 표 위에 적는다 (조장 11/08)
+  const basis = src.basis && <p className="tt-basis">{src.basis.note}</p>
   if (src.ranking.length === 0)
-    return <p className="tt-empty">{src.skipped.length ? `아직 비교할 만큼 쌓이지 않았어요 (${src.skipped.length}개 용어 대기).` : '아직 받은 값이 없어요.'}</p>
+    return (
+      <>
+        {basis}
+        <p className="tt-empty">
+          {src.empty ?? (src.skipped.length ? `아직 비교할 만큼 쌓이지 않았어요 (${src.skipped.length}개 용어 대기).` : '아직 받은 값이 없어요.')}
+        </p>
+      </>
+    )
   const rows = more ? src.ranking : src.ranking.slice(0, SHOW)
   return (
     <>
+      {basis}
       <ol className="tt-list">
         {rows.map((r) => (
           <li key={r.key}>
@@ -147,7 +160,7 @@ function SourceList({ src, win, onPick }) {
       </ol>
       <p className="tt-foot">
         {src.note}
-        {src.ranking[0]?.basis ? ` · ${src.ranking[0].basis}` : ''}
+        {src.ranking[0]?.basis && !src.basis ? ` · ${src.ranking[0].basis}` : ''}
         {src.at ? ` · ${fmtAt(src.at)} 받음` : ''}
         {src.skipped.length ? ` · 비교할 값이 모자라 빠진 용어 ${src.skipped.length}개` : ''}
       </p>
@@ -168,6 +181,8 @@ function TechTrends({ onPick }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
 
+  // 서버는 DB에 저장된 마지막 값을 바로 준다. 지금 갱신 중이면 1분마다 다시 불러 새 값으로 바꾼다 (11/08)
+  const [tick, setTick] = useState(0)
   useEffect(() => {
     if (period === 'custom' && !applied) return
     let alive = true
@@ -178,7 +193,12 @@ function TechTrends({ onPick }) {
     return () => {
       alive = false
     }
-  }, [period, applied])
+  }, [period, applied, tick])
+  useEffect(() => {
+    if (!data?.status?.running) return undefined
+    const t = setTimeout(() => setTick((n) => n + 1), 60_000)
+    return () => clearTimeout(t)
+  }, [data])
 
   const win = data?.window
   const src = data?.sources.find((s) => s.id === tab)
@@ -219,7 +239,7 @@ function TechTrends({ onPick }) {
           <button type="submit" className="btn" disabled={!range.from || !range.to}>
             적용
           </button>
-          <span className="tt-note">4주 이상이면 논문·특허(월별)도 비교해요</span>
+          <span className="tt-note">4주보다 짧으면 논문·특허(월별)는 최근 4주 · 마지막 달 기준으로 비교해요</span>
         </form>
       )}
 

@@ -22,7 +22,7 @@ function FolderBar({ label, folders, counts, checked, active, allOption, onPick,
 
   return (
     <div className="folder-bar" role="group" aria-label={label}>
-      <span className="folder-bar-label">{label}</span>
+      {label && <span className="folder-bar-label">{label}</span>}
       <div className="folder-chips">
         {allOption && (
           <button type="button" className={active === null ? 'folder-chip active' : 'folder-chip'} aria-pressed={active === null} onClick={() => onPick(null)}>
@@ -58,31 +58,37 @@ function FolderBar({ label, folders, counts, checked, active, allOption, onPick,
         )}
       </div>
       {activeFolder && activeFolder.id !== INBOX && (onRename || onDelete) && (
-        <span className="folder-actions">
-          {onRename && (
-            <button
-              type="button"
-              className="link-btn"
-              onClick={() => {
-                const n = window.prompt('폴더 이름', activeFolder.name)?.trim()
-                if (n) onRename(activeFolder.id, n)
-              }}
-            >
-              이름 바꾸기
-            </button>
-          )}
-          {onDelete && (
-            <button
-              type="button"
-              className="link-btn"
-              onClick={() => {
-                if (window.confirm(`「${activeFolder.name}」 폴더를 지울까요? 안의 기사는 「미분류」로 옮겨요.`)) onDelete(activeFolder.id)
-              }}
-            >
-              폴더 지우기
-            </button>
-          )}
-        </span>
+        <details className="folder-menu">
+          <summary aria-label={`「${activeFolder.name}」 폴더 관리`} title="폴더 이름 바꾸기 · 지우기">
+            ⋯
+          </summary>
+          <div className="folder-menu-pop">
+            {onRename && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.currentTarget.closest('details').open = false
+                  const n = window.prompt('폴더 이름', activeFolder.name)?.trim()
+                  if (n) onRename(activeFolder.id, n)
+                }}
+              >
+                이름 바꾸기
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                className="danger-text"
+                onClick={(e) => {
+                  e.currentTarget.closest('details').open = false
+                  if (window.confirm(`「${activeFolder.name}」 폴더를 지울까요? 안의 기사는 「미분류」로 옮겨요.`)) onDelete(activeFolder.id)
+                }}
+              >
+                폴더 지우기
+              </button>
+            )}
+          </div>
+        </details>
       )}
     </div>
   )

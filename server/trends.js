@@ -9,6 +9,7 @@
 // 바깥 API는 느리고 제한이 있어 6시간 동안 기억해 두고, 오래되면 뒤에서 새로 받는다 (그동안은 지난 값)
 import { dbEnabled, query } from './db/index.js'
 import { getKeywords, getSetting, setSetting } from './db/store.js'
+import { flushValues, keepValue, latestValues } from './trendHistory.js'
 import { getPatentTrends, patentPatternOf } from './patents.js'
 
 const CACHE_MS = 6 * 3600_000
@@ -100,14 +101,25 @@ async function gdeltSeries(term, retry = true) {
 // ── 지난 정상 값 (출처별 · 키별) ──
 const GOOD_KEY = 'trends_last_good'
 let good = null
+// 11/08: 지난 정상 값은 기록 표(tech_trend_values, 출처 이름 앞에 'kw:')에도 쌓는다.
+// 상태 묶음(trends_last_good)에 없는 값은 기록에서 가장 최근 값으로 채운다 (저장이 꼬이거나 처음 켤 때)
 async function loadGood() {
-  good ??= await getSetting(GOOD_KEY, {}).catch(() => ({}))
+  if (!good) {
+    good = await getSetting(GOOD_KEY, {}).catch(() => ({}))
+    for (const r of await latestValues('kw:')) {
+      const source = r.source.slice(3)
+      if (r.kind === 'series' && r.value?.series?.length && !good[source]?.[r.term]) (good[source] ??= {})[r.term] = { ...r.value, fromHistory: true }
+    }
+  }
   return good
 }
 async function remember(source, key, series) {
   const g = await loadGood()
-  ;(g[source] ??= {})[key] = { series, at: new Date().toISOString() }
+  const at = new Date().toISOString()
+  ;(g[source] ??= {})[key] = { series, at }
   await setSetting(GOOD_KEY, g).catch(() => {})
+  keepValue(`kw:${source}`, key, 'series', '', { series, at })
+  await flushValues()
 }
 // 새로 받기: 성공하면 기억, 실패하면 지난 값 { series, at, stale: true, error }
 async function withLastGood(source, key, fetcher) {
@@ -200,6 +212,15 @@ async function build() {
     await patents.wait
     patents = await getPatentTrends(keywords).catch((err) => ({ status: 'error', error: err.message }))
   }
+  // 특허: 받은 값은 기록, 못 받으면 기록의 지난 값 (11/08)
+  if (patents.status === 'ok') {
+    for (const [k, series] of Object.entries(patents.series ?? {})) if (series?.length) keepValue('kw:patents', k, 'series', '', { series, at: patents.at ?? new Date().toISOString() })
+    await flushValues()
+  } else if (patents.status === 'error') {
+    const last = (await loadGood()).patents ?? {}
+    const keys = keywords.filter((k) => last[k])
+    if (keys.length) patents = { status: 'ok', stale: true, error: patents.error, at: keys.map((k) => last[k].at).sort()[0], series: Object.fromEntries(keys.map((k) => [k, last[k].series])) }
+  }
   const items = []
   for (const keyword of keywords) {
     const g = globalOf(keyword)
@@ -219,24 +240,35 @@ async function build() {
     naverStale: Boolean(naver.stale),
     patentStatus: patents.status,
     patentAt: patents.at ?? null,
+    patentStale: Boolean(patents.stale),
     updatedAt: new Date().toISOString(),
   }
 }
 
-let cache = null
-let building = null
+// 마지막으로 만든 추이 묶음은 DB(app_settings 'trends_cache')에도 둔다 (11/08 조장)
+// → 서버를 켠 직후에도 기다리지 않고 지난 값을 바로 보여 주고(언제 값인지 함께), 뒤에서 새로 받으면 바꾼다
+const CACHE_KEY = 'trends_cache'
+const G = (globalThis.__keywordTrends ??= { cache: null, building: null, loaded: false })
 
-// 오래된 값이 있으면 그것을 바로 주고 뒤에서 새로 받는다. 처음이면 기다린다
+// 오래된 값이 있으면 그것을 바로 주고 뒤에서 새로 받는다. 메모리 · DB 어디에도 값이 없을 때만 기다린다
 export async function getTrends({ fresh = false } = {}) {
-  const stale = !cache || fresh || Date.now() - Date.parse(cache.updatedAt) > CACHE_MS
-  if (stale && !building) {
-    building = build()
-      .then((v) => (cache = v))
-      .catch((err) => console.warn(`[trends] 추이 받기 실패: ${err.message}`))
-      .finally(() => (building = null))
+  if (!G.cache && !G.loaded) {
+    G.loaded = true
+    G.cache = await getSetting(CACHE_KEY, null).catch(() => null)
   }
-  if (!cache || fresh) await building
-  return cache ? withGdelt(cache) : { items: [], naverStatus: 'error', updatedAt: null }
+  const stale = !G.cache || fresh || Date.now() - Date.parse(G.cache.updatedAt) > CACHE_MS
+  if (stale && !G.building) {
+    G.building = build()
+      .then(async (v) => {
+        G.cache = v
+        await setSetting(CACHE_KEY, v).catch((err) => console.warn(`[trends] 지난 값 저장 실패: ${err.message}`))
+      })
+      .catch((err) => console.warn(`[trends] 추이 받기 실패: ${err.message}`))
+      .finally(() => (G.building = null))
+  }
+  if (!G.cache || fresh) await G.building
+  // refreshing: 지금 보여 주는 값은 지난 값이고 새 값을 받는 중 → 화면이 잠시 뒤 다시 불러 바꾼다
+  return G.cache ? { ...(await withGdelt(G.cache)), refreshing: Boolean(G.building) } : { items: [], naverStatus: 'error', updatedAt: null, refreshing: Boolean(G.building) }
 }
 
 // GDELT 칸은 30분마다 바뀌므로 6시간 묶음 위에 요청 때마다 덮어쓴다

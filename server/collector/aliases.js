@@ -31,3 +31,13 @@ export function hasKeyword(text, keyword) {
   const t = squash(text)
   return matchersOf(keyword).some((words) => words.every((w) => t.includes(w)))
 }
+
+// 논문 찾기용 영문 표기 (11/08): 검색어에 영문이 있으면 그대로, 한글이면 위 표의 영문 표기 중 띄어 쓴 것 하나
+// 표에 없는 한글 말은 null → 논문은 찾지 않는다 (OpenAlex 등은 영문 제목 · 초록)
+export function englishOf(query) {
+  const q = String(query ?? '').trim()
+  if (/[A-Za-z]/.test(q)) return q
+  const key = q.toLowerCase()
+  const alias = ALIASES[key] ?? ALIASES[key.replace(/\s+/g, '')]
+  return alias?.find((a) => /^[a-z][a-z0-9 -]+$/.test(a) && a.includes(' ')) ?? alias?.find((a) => /^[a-z]/.test(a)) ?? null
+}

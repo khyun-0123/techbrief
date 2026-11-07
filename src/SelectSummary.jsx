@@ -39,11 +39,10 @@ function SelectSummary({
   onMaterialAdded,
   reportArticles,
   reports,
-  onSaved,
-  onUpdated,
-  onGoArchive,
-  storageLabel,
   folderSummary,
+  reportJobs,
+  onJobAdded,
+  onOpenReport,
 }) {
   const { aiBlocked } = useOps()
   const [sort, setSort] = useState('importance')
@@ -151,12 +150,15 @@ function SelectSummary({
     )
   }
 
+  const checkedHere = sorted.filter((a) => includedIds.includes(a.id)).length
+  const someChecked = checkedHere > 0 && !allChecked
+
   return (
-    <main className="page page-wide">
+    <main className="page page-wide select-page">
       <header className="page-header with-actions">
         <div>
           <h1>선별·요약</h1>
-          <p>왼쪽에서 기사를 눌러 요약을 보고, 보고서에 넣을 기사를 체크하세요. 오른쪽에서 체크한 기사로 보고서를 만들어요.</p>
+          <p>기사를 눌러 요약을 보고, 보고서에 넣을 기사를 체크하세요.</p>
         </div>
         <div className="header-actions">
           <button type="button" className={showAdd ? 'btn primary' : 'btn'} aria-expanded={showAdd} onClick={() => setShowAdd((v) => !v)}>
@@ -176,9 +178,15 @@ function SelectSummary({
         </section>
       ) : (
         <div className="select-report">
-          <section className="panel select-list">
+          <section className="panel select-list" aria-label="선별 기사">
+            <div className="select-list-head">
+              <h2>선별 기사</h2>
+              <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="정렬">
+                <option value="importance">중요도순</option>
+                <option value="latest">최신순</option>
+              </select>
+            </div>
             <FolderBar
-              label="폴더"
               folders={folders}
               counts={folderCounts}
               checked={checkedByFolder}
@@ -192,22 +200,32 @@ function SelectSummary({
                 setFolder(null)
               }}
             />
-            <div className="candidate-header">
-              <h2>
-                {folder === null ? '선별 기사' : folders.find((f) => f.id === folder)?.name} {sorted.length}건 <small>· 요약 {summarizedCount}</small>
-              </h2>
-              <div className="candidate-tools">
-                <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="정렬">
-                  <option value="importance">중요도순</option>
-                  <option value="latest">최신순</option>
-                </select>
-                <button type="button" className="btn" onClick={toggleAll} disabled={sorted.length === 0}>
-                  {allChecked ? '전체 해제' : '전체 체크'}
+            <div className="select-list-tools">
+              <label className="check-all">
+                <input
+                  type="checkbox"
+                  checked={allChecked}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someChecked
+                  }}
+                  onChange={toggleAll}
+                  disabled={sorted.length === 0}
+                />
+                {checkedHere > 0 ? (
+                  <span>
+                    <strong>{checkedHere}</strong> / {sorted.length}건 체크 · 보고서에 들어가요
+                  </span>
+                ) : (
+                  <span>
+                    {sorted.length}건 · 요약 {summarizedCount}
+                  </span>
+                )}
+              </label>
+              {checkedHere > 0 && (
+                <button type="button" className="btn-text danger" onClick={removeChecked} title="체크한 기사를 선별 목록에서 빼요. 만든 요약은 그대로 남아요">
+                  선별에서 빼기
                 </button>
-                <button type="button" className="btn danger" onClick={removeChecked} disabled={!sorted.some((a) => includedIds.includes(a.id))} title="체크한 기사를 선별 목록에서 빼요. 만든 요약은 그대로 남아요">
-                  선별 삭제
-                </button>
-              </div>
+              )}
             </div>
 
             {sorted.length === 0 ? (
@@ -218,12 +236,13 @@ function SelectSummary({
                   const job = jobOf(a.id)
                   const jobStatus = aiSummaries[a.id] && job?.status !== 'running' && job?.status !== 'queued' ? 'done' : job?.status
                   const open = openId === a.id
+                  const checked = includedIds.includes(a.id)
                   return (
-                    <li key={a.id} className={open ? 'candidate open' : 'candidate'}>
+                    <li key={a.id} className={['candidate', open && 'open', checked && 'checked'].filter(Boolean).join(' ')}>
                       <div className="candidate-row">
                         <input
                           type="checkbox"
-                          checked={includedIds.includes(a.id)}
+                          checked={checked}
                           onChange={() => toggleIncluded(a.id)}
                           disabled={a.aiAllowed === false}
                           title={a.aiAllowed === false ? 'AI 입력을 허용하지 않은 자료라 보고서에 넣을 수 없어요' : '보고서에 넣기'}
@@ -236,20 +255,23 @@ function SelectSummary({
                             {a.title}
                           </span>
                           <span className="meta">
-                            {folder === null && <span className="folder-tag">▤ {folders.find((f) => f.id === folderIdOf(a.id))?.name} · </span>}
-                            {a.source} · {formatPublished(a.hoursAgo)}
-                            {jobStatus === 'done' && <span className="summary-state done"> · 요약 완료</span>}
-                            {jobStatus && jobStatus !== 'done' && (
-                              <span className={`summary-state ${jobStatus}`}>
-                                {' '}
-                                · {JOB_LABEL[jobStatus]}
+                            {folder === null && <span className="folder-tag">{folders.find((f) => f.id === folderIdOf(a.id))?.name}</span>}
+                            <span>{a.source}</span>
+                            <span>{formatPublished(a.hoursAgo)}</span>
+                            {jobStatus === 'done' ? (
+                              <span className="summary-dot done">요약 완료</span>
+                            ) : jobStatus ? (
+                              <span className={`summary-dot ${jobStatus}`}>
+                                {JOB_LABEL[jobStatus]}
                                 {jobStatus === 'running' && ` ${queue.progressOf(job)}%`}
                               </span>
+                            ) : (
+                              <span className="summary-dot none">요약 없음</span>
                             )}
                           </span>
                         </button>
                         <span className="candidate-caret" aria-hidden="true">
-                          {open ? '▴' : '▾'}
+                          {open ? '접기' : '요약'}
                         </span>
                       </div>
                       {open && detail(a)}
@@ -265,10 +287,9 @@ function SelectSummary({
             aiSummaries={aiSummaries}
             queue={queue}
             reports={reports}
-            onSaved={onSaved}
-            onUpdated={onUpdated}
-            onGoArchive={onGoArchive}
-            storageLabel={storageLabel}
+            reportJobs={reportJobs}
+            onJobAdded={onJobAdded}
+            onOpenReport={onOpenReport}
             folderSummary={folderSummary}
           />
         </div>

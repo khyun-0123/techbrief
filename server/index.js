@@ -22,10 +22,13 @@ import {
   listReports,
   saveReport,
   setKeywords,
+  reportOwner,
   updateReport,
   updateReportSection,
 } from './db/store.js'
 import { reinforceBullet } from './reinforce.js'
+import { searchPaperArticles } from './searchPapers.js'
+import { addJob, answerJob, cancelJob, listJobs, setDraftBuilder } from './reportJobs.js'
 import { chatJson, llmProviders, modelName, pingModel, providerLabel, selectProvider } from './llm/client.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
@@ -188,11 +191,11 @@ async function draftLongReport(articles, opts) {
   return { ...merged, data: { ...merged.data, warnings: [...new Set([...(merged.data.warnings ?? []), ...notes])] } }
 }
 
-async function handleReport(req, res) {
-  const body = await readJson(req)
+// 보고서 한 건 만들기 (아직 저장 전). 대기열(reportJobs)과 예전 바로 만들기(/api/reports)가 같이 쓴다
+async function buildReportEntry(body) {
   const all = body.mode === 'all'
   const picked = readReportArticles(body, all ? MAX_REPORT_ALL : MAX_REPORT_ARTICLES)
-  for (const a of picked) if (await materialBlocksAi(String(a.id ?? ''))) return send(res, 403, { error: `AI 입력을 허용하지 않은 자료가 있어요: ${a.title}` })
+  for (const a of picked) if (await materialBlocksAi(String(a.id ?? ''))) throw Object.assign(new Error(`AI 입력을 허용하지 않은 자료가 있어요: ${a.title}`), { status: 403 })
   const title = body.title?.trim() || '테크 동향 브리핑'
   const direction = String(body.direction ?? '').trim().slice(0, 300)
   const opts = { title, periodLabel: body.periodLabel ?? '오늘', direction }
@@ -216,6 +219,12 @@ async function handleReport(req, res) {
     articles: articles.map(({ title: t, source, url, publishedAt, body: b }) => ({ title: t, source, url, publishedAt, fulltext: Boolean(b) })),
     inputs: articles.map(({ n: _n, body: _b, ...rest }) => rest),
   }
+  return entry
+}
+setDraftBuilder(buildReportEntry)
+
+async function handleReport(req, res) {
+  const entry = await buildReportEntry(await readJson(req))
   if (dbEnabled()) await saveReport(entry)
   send(res, 200, { entry, stored: dbEnabled() })
 }
@@ -418,7 +427,7 @@ export async function handleApi(req, res) {
       const status = await saveRefreshSettings(await readJson(req))
       const s = status.settings
       const mode = s.mode === 'daily' ? `매일 ${s.time}` : s.mode === 'interval' ? `${s.hours}시간마다` : '꺼짐'
-      await logChange(admin, '자동 최신화', `${mode} · 자동 요약 ${s.autoSummary === 'off' ? '꺼짐' : '켜짐'}`)
+      await logChange(admin, '자동 최신화', `${mode} · 자동 요약 ${s.autoSummary === 'off' ? '꺼짐' : `켜짐(기사 최근 ${s.summaryDays}일)`}`)
       return send(res, 200, status)
     }
     if (req.method === 'POST' && req.url === '/api/refresh/run') {
@@ -428,8 +437,13 @@ export async function handleApi(req, res) {
       return send(res, 202, await refreshStatus())
     }
     if (req.method === 'POST' && req.url === '/api/search') {
+      // 뉴스(네이버) + 논문을 같이 찾는다 (11/08). 논문이 막혀도 뉴스 결과는 그대로
       const { query, period } = await readJson(req)
-      return send(res, 200, await searchArticles(query, { period }))
+      const [news, papers] = await Promise.all([
+        searchArticles(query, { period }),
+        searchPaperArticles(query, period).catch((err) => ({ articles: [], note: `논문을 찾지 못했어요 (${err.message})` })),
+      ])
+      return send(res, 200, { ...news, articles: [...news.articles, ...papers.articles], newsCount: news.articles.length, paperCount: papers.articles.length, paperNote: papers.note })
     }
     if (req.method === 'GET' && req.url === '/api/favorites') {
       return send(res, 200, { favorites: await getSetting('favorite_queries', []) })
@@ -508,7 +522,7 @@ export async function handleApi(req, res) {
       return send(res, 200, await lookupWiki(term))
     }
     if (req.method === 'GET' && req.url === '/api/reports') {
-      return send(res, 200, { stored: dbEnabled(), reports: dbEnabled() ? await listReports() : [] })
+      return send(res, 200, { stored: dbEnabled(), reports: dbEnabled() ? await listReports(200) : [] })
     }
     if (req.method === 'POST' && req.url === '/api/reports/import') {
       // 브라우저(localStorage)에 있던 보고서함을 DB로 옮긴다. 이미 있는 건 건너뜀
@@ -518,11 +532,17 @@ export async function handleApi(req, res) {
       return send(res, 200, { reports: await listReports() })
     }
     if (req.method === 'DELETE' && req.url.startsWith('/api/reports/')) {
-      // 공용 보고서함에서 지우면 되돌릴 수 없어 관리자만 (17 문서 3-3)
-      const admin = requireAdmin(req)
-      const id = decodeURIComponent(req.url.slice('/api/reports/'.length))
+      // 공용 보고서함에서 지우면 되돌릴 수 없다: 관리자 또는 그 보고서를 만든 브라우저만 (11/08 조장)
+      const [path, qs = ''] = req.url.split('?')
+      const id = decodeURIComponent(path.slice('/api/reports/'.length))
+      const admin = adminOf(req)
+      if (!admin) {
+        const client = new URLSearchParams(qs).get('client')
+        const owner = await reportOwner(id)
+        if (!client || !owner || owner !== client) throw Object.assign(new Error('보고서는 만든 브라우저나 관리자만 지울 수 있어요.'), { status: 403 })
+      }
       await deleteReport(id)
-      await logChange(admin, '보고서 삭제', id)
+      if (admin) await logChange(admin, '보고서 삭제', id)
       return send(res, 200, { ok: true })
     }
     if (req.method === 'POST' && req.url === '/api/reports') {
@@ -535,6 +555,24 @@ export async function handleApi(req, res) {
       if (!report?.sections || !Array.isArray(articles)) return send(res, 400, { error: '보고서 형식이 아니에요.' })
       if (dbEnabled()) await updateReport(id, report, articles)
       return send(res, 200, { ok: true })
+    }
+    // 보고서 작업 대기열 (11/08): 만들기 → 대기열 → (필요하면 사용자에게 물음) → 보고서함
+    if (req.method === 'POST' && req.url === '/api/report-jobs') {
+      const body = await readJson(req)
+      if (!(body.articles ?? []).length) return send(res, 400, { error: '보고서에 넣을 기사가 없어요.' })
+      return send(res, 202, { job: addJob(body, body.clientId) })
+    }
+    if (req.method === 'GET' && req.url.startsWith('/api/report-jobs')) {
+      const client = new URLSearchParams(req.url.split('?')[1] ?? '').get('client')
+      return send(res, 200, { jobs: listJobs(client) })
+    }
+    if (req.method === 'POST' && /^\/api\/report-jobs\/[\w-]+\/(answer|cancel)$/.test(req.url)) {
+      const [, , , id, action] = req.url.split('/')
+      if (action === 'answer') {
+        const { use } = await readJson(req)
+        return send(res, 200, { job: answerJob(id, use) })
+      }
+      return send(res, 200, { job: cancelJob(id) })
     }
     // AI 해설 한 줄의 근거를 우리 자료 · 위키백과에서 찾아 고쳐 쓴다
     if (req.method === 'POST' && req.url === '/api/reports/reinforce') {

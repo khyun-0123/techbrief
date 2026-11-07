@@ -4,7 +4,7 @@
 // - 찾기는 규칙(낱말 겹침)으로, 고쳐 쓰기만 AI로 (원칙 1)
 // - 고쳐 쓴 문장은 찾은 자료와 다시 대조(isSupported)해서 맞을 때만 받아들인다
 import { dbEnabled, query } from './db/index.js'
-import { getArticleText } from './db/store.js'
+import { getArticleText, getSummaries } from './db/store.js'
 import { chatJson, PRIORITY } from './llm/client.js'
 import { isSupported, stripInlineRefs } from './llm/evidence.js'
 import { lookupWiki } from './wiki.js'
@@ -29,7 +29,7 @@ export function termsOf(text) {
   return uniq.sort((a, b) => Number(/[A-Za-z]/.test(b)) - Number(/[A-Za-z]/.test(a)) || b.length - a.length).slice(0, 6)
 }
 
-function sentencesOf(text) {
+export function sentencesOf(text) {
   return String(text ?? '')
     .replace(/\s+/g, ' ')
     .split(/(?<=[.!?。]|[다음임함됨]\.)\s+|\n+/)
@@ -40,7 +40,7 @@ function sentencesOf(text) {
 const has = (s, t) => s.toLowerCase().includes(t.toLowerCase())
 
 // 문서에서 낱말이 가장 많이 겹치는 두 문장 조각
-function bestPassage(text, terms) {
+export function bestPassage(text, terms) {
   const sents = sentencesOf(text)
   let best = null
   sents.forEach((s, i) => {
@@ -51,7 +51,7 @@ function bestPassage(text, terms) {
   return best
 }
 
-async function dbCandidates(terms) {
+export async function dbCandidates(terms) {
   if (!dbEnabled() || terms.length === 0) return []
   const pats = terms.map((t) => `%${t}%`)
   const [arts, texts, mats] = await Promise.all([
@@ -78,11 +78,24 @@ async function dbCandidates(terms) {
     ...arts.rows.map((r) => ({ ...r, text: `${r.title}. ${r.description ?? ''}`, kind: 'data' })),
   ]
   const seen = new Set()
-  return rows.filter((r) => !seen.has(r.id) && seen.add(r.id))
+  const uniq = rows.filter((r) => !seen.has(r.id) && seen.add(r.id))
+  // 요약이 있는 기사는 요약 항목도 근거 글에 붙인다. 요약이 없는 「모은 기사」는 발췌뿐이라 needsSummary로 표시
+  const sums = await getSummaries(uniq.filter((r) => !r.material).map((r) => String(r.id))).catch(() => ({}))
+  return uniq.map((r) => {
+    const sum = sums[r.id]?.summary
+    if (sum) {
+      const items = Object.values(sum.items ?? {})
+        .filter((it) => it.basis === 'article')
+        .map((it) => it.text)
+        .join(' ')
+      return { ...r, text: `${r.text} ${sum.headline ?? ''} ${items}`, summarized: true }
+    }
+    return { ...r, summarized: Boolean(r.material || r.body) }
+  })
 }
 
 // inputs: 보고서에 쓴 기사들 (화면이 보낸 inputs: id · title · url · description · summary)
-async function inputCandidates(inputs) {
+export async function inputCandidates(inputs) {
   return Promise.all(
     inputs.map(async (a, i) => {
       const body = await getArticleText(String(a.id ?? '')).catch(() => null)
@@ -90,7 +103,7 @@ async function inputCandidates(inputs) {
         .filter((it) => it.basis === 'article')
         .map((it) => it.text)
         .join(' ')
-      return { ...a, n: i + 1, text: [a.title, body ?? a.description ?? '', items].join('. '), kind: 'input' }
+      return { ...a, n: i + 1, text: [a.title, body ?? a.description ?? '', items].join('. '), kind: 'input', summarized: true }
     }),
   )
 }
@@ -105,7 +118,7 @@ const SCHEMA = {
   required: ['supported', 'text', 'refs'],
 }
 
-function messages(bullet, passages) {
+export function messages(bullet, passages) {
   const list = passages.map((p, i) => `[R${i + 1}] (${p.label}) ${p.title}\n${p.text}`).join('\n\n')
   return [
     {
@@ -174,7 +187,13 @@ export async function reinforceBullet({ text, inputs = [], existing = [] }) {
   }
 
   if (passages.length === 0) return { found: false, searched }
+  return { ...(await rewriteWithPassages(bullet, passages, existing)), searched }
+}
 
+// 찾은 근거 조각(passages)으로 한 줄을 고쳐 쓴다. 근거와 다시 대조해 맞을 때만 받아들인다
+// passages: [{ label, title, text, ref: { id?, n?, title, source, url, publishedAt?, wiki? }, kind: 'data' | 'wiki' }]
+export async function rewriteWithPassages(bulletText, passages, existing = []) {
+  const bullet = stripInlineRefs(String(bulletText ?? '')).trim()
   const { data, model } = await chatJson({
     messages: messages(bullet, passages),
     schema: SCHEMA,
@@ -185,9 +204,8 @@ export async function reinforceBullet({ text, inputs = [], existing = [] }) {
   const newText = stripInlineRefs(data.text ?? '').trim()
   const evidence = used.map((n) => `${passages[n - 1].title} ${passages[n - 1].text}`).join(' ')
   if (!data.supported || !newText || used.length === 0 || !isSupported(newText, evidence)) {
-    return { found: false, searched, model, tried: passages.map((p) => p.title) }
+    return { found: false, model, tried: passages.map((p) => p.title) }
   }
-
   // 근거 번호: 이 보고서 기사면 그 번호, 이미 보충한 자료면 그 번호, 새 자료면 뒤에 붙인다
   const list = [...existing]
   const added = []
@@ -204,7 +222,6 @@ export async function reinforceBullet({ text, inputs = [], existing = [] }) {
   const kinds = new Set(used.map((n) => passages[n - 1].kind))
   return {
     found: true,
-    searched,
     model,
     bullet: {
       text: newText,

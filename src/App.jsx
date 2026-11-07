@@ -2,7 +2,10 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import './App.css'
 import {
   deleteMaterialApi,
+  answerReportJob,
+  cancelReportJob,
   deleteReportApi,
+  fetchReportJobs,
   updateReportApi,
   fetchAdminMe,
   fetchArticles,
@@ -44,6 +47,7 @@ import SummaryItems from './SummaryItems.jsx'
 import { formatPublished, load } from './utils.js'
 import { clientId, enableUsage, track, trackVisit } from './usage.js'
 import AddMaterial from './AddMaterial.jsx'
+import DataMove from './DataMove.jsx'
 import FolderBar from './FolderBar.jsx'
 import { INBOX, INBOX_FOLDER } from './folders.js'
 
@@ -163,6 +167,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [targetFolder, setTargetFolder] = useState(() => load(TARGET_FOLDER_KEY, INBOX)) // 자료 현황에서 「선별 추가」가 담을 폴더
   const [materials, setMaterials] = useState([]) // 직접 추가한 자료 (서버)
   const [showAdd, setShowAdd] = useState(false)
+  const [showMove, setShowMove] = useState(false) // 내 자료 옮기기 (11/08)
   const [includedIds, setIncludedIds] = useState(() => load(INCLUDED_KEY, []))
   const [screen, setScreen] = useState('dashboard')
   const [query, setQuery] = useState('')
@@ -180,7 +185,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     return () => enableUsage(false)
   }, [isTest])
   const [openGroupId, setOpenGroupId] = useState(null) // 같은 이슈 기사를 펼친 기사
-  const [search, setSearch] = useState(null) // 네이버 기사 찾기 { query, articles?, loading?, error? }
+  const [search, setSearch] = useState(null) // 뉴스 · 논문 찾기 { query, articles?, loading?, error? } (11/08: 네이버 + 논문)
   const [extraArticles, setExtraArticles] = useState(() => load(EXTRA_KEY, []))
   const [page, setPage] = useState(1)
   const [excludeOwn, setExcludeOwn] = useState(() => load(EXCLUDE_OWN_KEY, false))
@@ -195,6 +200,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
   const [reports, setReports] = useState(() => loadReports())
   const [reportsInDb, setReportsInDb] = useState(false) // true면 보고서함을 서버 DB에 저장
+  // 보고서 작업 대기열 (11/08): 서버가 만들고, 화면은 3초마다 상태를 받아 진행 창에 보여 준다
+  const [reportJobs, setReportJobs] = useState([])
+  const ingestedJobs = useRef(new Set())
+  const [archiveTarget, setArchiveTarget] = useState(null) // 진행 창 「보고서함에서 보기」로 바로 열 보고서
 
   // 서버에 쌓인 기사를 불러온다. 앱을 열 때, 최신화가 끝났을 때
   const reloadArticles = useCallback(async () => {
@@ -352,6 +361,67 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     })
   }
 
+  // 보고서 작업 상태 받기: 도는 작업이 있으면 3초, 없으면 20초마다. 끝난 작업의 보고서는 보고서함에 넣는다
+  const reportJobsActive = reportJobs.some((j) => ['queued', 'running', 'need_confirm'].includes(j.status))
+  useEffect(() => {
+    const id = clientId()
+    if (!id) return undefined
+    let alive = true
+    const check = () =>
+      fetchReportJobs(id)
+        .then((list) => {
+          if (!alive) return
+          setReportJobs(list)
+          for (const j of list) {
+            if (j.status !== 'done' || !j.result || ingestedJobs.current.has(j.id)) continue
+            ingestedJobs.current.add(j.id)
+            const entry = j.result
+            setReports((prev) => {
+              if (prev.some((r) => r.id === entry.id)) return prev
+              const next = [entry, ...prev]
+              if (!reportsInDb) saveReports(next)
+              return next
+            })
+          }
+        })
+        .catch(() => {})
+    check()
+    const timer = setInterval(check, reportJobsActive ? 3_000 : 20_000)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+    // reportsInDb는 저장 위치만 정한다 (바뀌어도 다시 시작할 필요 없음)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportJobsActive])
+
+  function refreshReportJobs() {
+    const id = clientId()
+    if (id) fetchReportJobs(id).then(setReportJobs).catch(() => {})
+  }
+
+  async function handleJobAnswer(jobId, use) {
+    await answerReportJob(jobId, use).catch(() => {})
+    refreshReportJobs()
+  }
+
+  async function handleJobCancel(jobId) {
+    await cancelReportJob(jobId).catch(() => {})
+    refreshReportJobs()
+  }
+
+  // 보고서함에서 보고서를 열면: 그 보고서에 쓴 기사가 아직 선별에 있으면 정리할지 묻는다 (한 번만)
+  function handleCleanup(entry, action) {
+    const ids = (entry.inputs ?? []).map((a) => a.id).filter((id) => selectedIds.includes(id))
+    if (action === 'remove') ids.forEach(handleExclude)
+    if (action === 'archive') {
+      let archiveId = folders.find((f) => f.name === '보관')?.id
+      if (!archiveId) archiveId = createFolder('보관')
+      setFolderOf((prev) => ({ ...prev, ...Object.fromEntries(ids.map((id) => [id, archiveId])) }))
+      setIncludedIds((prev) => prev.filter((id) => !ids.includes(id)))
+    }
+  }
+
   // 보고서 고치기 (줄 빼기 · AI 보충 근거): 화면에 바로 반영하고, DB가 있으면 서버에도 저장
   function handleReportUpdated(entry) {
     updateReports((list) => list.map((r) => (r.id === entry.id ? entry : r)))
@@ -359,11 +429,11 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   }
 
   async function handleDeleteReport(id) {
-    if (reportsInDb) await deleteReportApi(id)
+    if (reportsInDb) await deleteReportApi(id, clientId())
     updateReports((list) => list.filter((r) => r.id !== id))
   }
-  // 공용 보고서함(DB)은 관리자만 지운다. 브라우저에만 있는 보고서함은 각자 지움
-  const canDeleteReport = !reportsInDb || Boolean(admin)
+  // 공용 보고서함(DB): 관리자 또는 그 보고서를 만든 브라우저만 지운다 (11/08). 브라우저에만 있는 보고서함은 각자 지움
+  const canDeleteReport = (r) => !reportsInDb || Boolean(admin) || (r?.report?.createdBy && r.report.createdBy === clientId())
 
   useEffect(() => {
     localStorage.setItem(AI_SUMMARIES_KEY, JSON.stringify(aiSummaries))
@@ -487,7 +557,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const listed = searchArticles
     ? searchArticles
         .map((a) => byId.get(a.id))
-        .filter((a) => a.hoursAgo < maxHours && sourceMatch(a))
+        // 논문은 서버가 기간을 넓게 잡아 찾으므로(하루 · 일주일 안 논문은 거의 없음) 화면 기간으로 다시 거르지 않는다
+        .filter((a) => (a.paper || a.hoursAgo < maxHours) && sourceMatch(a))
         .sort((a, b) =>
           sort === 'importance' ? b.importance - a.importance || a.hoursAgo - b.hoursAgo : a.hoursAgo - b.hoursAgo,
         )
@@ -535,7 +606,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     document.querySelector('.list-panel')?.scrollIntoView({ block: 'start' })
   }
 
-  // 「기사 찾기」: 등록 키워드와 상관없이 네이버에서 바로 찾는다
+  // 「뉴스·논문에서 찾기」: 등록 키워드와 상관없이 네이버 뉴스 + 논문(OpenAlex 등)에서 바로 찾는다 (11/08)
   async function handleSearch(e) {
     e.preventDefault()
     await runSearch(query.trim())
@@ -564,7 +635,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     try {
       const result = await searchNewsApi(q, p)
       if (seq !== searchSeq.current) return
-      setSearch({ query: result.query, period: result.period, articles: result.articles, truncated: result.truncated, oldestAt: result.oldestAt })
+      setSearch({ query: result.query, period: result.period, articles: result.articles, truncated: result.truncated, oldestAt: result.oldestAt, newsCount: result.newsCount, paperCount: result.paperCount, paperNote: result.paperNote })
     } catch (err) {
       if (seq !== searchSeq.current) return
       setSearch({ query: q, period: p, error: err.message })
@@ -743,7 +814,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         <button
           type="button"
           className={screen === 'archive' ? 'tab active' : 'tab'}
-          onClick={() => setScreen('archive')}
+          onClick={() => {
+            setArchiveTarget(null)
+            setScreen('archive')
+          }}
         >
           보고서함{reports.length > 0 && <span className="tab-count">{reports.length}</span>}
         </button>
@@ -754,6 +828,15 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         )}
         </div>
         <span className="topbar-side">
+          {/* 오늘 수집 · 선별 숫자 (11/08: 대시보드 숫자 칸을 메뉴 막대로 옮김). 누르면 그 화면으로 */}
+          <span className="topbar-stats">
+            <button type="button" onClick={() => setScreen('collect')} title="오늘(24시간) 모은 이슈 · 기사 — 자료 현황으로">
+              오늘 이슈 <strong>{todayIssues.length}</strong> · 기사 <strong>{countArticles(todayIssues)}</strong>
+            </button>
+            <button type="button" onClick={() => setScreen('select')} title="선별한 기사 — 선별·요약으로">
+              선별 <strong>{selectedIds.length}</strong>
+            </button>
+          </span>
           {/* AI 모델은 모두에게 적용되므로 관리자 화면에서 고른다. 여기서는 보기만 (17 문서) */}
           {health?.llm && (
             <span className="llm-pick" title="요약·보고서에 쓰는 AI 모델 (관리자가 정해요)">
@@ -776,6 +859,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               ● AI 연결 안 됨
             </span>
           )}
+          <button type="button" className="topbar-link" onClick={() => setShowMove(true)} title="선별 · 폴더 등 이 브라우저의 자료를 파일로 내보내거나 불러와요 (자리 이동 · 다른 PC)">
+            내 자료
+          </button>
           <a className="admin-link" href="/admin" title="키워드·회사·관심 기술·자동 최신화·AI 모델 설정">
             {admin ? `관리자 (${admin.name})` : '관리자'}
           </a>
@@ -829,9 +915,14 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       ) : screen === 'archive' ? (
         <ReportArchive
           reports={reports}
-          onDelete={canDeleteReport ? handleDeleteReport : undefined}
+          onDelete={handleDeleteReport}
+          canDelete={canDeleteReport}
           onGoDraft={() => setScreen('select')}
           onUpdated={handleReportUpdated}
+          selectedIds={selectedIds}
+          onCleanup={handleCleanup}
+          initialId={archiveTarget}
+          key={archiveTarget ?? 'archive'}
         />
       ) : screen === 'select' ? (
         <SelectSummary
@@ -852,10 +943,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           onMaterialAdded={handleMaterialAdded}
           reportArticles={reportArticles}
           reports={reports}
-          onSaved={(entry) => updateReports((list) => [entry, ...list])}
-          onUpdated={handleReportUpdated}
-          onGoArchive={() => setScreen('archive')}
-          storageLabel={reportsInDb ? 'DB' : '이 브라우저'}
+          reportJobs={reportJobs}
+          onJobAdded={(job) => setReportJobs((prev) => [...prev.filter((j) => j.id !== job.id), job])}
+          onOpenReport={(id) => {
+            setArchiveTarget(id)
+            setScreen('archive')
+          }}
           folderSummary={reportFolders}
         />
       ) : (
@@ -926,14 +1019,14 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                     onChange={(e) => setQuery(e.target.value)}
                   />
                   <button type="submit" className="btn outline" disabled={!query.trim() || search?.loading}>
-                    {search?.loading ? '찾는 중…' : '네이버에서 찾기'}
+                    {search?.loading ? '찾는 중…' : '뉴스·논문에서 찾기'}
                   </button>
                 </form>
                 <select
                   value={period}
                   onChange={(e) => changePeriod(e.target.value)}
                   aria-label="기간"
-                  title={search ? '바꾸면 이 기간으로 네이버에서 다시 찾아요' : undefined}
+                  title={search ? '바꾸면 이 기간으로 다시 찾아요' : undefined}
                 >
                   {PERIODS.map((p) => (
                     <option key={p.value} value={p.value}>
@@ -965,7 +1058,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               {search ? (
                 <div className="search-banner">
                   <span>
-                    <strong>‘{search.query}’</strong> 네이버 찾기 결과 · {searchScope(search.period)}
+                    <strong>‘{search.query}’</strong> 찾기 결과 · 뉴스 {searchScope(search.period)}
+                    {search.articles && ` · 뉴스 ${search.newsCount ?? 0}건 · 논문 ${search.paperCount ?? 0}건`}
+                    {search.paperNote && <span className="search-note"> · {search.paperNote}</span>}
                     {search.articles && ` · 이슈 ${visible.length}개 · 기사 ${countArticles(visible)}건`}
                     {search.loading && ' · 찾는 중…'}
                     {search.truncated && (
@@ -982,7 +1077,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               ) : (
                 <p className="list-meta">
                   이슈 {visible.length}개 · 기사 {countArticles(visible)}건
-                  {q && <span className="search-note"> · 모은 기사에서 찾는 중. 없으면 「네이버에서 찾기」</span>}
+                  {q && <span className="search-note"> · 모은 기사에서 찾는 중. 없으면 「뉴스·논문에서 찾기」</span>}
                 </p>
               )}
               <div className="list-tools">
@@ -1019,13 +1114,13 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 <p className="empty">
                   {search
                     ? search.loading
-                      ? '네이버에서 찾는 중이에요…'
+                      ? '뉴스 · 논문에서 찾는 중이에요…'
                       : search.error
                         ? '찾지 못했어요. 잠시 뒤 다시 찾아보세요.'
                         : search.period !== 'all'
                           ? '이 기간에는 찾은 기사가 없어요.'
                           : '찾은 기사가 없어요. 다른 말로 찾아보세요.'
-                    : '조건에 맞는 기사가 없어요. 기간을 넓히거나 「네이버에서 찾기」를 눌러 보세요.'}
+                    : '조건에 맞는 기사가 없어요. 기간을 넓히거나 「뉴스·논문에서 찾기」를 눌러 보세요.'}
                   {search?.articles && search.period !== 'all' && (
                     <button type="button" className="btn outline empty-action" onClick={() => changePeriod('all')}>
                       전체 기간으로 다시 찾기
@@ -1079,6 +1174,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                                   {a.topicTag} 기사 속 기술 정보
                                 </span>
                               )}
+                              {a.paper && <span className="badge-material" title={`논문 · 인용 ${a.cited ?? 0}회`}>논문</span>}
                               {a.material && (
                                 <span className="badge-material" title={a.aiAllowed === false ? 'AI 요약 · 보고서에 쓰지 않는 자료예요' : undefined}>
                                   직접 추가 · {a.kindLabel}
@@ -1259,7 +1355,31 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           </div>
         </main>
       )}
-      <ProgressPanel queue={queue} />
+      {showMove && (
+        <DataMove
+          rows={candidates.map((a) => ({
+            folder: folders.find((f) => f.id === folderIdOf(a.id))?.name ?? '미분류',
+            title: a.title,
+            source: a.source,
+            publishedAt: a.publishedAt,
+            url: a.url,
+            included: included.includes(a.id),
+          }))}
+          onClose={() => setShowMove(false)}
+        />
+      )}
+      <ProgressPanel
+        queue={queue}
+        reportJobs={reportJobs}
+        onAnswer={handleJobAnswer}
+        onCancel={handleJobCancel}
+        quiet={screen === 'select'}
+        onOpenReport={(id) => {
+          setArchiveTarget(id)
+          setScreen('archive')
+          window.scrollTo({ top: 0 })
+        }}
+      />
     </div>
     </FeaturesContext.Provider>
     </OpsContext.Provider>

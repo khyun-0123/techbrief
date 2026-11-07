@@ -170,8 +170,8 @@ export function importReports(reports) {
   return postJson('/api/reports/import', { reports })
 }
 
-export async function deleteReportApi(id) {
-  const res = await fetch(`/api/reports/${encodeURIComponent(id)}`, { method: 'DELETE' })
+export async function deleteReportApi(id, clientId) {
+  const res = await fetch(`/api/reports/${encodeURIComponent(id)}?client=${encodeURIComponent(clientId ?? '')}`, { method: 'DELETE' })
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '보고서를 지우지 못했어요')
 }
 
@@ -371,7 +371,33 @@ export async function updateReportApi(entry) {
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
 }
 
-// AI 해설 한 줄의 근거를 우리 자료 · 위키백과에서 찾기
-export function reinforceApi({ text, inputs, existing }) {
-  return postJson('/api/reports/reinforce', { text, inputs, existing })
+
+// ── 보고서 작업 대기열 (11/08) ──
+// level: 'selected' | 'owned' | 'research' (자료 조사 수준)
+export async function createReportJob({ articles, aiSummaries, title, direction, periodLabel, mode, level, clientId }) {
+  return (
+    await postJson('/api/report-jobs', {
+      title,
+      direction,
+      periodLabel,
+      mode,
+      level,
+      clientId,
+      articles: articles.map((a) => reportArticle(a, aiSummaries[a.id])),
+    })
+  ).job
+}
+
+export async function fetchReportJobs(clientId) {
+  const res = await fetch(`/api/report-jobs?client=${encodeURIComponent(clientId ?? '')}`)
+  if (!res.ok) throw new Error('보고서 작업 상태를 불러오지 못했어요')
+  return (await res.json()).jobs
+}
+
+export async function answerReportJob(id, use) {
+  return (await postJson(`/api/report-jobs/${encodeURIComponent(id)}/answer`, { use })).job
+}
+
+export async function cancelReportJob(id) {
+  return (await postJson(`/api/report-jobs/${encodeURIComponent(id)}/cancel`, {})).job
 }

@@ -162,7 +162,7 @@ function AdminUsage({ keywords, onAddKeyword, refresh }) {
 
       <div className="adm-tiles">
         <Tile label="사용자 (브라우저 수)" value={n(usage.clients)} sub={`방문 ${n(usage.visits)}번 · 하루 한 번씩 셈`} />
-        <Tile label="찾기 · 선별" value={`${n(outcomes.searches)} · ${n(outcomes.selects)}`} sub="「네이버에서 찾기」 · 「선별 추가」" />
+        <Tile label="찾기 · 선별" value={`${n(outcomes.searches)} · ${n(outcomes.selects)}`} sub="「뉴스·논문에서 찾기」 · 「선별 추가」" />
         <Tile label="요약 요청" value={n(outcomes.summaries)} sub="사람이 요청한 것만 (자동 요약 제외)" />
         <Tile label="보고서 · 내보내기" value={`${n(outcomes.reports)} · ${n(outcomes.exports.total)}`} sub={`PDF ${outcomes.exports.pdf} · PPT ${outcomes.exports.ppt} · 복사 ${outcomes.exports.copy}`} />
         <Tile
@@ -211,7 +211,7 @@ function AdminUsage({ keywords, onAddKeyword, refresh }) {
       <div className="adm-cols">
         <section className="adm-card">
           <h2>자주 찾는 검색어</h2>
-          <p className="adm-desc">「네이버에서 찾기」로 찾은 말 Top 20. 자동 수집에 없는 말은 키워드 후보예요.</p>
+          <p className="adm-desc">「뉴스·논문에서 찾기」로 찾은 말 Top 20. 자동 수집에 없는 말은 키워드 후보예요.</p>
           <RankList
             items={interests.searches}
             empty="아직 찾은 말이 없어요."

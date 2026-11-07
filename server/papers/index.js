@@ -199,4 +199,52 @@ export async function countMonthly(term, months, { prefer = null, hasHistory = f
   return { months: value, provider }
 }
 
+// ── 논문 수 (최근 4주, 조장 11/08) ──
+// 「이번 주」·「지난주」처럼 짧은 기간을 고르면 기술 트렌드 「논문 수」는 최근 28일과 그 전 28일을 비교한다
+// windows: { cur: [시작, 끝], prev: [시작, 끝] } (YYYY-MM-DD)
+// months: 같이 채워 둘 달 목록 (이번 달 · 지난달). 날짜 목록 한 번으로 그 달 값도 세어 countMonthly 캐시에 넣는다
+//   → 그날 countMonthly는 그 두 달을 다시 검색하지 않는다 (OpenAlex 예산을 더 쓰지 않음)
+// 비용: OpenAlex 용어당 하루 1번 (해당 기간 200편 이하일 때). 200편이 넘으면 cur · prev 따로 2번 (+ countMonthly가 두 달 2번)
+// big: 지난번에 200편이 넘었던 용어 → 날짜 목록을 건너뛰고 바로 2번
+// 결과: { cur, prev, provider, big }
+export async function countRecent(term, windows, { prefer = null, months = [], big = false } = {}) {
+  const t = term.toLowerCase()
+  const day = windows.cur[1]
+  // 최근 4주 비교는 OpenAlex로만 센다 (11/08 실측: OpenAlex가 한도에 걸려 arXiv로 넘어가자 프리프린트만 세어
+  // OLED 4주 11편처럼 엉뚱한 값이 나옴). 막혀 있으면 LimitedError → 부르는 쪽이 「한도, 풀리면 다시」로 표시
+  void prefer
+  const order = ['openalex']
+  const { value, provider } = await viaChain(order, async (p) => {
+    const cacheKey = `recent:${p.id}:${t}:${windows.prev[0]}:${day}`
+    const hit = await cacheGet(cacheKey).catch(() => null)
+    if (hit) return hit
+    let out = null
+    let exhausted = null
+    if (p.countDates && !big) {
+      // 달 값도 같이 채우려면 그 달 전체(달 끝은 앞날일 수 있음 — 앞날로 적힌 논문도 OpenAlex에 있음)를 덮어야 한다
+      const from = [windows.prev[0], ...months.map((m) => `${m}-01`)].sort()[0]
+      const to = [windows.cur[1], ...months.map(monthEnd)].sort().at(-1)
+      const r = await p.countDates(term, from, to)
+      exhausted = r.exhausted ?? null
+      if (r.dates) {
+        const inRange = (d, [a, b]) => d >= a && d <= b
+        out = { cur: r.dates.filter((d) => inRange(d, windows.cur)).length, prev: r.dates.filter((d) => inRange(d, windows.prev)).length }
+        for (const m of months) {
+          const n = r.dates.filter((d) => d.slice(0, 7) === m).length
+          await cachePut(`count:${p.id}:${t}:${m}`, n, TTL.count).catch(() => {})
+        }
+      }
+    }
+    if (!out) {
+      const a = await p.count(term, ...windows.cur)
+      const b = await p.count(term, ...windows.prev)
+      exhausted = b.exhausted ?? a.exhausted ?? exhausted
+      out = { cur: a.value, prev: b.value, big: Boolean(p.countDates) }
+    }
+    await cachePut(cacheKey, out, TTL.count).catch(() => {})
+    return exhausted ? { ...out, exhausted } : out
+  })
+  return { cur: value.cur, prev: value.prev, provider, big: Boolean(value.big) }
+}
+
 export { PROVIDERS }

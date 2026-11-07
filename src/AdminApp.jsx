@@ -680,7 +680,7 @@ function AdminApp() {
                 <ChipList
                   id="keywords"
                   label="키워드 추가"
-                  hint={keywords.stored ? '일반 사용자는 「네이버에서 찾기」로 다른 말도 찾을 수 있어요' : 'DB가 없어 저장할 수 없어요 (DATABASE_URL 확인)'}
+                  hint={keywords.stored ? '일반 사용자는 「뉴스·논문에서 찾기」로 다른 말도 찾을 수 있어요' : 'DB가 없어 저장할 수 없어요 (DATABASE_URL 확인)'}
                   placeholder="예: 마이크로LED"
                   words={view.keywords}
                   onChange={keywords.stored ? (next) => change('keywords', next) : undefined}

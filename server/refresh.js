@@ -18,10 +18,15 @@ const STALE_MS = 30 * 60_000 // 실행 중 표시가 이보다 오래되면 중�
 const KST = 9 * 3600_000 // 한국 시간 (서머타임 없음)
 
 export const HOUR_OPTIONS = [1, 2, 3, 4, 6, 8, 12]
-// autoSummary: 자동 요약 켜기/끄기. all(제목에 키워드가 있는 기사 전부) / off(직접 누를 때만)
+// autoSummary: 자동 요약 켜기/끄기. all(관련도 낮음을 뺀 기사 전부, 중요도 높은 순) / off(직접 누를 때만)
 // 개발 중에는 off로 두고, 시연·테스트 때 all로 켠다
 export const AUTO_SUMMARY_OPTIONS = ['all', 'off']
-const DEFAULT_SETTINGS = { mode: 'off', time: '06:00', hours: 2, autoSummary: 'off' }
+const DEFAULT_SETTINGS = { mode: 'off', time: '06:00', hours: 2, autoSummary: 'off', summaryDays: 7 }
+// 자동 요약할 기사 기간 (관리자, 11/08). 기사(네이버 · 전문매체)만. 네이버 검색 결과 보관 21일(23 문서) 안에서 고른다
+// 논문은 기간 기준이 달라 따로 둔다 (지금은 7일 고정, PAPER_SUMMARY_DAYS)
+export const SUMMARY_DAY_OPTIONS = [3, 7, 14, 21]
+const PAPER_SUMMARY_DAYS = 7
+const isPaper = (a) => String(a.section ?? '').startsWith('feed:crossref')
 
 let memoryKeywords = [] // DB가 없을 때 마지막으로 받은 키워드
 let localRun = null // 이 프로세스에서 도는 실행 { promise, progress }
@@ -33,6 +38,7 @@ export function normalizeSettings(input = {}) {
     time: /^([01]\d|2[0-3]):[0-5]\d$/.test(s.time) ? s.time : DEFAULT_SETTINGS.time,
     hours: HOUR_OPTIONS.includes(Number(s.hours)) ? Number(s.hours) : DEFAULT_SETTINGS.hours,
     autoSummary: AUTO_SUMMARY_OPTIONS.includes(s.autoSummary) ? s.autoSummary : DEFAULT_SETTINGS.autoSummary,
+    summaryDays: SUMMARY_DAY_OPTIONS.includes(Number(s.summaryDays)) ? Number(s.summaryDays) : DEFAULT_SETTINGS.summaryDays,
     enabledAt: s.enabledAt ?? null, // 켠 시각. 켜기 전에 지난 예정은 따라잡지 않는다
   }
 }
@@ -85,22 +91,22 @@ export async function saveRefreshSettings(input) {
     settings.enabledAt = new Date().toISOString()
   }
   await setSetting(SETTINGS_KEY, settings)
-  // 자동 요약을 켜거나 끄면 대기열을 바로 다시 짠다 (꺼짐이면 지금 요약 중인 1건까지만 하고 멈춤)
-  if (settings.autoSummary !== before.autoSummary) {
-    const { articles } = await listArticles()
-    await setBacklog(await buildBacklog(articles))
+  // 자동 요약을 켜거나 끄거나 기간을 바꾸면 대기열을 바로 다시 짠다 (꺼짐이면 지금 요약 중인 1건까지만 하고 멈춤)
+  if (settings.autoSummary !== before.autoSummary || settings.summaryDays !== before.summaryDays) {
+    await setBacklog(await buildBacklog())
   }
   return refreshStatus()
 }
 
-// 제목에 키워드가 들어간 이슈만 자동 요약한다 (본문에만 스치듯 나온 기사는 제외)
-// 대표 기사 제목에 없어도 같은 이슈 기사 중 하나의 제목에 있으면 관련도 high (collector/index.js)
-function titleHasKeyword(article) {
-  return article.relevance === 'high'
+// 자동 요약 대상 (11/08 조장: 「중요도 높은 것만」이 아니라 「중요도 높은 순으로 전부」)
+// 관련도 「낮음」(주식 · 판촉 등 주제 밖, 화면에서 기본으로 숨김)만 빼고 나머지 전부를 중요도 순으로 요약한다
+// 예전: 제목에 키워드가 있는 이슈(관련도 high)만 → 101건을 다 하면 멈췄음
+function autoSummaryTarget(article) {
+  return article.relevance !== 'low'
 }
 
 // ── 자동 요약 대기열 ──
-// 최신화가 끝나면 아직 요약 안 된 기사(제목에 키워드가 있는 이슈, 최근 7일)를 전부 대기열에 넣고
+// 최신화가 끝나면 아직 요약 안 된 기사(관련도 낮음을 뺀 이슈, 최근 7일)를 전부 대기열에 넣고
 // 뒤에서 한 건씩 요약한다. 최신화와 따로 돌아서, 다음 최신화 때 새 기사를 반영해 순서를 다시 짠다
 // 순서: 목록과 같은 중요도 점수(collector/score.js)가 높은 것부터, 같으면 최신부터. 최신성은 점수 안에 들어 있다
 const WORKER_LOCK_ID = LOCK_ID + 1 // 팀원 앱 여러 개가 같은 DB를 쓰면 한 곳에서만 요약한다
@@ -110,10 +116,15 @@ const BACKLOG_KEY = 'summary_backlog'
 // 남은 기사 안에서 매번 다시 자르면 기준이 계속 내려간다
 const IMPORTANT_SHARE = 0.2
 
-async function buildBacklog(articles) {
-  const { autoSummary } = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
+// 대상 기간: 기사는 관리자가 정한 기간(summaryDays), 논문은 7일. 넘겨받은 목록(화면 기간 7일) 대신 그 기간으로 다시 불러온다
+async function buildBacklog() {
+  const { autoSummary, summaryDays } = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
   if (autoSummary === 'off') return []
-  const candidates = articles.filter(titleHasKeyword)
+  const { articles } = await listArticles({ days: Math.max(summaryDays, PAPER_SUMMARY_DAYS) })
+  const since = (days) => Date.now() - days * 86_400_000
+  const candidates = articles.filter(
+    (a) => autoSummaryTarget(a) && Date.parse(a.publishedAt) >= since(isPaper(a) ? PAPER_SUMMARY_DAYS : summaryDays),
+  )
   const done = await getSummaries(candidates.map((a) => a.id))
   const scores = candidates.map((a) => a.importance ?? 0).sort((x, y) => y - x)
   const cut = Math.max(1, scores[Math.floor(scores.length * IMPORTANT_SHARE)] ?? Infinity)
@@ -163,7 +174,7 @@ async function runWorker() {
       // 다시 짠 목록에서 새로 요약한 게 없었으면 멈춘다 (같은 기사를 계속 도는 것 방지)
       if (!backlog.length) {
         if (!summarizedInPass) break
-        backlog = await buildBacklog((await listArticles()).articles)
+        backlog = await buildBacklog()
         summarizedInPass = false
       }
       if (!backlog.length) break
@@ -214,8 +225,7 @@ async function runWorker() {
 // 앱이 켜질 때: 밀린 요약이 있으면 이어서 한다 (자동 요약이 꺼짐이면 대기열이 비어 아무것도 안 함)
 async function resumeBacklog() {
   try {
-    const { articles } = await listArticles()
-    const n = await setBacklog(await buildBacklog(articles))
+    const n = await setBacklog(await buildBacklog())
     if (n) console.log(`[summary] 밀린 자동 요약 ${n}건 이어서 시작`)
   } catch (err) {
     console.error(`[summary] 자동 요약 시작 실패: ${err.message}`)
@@ -253,7 +263,7 @@ async function execute({ trigger, keywords }) {
     Object.assign(result, { fetched: collected.fetched, added: collected.added })
     result.failedKeywords = collected.failed.map((f) => f.keyword)
 
-    result.queued = await setBacklog(await buildBacklog(collected.articles))
+    result.queued = await setBacklog(await buildBacklog())
   } catch (err) {
     result.error = err.message
   }
