@@ -21,7 +21,12 @@ export const HOUR_OPTIONS = [1, 2, 3, 4, 6, 8, 12]
 // autoSummary: 자동 요약 켜기/끄기. all(관련도 낮음을 뺀 기사 전부, 중요도 높은 순) / off(직접 누를 때만)
 // 개발 중에는 off로 두고, 시연·테스트 때 all로 켠다
 export const AUTO_SUMMARY_OPTIONS = ['all', 'off']
-const DEFAULT_SETTINGS = { mode: 'off', time: '06:00', hours: 2, autoSummary: 'off' }
+const DEFAULT_SETTINGS = { mode: 'off', time: '06:00', hours: 2, autoSummary: 'off', summaryDays: 7 }
+// 자동 요약할 기사 기간 (관리자, 11/08). 기사(네이버 · 전문매체)만. 네이버 검색 결과 보관 21일(23 문서) 안에서 고른다
+// 논문은 기간 기준이 달라 따로 둔다 (지금은 7일 고정, PAPER_SUMMARY_DAYS)
+export const SUMMARY_DAY_OPTIONS = [3, 7, 14, 21]
+const PAPER_SUMMARY_DAYS = 7
+const isPaper = (a) => String(a.section ?? '').startsWith('feed:crossref')
 
 let memoryKeywords = [] // DB가 없을 때 마지막으로 받은 키워드
 let localRun = null // 이 프로세스에서 도는 실행 { promise, progress }
@@ -33,6 +38,7 @@ export function normalizeSettings(input = {}) {
     time: /^([01]\d|2[0-3]):[0-5]\d$/.test(s.time) ? s.time : DEFAULT_SETTINGS.time,
     hours: HOUR_OPTIONS.includes(Number(s.hours)) ? Number(s.hours) : DEFAULT_SETTINGS.hours,
     autoSummary: AUTO_SUMMARY_OPTIONS.includes(s.autoSummary) ? s.autoSummary : DEFAULT_SETTINGS.autoSummary,
+    summaryDays: SUMMARY_DAY_OPTIONS.includes(Number(s.summaryDays)) ? Number(s.summaryDays) : DEFAULT_SETTINGS.summaryDays,
     enabledAt: s.enabledAt ?? null, // 켠 시각. 켜기 전에 지난 예정은 따라잡지 않는다
   }
 }
@@ -85,10 +91,9 @@ export async function saveRefreshSettings(input) {
     settings.enabledAt = new Date().toISOString()
   }
   await setSetting(SETTINGS_KEY, settings)
-  // 자동 요약을 켜거나 끄면 대기열을 바로 다시 짠다 (꺼짐이면 지금 요약 중인 1건까지만 하고 멈춤)
-  if (settings.autoSummary !== before.autoSummary) {
-    const { articles } = await listArticles()
-    await setBacklog(await buildBacklog(articles))
+  // 자동 요약을 켜거나 끄거나 기간을 바꾸면 대기열을 바로 다시 짠다 (꺼짐이면 지금 요약 중인 1건까지만 하고 멈춤)
+  if (settings.autoSummary !== before.autoSummary || settings.summaryDays !== before.summaryDays) {
+    await setBacklog(await buildBacklog())
   }
   return refreshStatus()
 }
@@ -111,10 +116,15 @@ const BACKLOG_KEY = 'summary_backlog'
 // 남은 기사 안에서 매번 다시 자르면 기준이 계속 내려간다
 const IMPORTANT_SHARE = 0.2
 
-async function buildBacklog(articles) {
-  const { autoSummary } = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
+// 대상 기간: 기사는 관리자가 정한 기간(summaryDays), 논문은 7일. 넘겨받은 목록(화면 기간 7일) 대신 그 기간으로 다시 불러온다
+async function buildBacklog() {
+  const { autoSummary, summaryDays } = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
   if (autoSummary === 'off') return []
-  const candidates = articles.filter(autoSummaryTarget)
+  const { articles } = await listArticles({ days: Math.max(summaryDays, PAPER_SUMMARY_DAYS) })
+  const since = (days) => Date.now() - days * 86_400_000
+  const candidates = articles.filter(
+    (a) => autoSummaryTarget(a) && Date.parse(a.publishedAt) >= since(isPaper(a) ? PAPER_SUMMARY_DAYS : summaryDays),
+  )
   const done = await getSummaries(candidates.map((a) => a.id))
   const scores = candidates.map((a) => a.importance ?? 0).sort((x, y) => y - x)
   const cut = Math.max(1, scores[Math.floor(scores.length * IMPORTANT_SHARE)] ?? Infinity)
@@ -164,7 +174,7 @@ async function runWorker() {
       // 다시 짠 목록에서 새로 요약한 게 없었으면 멈춘다 (같은 기사를 계속 도는 것 방지)
       if (!backlog.length) {
         if (!summarizedInPass) break
-        backlog = await buildBacklog((await listArticles()).articles)
+        backlog = await buildBacklog()
         summarizedInPass = false
       }
       if (!backlog.length) break
@@ -215,8 +225,7 @@ async function runWorker() {
 // 앱이 켜질 때: 밀린 요약이 있으면 이어서 한다 (자동 요약이 꺼짐이면 대기열이 비어 아무것도 안 함)
 async function resumeBacklog() {
   try {
-    const { articles } = await listArticles()
-    const n = await setBacklog(await buildBacklog(articles))
+    const n = await setBacklog(await buildBacklog())
     if (n) console.log(`[summary] 밀린 자동 요약 ${n}건 이어서 시작`)
   } catch (err) {
     console.error(`[summary] 자동 요약 시작 실패: ${err.message}`)
@@ -254,7 +263,7 @@ async function execute({ trigger, keywords }) {
     Object.assign(result, { fetched: collected.fetched, added: collected.added })
     result.failedKeywords = collected.failed.map((f) => f.keyword)
 
-    result.queued = await setBacklog(await buildBacklog(collected.articles))
+    result.queued = await setBacklog(await buildBacklog())
   } catch (err) {
     result.error = err.message
   }

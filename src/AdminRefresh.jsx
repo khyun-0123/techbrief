@@ -105,6 +105,21 @@ function AdminRefresh({ status, starting, disabled, onRun, onSave, keywords = []
           <p className="adm-note">기사 모으기가 꺼져 있어, 「지금 최신화」를 누를 때만 새 요약 대상이 생겨요.</p>
         )}
         {settings.autoSummary !== 'all' && <p className="adm-note">꺼져 있으면 사람이 「요약 추가」를 누른 기사만 요약해요.</p>}
+        {settings.autoSummary === 'all' && (
+          <label className="adm-field-inline">
+            자동 요약할 기사 기간
+            <select value={settings.summaryDays ?? 7} onChange={(e) => change({ summaryDays: Number(e.target.value) })}>
+              {[3, 7, 14, 21].map((d) => (
+                <option key={d} value={d}>
+                  최근 {d}일{d === 7 ? ' (기본)' : ''}
+                </option>
+              ))}
+            </select>
+            <small>
+              기사(네이버 · 전문매체)만이에요. 처음 켜면 이 기간의 기사를 중요도 순으로 요약하고, 그 뒤로는 새로 모은 기사를 이어서 요약해요. 네이버 검색 결과는 21일까지만 보관해요(23 문서). 논문은 따로 최근 7일.
+            </small>
+          </label>
+        )}
       </section>
       </div>
 

@@ -427,7 +427,7 @@ export async function handleApi(req, res) {
       const status = await saveRefreshSettings(await readJson(req))
       const s = status.settings
       const mode = s.mode === 'daily' ? `매일 ${s.time}` : s.mode === 'interval' ? `${s.hours}시간마다` : '꺼짐'
-      await logChange(admin, '자동 최신화', `${mode} · 자동 요약 ${s.autoSummary === 'off' ? '꺼짐' : '켜짐'}`)
+      await logChange(admin, '자동 최신화', `${mode} · 자동 요약 ${s.autoSummary === 'off' ? '꺼짐' : `켜짐(기사 최근 ${s.summaryDays}일)`}`)
       return send(res, 200, status)
     }
     if (req.method === 'POST' && req.url === '/api/refresh/run') {

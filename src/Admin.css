@@ -2029,3 +2029,21 @@ a.adm-brand:focus-visible {
     align-items: stretch;
   }
 }
+
+/* 자동 요약할 기사 기간 (11/08) */
+.adm-field-inline {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.adm-field-inline select {
+  justify-self: start;
+  min-width: 180px;
+}
+.adm-field-inline small {
+  font-weight: 400;
+  color: var(--tb-color-text-sub);
+  line-height: 1.5;
+}

@@ -260,8 +260,9 @@ function toIssues(stored, lists) {
 
 // 대표 기사 목록 (최근 LIST_DAYS일)
 // regroup: 수집 직후처럼 기사가 바뀌었을 때 묶음을 다시 저장. 묶음이 없는 기사가 있어도 (처음 켰을 때) 다시 묶는다
-export async function listArticles({ regroup = false } = {}) {
-  let stored = dbEnabled() ? await loadRecentFromDb(LIST_DAYS) : [...memory.values()]
+// days: 기본은 화면 목록 기간(7일). 자동 요약은 관리자가 정한 기간으로 부른다 (11/08)
+export async function listArticles({ regroup = false, days = LIST_DAYS } = {}) {
+  let stored = dbEnabled() ? await loadRecentFromDb(days) : [...memory.values()]
   if (dbEnabled() && (regroup || stored.some((a) => !a.groupId))) stored = await regroupDb(stored)
   const articles = toIssues(stored, await getLists())
   const lastCollectedAt = dbEnabled() ? await lastCollectedFromDb() : memoryCollectedAt
