@@ -2729,10 +2729,6 @@ a.brand:focus-visible {
   padding: 16px 20px 20px;
 }
 
-.dash-search .search-form {
-  max-width: 640px;
-}
-
 .dash-search .search-form input {
   flex: 1;
   min-width: 0;
@@ -2740,26 +2736,42 @@ a.brand:focus-visible {
 
 .dash-title {
   margin: 0;
-  font-size: var(--fs-lg, 18px);
+  font-size: var(--fs-lg);
 }
 
 .dash-note {
-  margin: -4px 0 0;
+  margin: -4px 0 4px;
   color: var(--tb-color-text-sub);
   font-size: var(--fs-sm);
 }
 
+/* 칩 줄: 왼쪽 이름(무엇을 하는지 작은 글씨) + 오른쪽 칩. 줄바꿈해도 칩끼리 왼쪽이 맞게 */
 .dash-chips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding-top: 12px;
+  border-top: 1px solid var(--tb-color-bg-strong);
 }
 
 .dash-chips-label {
-  min-width: 108px;
-  color: var(--tb-color-text-sub);
+  display: grid;
+  gap: 2px;
+  padding-top: 5px;
   font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.dash-chips-label small {
+  color: var(--tb-color-text-sub);
+  font-weight: 400;
+}
+
+.dash-chips-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .chip.dash-chip {
@@ -2769,4 +2781,29 @@ a.brand:focus-visible {
 
 .chip.dash-chip:hover {
   border-color: var(--tb-color-text-sub);
+}
+
+/* 자료 현황: 숫자 칸이 대시보드로 옮겨가서 제목과 목록 사이 간격을 따로 둔다 */
+.collect-page .content {
+  margin-top: 24px;
+}
+
+@media (max-width: 640px) {
+  .dash-chips {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .dash-search .search-form {
+    flex-wrap: wrap;
+  }
+
+  .dash-search .search-form input {
+    flex-basis: 100%;
+  }
+
+  .dash-search .search-form select,
+  .dash-search .search-form .btn {
+    flex: 1;
+  }
 }

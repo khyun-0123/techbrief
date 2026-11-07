@@ -671,6 +671,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           keywords={keywords}
           favorites={favorites}
           recent={recent}
+          periods={PERIODS}
+          period={period}
+          onPeriod={setPeriod}
           onSearch={(q) => {
             runSearch(q)
             setScreen('collect')
@@ -715,7 +718,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           queue={queue}
         />
       ) : (
-        <main className="page page-wide">
+        <main className="page page-wide collect-page">
           <header className="page-header with-actions">
             <div>
               <h1>자료 현황</h1>
