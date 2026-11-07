@@ -161,7 +161,7 @@ function KeywordTrends() {
   return (
     <section className="panel trends" aria-labelledby="trends-title">
       <div className="trends-head">
-        <h2 id="trends-title">키워드 추이</h2>
+        <h2 id="trends-title">추적 중인 키워드 추이</h2>
         <span className="trends-meta">
           {data?.updatedAt ? `${new Date(data.updatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 기준 · 6시간마다 새로` : error || '불러오는 중…'}
         </span>

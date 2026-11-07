@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url'
 import { collect, getSources, listArticles, saveSources, searchArticles } from './collector/index.js'
 import { feedList } from './collector/feeds.js'
 import { getTrends } from './trends.js'
+import { getTechTrends, startTechTrends } from './techtrends.js'
 import { similarity } from './collector/dedupe.js'
 import { fetchBodies } from './collector/fulltext.js'
 import { getLists, saveLists } from './collector/lists.js'
@@ -232,6 +233,7 @@ export function startScheduler() {
     .then((id) => id && selectProvider(id))
     .catch((err) => console.warn(`[llm] 저장된 AI 서버를 쓸 수 없어 기본값으로: ${err.message}`))
   startRefreshScheduler()
+  startTechTrends() // 기술 트렌드: 켜진 뒤 1분, 그 뒤 하루마다 (TECH_TRENDS=off면 안 함)
   // 사용 현황 원본은 90일만 둔다: 켜질 때 한 번, 그 뒤 하루 한 번
   const prune = () => pruneUsage().catch((err) => console.warn(`[usage] 오래된 기록 정리 실패: ${err.message}`))
   prune()
@@ -315,6 +317,11 @@ export async function handleApi(req, res) {
       return send(res, 200, { features: after, list: featureList() })
     }
     // 키워드 추이 (22 문서 6-4): 뉴스 기사량 · 네이버 검색량 · Wikipedia 관심도 · GDELT 해외 보도량. 누구나 읽음
+    // 기술 트렌드 (25 문서): 기간별 출처마다 순위 + 종합 순위. 누구나 읽음
+    if (req.method === 'GET' && req.url.startsWith('/api/tech-trends')) {
+      const q = new URL(req.url, 'http://x').searchParams
+      return send(res, 200, await getTechTrends({ period: q.get('period'), from: q.get('from'), to: q.get('to') }))
+    }
     if (req.method === 'GET' && req.url === '/api/trends') {
       return send(res, 200, await getTrends())
     }

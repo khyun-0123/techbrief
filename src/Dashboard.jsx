@@ -1,8 +1,9 @@
-// 대시보드 (11/07 팀 회의): 첫 화면. 오늘 수집 현황 숫자 · 자료 검색 · 키워드 추이를 한곳에서 본다
+// 대시보드 (11/07 팀 회의): 첫 화면. 오늘 수집 현황 숫자 · 요즘 뜨는 기술(출처별·종합 순위) · 자료 검색 · 추적 중인 키워드 추이
 // - 「자료 검색」은 네이버에서 찾고 자료 현황 탭으로 넘어가 결과를 보여 준다
 // - 자동 수집 키워드를 누르면 자료 현황에서 모은 기사를 그 키워드로 걸러 보여 준다
 import { useState } from 'react'
 import KeywordTrends from './KeywordTrends.jsx'
+import TechTrends from './TechTrends.jsx'
 
 function Dashboard({ stats, keywords, favorites, recent, periods, period, onPeriod, onSearch, onKeyword, onGoCollect }) {
   const [text, setText] = useState('')
@@ -45,6 +46,8 @@ function Dashboard({ stats, keywords, favorites, recent, periods, period, onPeri
           <strong>{stats.selected}건</strong>
         </div>
       </section>
+
+      <TechTrends onPick={onSearch} />
 
       <section className="panel dash-search">
         <h2 className="dash-title">자료 검색</h2>
