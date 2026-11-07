@@ -24,7 +24,7 @@ export const FEATURES = [
     key: 'refreshButton',
     label: '「지금 최신화」 버튼',
     desc: '자료 현황 위에 「지금 최신화」 버튼 (일반 사용자는 10분에 한 번)',
-    default: 'test',
+    default: 'all', // 11/07: 기능은 메인에, 고민되는 것만 테스트 (CLAUDE.md 결정)
   },
 ]
 export const FEATURE_STATES = ['off', 'test', 'all']
