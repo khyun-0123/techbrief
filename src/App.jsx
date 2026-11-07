@@ -18,6 +18,8 @@ import {
   searchNewsApi,
 } from './api.js'
 import FavoritesRail from './FavoritesRail.jsx'
+import Highlight from './Highlight.jsx'
+import { highlightPattern, matchesTerms } from './highlightTerms.js'
 import Pager from './Pager.jsx'
 import ProgressPanel from './ProgressPanel.jsx'
 import ReportArchive from './ReportArchive.jsx'
@@ -62,13 +64,16 @@ function toView(a) {
 }
 
 // 원문 링크 표시(↗)가 혼자 다음 줄로 넘어가지 않게 마지막 단어와 붙여 둔다
-function TitleWithIcon({ title }) {
-  const cut = title.lastIndexOf(' ') + 1
+// terms: 강조할 검색어 (자르는 곳이 강조할 말 가운데면 그 말 앞에서 자른다)
+function TitleWithIcon({ title, terms }) {
+  let cut = title.lastIndexOf(' ') + 1
+  const re = highlightPattern(terms)
+  for (const m of re ? title.matchAll(re) : []) if (m.index < cut && cut < m.index + m[0].length) cut = m.index
   return (
     <>
-      {title.slice(0, cut)}
+      <Highlight text={title.slice(0, cut)} terms={terms} />
       <span className="nowrap">
-        {title.slice(cut)}
+        <Highlight text={title.slice(cut)} terms={terms} />
         <svg className="external-icon" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M6 3H3v10h10v-3M9 3h4v4M13 3 7 9" />
         </svg>
@@ -101,7 +106,7 @@ function scoreTitle(a) {
   ]
   if (p.noise) parts.push(`시황·홍보성 ${p.noise}`)
   const weight = p.weight ?? 1
-  const relevance = weight < 1 ? ` × 관련도 ${weight} (제목에 키워드 없음)` : ''
+  const relevance = weight < 1 ? ` × 관련도 ${weight} (${weight >= 0.5 ? '관련도 중간' : '관련도 낮음'})` : ''
   return `중요도 ${a.importance ?? 0}점 = (${parts.join(' + ')})${relevance} · 60점 이상이면 중요`
 }
 
@@ -413,9 +418,11 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       (a) =>
         a.hoursAgo < maxHours &&
         sourceMatch(a) &&
-        (!q || a.title.toLowerCase().includes(q) || a.keyword.toLowerCase().includes(q)),
+        (!q || matchesTerms(`${a.title} ${a.keyword}`, [q])),
     )
     .sort((a, b) => (sort === 'importance' ? (b.importance ?? 0) - (a.importance ?? 0) : 0) || a.hoursAgo - b.hoursAgo)
+  // 강조할 검색어: 네이버 찾기 결과면 찾은 말, 모은 기사에서 거르는 중이면 입력한 말 (Highlight.jsx)
+  const hlTerms = search?.query ? [search.query] : q ? [q] : []
   const isLow = (a) => a.relevance === 'low'
   const lowCount = listed.filter(isLow).length
   const ownCount = listed.filter(isOwnOnly).length
@@ -836,7 +843,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   <input type="checkbox" checked={summarizedFirst} onChange={(e) => toggleSummarizedFirst(e.target.checked)} />
                   요약된 기사 먼저 <span className="own-count">{listed.filter(hasSummary).length}건</span>
                 </label>
-                <label className="own-toggle" title="키워드가 제목·발췌에 없거나, 정치·사회 섹션 기사예요">
+                <label className="own-toggle" title="키워드 이야기가 한두 줄뿐이거나, 제목이 주식·쇼핑·생활 등 다른 주제이고 기술 내용이 없는 기사예요 (기본은 숨김)">
                   <input type="checkbox" checked={showLow} onChange={(e) => toggleShowLow(e.target.checked)} />
                   관련도 낮은 기사도 보기 <span className="own-count">{lowCount}건</span>
                 </label>
@@ -915,15 +922,38 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                                 </span>
                               )}
                               {a.relevance === 'low' && <span className="badge-low">관련 낮음</span>}
+                              {a.roundup && (
+                                <span className="badge-low" title="여러 소식을 모은 기사예요. 아래 문장이 키워드 관련 꼭지예요">
+                                  모음 기사
+                                </span>
+                              )}
+                              {a.topicTag && (
+                                <span className="badge-low" title={`제목은 ${a.topicTag} 이야기지만 발췌에 기술 정보가 있어 남겼어요`}>
+                                  {a.topicTag} 기사 속 기술 정보
+                                </span>
+                              )}
                               <SentimentBadge sentiment={pickSentiment(a, ai?.summary)} />
                               {a.url ? (
                                 <a className="title-link" href={a.url} target="_blank" rel="noreferrer" title="원문 열기 (새 창)" onClick={() => track('open', a.title)}>
-                                  <TitleWithIcon title={a.title} />
+                                  <TitleWithIcon title={a.title} terms={hlTerms} />
                                 </a>
                               ) : (
-                                a.title
+                                <Highlight text={a.title} terms={hlTerms} />
                               )}
                             </div>
+                            {/* 제목이 내용을 대표하지 못할 때 (27 문서 7장): AI 요약 한 줄 · 키워드 이야기 문장 */}
+                            {ai?.summary?.headline && ai.summary.headline !== a.title && (
+                              <p className="row-sub">
+                                <span className="row-sub-label">실제 내용</span>
+                                <Highlight text={ai.summary.headline} terms={hlTerms} />
+                              </p>
+                            )}
+                            {a.focus && (a.roundup || !ai?.summary?.headline) && (
+                              <p className="row-sub" title="발췌에서 키워드 이야기 문장만 골랐어요">
+                                <span className="row-sub-label">{a.keyword} 내용</span>
+                                <Highlight text={a.focus} terms={hlTerms} />
+                              </p>
+                            )}
                             <div className="row-meta">
                               {a.sameIssue > 0 &&
                                 (a.related?.length ? (
