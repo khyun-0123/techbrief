@@ -97,6 +97,12 @@ function ProgressPanel({ queue, reportJobs = [], onAnswer, onCancel, onOpenRepor
   if (jobs.length === 0 && reports.length === 0) return null
   const reportActive = reports.some((j) => ['queued', 'running', 'need_confirm'].includes(j.status))
   const asking = reports.some((j) => j.status === 'need_confirm')
+  // 「완료 지우기」: 끝난 요약과 끝난 보고서 작업(완성 · 오류 · 취소)을 함께 닫는다 (11/08: 보고서는 안 닫히던 문제)
+  const finishedReports = reports.filter((j) => ['done', 'error', 'cancelled'].includes(j.status))
+  const clearAll = () => {
+    clearFinished()
+    if (finishedReports.length) setHidden((h) => [...h, ...finishedReports.map((j) => j.id)])
+  }
 
   const done = jobs.filter((j) => j.status === 'done').length
   const errors = jobs.filter((j) => j.status === 'error').length
@@ -112,8 +118,8 @@ function ProgressPanel({ queue, reportJobs = [], onAnswer, onCancel, onOpenRepor
           {errors > 0 && ` · 오류 ${errors}`}
           {reports.length > 0 && `${jobs.length > 0 ? ' · ' : ''}보고서 ${reports.filter((j) => j.status === 'done').length}/${reports.length}`}
         </span>
-        {!open && done + errors > 0 && (
-          <button type="button" className="icon-btn" onClick={clearFinished} title="완료 지우기">
+        {!open && done + errors + finishedReports.length > 0 && (
+          <button type="button" className="icon-btn" onClick={clearAll} title="완료 지우기">
             지우기
           </button>
         )}
@@ -173,13 +179,15 @@ function ProgressPanel({ queue, reportJobs = [], onAnswer, onCancel, onOpenRepor
               )
             })}
           </ul>
-          <div className="progress-foot">
-            <span className="hint">게이지는 평균 요약 시간으로 계산한 예상치예요</span>
-            <button type="button" className="btn" onClick={clearFinished} disabled={done + errors === 0}>
-              완료 지우기
-            </button>
-          </div>
         </>
+      )}
+      {open && (
+        <div className="progress-foot">
+          <span className="hint">{jobs.length > 0 ? '게이지는 평균 요약 시간으로 계산한 예상치예요' : ''}</span>
+          <button type="button" className="btn" onClick={clearAll} disabled={done + errors + finishedReports.length === 0}>
+            완료된 작업 모두 닫기
+          </button>
+        </div>
       )}
     </aside>
   )
