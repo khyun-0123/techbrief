@@ -11,6 +11,7 @@ import { dbEnabled, query } from './db/index.js'
 import { getKeywords, getSetting, setSetting } from './db/store.js'
 import { chatJson, PRIORITY, PreemptedError } from './llm/client.js'
 import { countPatentsFor } from './patents.js'
+import { flushValues, keepValue, latestValues } from './trendHistory.js'
 import { countMonthly, countRecent, forceLimit, isLimited, LimitedError, openAlexGet as papersOpenAlexGet } from './papers/index.js'
 
 const KEY = 'tech_trends'
@@ -57,6 +58,7 @@ async function load({ fresh = false } = {}) {
 }
 async function save() {
   await setSetting(KEY, state).catch((err) => console.warn(`[techtrends] 저장 실패: ${err.message}`))
+  await flushValues()
 }
 
 const keyOf = (s) => String(s ?? '').toLowerCase().replace(/[\s·\-_/]+/g, '')
@@ -373,7 +375,20 @@ async function discoverSearch() {
 
 // ── 2. 출처별로 받기 ──
 function remember(source, key, series) {
-  ;(state.series[source] ??= {})[key] = { series, at: new Date().toISOString() }
+  const at = new Date().toISOString()
+  ;(state.series[source] ??= {})[key] = { series, at }
+  keepValue(source, key, 'series', '', { series, at })
+}
+
+// 상태에 값이 없거나(처음 · 저장 꼬임) 이번 구간 값을 못 받았으면 기록(tech_trend_values)에서 가장 최근 값을 채운다
+async function fillFromHistory() {
+  const rows = await latestValues('')
+  for (const r of rows) {
+    if (r.source.startsWith('kw:')) continue
+    const slot = ((state.series[r.source] ??= {})[r.term] ??= { series: [] })
+    if (r.kind === 'series' && !slot.series?.length && r.value?.series?.length) Object.assign(slot, { series: r.value.series, at: r.value.at, fromHistory: true })
+    if (r.kind === 'recent' && !slot.recent && r.value) slot.recent = { ...r.value, fromHistory: true }
+  }
 }
 function failed(source, key, err) {
   const slot = ((state.series[source] ??= {})[key] ??= { series: [] })
@@ -481,6 +496,7 @@ async function fetchOpenAlex(keys) {
       try {
         const r = await countRecent(term, windows, { prefer: slot?.provider, months: monthList.slice(-2), big: Boolean(slot?.recent?.big) })
         recent = { cur: windows.cur, prev: windows.prev, curN: r.cur, prevN: r.prev, provider: r.provider, big: r.big, at: new Date().toISOString() }
+        keepValue('openalex', k, 'recent', windows.cur[1], recent)
       } catch (err) {
         recentError = err.message
       }
@@ -749,7 +765,9 @@ function shortMonthly(src, out, keys) {
     // 용어마다 센 날이 다를 수 있다 (오늘 실패한 용어) → 가장 최근 구간 하나로만 비교한다
     const latest = slots.map(([, s]) => s.recent.cur[1]).sort().at(-1)
     const w = latest ? slots.find(([, s]) => s.recent.cur[1] === latest)[1].recent : want
-    out.basis = { short: '최근 4주', cur: w.cur, prev: w.prev, note: `논문은 최근 4주(${md(w.cur[0])}~${md(w.cur[1])}) 기준 · 그 전 4주(${md(w.prev[0])}~${md(w.prev[1])})와 비교 (월별 자료라 짧은 기간 대신)` }
+    // 이번 구간(어제까지)을 못 받아 기록의 지난 값으로 보여 주는 중이면 그렇다고 적는다
+    const old = latest && latest !== want.cur[1] ? ` · 최신 값을 못 받아 ${md(slots.map(([, s]) => s.recent.at).filter(Boolean).sort().at(-1) ?? latest)} 받은 지난 값` : ''
+    out.basis = { short: '최근 4주', cur: w.cur, prev: w.prev, note: `논문은 최근 4주(${md(w.cur[0])}~${md(w.cur[1])}) 기준 · 그 전 4주(${md(w.prev[0])}~${md(w.prev[1])})와 비교 (월별 자료라 짧은 기간 대신)${old}` }
     out.at = slots.map(([, s]) => s.recent.at).sort().at(-1) ?? out.at
     for (const [k, slot] of slots) {
       const name = state.terms[k].name
@@ -760,7 +778,7 @@ function shortMonthly(src, out, keys) {
       const { curN: cur, prevN: prev } = slot.recent
       if (cur + prev === 0) out.skipped.push({ key: k, name, why: '최근 8주 동안 논문이 없어요' })
       else if (cur + prev < src.min) out.skipped.push({ key: k, name, why: '값이 너무 적어요' })
-      else out.ranking.push(row(k, slot, cur, prev, { basis: `${md(w.cur[0])}~${md(w.cur[1])} vs 그 전 4주`, stale: Boolean(slot.recentError) }))
+      else out.ranking.push(row(k, slot, cur, prev, { basis: `${md(w.cur[0])}~${md(w.cur[1])} vs 그 전 4주`, stale: Boolean(slot.recentError || slot.recent.fromHistory || latest !== want.cur[1]) }))
     }
     const limited = keys.some((k) => /한도|예산/.test(state.series.openalex?.[k]?.recentError ?? ''))
     if (!out.ranking.length)
@@ -797,6 +815,7 @@ function shortMonthly(src, out, keys) {
 
 export async function getTechTrends({ period, from, to } = {}) {
   await load({ fresh: true })
+  await fillFromHistory() // API가 막혀 비어 있는 값은 기록에서 가장 최근 값으로 (11/08)
   const win = windowOf(period, from, to)
   const keys = await candidates()
   const sources = SOURCES.map((src) => {

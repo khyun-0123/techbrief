@@ -126,6 +126,20 @@ CREATE TABLE IF NOT EXISTS selections (
   updated_at  timestamptz NOT NULL DEFAULT now()
 );
 
+-- 요즘 뜨는 기술 · 추적 키워드 추이 값 기록 (11/08 조장): 받은 값을 출처 · 용어 · 종류 · 구간별로 쌓아 둔다
+-- API가 실패하거나 한도에 막히면 여기서 가장 최근 값을 꺼내 「지난 값 · 언제 받음」으로 보여 준다. 400일 지나면 정리
+-- kind: 'series'(일별 · 월별 값 묶음, win 없음) · 'recent'(논문 최근 4주, win = 구간 끝 날짜)
+CREATE TABLE IF NOT EXISTS tech_trend_values (
+  source      text NOT NULL,
+  term        text NOT NULL,
+  kind        text NOT NULL,
+  win         text NOT NULL DEFAULT '',
+  value       jsonb NOT NULL,
+  fetched_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (source, term, kind, win)
+);
+CREATE INDEX IF NOT EXISTS tech_trend_values_recent_idx ON tech_trend_values (source, term, kind, fetched_at DESC);
+
 CREATE TABLE IF NOT EXISTS app_settings (
   key        text PRIMARY KEY,
   value      jsonb NOT NULL,

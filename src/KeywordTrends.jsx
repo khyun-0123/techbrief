@@ -96,7 +96,7 @@ const PATENT_NOTE = {
   error: '특허 집계를 받지 못했어요.',
 }
 
-function TrendCard({ item, naverStatus, naverAt, naverStale, naverError, patentStatus, patentAt }) {
+function TrendCard({ item, naverStatus, naverAt, naverStale, naverError, patentStatus, patentAt, patentStale }) {
   const s = item.newsSurge
   return (
     <article className="trend-card">
@@ -140,7 +140,7 @@ function TrendCard({ item, naverStatus, naverAt, naverStale, naverError, patentS
           series={item.patents}
           note={item.patents === null && patentStatus === 'ok' ? '특허 검색어가 정해지지 않은 키워드예요.' : PATENT_NOTE[patentStatus] ?? '아직 데이터가 없어요.'}
           source="Google Patents · 월별, 영문 제목 · 최근 달은 덜 잡힘"
-          asOf={{ at: patentAt, label: '집계 (30일마다)' }}
+          asOf={{ at: patentAt, label: '집계 (30일마다)', stale: patentStale }}
         />
       </div>
     </article>
@@ -171,7 +171,7 @@ function KeywordTrends() {
       </div>
       {open && data && (
         <div className="trend-cards">
-          {data.items.length === 0 ? <p className="trend-empty">자동 수집 키워드가 없어요.</p> : data.items.map((item) => <TrendCard key={item.keyword} item={item} naverStatus={data.naverStatus} naverAt={data.naverAt} naverStale={data.naverStale} naverError={data.naverError} patentStatus={data.patentStatus} patentAt={data.patentAt} />)}
+          {data.items.length === 0 ? <p className="trend-empty">자동 수집 키워드가 없어요.</p> : data.items.map((item) => <TrendCard key={item.keyword} item={item} naverStatus={data.naverStatus} naverAt={data.naverAt} naverStale={data.naverStale} naverError={data.naverError} patentStatus={data.patentStatus} patentAt={data.patentAt} patentStale={data.patentStale} />)}
         </div>
       )}
     </section>
