@@ -18,7 +18,7 @@ const STALE_MS = 30 * 60_000 // 실행 중 표시가 이보다 오래되면 중�
 const KST = 9 * 3600_000 // 한국 시간 (서머타임 없음)
 
 export const HOUR_OPTIONS = [1, 2, 3, 4, 6, 8, 12]
-// autoSummary: 자동 요약 켜기/끄기. all(제목에 키워드가 있는 기사 전부) / off(직접 누를 때만)
+// autoSummary: 자동 요약 켜기/끄기. all(관련도 낮음을 뺀 기사 전부, 중요도 높은 순) / off(직접 누를 때만)
 // 개발 중에는 off로 두고, 시연·테스트 때 all로 켠다
 export const AUTO_SUMMARY_OPTIONS = ['all', 'off']
 const DEFAULT_SETTINGS = { mode: 'off', time: '06:00', hours: 2, autoSummary: 'off' }
@@ -93,14 +93,15 @@ export async function saveRefreshSettings(input) {
   return refreshStatus()
 }
 
-// 제목에 키워드가 들어간 이슈만 자동 요약한다 (본문에만 스치듯 나온 기사는 제외)
-// 대표 기사 제목에 없어도 같은 이슈 기사 중 하나의 제목에 있으면 관련도 high (collector/index.js)
-function titleHasKeyword(article) {
-  return article.relevance === 'high'
+// 자동 요약 대상 (11/08 조장: 「중요도 높은 것만」이 아니라 「중요도 높은 순으로 전부」)
+// 관련도 「낮음」(주식 · 판촉 등 주제 밖, 화면에서 기본으로 숨김)만 빼고 나머지 전부를 중요도 순으로 요약한다
+// 예전: 제목에 키워드가 있는 이슈(관련도 high)만 → 101건을 다 하면 멈췄음
+function autoSummaryTarget(article) {
+  return article.relevance !== 'low'
 }
 
 // ── 자동 요약 대기열 ──
-// 최신화가 끝나면 아직 요약 안 된 기사(제목에 키워드가 있는 이슈, 최근 7일)를 전부 대기열에 넣고
+// 최신화가 끝나면 아직 요약 안 된 기사(관련도 낮음을 뺀 이슈, 최근 7일)를 전부 대기열에 넣고
 // 뒤에서 한 건씩 요약한다. 최신화와 따로 돌아서, 다음 최신화 때 새 기사를 반영해 순서를 다시 짠다
 // 순서: 목록과 같은 중요도 점수(collector/score.js)가 높은 것부터, 같으면 최신부터. 최신성은 점수 안에 들어 있다
 const WORKER_LOCK_ID = LOCK_ID + 1 // 팀원 앱 여러 개가 같은 DB를 쓰면 한 곳에서만 요약한다
@@ -113,7 +114,7 @@ const IMPORTANT_SHARE = 0.2
 async function buildBacklog(articles) {
   const { autoSummary } = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
   if (autoSummary === 'off') return []
-  const candidates = articles.filter(titleHasKeyword)
+  const candidates = articles.filter(autoSummaryTarget)
   const done = await getSummaries(candidates.map((a) => a.id))
   const scores = candidates.map((a) => a.importance ?? 0).sort((x, y) => y - x)
   const cut = Math.max(1, scores[Math.floor(scores.length * IMPORTANT_SHARE)] ?? Infinity)

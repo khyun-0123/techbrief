@@ -38,7 +38,7 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, canEdi
         </div>
       ) : (
         <p className="hint">
-          키워드마다 네이버 뉴스에서 지난번 이후 새 기사를 빠짐없이 모으고, 자동 요약을 켜 두면 제목에 키워드가 있는 기사를 뒤에서 중요도 점수가 높은 것부터 전부 요약해요. 직접 누른 요약이 언제나 먼저예요.
+          키워드마다 네이버 뉴스에서 지난번 이후 새 기사를 빠짐없이 모으고, 자동 요약을 켜 두면 관련도 낮은 기사를 뺀 전부를 뒤에서 중요도 점수가 높은 것부터 요약해요. 직접 누른 요약이 언제나 먼저예요.
         </p>
       )}
 
@@ -77,7 +77,7 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, canEdi
               </select>
             </>
           )}
-          {/* 자동 요약 켜기/끄기. 개발 중에는 끄고, 시연·테스트 때 켠다 (켜면 제목에 키워드가 있는 기사 전부) */}
+          {/* 자동 요약 켜기/끄기. 개발 중에는 끄고, 시연·테스트 때 켠다 (켜면 관련도 낮음을 뺀 기사 전부, 중요도 순) */}
           <label className="refresh-switch">
             <input
               type="checkbox"

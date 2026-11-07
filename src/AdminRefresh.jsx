@@ -86,7 +86,7 @@ function AdminRefresh({ status, starting, disabled, onRun, onSave, keywords = []
               ② 자동 요약 <span className="adm-tag adm-tag-warn">AI 사용</span>
             </h2>
             <span>
-              모은 기사 중 제목에 키워드가 있는 것을 중요도 높은 순으로, 150자 발췌문을 바탕으로 6항목 요약해요. 기사를 모을 때마다 대상이 새로 정해지고, 사람이 누른 요약이
+              모은 기사 중 관련도 낮은 기사(주식 · 판촉 등)를 뺀 전부를 중요도 높은 순으로, 원문(못 가져오면 발췌문)을 바탕으로 6항목 요약해요. 기사를 모을 때마다 대상이 새로 정해지고, 사람이 누른 요약이
               언제나 먼저예요.
             </span>
           </div>
