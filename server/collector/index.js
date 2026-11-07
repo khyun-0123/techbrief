@@ -14,6 +14,10 @@ import { restoreTitles } from './titles.js'
 
 const MAX_KEYWORDS = 10 // API 호출 수를 지키기 위한 한도
 const MAX_PAGES = 10 // 키워드마다 100건씩 최대 10번(1,000건, 네이버 한도)까지 넘겨 받는다
+// 처음 거슬러 모으기 (11/08 조장 결정): 키워드마다 한 번, 최근 21일치까지 받는다. 그 뒤로는 새 기사를 이어 붙인다 (지우지 않음)
+// 네이버 검색 API는 최신순 1,000건까지만 넘겨 주므로, 기사가 많은 키워드는 21일까지 닿지 못할 수 있다 → 닿은 날짜를 기록
+const BACKFILL_DAYS = 21
+const BACKFILL_KEY = 'collect_backfill' // { [키워드]: { at, oldest, reached, capped } }
 const LIST_DAYS = 7 // 화면 목록에 보여 주는 기간
 const KEEP_DAYS = 365 // DB 보관 기간. 요약된 기사·일자별 집계는 계속 보관 (08 13-2)
 
@@ -151,12 +155,23 @@ export async function collect(keywords) {
   let fetched = 0
   let added = 0
   const failed = []
+  const backfill = dbEnabled() ? await getSetting(BACKFILL_KEY, {}).catch(() => ({})) : null
+  const cutoff = Date.now() - BACKFILL_DAYS * 86_400_000
   for (const word of words) {
     try {
       // 최신순 100건씩 넘겨 받는다. 지난번에 받은 기사가 나오면 그 뒤는 이미 있으므로 멈춘다
       // (100건만 받으면 기사가 많은 낮 시간에는 2시간 중 앞부분을 놓친다)
+      // 거슬러 모으기가 아직이면 이미 받은 기사가 나와도 멈추지 않고 21일 전 기사까지 (또는 1,000건 한도까지)
+      const filling = backfill && !backfill[word]
+      let oldest = null
+      let capped = false
       for (let page = 0; page < MAX_PAGES; page += 1) {
         const items = await searchNews(word, { start: page * 100 + 1 })
+        for (const it of items) {
+          const t = Date.parse(it.pubDate)
+          if (Number.isFinite(t) && (oldest === null || t < oldest)) oldest = t
+        }
+        if (filling && page === MAX_PAGES - 1 && items.length === 100) capped = true
         fetched += items.length
         const articles = items.map((item) => toArticle(item, word)).filter((a) => a.url && a.title)
         // 한 번 받은 결과 안에서도 같은 원문이 겹칠 수 있다
@@ -170,7 +185,12 @@ export async function collect(keywords) {
             memory.set(a.id, { ...memory.get(a.id), ...a })
           }
         }
-        if (reachedKnown || items.length < 100) break
+        if (filling ? (oldest !== null && oldest < cutoff) || items.length < 100 : reachedKnown || items.length < 100) break
+      }
+      if (filling) {
+        backfill[word] = { at: new Date().toISOString(), oldest: oldest ? new Date(oldest).toISOString() : null, reached: oldest !== null && oldest < cutoff, capped }
+        await setSetting(BACKFILL_KEY, backfill).catch(() => {})
+        console.log(`[collect] 「${word}」 거슬러 모으기: ${oldest ? new Date(oldest).toISOString().slice(0, 10) : '?'}까지${capped ? ' (네이버 1,000건 한도)' : ''}`)
       }
     } catch (err) {
       failed.push({ keyword: word, error: err.message })
