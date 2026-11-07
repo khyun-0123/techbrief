@@ -1,4 +1,4 @@
-// 대시보드 (11/07 팀 회의): 첫 화면. 자료 검색(맨 위, 키워드·즐겨찾기·최근 검색어 칩은 접어 둠) · 오늘 수집 숫자 · 요즘 뜨는 기술 · 추적 중인 키워드 추이
+// 대시보드 (11/07 팀 회의): 첫 화면. 오늘 수집 숫자(맨 위) · 자료 검색(키워드·즐겨찾기·최근 검색어 칩은 접어 둠) · 요즘 뜨는 기술 · 추적 중인 키워드 추이
 // - 「자료 검색」은 네이버에서 찾고 자료 현황 탭으로 넘어가 결과를 보여 준다
 // - 자동 수집 키워드를 누르면 자료 현황에서 모은 기사를 그 키워드로 걸러 보여 준다
 import { useState } from 'react'
@@ -30,6 +30,23 @@ function Dashboard({ stats, keywords, favorites, recent, periods, period, onPeri
           </button>
         </div>
       </header>
+
+      <section className="stats">
+        <div className="stat">
+          <span className="stat-label">오늘 수집된 이슈 · 기사</span>
+          <strong>
+            {stats.todayIssues}개 <small>· 기사 {stats.todayArticles}건</small>
+          </strong>
+        </div>
+        <div className="stat" title={keywords.join(' · ')}>
+          <span className="stat-label">자동 수집 키워드</span>
+          <strong>{keywords.length}개</strong>
+        </div>
+        <div className="stat">
+          <span className="stat-label">선별한 기사</span>
+          <strong>{stats.selected}건</strong>
+        </div>
+      </section>
 
       <section className="panel dash-search">
         <h2 className="dash-title">자료 검색</h2>
@@ -108,25 +125,7 @@ function Dashboard({ stats, keywords, favorites, recent, periods, period, onPeri
         )}
       </section>
 
-      <section className="stats">
-        <div className="stat">
-          <span className="stat-label">오늘 수집된 이슈 · 기사</span>
-          <strong>
-            {stats.todayIssues}개 <small>· 기사 {stats.todayArticles}건</small>
-          </strong>
-        </div>
-        <div className="stat" title={keywords.join(' · ')}>
-          <span className="stat-label">자동 수집 키워드</span>
-          <strong>{keywords.length}개</strong>
-        </div>
-        <div className="stat">
-          <span className="stat-label">선별한 기사</span>
-          <strong>{stats.selected}건</strong>
-        </div>
-      </section>
-
       <TechTrends onPick={onSearch} />
-
 
       <KeywordTrends />
     </main>

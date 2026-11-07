@@ -2737,7 +2737,7 @@ a.brand:focus-visible {
 .dash-search {
   display: grid;
   gap: 12px;
-  margin-top: 8px;
+  margin-top: 0;
   padding: 16px 20px 20px;
 }
 
