@@ -2720,3 +2720,53 @@ a.brand:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ── 대시보드 (11/07): 자료 검색 칸 ── */
+.dash-search {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px 20px 20px;
+}
+
+.dash-search .search-form {
+  max-width: 640px;
+}
+
+.dash-search .search-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-title {
+  margin: 0;
+  font-size: var(--fs-lg, 18px);
+}
+
+.dash-note {
+  margin: -4px 0 0;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+}
+
+.dash-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.dash-chips-label {
+  min-width: 108px;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+}
+
+.chip.dash-chip {
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.chip.dash-chip:hover {
+  border-color: var(--tb-color-text-sub);
+}

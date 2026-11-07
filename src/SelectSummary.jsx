@@ -80,9 +80,9 @@ function SelectSummary({ candidates, includedIds, setIncludedIds, onExclude, onG
 
       {candidates.length === 0 ? (
         <section className="panel select-empty">
-          <p className="empty">아직 선별한 기사가 없어요. 수집 현황에서 「선별 추가」를 눌러 주세요.</p>
+          <p className="empty">아직 선별한 기사가 없어요. 자료 현황에서 「선별 추가」를 눌러 주세요.</p>
           <button type="button" className="btn primary" onClick={onGoCollect}>
-            수집 현황으로 가기
+            자료 현황으로 가기
           </button>
         </section>
       ) : (
