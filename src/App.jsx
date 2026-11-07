@@ -2,7 +2,10 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import './App.css'
 import {
   deleteMaterialApi,
+  answerReportJob,
+  cancelReportJob,
   deleteReportApi,
+  fetchReportJobs,
   updateReportApi,
   fetchAdminMe,
   fetchArticles,
@@ -63,6 +66,7 @@ const RECENT_MAX = 10
 const TIER_TITLE = { 1: '1차 출처: 기업 발표·학회·논문', 2: '2차 출처: 전문매체', 3: '3차 출처: 일반 뉴스' }
 const EXTRA_KEY = 'techbrief-extra-articles' // 「기사 찾기」 결과에서 선별한 기사 (수집 목록에 없는 것)
 const MAX_SAVED = 400
+const LAST_REPORT_KEY = 'techbrief-last-report'
 // 선별 폴더 (11/07 결정, 27 문서 2장). 브라우저에 두고 서버(selections)에도 같이 저장한다
 const FOLDERS_KEY = 'techbrief-folders'
 const FOLDER_OF_KEY = 'techbrief-folder-of'
@@ -195,6 +199,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
   const [reports, setReports] = useState(() => loadReports())
   const [reportsInDb, setReportsInDb] = useState(false) // true면 보고서함을 서버 DB에 저장
+  // 보고서 작업 대기열 (11/08): 서버가 만들고, 화면은 3초마다 상태를 받아 진행 창에 보여 준다
+  const [reportJobs, setReportJobs] = useState([])
+  const [lastReportId, setLastReportId] = useState(() => load(LAST_REPORT_KEY, null)) // 선별·요약 「미리보기」에 보여 줄 보고서
+  const ingestedJobs = useRef(new Set())
 
   // 서버에 쌓인 기사를 불러온다. 앱을 열 때, 최신화가 끝났을 때
   const reloadArticles = useCallback(async () => {
@@ -350,6 +358,73 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       if (!reportsInDb) saveReports(next)
       return next
     })
+  }
+
+  // 보고서 작업 상태 받기: 도는 작업이 있으면 3초, 없으면 20초마다. 끝난 작업의 보고서는 보고서함에 넣는다
+  const reportJobsActive = reportJobs.some((j) => ['queued', 'running', 'need_confirm'].includes(j.status))
+  useEffect(() => {
+    const id = clientId()
+    if (!id) return undefined
+    let alive = true
+    const check = () =>
+      fetchReportJobs(id)
+        .then((list) => {
+          if (!alive) return
+          setReportJobs(list)
+          for (const j of list) {
+            if (j.status !== 'done' || !j.result || ingestedJobs.current.has(j.id)) continue
+            ingestedJobs.current.add(j.id)
+            const entry = j.result
+            setReports((prev) => {
+              if (prev.some((r) => r.id === entry.id)) return prev
+              const next = [entry, ...prev]
+              if (!reportsInDb) saveReports(next)
+              return next
+            })
+            setLastReportId(entry.id)
+            try {
+              localStorage.setItem(LAST_REPORT_KEY, JSON.stringify(entry.id))
+            } catch {
+              // 저장 공간을 못 쓰면 이번 화면에서만
+            }
+          }
+        })
+        .catch(() => {})
+    check()
+    const timer = setInterval(check, reportJobsActive ? 3_000 : 20_000)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+    // reportsInDb는 저장 위치만 정한다 (바뀌어도 다시 시작할 필요 없음)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportJobsActive])
+
+  function refreshReportJobs() {
+    const id = clientId()
+    if (id) fetchReportJobs(id).then(setReportJobs).catch(() => {})
+  }
+
+  async function handleJobAnswer(jobId, use) {
+    await answerReportJob(jobId, use).catch(() => {})
+    refreshReportJobs()
+  }
+
+  async function handleJobCancel(jobId) {
+    await cancelReportJob(jobId).catch(() => {})
+    refreshReportJobs()
+  }
+
+  // 보고서함에서 보고서를 열면: 그 보고서에 쓴 기사가 아직 선별에 있으면 정리할지 묻는다 (한 번만)
+  function handleCleanup(entry, action) {
+    const ids = (entry.inputs ?? []).map((a) => a.id).filter((id) => selectedIds.includes(id))
+    if (action === 'remove') ids.forEach(handleExclude)
+    if (action === 'archive') {
+      let archiveId = folders.find((f) => f.name === '보관')?.id
+      if (!archiveId) archiveId = createFolder('보관')
+      setFolderOf((prev) => ({ ...prev, ...Object.fromEntries(ids.map((id) => [id, archiveId])) }))
+      setIncludedIds((prev) => prev.filter((id) => !ids.includes(id)))
+    }
   }
 
   // 보고서 고치기 (줄 빼기 · AI 보충 근거): 화면에 바로 반영하고, DB가 있으면 서버에도 저장
@@ -754,6 +829,15 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         )}
         </div>
         <span className="topbar-side">
+          {/* 오늘 수집 · 선별 숫자 (11/08: 대시보드 숫자 칸을 메뉴 막대로 옮김). 누르면 그 화면으로 */}
+          <span className="topbar-stats">
+            <button type="button" onClick={() => setScreen('collect')} title="오늘(24시간) 모은 이슈 · 기사 — 자료 현황으로">
+              오늘 이슈 <strong>{todayIssues.length}</strong> · 기사 <strong>{countArticles(todayIssues)}</strong>
+            </button>
+            <button type="button" onClick={() => setScreen('select')} title="선별한 기사 — 선별·요약으로">
+              선별 <strong>{selectedIds.length}</strong>
+            </button>
+          </span>
           {/* AI 모델은 모두에게 적용되므로 관리자 화면에서 고른다. 여기서는 보기만 (17 문서) */}
           {health?.llm && (
             <span className="llm-pick" title="요약·보고서에 쓰는 AI 모델 (관리자가 정해요)">
@@ -832,6 +916,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           onDelete={canDeleteReport ? handleDeleteReport : undefined}
           onGoDraft={() => setScreen('select')}
           onUpdated={handleReportUpdated}
+          selectedIds={selectedIds}
+          onCleanup={handleCleanup}
+          initialId={lastReportId}
+          key={lastReportId ?? 'archive'}
         />
       ) : screen === 'select' ? (
         <SelectSummary
@@ -852,9 +940,11 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           onMaterialAdded={handleMaterialAdded}
           reportArticles={reportArticles}
           reports={reports}
-          onSaved={(entry) => updateReports((list) => [entry, ...list])}
           onUpdated={handleReportUpdated}
           onGoArchive={() => setScreen('archive')}
+          reportJobs={reportJobs}
+          onJobAdded={(job) => setReportJobs((prev) => [...prev.filter((j) => j.id !== job.id), job])}
+          lastReportId={lastReportId}
           storageLabel={reportsInDb ? 'DB' : '이 브라우저'}
           folderSummary={reportFolders}
         />
@@ -1259,7 +1349,18 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           </div>
         </main>
       )}
-      <ProgressPanel queue={queue} />
+      <ProgressPanel
+        queue={queue}
+        reportJobs={reportJobs}
+        onAnswer={handleJobAnswer}
+        onCancel={handleJobCancel}
+        quiet={screen === 'select'}
+        onOpenReport={(id) => {
+          setLastReportId(id)
+          setScreen('archive')
+          window.scrollTo({ top: 0 })
+        }}
+      />
     </div>
     </FeaturesContext.Provider>
     </OpsContext.Provider>

@@ -1379,52 +1379,6 @@ a.btn {
 }
 
 /* 보고서함 */
-.archive-layout {
-  display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 20px;
-  align-items: start;
-  margin-top: 24px;
-}
-
-.archive-list {
-  margin: 0;
-  padding: 6px;
-  list-style: none;
-  max-height: calc(100vh - 220px);
-  overflow-y: auto;
-}
-
-.archive-item {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  width: 100%;
-  padding: 12px;
-  border: none;
-  border-radius: var(--tb-radius-card-s);
-  background: none;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.archive-item:hover {
-  background: var(--tb-color-bg);
-}
-
-.archive-item.active {
-  background: var(--tb-color-bg-strong);
-}
-
-.archive-item .title {
-  font-size: 15px;
-}
-
-.archive-item .meta {
-  margin: 0;
-}
-
 .archive-preview {
   overflow: hidden;
   color: var(--tb-color-text-sub);
@@ -1438,9 +1392,6 @@ a.btn {
   margin: 0;
 }
 
-.archive-layout .report-layout {
-  margin-top: 0;
-}
 
 .db-status.on {
   color: #86efac;
@@ -4064,5 +4015,385 @@ a.brand:focus-visible {
   .report-bullets li:focus-within .line-tools,
   .report-bullets li.is-finding .line-tools {
     pointer-events: auto;
+  }
+}
+
+/* ── 선별·요약: 두 박스를 브라우저 높이에 맞춤 (11/08 조장) ──
+   기사를 더 담아도 박스 크기는 그대로, 기사 목록은 왼쪽 박스 안에서 스크롤 */
+@media (min-width: 1101px) {
+  .select-page {
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - 64px);
+    padding-bottom: 20px;
+    box-sizing: border-box;
+  }
+  .app:has(.select-page) {
+    padding-bottom: 0;
+  }
+  .select-page > .page-header,
+  .select-page > .add-material {
+    flex: none;
+  }
+  .select-page > .select-report {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .select-page .select-list {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  .select-page .select-list > :not(.candidates):not(.empty) {
+    flex: none;
+  }
+  .select-page .select-list .candidates {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+  .select-page .select-report .composer {
+    position: static;
+    height: 100%;
+    max-height: none;
+  }
+  .select-page > .add-material {
+    max-height: 45vh;
+    overflow-y: auto;
+  }
+}
+@media (max-width: 1100px) {
+  .select-page .select-list .candidates {
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+}
+
+/* 자료 조사 수준 */
+.composer-levels {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+.composer-levels legend {
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+.level-option {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 10px !important;
+  padding: 10px 12px;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: var(--tb-radius-input);
+  cursor: pointer;
+}
+.level-option.active {
+  border-color: var(--tb-color-primary);
+  background: var(--tb-color-bg);
+}
+.level-option input {
+  width: auto !important;
+  margin-top: 3px;
+}
+.level-option span {
+  display: grid;
+  gap: 2px;
+}
+.level-option strong {
+  font-size: 14px;
+}
+.level-option small {
+  font-size: 13px;
+  color: var(--tb-color-text-sub);
+}
+.composer-levels .hint {
+  margin: 0;
+}
+.composer-jobs {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-bg);
+  font-size: 13px;
+}
+.composer-go-note {
+  margin: 0;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* 보고서함: 선별 정리 묻기 */
+.cleanup-ask {
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-card-s);
+  background: var(--tb-color-surface);
+}
+.cleanup-ask p {
+  margin: 0 0 10px;
+}
+.cleanup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 진행 창: 보고서 작업 질문 */
+.job-question {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-warning-soft);
+  font-size: 13px;
+}
+.job-question p {
+  margin: 0 0 6px;
+}
+.job-question ul {
+  margin: 0 0 8px;
+  padding-left: 16px;
+}
+.job-question-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.report-jobs .progress-title small {
+  color: var(--tb-color-text-sub);
+  font-weight: 400;
+}
+
+/* 위 메뉴 막대의 오늘 수집 · 선별 숫자 (11/08) */
+.topbar-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--tb-radius-full);
+  background: rgb(255 255 255 / 8%);
+}
+.topbar-stats button {
+  padding: 4px 10px;
+  border: none;
+  border-radius: var(--tb-radius-full);
+  background: none;
+  color: var(--tb-color-text-inverse);
+  font: inherit;
+  font-size: 13px;
+  opacity: 0.85;
+  cursor: pointer;
+}
+.topbar-stats button:hover {
+  background: rgb(255 255 255 / 12%);
+  opacity: 1;
+}
+.topbar-stats strong {
+  font-weight: 700;
+}
+@media (max-width: 860px) {
+  .topbar-stats {
+    display: none;
+  }
+}
+
+/* ── 보고서함 (11/08 개편): 맨 위 고르기 + 넓은 보고서 | 근거 기사, 화면 높이에 맞춤 ── */
+.archive-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin-bottom: 16px;
+}
+.archive-head h1 {
+  margin: 0;
+}
+.archive-head > .btn {
+  margin-left: auto;
+}
+.archive-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 420px;
+  max-width: 720px;
+  min-width: 0;
+}
+.archive-nav {
+  flex: none;
+  width: 36px;
+  height: 40px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-surface);
+  font-size: 18px;
+  cursor: pointer;
+}
+.archive-nav:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.archive-current {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.archive-current-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.archive-current-meta {
+  flex: none;
+  font-size: 13px;
+  color: var(--tb-color-text-sub);
+}
+.archive-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  max-height: min(70vh, 640px);
+  padding: 12px;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: var(--tb-radius-card-s);
+  background: var(--tb-color-surface);
+  box-shadow: var(--tb-shadow-pop);
+}
+.archive-pop-tools {
+  display: flex;
+  gap: 8px;
+}
+.archive-pop-tools input {
+  flex: 1;
+  min-width: 0;
+}
+.archive-pop-count {
+  margin: 8px 2px 6px;
+  font-size: 12px;
+  color: var(--tb-color-text-sub);
+}
+.archive-results {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.archive-result {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: var(--tb-radius-input);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.archive-result:hover {
+  background: var(--tb-color-bg);
+}
+.archive-result.active {
+  background: var(--tb-color-bg-strong);
+}
+.archive-result .title {
+  font-weight: 700;
+}
+.archive-result .meta {
+  margin: 0;
+  font-size: 12px;
+}
+.mine-badge {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-bg-strong);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tb-color-text-sub);
+}
+.archive-body .report-layout {
+  margin-top: 0;
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+@media (min-width: 1101px) {
+  .archive-page {
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - 64px);
+    padding-bottom: 20px;
+    box-sizing: border-box;
+  }
+  .app:has(.archive-page) {
+    padding-bottom: 0;
+  }
+  .archive-page > .archive-head {
+    flex: none;
+  }
+  .archive-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .archive-body > .cleanup-ask {
+    flex: none;
+  }
+  .archive-body .report-layout {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .archive-body .report-doc,
+  .archive-body .report-refs {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+}
+@media (max-width: 1100px) {
+  .archive-body .report-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .archive-picker {
+    flex-basis: 100%;
+    max-width: none;
   }
 }

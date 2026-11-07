@@ -2,10 +2,8 @@
 // 11/08 조장 요청
 // - 줄 빼기: 줄마다 끝에 작은 「빼기」. 뺀 줄은 섹션 아래 「뺀 줄 N개」에 접혀 들어가고 「되살리기」로 돌린다
 //   (체크박스를 줄마다 두면 정신없어서). 뺀 줄은 복사 · PDF · PPT에서 빠진다
-// - AI 보충 근거 찾기: AI 해설 줄의 근거를 우리 자료(원문 · 모은 기사 · 직접 추가 자료)와 위키백과에서 찾아 고쳐 쓴다
-//   근거를 찾으면 사실 줄로 옮기고 「근거 보충」 표시 + 근거 번호. 못 찾으면 그대로 두고 「근거 못 찾음」
+// - AI 해설 보충은 보고서를 만들 때 대기열에서 자동으로 한다(자료 조사 수준). 보충한 줄은 「근거 보충」 표시
 import { useState } from 'react'
-import { reinforceApi } from './api.js'
 import { exportPptx, printReport } from './reportExport.js'
 import { formatDate, kindOf, SECTIONS } from './reportStore.js'
 import { track } from './usage.js'
@@ -18,9 +16,6 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
   const { report } = saved
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState('')
-  const [finding, setFinding] = useState(null) // 'key:index' 근거 찾는 중인 줄
-  const [findAll, setFindAll] = useState(null) // { done, total }
-  const [findError, setFindError] = useState('')
   const editable = Boolean(onChange)
   const baseCount = saved.articles.filter((a) => !a.supplement).length
 
@@ -46,62 +41,12 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
     onChange(patchBullet(saved, key, index, { excluded }))
   }
 
-  // 한 줄의 근거 찾기. entry를 받아 고친 entry를 돌려준다 (모두 찾기에서 이어 쓰려고)
-  async function reinforce(entry, key, index) {
-    const b = entry.report.sections[key].bullets[index]
-    const result = await reinforceApi({ text: b.text, inputs: entry.inputs ?? [], existing: entry.articles })
-    if (!result.found) return patchBullet(entry, key, index, { noRef: { tried: result.tried?.length ?? 0 } })
-    const next = { ...entry, articles: [...entry.articles, ...result.added] }
-    return patchBullet(next, key, index, { ...result.bullet, noRef: undefined })
-  }
-
-  async function handleFind(key, index) {
-    setFinding(`${key}:${index}`)
-    setFindError('')
-    try {
-      onChange(await reinforce(saved, key, index))
-    } catch (err) {
-      setFindError(`근거를 찾지 못했어요: ${err.message}`)
-    } finally {
-      setFinding(null)
-    }
-  }
-
-  const aiTargets = SECTIONS.flatMap(([key]) =>
-    (report.sections[key]?.bullets ?? []).flatMap((b, i) => (kindOf(b) === 'ai' && !b.excluded && !b.noRef ? [[key, i]] : [])),
-  )
-
-  async function handleFindAll() {
-    setFindError('')
-    setFindAll({ done: 0, total: aiTargets.length })
-    let entry = saved
-    try {
-      for (const [i, [key, index]] of aiTargets.entries()) {
-        setFinding(`${key}:${index}`)
-        entry = await reinforce(entry, key, index)
-        onChange(entry)
-        setFindAll({ done: i + 1, total: aiTargets.length })
-      }
-    } catch (err) {
-      setFindError(`근거 찾기가 멈췄어요: ${err.message}`)
-    } finally {
-      setFinding(null)
-      setFindAll(null)
-    }
-  }
-
-  const working = Boolean(finding) || busy
+  const working = busy
 
   function lineTools(key, i, b) {
     if (!editable) return null
-    const ai = kindOf(b) === 'ai'
     return (
       <span className="line-tools">
-        {ai && (
-          <button type="button" className="line-btn" onClick={() => handleFind(key, i)} disabled={working} title="우리 자료(원문 · 모은 기사 · 직접 추가 자료)와 위키백과에서 근거를 찾아 고쳐 써요">
-            {finding === `${key}:${i}` ? '찾는 중…' : '근거 찾기'}
-          </button>
-        )}
         <button type="button" className="line-btn line-remove" onClick={() => toggleExclude(key, i, true)} disabled={working} aria-label={`「${b.text.slice(0, 20)}…」 줄 빼기`} title="이 줄을 보고서에서 빼요 (아래 「뺀 줄」에서 되살릴 수 있어요)">
           빼기
         </button>
@@ -159,13 +104,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
               </button>
             </>
           )}
-          {editable && aiTargets.length > 0 && (
-            <button type="button" className="btn outline" onClick={handleFindAll} disabled={working} title="AI 해설 줄마다 우리 자료와 위키백과에서 근거를 찾아요 (줄마다 30초쯤)">
-              {findAll ? `근거 찾는 중 ${findAll.done}/${findAll.total}` : `AI 해설 ${aiTargets.length}줄 근거 찾기`}
-            </button>
-          )}
         </div>
-        {findError && <p className="ai-error">{findError}</p>}
         <header className="report-doc-head">
           <h2>{report.title}</h2>
           <span>
@@ -212,7 +151,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
               {facts.length > 0 && (
                 <ul className="report-bullets">
                   {facts.map(({ b, i }) => (
-                    <li key={i} className={finding === `${key}:${i}` ? 'is-finding' : undefined}>
+                    <li key={i}>
                       <span className="line-text">
                         {b.text}
                         {b.refs.map((n) => (
@@ -234,10 +173,10 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
               )}
               {ai.length > 0 && (
                 <div className="report-ai">
-                  <p className="report-ai-label">AI 해설·제안 · 기사에서 확인된 내용이 아니에요. 「근거 찾기」로 우리 자료 · 백과에서 근거를 찾을 수 있어요</p>
+                  <p className="report-ai-label">AI 해설·제안 · 기사에서 확인된 내용이 아니에요, 확인 후 쓰세요</p>
                   <ul className="report-bullets">
                     {ai.map(({ b, i }) => (
-                      <li key={i} className={finding === `${key}:${i}` ? 'is-finding' : undefined}>
+                      <li key={i}>
                         <span className="line-text">
                           {b.text}
                           {b.noRef && <span className="basis basis-noref">근거 못 찾음{b.noRef.tried ? ` (자료 ${b.noRef.tried}건 확인)` : ''}</span>}

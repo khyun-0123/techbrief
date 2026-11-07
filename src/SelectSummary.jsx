@@ -39,11 +39,13 @@ function SelectSummary({
   onMaterialAdded,
   reportArticles,
   reports,
-  onSaved,
   onUpdated,
   onGoArchive,
   storageLabel,
   folderSummary,
+  reportJobs,
+  onJobAdded,
+  lastReportId,
 }) {
   const { aiBlocked } = useOps()
   const [sort, setSort] = useState('importance')
@@ -288,8 +290,10 @@ function SelectSummary({
             aiSummaries={aiSummaries}
             queue={queue}
             reports={reports}
-            onSaved={onSaved}
             onUpdated={onUpdated}
+            reportJobs={reportJobs}
+            onJobAdded={onJobAdded}
+            lastReportId={lastReportId}
             onGoArchive={onGoArchive}
             storageLabel={storageLabel}
             folderSummary={folderSummary}

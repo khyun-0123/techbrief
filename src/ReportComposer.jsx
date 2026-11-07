@@ -1,26 +1,26 @@
-// 보고서 작성 칸 (11/08 조장: 「보고서 초안」 탭을 없애고 선별·요약 오른쪽으로 옮김)
-// 사람이 주는 것 두 가지: ① 보고서 제목 ② 보고서 방향(주제 · 담아야 할 방향 한 줄 — AI 지시문에 들어감)
-// 만들기 전: 체크한 기사 목록(요약 상태) / 만든 뒤: 보고서 미리보기(줄 빼기 · AI 보충 근거 찾기 · 다시 쓰기 · 내보내기)
-// 만든 보고서는 보고서함에 저장되고, 마지막 보고서는 탭을 옮겨도 이 칸에 남는다
-import { useEffect, useState } from 'react'
-import { requestReport, requestReportSection } from './api.js'
+// 보고서 칸 (선별·요약 오른쪽, 11/08 조장)
+// 작성: ① 보고서 제목 ② 보고서 방향(한 줄, AI 지시문에 들어감) ③ 자료 조사 수준 → 「보고서 만들기」는 서버 대기열에 넣는다
+//       다른 탭에 가도 오른쪽 아래 진행 창에서 진행 상황을 보고, 요약 안 된 기사를 써야 하면 거기서 묻는다
+// 미리보기: 이 브라우저에서 마지막으로 만든 보고서 (줄 빼기 · 섹션 다시 쓰기 · 복사 · 내보내기)
+// 기간: 예전에는 「오늘 · 이번 주 · 이번 달」을 골랐지만 보고서 머리글에만 붙는 글자였다 → 기사 날짜로 자동 (11/8)
+import { useState } from 'react'
+import { createReportJob, requestReportSection } from './api.js'
 import { articleKey, copyText, toPlainText } from './reportStore.js'
-import { track } from './usage.js'
+import { clientId, track } from './usage.js'
 import { AI_BLOCKED_TITLE, useOps } from './ops.js'
 import ReportView from './ReportView.jsx'
 import { load } from './utils.js'
 
-const REPORT_AVG_KEY = 'techbrief-report-avg-ms-v2'
-const LAST_REPORT_KEY = 'techbrief-last-report' // 이 칸에 보여 줄 마지막 보고서 id
-const DRAFT_INPUT_KEY = 'techbrief-report-input' // 제목 · 방향 · 기간 (쓰던 것 남기기)
-const DEFAULT_REPORT_MS = 90_000
-const PERIODS = { today: '오늘', week: '이번 주', month: '이번 달' }
-
-// 한 번에 넣는 기사 수 (서버 MAX_REPORT_ARTICLES와 같음). 넘으면 고르게 한다 (21 문서 6-3)
-const REPORT_LIMIT = 10
+const DRAFT_INPUT_KEY = 'techbrief-report-input' // 제목 · 방향 · 조사 수준 (쓰던 것 남기기)
+const REPORT_LIMIT = 10 // 서버 MAX_REPORT_ARTICLES
 const REPORT_MAX_ALL = 40
-const REPORT_CHUNK = 8
-const chunkCalls = (n) => Math.ceil(n / REPORT_CHUNK) + 1
+const ACTIVE = ['queued', 'running', 'need_confirm']
+
+const LEVELS = [
+  ['selected', '선택한 자료만', '체크한 기사만으로 써요. 가장 빨라요.'],
+  ['owned', '보유 자료까지', '근거가 없는 「AI 해설」 줄을 우리가 모은 기사 · 원문 · 직접 추가 자료 · 위키백과로 보충해요.'],
+  ['research', '추가 자료 조사까지', '보유 자료에 더해 네이버 뉴스 · 논문에서 새로 찾아 요약해 참고자료로 써요. 가장 오래 걸려요.'],
+]
 
 function topByImportance(articles, limit) {
   const keep = new Set(
@@ -32,80 +32,64 @@ function topByImportance(articles, limit) {
   return articles.filter((a) => keep.has(a.id))
 }
 
-function minutes(ms) {
-  const m = Math.round(ms / 60_000)
-  return m < 1 ? '1분 안' : `약 ${m}분`
+// 기사 날짜로 기간 글자 만들기: 「11. 1. ~ 11. 8. 기사」
+function periodOf(articles) {
+  const times = articles.map((a) => (a.publishedAt ? Date.parse(a.publishedAt) : Date.now() - (a.hoursAgo ?? 0) * 3600_000)).filter(Number.isFinite)
+  if (!times.length) return '기사 기준'
+  const f = (t) => new Date(t).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
+  const [lo, hi] = [f(Math.min(...times)), f(Math.max(...times))]
+  return lo === hi ? `${lo} 기사` : `${lo} ~ ${hi} 기사`
 }
 
-function ReportComposer({ articles: picked, aiSummaries, queue, reports, onSaved, onUpdated, onGoArchive, storageLabel, folderSummary }) {
+function ReportComposer({ articles: picked, aiSummaries, queue, reports, onUpdated, onGoArchive, storageLabel, folderSummary, reportJobs = [], onJobAdded, lastReportId }) {
   const [saved0] = useState(() => load(DRAFT_INPUT_KEY, {}))
   const [title, setTitle] = useState(saved0.title ?? '테크 동향 브리핑')
   const [direction, setDirection] = useState(saved0.direction ?? '')
-  const [period, setPeriod] = useState(saved0.period ?? 'today')
-  const [generating, setGenerating] = useState(null)
-  const [lastId, setLastId] = useState(() => load(LAST_REPORT_KEY, null))
+  const [level, setLevel] = useState(saved0.level ?? 'owned')
+  const [mode, setMode] = useState('top')
+  const [sending, setSending] = useState(false)
   const [regenKey, setRegenKey] = useState(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [avgMs, setAvgMs] = useState(() => load(REPORT_AVG_KEY, DEFAULT_REPORT_MS))
-  const [now, setNow] = useState(() => Date.now())
-  const [mode, setMode] = useState('top')
   const { aiBlocked } = useOps()
 
-  useEffect(() => {
-    localStorage.setItem(DRAFT_INPUT_KEY, JSON.stringify({ title, direction, period }))
-  }, [title, direction, period])
-
-  useEffect(() => {
-    localStorage.setItem(LAST_REPORT_KEY, JSON.stringify(lastId))
-  }, [lastId])
+  function remember(patch) {
+    try {
+      localStorage.setItem(DRAFT_INPUT_KEY, JSON.stringify({ title, direction, level, ...patch }))
+    } catch {
+      // 저장 공간을 못 쓰면 이번 화면에서만
+    }
+  }
 
   const tooMany = picked.length > REPORT_LIMIT
   const overMax = picked.length > REPORT_MAX_ALL
   const useAll = tooMany && mode === 'all' && !overMax
   const articles = tooMany && !useAll ? topByImportance(picked, REPORT_LIMIT) : picked
   const leftOut = tooMany && !useAll ? picked.filter((a) => !articles.includes(a)) : []
-  const expectMs = useAll ? avgMs * chunkCalls(articles.length) : avgMs
-
-  useEffect(() => {
-    if (!generating) return undefined
-    const timer = setInterval(() => setNow(Date.now()), 400)
-    return () => clearInterval(timer)
-  }, [generating])
 
   const key = articleKey(picked.map((a) => a.id))
-  const current = reports.find((r) => r.id === lastId)
-  const changed = current && current.articleKey !== key // 보고서를 만든 뒤 체크한 기사가 바뀜
-  // 탭: 작성 | 미리보기. 체크한 기사가 지난 보고서와 같으면 미리보기부터, 다르면 작성부터
+  const current = reports.find((r) => r.id === lastReportId)
+  const changed = current && current.articleKey && current.articleKey !== key
   const [view, setView] = useState(() => (current && !changed ? 'preview' : 'compose'))
-  const showReport = view === 'preview' && current && !generating
+  const showReport = view === 'preview' && current
+  const activeJobs = reportJobs.filter((j) => ACTIVE.includes(j.status))
 
   const missing = articles.filter((a) => !aiSummaries[a.id])
   const jobOf = (id) => queue.jobs.find((j) => j.id === id)
   const pending = missing.filter((a) => ['queued', 'running'].includes(jobOf(a.id)?.status))
-  const canGenerate = articles.length > 0 && missing.length === 0 && !generating && !aiBlocked && !(tooMany && mode === 'all' && overMax)
+  const canSend = articles.length > 0 && missing.length === 0 && !sending && !aiBlocked && !(tooMany && mode === 'all' && overMax)
 
-  async function handleGenerate() {
-    const startedAt = Date.now()
-    setGenerating({ startedAt })
-    setNow(startedAt)
+  async function handleSend() {
+    setSending(true)
     setError('')
-    setNotice('')
     try {
-      const { entry } = await requestReport({ articles, aiSummaries, title, direction, periodLabel: PERIODS[period], mode: useAll ? 'all' : undefined })
+      const job = await createReportJob({ articles, aiSummaries, title, direction, level, periodLabel: periodOf(articles), mode: useAll ? 'all' : undefined, clientId: clientId() })
       track('report')
-      entry.articleKey = key
-      onSaved(entry)
-      setLastId(entry.id)
-      setView('preview')
-      const took = (Date.now() - startedAt) / (useAll ? chunkCalls(articles.length) : 1)
-      const avg = Math.round(avgMs * 0.6 + took * 0.4)
-      setAvgMs(avg)
-      localStorage.setItem(REPORT_AVG_KEY, JSON.stringify(avg))
+      onJobAdded?.(job)
     } catch (err) {
       setError(err.message)
     } finally {
-      setGenerating(null)
+      setSending(false)
     }
   }
 
@@ -116,8 +100,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, onSaved
       const inputs = current.inputs ?? articles
       const summaries = Object.fromEntries(inputs.map((a) => [a.id, a.summary ? { summary: a.summary } : aiSummaries[a.id]]))
       const result = await requestReportSection({ articles: inputs, aiSummaries: summaries, key: sectionKey, report: current.report, reportId: current.id })
-      const report = { ...current.report, sections: { ...current.report.sections, [sectionKey]: { bullets: result.bullets } } }
-      onUpdated({ ...current, report })
+      onUpdated({ ...current, report: { ...current.report, sections: { ...current.report.sections, [sectionKey]: { bullets: result.bullets } } } })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -128,48 +111,42 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, onSaved
   async function handleCopy() {
     await copyText(toPlainText(current))
     track('export', 'copy')
-    setNotice('복사했어요. 업무 문서에 붙여 넣으세요.')
+    setNotice('복사했어요.')
   }
-
-  const progress = generating ? Math.min(95, Math.round(((now - generating.startedAt) / expectMs) * 100)) : 0
-
-  const tabs = (
-    <div className="composer-tabs" role="tablist" aria-label="보고서">
-      <button type="button" role="tab" aria-selected={view === 'compose'} className={view === 'compose' ? 'active' : ''} onClick={() => setView('compose')}>
-        작성
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={view === 'preview'}
-        className={view === 'preview' ? 'active' : ''}
-        onClick={() => setView('preview')}
-        disabled={!current || Boolean(generating)}
-        title={current ? undefined : '아직 만든 보고서가 없어요'}
-      >
-        미리보기
-      </button>
-    </div>
-  )
 
   return (
     <aside className="panel composer" aria-label="보고서">
       <div className="composer-head">
         <h2>보고서</h2>
-        {tabs}
+        <div className="composer-tabs" role="tablist" aria-label="보고서">
+          <button type="button" role="tab" aria-selected={view === 'compose'} className={view === 'compose' ? 'active' : ''} onClick={() => setView('compose')}>
+            작성
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === 'preview'}
+            className={view === 'preview' ? 'active' : ''}
+            onClick={() => setView('preview')}
+            disabled={!current}
+            title={current ? '이 브라우저에서 마지막으로 만든 보고서' : '아직 만든 보고서가 없어요'}
+          >
+            미리보기
+          </button>
+        </div>
       </div>
 
       {showReport ? (
         <div className="composer-body">
           <p className="composer-note">
             {changed ? (
-              <span className="note-warn">지금 체크한 기사와 다른 기사로 만든 보고서예요. 「작성」에서 새로 만들 수 있어요.</span>
+              <span className="note-warn">지금 체크한 기사와 다른 기사로 만든 보고서예요.</span>
             ) : (
               <span>✓ 보고서함에 저장됨 ({storageLabel})</span>
             )}{' '}
             ·{' '}
             <button type="button" className="link-btn" onClick={onGoArchive}>
-              보고서함 보기
+              보고서함에서 보기
             </button>
           </p>
           {error && <p className="ai-error">{error}</p>}
@@ -193,22 +170,17 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, onSaved
       ) : (
         <div className="composer-body">
           <div className="composer-form">
-            <div className="composer-row">
-              <label>
-                <span>보고서 제목</span>
-                <input value={title} onChange={(e) => setTitle(e.target.value)} disabled={Boolean(generating)} maxLength={80} />
-              </label>
-              <label className="composer-period">
-                <span>기간</span>
-                <select value={period} onChange={(e) => setPeriod(e.target.value)} disabled={Boolean(generating)}>
-                  {Object.entries(PERIODS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            <label>
+              <span>보고서 제목</span>
+              <input
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value)
+                  remember({ title: e.target.value })
+                }}
+                maxLength={80}
+              />
+            </label>
             <label>
               <span>
                 보고서 방향 <small>주제나 꼭 담을 방향을 한 줄로. AI가 이 방향으로 내용을 고르고 순서를 정해요</small>
@@ -216,22 +188,46 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, onSaved
               <textarea
                 rows={2}
                 value={direction}
-                onChange={(e) => setDirection(e.target.value)}
+                onChange={(e) => {
+                  setDirection(e.target.value)
+                  remember({ direction: e.target.value })
+                }}
                 placeholder="예: WOLED 관점에서 마이크로LED가 위협이 되는 시점과 대응 방향 위주로"
-                disabled={Boolean(generating)}
                 maxLength={300}
               />
             </label>
+            <fieldset className="composer-levels">
+              <legend>자료 조사 수준</legend>
+              {LEVELS.map(([value, label, desc]) => (
+                <label key={value} className={level === value ? 'level-option active' : 'level-option'}>
+                  <input
+                    type="radio"
+                    name="report-level"
+                    value={value}
+                    checked={level === value}
+                    onChange={() => {
+                      setLevel(value)
+                      remember({ level: value })
+                    }}
+                  />
+                  <span>
+                    <strong>{label}</strong>
+                    <small>{desc}</small>
+                  </span>
+                </label>
+              ))}
+              <p className="hint">요약이 안 된 기사를 써야 하면 만드는 중에 오른쪽 아래 진행 창에서 물어봐요.</p>
+            </fieldset>
 
             {tooMany && (
               <div className="report-mode-choices" role="radiogroup" aria-label="기사가 많을 때">
-                <button type="button" role="radio" aria-checked={mode === 'top'} className="report-mode-choice" onClick={() => setMode('top')} disabled={Boolean(generating)}>
+                <button type="button" role="radio" aria-checked={mode === 'top'} className="report-mode-choice" onClick={() => setMode('top')}>
                   <strong>중요도 높은 {REPORT_LIMIT}건으로</strong>
-                  <span>빠름 · {minutes(avgMs)}. 나머지 {picked.length - REPORT_LIMIT}건은 빠져요.</span>
+                  <span>빠름. 나머지 {picked.length - REPORT_LIMIT}건은 빠져요.</span>
                 </button>
-                <button type="button" role="radio" aria-checked={mode === 'all'} className="report-mode-choice" onClick={() => setMode('all')} disabled={Boolean(generating) || overMax}>
+                <button type="button" role="radio" aria-checked={mode === 'all'} className="report-mode-choice" onClick={() => setMode('all')} disabled={overMax}>
                   <strong>{picked.length}건 모두</strong>
-                  <span>{overMax ? `한 번에 ${REPORT_MAX_ALL}건까지만 돼요.` : `오래 걸림 · ${minutes(avgMs * chunkCalls(picked.length))}`}</span>
+                  <span>{overMax ? `한 번에 ${REPORT_MAX_ALL}건까지만 돼요.` : '오래 걸려요.'}</span>
                 </button>
               </div>
             )}
@@ -240,7 +236,8 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, onSaved
           <div className="composer-articles">
             <div className="composer-articles-head">
               <h3>담길 기사 {articles.length}건</h3>
-              {folderSummary && <span className="hint">{folderSummary}</span>}
+              {articles.length > 0 && <span className="hint">{periodOf(articles)}</span>}
+              {folderSummary && <span className="hint">· {folderSummary}</span>}
             </div>
             {picked.length === 0 ? (
               <p className="hint">왼쪽 목록에서 보고서에 넣을 기사를 체크하세요. 여러 폴더의 기사를 함께 넣을 수 있어요.</p>
@@ -264,6 +261,15 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, onSaved
           </div>
 
           <div className="composer-foot">
+            {activeJobs.length > 0 && (
+              <p className="composer-jobs">
+                {activeJobs.map((j) => (
+                  <span key={j.id}>
+                    「{j.title}」 {j.status === 'queued' ? `대기 ${j.queuePos}번째` : j.status === 'need_confirm' ? '확인 필요 — 오른쪽 아래 진행 창' : `${j.step} ${j.progress ?? 0}%`}
+                  </span>
+                ))}
+              </p>
+            )}
             {missing.length > 0 && picked.length > 0 && (
               <p className="note-warn">
                 요약이 없는 기사 {missing.length}건{pending.length > 0 ? ` (${pending.length}건 요약 중)` : ''} — 요약이 끝나면 만들 수 있어요.{' '}
@@ -274,20 +280,11 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, onSaved
                 )}
               </p>
             )}
-            {generating && (
-              <div className="report-progress">
-                <div className="gauge gauge-running">
-                  <div className="gauge-fill" style={{ width: `${progress}%` }} />
-                </div>
-                <span>
-                  {useAll ? `${Math.ceil(articles.length / REPORT_CHUNK)}번 나눠 쓰고 합치는 중 ${progress}% (예상 ${minutes(expectMs)})` : `원문을 읽고 쓰는 중 ${progress}% (예상 약 ${Math.round(expectMs / 1000)}초)`}
-                </span>
-              </div>
-            )}
             {error && <p className="ai-error">{error}</p>}
-            <button type="button" className="btn primary composer-go" onClick={handleGenerate} disabled={!canGenerate} title={aiBlocked ? AI_BLOCKED_TITLE : picked.length === 0 ? '왼쪽에서 보고서에 넣을 기사를 체크하세요' : undefined}>
-              {generating ? '초안 만드는 중…' : `체크한 기사 ${articles.length}건으로 보고서 만들기`}
+            <button type="button" className="btn primary composer-go" onClick={handleSend} disabled={!canSend} title={aiBlocked ? AI_BLOCKED_TITLE : picked.length === 0 ? '왼쪽에서 보고서에 넣을 기사를 체크하세요' : undefined}>
+              {sending ? '대기열에 넣는 중…' : `체크한 기사 ${articles.length}건으로 보고서 만들기`}
             </button>
+            <p className="hint composer-go-note">대기열에 들어가요. 다른 탭에 가도 오른쪽 아래 진행 창에서 볼 수 있고, 완성되면 보고서함에 저장돼요.</p>
           </div>
         </div>
       )}

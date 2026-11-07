@@ -30,7 +30,7 @@ const fmtDay = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`
 const fmtNum = (v) => (v >= 10000 ? `${Math.round(v / 1000)}천` : v >= 1000 ? `${(v / 1000).toFixed(1)}천` : String(Math.round(v * 10) / 10))
 
 function Change({ change, growth, cur }) {
-  if (change === null || change === undefined) return <span className="tt-chg up">{cur > 0 ? '▲ 새로' : '—'}</span>
+  if (change === null || change === undefined) return <span className="tt-chg up">{cur > 0 ? '▲ 신규' : '—'}</span>
   const dir = growth >= 1.15 ? 'up' : growth <= 0.87 ? 'down' : 'flat'
   return (
     <span className={`tt-chg ${dir}`}>
