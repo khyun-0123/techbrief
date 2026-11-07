@@ -2737,7 +2737,7 @@ a.brand:focus-visible {
 .dash-search {
   display: grid;
   gap: 12px;
-  margin-top: 16px;
+  margin-top: 8px;
   padding: 16px 20px 20px;
 }
 
@@ -3133,4 +3133,24 @@ a.brand:focus-visible {
 .summary-source-excerpt {
   color: var(--tb-color-text);
   font-weight: 600;
+}
+
+/* 대시보드 자료 검색의 칩 줄은 접어 둔다 (11/07 조장) */
+.dash-more summary {
+  width: fit-content;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.dash-more summary:hover {
+  color: var(--tb-color-text);
+}
+
+.dash-more-count {
+  color: var(--tb-color-text-faint);
+}
+
+.dash-more[open] summary {
+  margin-bottom: 4px;
 }
