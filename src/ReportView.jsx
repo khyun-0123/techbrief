@@ -111,29 +111,59 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
 
   return (
     <div className={stacked ? 'report-layout stacked' : 'report-layout'}>
-      <article className="panel report-doc">
+      <article className={stacked ? 'report-doc' : 'panel report-doc'}>
         <div className="report-toolbar">
           {exportError && <span className="toolbar-error">{exportError}</span>}
+          {tools}
+          {stacked ? (
+            <details className="export-menu">
+              <summary className="btn">내보내기 ▾</summary>
+              <div className="export-menu-pop">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.currentTarget.closest('details').open = false
+                    track('export', 'pdf')
+                    printReport()
+                  }}
+                >
+                  PDF로 저장
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.currentTarget.closest('details').open = false
+                    handlePptx()
+                  }}
+                  disabled={exporting}
+                >
+                  {exporting ? 'PPT 만드는 중…' : 'PPT로 저장'}
+                </button>
+              </div>
+            </details>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  track('export', 'pdf')
+                  printReport()
+                }}
+                title="인쇄 창에서 'PDF로 저장'을 고르세요"
+              >
+                PDF로 저장
+              </button>
+              <button type="button" className="btn" onClick={handlePptx} disabled={exporting}>
+                {exporting ? 'PPT 만드는 중…' : 'PPT로 저장'}
+              </button>
+            </>
+          )}
           {editable && aiTargets.length > 0 && (
             <button type="button" className="btn outline" onClick={handleFindAll} disabled={working} title="AI 해설 줄마다 우리 자료와 위키백과에서 근거를 찾아요 (줄마다 30초쯤)">
               {findAll ? `근거 찾는 중 ${findAll.done}/${findAll.total}` : `AI 해설 ${aiTargets.length}줄 근거 찾기`}
             </button>
           )}
-          <button
-            type="button"
-            className="btn"
-            onClick={() => {
-              track('export', 'pdf')
-              printReport()
-            }}
-            title="인쇄 창에서 'PDF로 저장'을 고르세요"
-          >
-            PDF로 저장
-          </button>
-          <button type="button" className="btn" onClick={handlePptx} disabled={exporting}>
-            {exporting ? 'PPT 만드는 중…' : 'PPT로 저장'}
-          </button>
-          {tools}
         </div>
         {findError && <p className="ai-error">{findError}</p>}
         <header className="report-doc-head">
@@ -145,13 +175,23 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
         </header>
         {report.direction && <p className="report-direction">방향: {report.direction}</p>}
 
-        {report.warnings?.length > 0 && (
-          <ul className="report-warnings">
-            {report.warnings.map((w) => (
-              <li key={w}>⚠ {w}</li>
-            ))}
-          </ul>
-        )}
+        {report.warnings?.length > 0 &&
+          (stacked ? (
+            <details className="report-warnings-fold">
+              <summary>⚠ 확인할 점 {report.warnings.length}개</summary>
+              <ul className="report-warnings">
+                {report.warnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            </details>
+          ) : (
+            <ul className="report-warnings">
+              {report.warnings.map((w) => (
+                <li key={w}>⚠ {w}</li>
+              ))}
+            </ul>
+          ))}
 
         {SECTIONS.map(([key, label]) => {
           const list = (report.sections[key]?.bullets ?? []).map((b, i) => ({ b, i }))
@@ -234,8 +274,9 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
         <p className="hint">AI가 만든 초안이에요. 근거 기사를 확인하고 고쳐 쓰세요. · 모델 {saved.model}</p>
       </article>
 
-      <aside className="panel report-refs">
-        <h3>근거 기사</h3>
+      {stacked ? (
+        <details className="report-refs report-refs-fold">
+          <summary>근거 기사 {saved.articles.length}건</summary>
         <ol>
           {saved.articles.map((a, i) => (
             <li key={`${i}-${a.title}`} id={`ref-${saved.id}-${i + 1}`}>
@@ -264,7 +305,40 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
             </li>
           ))}
         </ol>
-      </aside>
+        </details>
+      ) : (
+        <aside className="panel report-refs">
+          <h3>근거 기사</h3>
+        <ol>
+          {saved.articles.map((a, i) => (
+            <li key={`${i}-${a.title}`} id={`ref-${saved.id}-${i + 1}`}>
+              <span className="report-ref-num">[{i + 1}]</span>
+              <div>
+                <div className="title">
+                  {a.supplement && <span className="basis basis-supplement">보충 · {a.supplement === 'wiki' ? '위키백과' : '우리 자료'}</span>} {a.title}
+                </div>
+                <div className="meta">
+                  {a.source}
+                  {a.publishedAt && ` · ${formatDate(a.publishedAt)}`}
+                  {a.fulltext === true && <span className="fulltext-badge on"> · 원문 반영</span>}
+                  {a.fulltext === false && (
+                    <span className="fulltext-badge off" title="원문 페이지에서 본문을 가져오지 못해 네이버 발췌문으로 썼어요">
+                      {' '}
+                      · 발췌문으로 작성
+                    </span>
+                  )}
+                </div>
+                {a.url && (
+                  <a href={a.url} target="_blank" rel="noreferrer">
+                    원문 열기 ↗
+                  </a>
+                )}
+              </div>
+            </li>
+          ))}
+        </ol>
+        </aside>
+      )}
     </div>
   )
 }
