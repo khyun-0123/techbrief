@@ -302,3 +302,11 @@ export async function saveSourcesApi(disabled) {
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
   return data
 }
+
+// 키워드 추이 (뉴스 기사량 · 네이버 검색량 · Wikipedia 관심도 · GDELT 해외 보도량) — 22 문서 6-4
+export async function fetchTrends() {
+  const res = await fetch('/api/trends')
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? '키워드 추이를 불러오지 못했어요')
+  return data
+}
