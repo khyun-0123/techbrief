@@ -2,11 +2,13 @@
 // 1. 뉴스 기사량: 우리 DB keyword_daily (매 수집 때 최근 7일을 다시 셈) — 언급량·급증
 // 2. 네이버 검색량: NAVER API HUB 검색어 트렌드 (앱에서 「검색어 트렌드」를 켜야 함, 안 켜져 있으면 not_enabled)
 // 3. 전 세계 관심도: Wikipedia(영문) 문서 조회수 — 키 없음
-// 4. 해외 보도량: GDELT — 키 없음, 5초에 1회 제한(자주 막힘 → 실패해도 나머지는 보여 줌)
+// 4. 해외 보도량: GDELT — 키 없음, 5초에 1회 제한. 이 서버 IP는 늘 막혀 있어(24 문서 5-1) 30분마다 따로 다시 시도,
+//    24시간 동안 한 번도 못 받으면 그래프에서 뺀다 (11/07 조장 결정)
+// 바깥 API가 실패하면 마지막으로 받은 정상 값을 그대로 보여 주고, 언제 값인지(at)를 함께 보낸다 (DB에 저장 → 서버를 다시 켜도 남음)
 // 약관(23 문서): 데이터랩 숫자는 그래프로만 보여 주고 AI에 넣지 않는다. Wikipedia·GDELT는 출처 표시
 // 바깥 API는 느리고 제한이 있어 6시간 동안 기억해 두고, 오래되면 뒤에서 새로 받는다 (그동안은 지난 값)
 import { dbEnabled, query } from './db/index.js'
-import { getKeywords } from './db/store.js'
+import { getKeywords, getSetting, setSetting } from './db/store.js'
 import { getPatentTrends, patentPatternOf } from './patents.js'
 
 const CACHE_MS = 6 * 3600_000
@@ -95,6 +97,71 @@ async function gdeltSeries(term, retry = true) {
   return (data.timeline?.[0]?.data ?? []).map((p) => ({ t: `${p.date.slice(0, 4)}-${p.date.slice(4, 6)}-${p.date.slice(6, 8)}`, v: p.value }))
 }
 
+// ── 지난 정상 값 (출처별 · 키별) ──
+const GOOD_KEY = 'trends_last_good'
+let good = null
+async function loadGood() {
+  good ??= await getSetting(GOOD_KEY, {}).catch(() => ({}))
+  return good
+}
+async function remember(source, key, series) {
+  const g = await loadGood()
+  ;(g[source] ??= {})[key] = { series, at: new Date().toISOString() }
+  await setSetting(GOOD_KEY, g).catch(() => {})
+}
+// 새로 받기: 성공하면 기억, 실패하면 지난 값 { series, at, stale: true, error }
+async function withLastGood(source, key, fetcher) {
+  try {
+    const series = await fetcher()
+    if (series?.length) await remember(source, key, series)
+    return { series, at: new Date().toISOString() }
+  } catch (err) {
+    const last = (await loadGood())[source]?.[key]
+    return last ? { series: last.series, at: last.at, stale: true, error: err.message } : { series: [], error: err.message }
+  }
+}
+
+// ── GDELT: 6시간 묶음과 따로 30분마다 다시 시도 ──
+const GDELT_EVERY = 30 * 60_000
+const GDELT_GIVE_UP = 24 * 3600_000 // 이만큼 계속 실패하고 한 번도 못 받았으면 그래프에서 뺀다
+const GDELT_STALE_MAX = 7 * DAY // 지난 값이 이보다 오래되면 보여 주지 않는다
+const gdelt = { terms: [], startedAt: null, lastTryAt: null, lastOkAt: null, timer: null, running: false }
+
+async function gdeltRound() {
+  if (gdelt.running || gdelt.terms.length === 0) return
+  gdelt.running = true
+  gdelt.lastTryAt = new Date().toISOString()
+  try {
+    for (const term of gdelt.terms) {
+      const r = await withLastGood('gdelt', term, () => gdeltSeries(term))
+      if (!r.error) gdelt.lastOkAt = r.at
+    }
+  } finally {
+    gdelt.running = false
+  }
+  const ok = gdelt.lastOkAt ? '받음' : '실패'
+  console.log(`[trends] GDELT 30분 시도: ${ok} (${gdelt.terms.join(', ')})`)
+}
+
+function startGdelt(terms) {
+  gdelt.terms = [...new Set(terms)]
+  if (gdelt.timer) return
+  gdelt.startedAt = new Date().toISOString()
+  gdeltRound()
+  gdelt.timer = setInterval(gdeltRound, GDELT_EVERY)
+  gdelt.timer.unref?.()
+}
+
+// 화면에 줄 GDELT 상태: 지난 값이 있으면 그 값, 없으면 시도 중 / 24시간 실패면 retired(그래프 빼기)
+async function gdeltView(term) {
+  const last = (await loadGood()).gdelt?.[term]
+  const fresh = last && Date.now() - Date.parse(last.at) < GDELT_STALE_MAX
+  if (fresh) return { term, series: last.series, at: last.at, stale: Date.now() - Date.parse(last.at) > GDELT_EVERY * 2 }
+  const failingFor = Date.now() - Date.parse(gdelt.startedAt ?? new Date().toISOString())
+  if (!gdelt.lastOkAt && failingFor >= GDELT_GIVE_UP) return { term, retired: true }
+  return { term, series: [], error: '요청 제한', retryAt: gdelt.lastTryAt }
+}
+
 // 급증: 최근 7일 합이 그 전 21일 주평균의 1.5배 이상이고 5건 이상 (뉴스 기사량 기준)
 // 비교할 과거가 14일 이상 쌓이기 전에는 판단하지 않는다 (수집을 시작한 직후·출처를 늘린 직후는 늘어 보이기만 함)
 // 수집 방식이 바뀐 날(출처 20곳 추가, 22 문서 1장). 그 전 기사 수는 지금과 기준이 달라 급증 비교에서 뺀다
@@ -116,7 +183,17 @@ export function surgeOf(all = []) {
 async function build() {
   const keywords = dbEnabled() ? await getKeywords() : []
   const news = await newsSeries(keywords).catch(() => ({}))
-  const naver = await naverSeries(keywords).catch((err) => ({ status: 'error', error: err.message }))
+  startGdelt(keywords.map(globalOf).filter(Boolean).map((g) => g.en))
+  let naver = await naverSeries(keywords).catch((err) => ({ status: 'error', error: err.message }))
+  // 네이버: 성공하면 키워드별로 기억, 실패하면 지난 값 (키 없음·권한 꺼짐은 그대로 안내)
+  if (naver.status === 'ok') {
+    for (const [k, series] of Object.entries(naver.series)) if (series.length) await remember('naver', k, series)
+    naver.at = new Date().toISOString()
+  } else if (naver.status === 'error') {
+    const last = (await loadGood()).naver ?? {}
+    const keys = keywords.filter((k) => last[k])
+    if (keys.length) naver = { status: 'ok', stale: true, error: naver.error, at: keys.map((k) => last[k].at).sort()[0], series: Object.fromEntries(keys.map((k) => [k, last[k].series])) }
+  }
   // 특허: 30일에 한 번 BigQuery로 받아 둔 값 (patents.js). 처음 받는 중이면 끝날 때까지 기다린다
   let patents = await getPatentTrends(keywords).catch((err) => ({ status: 'error', error: err.message }))
   if (patents.status === 'loading') {
@@ -128,10 +205,8 @@ async function build() {
     const g = globalOf(keyword)
     const item = { keyword, news: news[keyword] ?? [], newsSurge: surgeOf(news[keyword] ?? []), naver: naver.status === 'ok' ? naver.series[keyword] ?? [] : null }
     if (g) {
-      item.wiki = { article: g.wiki, url: `https://en.wikipedia.org/wiki/${g.wiki}` }
-      item.wiki.series = await wikiSeries(g.wiki).catch((err) => ((item.wiki.error = err.message), []))
-      item.gdelt = { term: g.en }
-      item.gdelt.series = await gdeltSeries(g.en).catch((err) => ((item.gdelt.error = err.message), []))
+      item.wiki = { article: g.wiki, url: `https://en.wikipedia.org/wiki/${g.wiki}`, ...(await withLastGood('wiki', g.wiki, () => wikiSeries(g.wiki))) }
+      item.gdelt = { term: g.en } // 실제 값은 getTrends에서 요청 때마다 채움 (30분마다 바뀜)
     }
     item.patents = patents.status === 'ok' && patentPatternOf(keyword) ? patents.series[keyword] ?? [] : null
     items.push(item)
@@ -140,6 +215,8 @@ async function build() {
     items,
     naverStatus: naver.status,
     naverError: naver.error ?? null,
+    naverAt: naver.at ?? null,
+    naverStale: Boolean(naver.stale),
     patentStatus: patents.status,
     patentAt: patents.at ?? null,
     updatedAt: new Date().toISOString(),
@@ -158,7 +235,12 @@ export async function getTrends({ fresh = false } = {}) {
       .catch((err) => console.warn(`[trends] 추이 받기 실패: ${err.message}`))
       .finally(() => (building = null))
   }
-  if (cache && !fresh) return cache
-  await building
-  return cache ?? { items: [], naverStatus: 'error', updatedAt: null }
+  if (!cache || fresh) await building
+  return cache ? withGdelt(cache) : { items: [], naverStatus: 'error', updatedAt: null }
+}
+
+// GDELT 칸은 30분마다 바뀌므로 6시간 묶음 위에 요청 때마다 덮어쓴다
+async function withGdelt(base) {
+  const items = await Promise.all(base.items.map(async (it) => (it.gdelt?.term ? { ...it, gdelt: await gdeltView(it.gdelt.term) } : it)))
+  return { ...base, items, gdelt: { every: '30분', startedAt: gdelt.startedAt, lastTryAt: gdelt.lastTryAt, lastOkAt: gdelt.lastOkAt } }
 }
