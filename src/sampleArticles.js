@@ -11,6 +11,10 @@ export const SAMPLE_ARTICLES = [
   { id: 8, title: '대형 OLED 패널 출하량 전년 대비 증가', source: '디스플레이투데이', keyword: 'OLED', hoursAgo: 52, sameIssue: 2 },
   { id: 9, title: 'AI 반도체 수요 확대로 HBM 공급 경쟁', source: '반도체타임스', keyword: '반도체', hoursAgo: 75, sameIssue: 0 },
   { id: 10, title: '기업용 AI 에이전트 보안 가이드라인 공개', source: 'IT뉴스룸', keyword: '생성형 AI', hoursAgo: 120, sameIssue: 0 },
+  // 관련도 규칙 예시 (11 문서): 모음 기사 · 주제 밖 제목 속 기술 정보 · 관련 낮음(기본 숨김)
+  { id: 11, title: '[데일리픽] 비트코인 반등 공식…데이터센터 투자 外', source: '테크데일리', keyword: 'OLED', hoursAgo: 8, sameIssue: 0, relevance: 'mid', roundup: true, focus: "차량용 '탠덤 OLED' 선점 경쟁 본격화. 두 업체가 발광층을 두 층으로 쌓은 탠덤 OLED를 앞세워 차량용 시장 선점 경쟁에 나섰다." },
+  { id: 12, title: '검사장비 업체, 영업익 10배 급증했는데 PER 3배…"저평가"', source: '경제뉴스', keyword: 'OLED', hoursAgo: 10, sameIssue: 0, relevance: 'mid', topicTag: '주식', focus: '프리미엄 OLED 패널 수요 확대가 투자 증가의 배경이다. 8.6세대 OLED 패널 양산 수율이 안정화되면서 설비투자가 늘었다.' },
+  { id: 13, title: '가업상속세 개편, 업종 분류가 혁신 막는다', source: '경제뉴스', keyword: 'OLED', hoursAgo: 12, sameIssue: 0, relevance: 'low' },
 ]
 
 // 고객사(LG디스플레이) 담당자님이 요즘 자주 본다고 한 기술 (14 문서). DB에 키워드가 없을 때 처음 한 번 쓰인다

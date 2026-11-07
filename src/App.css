@@ -267,6 +267,32 @@ select {
   vertical-align: 1px;
 }
 
+/* 제목 아래 「실제 내용」(AI 요약 한 줄) · 「키워드 내용」(발췌의 키워드 문장). 두 줄까지 */
+.row-sub {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 4px 0 0;
+  color: var(--tb-color-text-sub);
+  font-size: 13px;
+}
+
+.row-sub-label {
+  margin-right: 6px;
+  color: var(--tb-color-text);
+  font-weight: 600;
+}
+
+/* 검색어 강조 (Highlight.jsx): 연한 주황 바탕 + 검정 굵은 글자 (대비 약 18:1) */
+mark.hl {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: var(--tb-color-warning-soft);
+  color: var(--tb-color-text);
+  font-weight: 700;
+}
+
 .same-issue {
   color: var(--tb-color-text-sub);
   font-size: 13px;
