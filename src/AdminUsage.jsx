@@ -241,7 +241,7 @@ function AdminUsage({ keywords, onAddKeyword, refresh }) {
       <div className="adm-cols">
         <section className="adm-card">
           <h2>많이 열어 본 기사</h2>
-          <p className="adm-desc">수집 현황에서 제목을 눌러 원문을 연 횟수예요.</p>
+          <p className="adm-desc">자료 현황에서 제목을 눌러 원문을 연 횟수예요.</p>
           <RankList items={interests.openedArticles} empty="아직 연 기사가 없어요." />
         </section>
         <section className="adm-card">

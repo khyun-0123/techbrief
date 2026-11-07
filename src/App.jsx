@@ -27,7 +27,7 @@ import { useSummaryQueue } from './summaryQueue.js'
 import { DEFAULT_KEYWORDS, SAMPLE_ARTICLES } from './sampleArticles.js'
 import SelectSummary from './SelectSummary.jsx'
 import { enabledFeatures, FeaturesContext } from './features.js'
-import KeywordTrends from './KeywordTrends.jsx'
+import Dashboard from './Dashboard.jsx'
 import { AI_BLOCKED_TITLE, OPS_LABEL, OpsContext } from './ops.js'
 import ListsPanel from './ListsPanel.jsx'
 import LogoMark from './Logo.jsx'
@@ -132,7 +132,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [keywords, setKeywords] = useState(() => load(KEYWORDS_KEY, DEFAULT_KEYWORDS))
   const [selectedIds, setSelectedIds] = useState(() => load(SELECTED_KEY, []))
   const [includedIds, setIncludedIds] = useState(() => load(INCLUDED_KEY, []))
-  const [screen, setScreen] = useState('collect')
+  const [screen, setScreen] = useState('dashboard')
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState('today')
   const [source, setSource] = useState('all')
@@ -557,7 +557,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         </div>
       )}
       <nav className="topbar">
-        {/* 로고를 누르면 첫 화면(수집 현황 맨 위)으로. 새 탭(Ctrl·⌘ 클릭)은 주소로 그대로 열림 */}
+        {/* 로고를 누르면 첫 화면(대시보드 맨 위)으로. 새 탭(Ctrl·⌘ 클릭)은 주소로 그대로 열림 */}
         <a
           className="brand"
           href={isTest ? '/admin/test' : '/'}
@@ -565,7 +565,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           onClick={(e) => {
             if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
             e.preventDefault()
-            setScreen('collect')
+            setScreen('dashboard')
             closeSearch()
             window.scrollTo({ top: 0 })
           }}
@@ -576,10 +576,17 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         <div className="tabs">
         <button
           type="button"
+          className={screen === 'dashboard' ? 'tab active' : 'tab'}
+          onClick={() => setScreen('dashboard')}
+        >
+          대시보드
+        </button>
+        <button
+          type="button"
           className={screen === 'collect' ? 'tab active' : 'tab'}
           onClick={() => setScreen('collect')}
         >
-          수집 현황
+          자료 현황
         </button>
         <button
           type="button"
@@ -653,6 +660,34 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
       {screen === 'tools' && isTest ? (
         <TestTools providers={health?.llm?.providers ?? []} />
+      ) : screen === 'dashboard' ? (
+        <Dashboard
+          stats={{
+            todayIssues: todayIssues.length,
+            todayArticles: countArticles(todayIssues),
+            selected: selectedIds.length,
+            collectedLabel: refreshRunning ? '최신화 중…' : collectedAt ? `마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 수집 전',
+          }}
+          keywords={keywords}
+          favorites={favorites}
+          recent={recent}
+          periods={PERIODS}
+          period={period}
+          onPeriod={setPeriod}
+          onSearch={(q) => {
+            runSearch(q)
+            setScreen('collect')
+            window.scrollTo({ top: 0 })
+          }}
+          onKeyword={(k) => {
+            searchSeq.current++
+            setSearch(null)
+            setQuery(k)
+            setScreen('collect')
+            window.scrollTo({ top: 0 })
+          }}
+          onGoCollect={() => setScreen('collect')}
+        />
       ) : screen === 'archive' ? (
         <ReportArchive
           reports={reports}
@@ -683,10 +718,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           queue={queue}
         />
       ) : (
-        <main className="page page-wide">
+        <main className="page page-wide collect-page">
           <header className="page-header with-actions">
             <div>
-              <h1>뉴스 수집 현황</h1>
+              <h1>자료 현황</h1>
               <p>
                 {isSample
                   ? '키워드로 기사를 모아 보여 줘요. 아직 수집 전이라 샘플 기사를 보여 줘요.'
@@ -716,26 +751,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           </header>
           {refreshError && <p className="ai-error">{refreshError}</p>}
 
-          <section className="stats">
-            <div className="stat">
-              <span className="stat-label">오늘 수집된 이슈 · 기사</span>
-              <strong>
-                {todayIssues.length}개 <small>· 기사 {countArticles(todayIssues)}건</small>
-              </strong>
-            </div>
-            {/* 자동 수집 키워드·자동 최신화·회사/관심 기술은 관리자 화면(/admin)에서만 보고 바꾼다 */}
-            <div className="stat" title={keywords.join(' · ')}>
-              <span className="stat-label">자동 수집 키워드</span>
-              <strong>{keywords.length}개</strong>
-            </div>
-            <div className="stat">
-              <span className="stat-label">선별한 기사</span>
-              <strong>{selectedIds.length}건</strong>
-            </div>
-          </section>
-
-          {features.has('trends') && <KeywordTrends />}
-
+          {/* 오늘 수집 숫자 · 키워드 추이는 대시보드로 옮김 (11/07 팀 회의) */}
           <div className={features.has('collectPanel') ? 'content with-favs' : 'content with-favs no-settings'}>
             <FavoritesRail
               favorites={favorites}
