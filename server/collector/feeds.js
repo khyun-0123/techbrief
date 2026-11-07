@@ -6,8 +6,9 @@
 // 조사: 2026-11-06 (RSS 주소는 서버에서 직접 열어 확인). 쓸 수 없는 곳: 삼성디스플레이·BOE 뉴스룸(RSS 없음),
 //   Display Daily·Counterpoint·GlobeNewswire(접속 차단), Google 뉴스 RSS(개인 피드 리더 전용 약관)
 import { JSDOM } from 'jsdom'
-import { hasKeyword, matchersOf } from './aliases.js'
+import { hasKeyword } from './aliases.js'
 import { articleId, cleanText } from './normalize.js'
+import { recentPapers } from '../papers/journals.js'
 
 export const TIER_LABEL = { 1: '1차', 2: '2차', 3: '3차' }
 
@@ -20,7 +21,7 @@ export const FEEDS = [
   { id: 'sid-jsid', name: 'SID 학회지(JSID)', tier: 1, url: 'https://sid.onlinelibrary.wiley.com/feed/19383657/most-recent', lang: 'en' },
   { id: 'sid-digest', name: 'SID Display Week 논문집', tier: 1, url: 'https://sid.onlinelibrary.wiley.com/feed/21680159/most-recent', lang: 'en' },
   { id: 'sid-id', name: 'SID Information Display', tier: 1, url: 'https://sid.onlinelibrary.wiley.com/feed/2637496x/most-recent', lang: 'en' },
-  { id: 'crossref', name: '학술 논문', tier: 1, paper: true, lang: 'en' },
+  { id: 'crossref', name: '학술 논문', tier: 1, paper: true, lang: 'en' }, // id는 저장된 기사(section 'feed:crossref') 때문에 그대로 둔다
   { id: 'thelec', name: '디일렉', tier: 2, url: 'https://www.thelec.kr/rss/allArticle.xml' },
   { id: 'thelec-en', name: 'The Elec', tier: 2, url: 'https://www.thelec.net/rss/allArticle.xml', lang: 'en' },
   { id: 'oled-info', name: 'OLED-Info', tier: 2, url: 'https://www.oled-info.com/rss.xml', lang: 'en' },
@@ -37,6 +38,7 @@ export const FEEDS = [
 const BY_ID = new Map(FEEDS.map((f) => [f.id, f]))
 
 const FEED_DAYS = 14 // 이보다 오래된 글은 넣지 않는다 (화면 목록은 7일)
+const PAPER_DAYS = 7 // 논문은 최근 7일 (OpenAlex에 새 논문이 보이기까지 보통 하루, SID Digest는 몇 주)
 const DESC_MAX = 400
 const TIMEOUT_MS = 15_000
 const UA = 'Mozilla/5.0 (techbrief news collector)'
@@ -73,36 +75,20 @@ async function getText(url) {
   return res.text()
 }
 
-// 논문 검색 (Crossref, 키 없음). 키워드의 영문 표기로 최근 FEED_DAYS일 논문
-async function searchPapers(words) {
-  const since = new Date(Date.now() - FEED_DAYS * 86_400_000).toISOString().slice(0, 10)
-  const out = []
-  const queries = [...new Set(words.flatMap((w) => matchersOf(w).map((m) => m.join(' ')).filter((q) => /^[\x20-\x7e]+$/.test(q)).slice(0, 2)))]
-  // Crossref는 빠르게 여러 번 부르면 429를 준다 → 한 번에 하나씩, 1초 간격. 막히면 그때까지 받은 것만
-  for (const [i, q] of queries.slice(0, 6).entries()) {
-    if (i > 0) await new Promise((r) => setTimeout(r, 1000))
-    const url = `https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(q)}&filter=from-pub-date:${since},type:journal-article&sort=published&order=desc&rows=20&select=DOI,title,abstract,container-title,published,URL`
-    let data
-    try {
-      data = JSON.parse(await getText(url))
-    } catch (err) {
-      if (out.length === 0) throw err
-      break
-    }
-    for (const w of data.message?.items ?? []) {
-      const p = w.published?.['date-parts']?.[0] ?? []
-      const journal = w['container-title']?.[0]
-      const abstract = cleanText(w.abstract ?? '').replace(/^Abstract\s*/i, '')
-      out.push({
-        title: cleanText(w.title?.[0] ?? ''),
-        link: w.DOI ? `https://doi.org/${w.DOI}` : w.URL || '',
-        // 학술지 이름을 요약 앞에 붙인다 (매체 칸은 '논문(Crossref)' 하나로 두어 출처 목록이 길어지지 않게)
-        description: `${journal ? `[${journal}] ` : ''}${abstract}`.slice(0, DESC_MAX),
-        date: p.length ? new Date(Date.UTC(p[0], (p[1] ?? 1) - 1, p[2] ?? 1)).toISOString() : '',
-      })
-    }
-  }
-  return out
+// 논문 (server/papers): 디스플레이 학술지 최근 7일 + 큰 학술지의 디스플레이 주제 논문
+// OpenAlex(키) → Crossref → Semantic Scholar 순서로, 막힌 곳은 건너뛴다. 같은 요청은 6시간 캐시
+// QD-OLED 논문은 경쟁사 기술이라 요약 앞에 표시한다 (고객사 기술은 WOLED)
+async function searchPapers() {
+  const { works, providers } = await recentPapers(PAPER_DAYS)
+  const items = works.map((w) => ({
+    title: w.title,
+    link: w.doi ? `https://doi.org/${w.doi}` : w.url,
+    doi: w.doi,
+    // 학술지 이름을 요약 앞에 붙인다 (매체 칸은 '학술 논문' 하나로 두어 출처 목록이 길어지지 않게)
+    description: `${w.competitorTech ? '[경쟁사 기술 · QD-OLED] ' : ''}${w.journal ? `[${w.journal}] ` : ''}${w.abstract}`.slice(0, DESC_MAX),
+    date: w.date ? `${w.date}T00:00:00Z` : '',
+  }))
+  return Object.assign(items, { via: providers })
 }
 
 function toFeedArticle(item, feed, keyword) {
@@ -133,7 +119,7 @@ export async function collectFeeds(words, { disabled = [] } = {}) {
   await Promise.all(
     feeds.map(async (feed) => {
       try {
-        const items = feed.paper ? await searchPapers(words) : parseFeed(await getText(feed.url))
+        const items = feed.paper ? await searchPapers() : parseFeed(await getText(feed.url))
         let matched = 0
         for (const item of items) {
           if (!item.title || !item.link) continue
@@ -144,17 +130,21 @@ export async function collectFeeds(words, { disabled = [] } = {}) {
           matched += 1
           articles.push(toFeedArticle(item, feed, keyword))
         }
-        results.push({ id: feed.id, ok: true, items: items.length, matched })
+        results.push({ id: feed.id, ok: true, items: items.length, matched, ...(items.via ? { via: items.via } : {}) })
       } catch (err) {
         results.push({ id: feed.id, ok: false, error: err.name === 'TimeoutError' ? '응답 시간 초과' : err.message })
       }
     }),
   )
-  const unique = [...new Map(articles.map((a) => [a.url, a])).values()]
+  // 같은 논문이 SID RSS와 논문 검색에 둘 다 오면 RSS 쪽만 (DOI로 비교)
+  const doiOf = (u) => u.match(/10\.\d{4,}\/[^?#\s]+/)?.[0]?.toLowerCase()
+  const rssDois = new Set(articles.filter((a) => a.section !== 'feed:crossref').map((a) => doiOf(a.url)).filter(Boolean))
+  const kept = articles.filter((a) => a.section !== 'feed:crossref' || !rssDois.has(doiOf(a.url)))
+  const unique = [...new Map(kept.map((a) => [a.url, a])).values()]
   return { articles: unique, results: FEEDS.filter((f) => !disabled.includes(f.id)).map((f) => results.find((r) => r.id === f.id)) }
 }
 
 // 관리 화면용 목록
 export function feedList() {
-  return FEEDS.map(({ id, name, tier, url, lang, paper }) => ({ id, name, tier, url: url ?? 'https://api.crossref.org', lang: lang ?? 'ko', paper: Boolean(paper) }))
+  return FEEDS.map(({ id, name, tier, url, lang, paper }) => ({ id, name, tier, url: url ?? 'https://api.openalex.org', lang: lang ?? 'ko', paper: Boolean(paper) }))
 }

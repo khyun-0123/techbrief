@@ -2,14 +2,15 @@
 // 저장: DATABASE_URL이 있으면 PostgreSQL, 없으면 서버 메모리 (서버를 끄면 비워짐)
 import { dbEnabled, query } from '../db/index.js'
 import { getSetting, setSetting } from '../db/store.js'
-import { hasKeyword } from './aliases.js'
 import { groupArticles, sameIssue, titleGrams } from './dedupe.js'
 import { collectFeeds, FEEDS, tierOf } from './feeds.js'
 import { searchNews } from './naver.js'
 import { findMention, getLists } from './lists.js'
 import { EXPERT_SOURCES, toArticle } from './normalize.js'
+import { relevanceInfo } from './relevance.js'
 import { scoreArticle } from './score.js'
 import { titleSentiment } from './sentiment.js'
+import { restoreTitles } from './titles.js'
 
 const MAX_KEYWORDS = 10 // API 호출 수를 지키기 위한 한도
 const MAX_PAGES = 10 // 키워드마다 100건씩 최대 10번(1,000건, 네이버 한도)까지 넘겨 받는다
@@ -44,14 +45,24 @@ async function saveToDb(articles) {
   return rows.filter((r) => r.inserted).length
 }
 
+// body: 선별해서 저장해 둔 원문 앞부분 (있으면 관련도를 원문으로 계산, 화면에는 보내지 않음)
 async function loadRecentFromDb(days) {
   const { rows } = await query(
-    `SELECT id, url, title, description, source, keyword, published_at, section, group_id
-       FROM articles WHERE published_at > now() - make_interval(days => $1) ORDER BY published_at, id`,
-    [days],
+    `SELECT a.id, a.url, a.title, a.description, a.source, a.keyword, a.published_at, a.section, a.group_id, a.full_title,
+            left(t.body, $2) AS body
+       FROM articles a LEFT JOIN article_texts t ON t.article_id = a.id
+      WHERE a.published_at > now() - make_interval(days => $1) ORDER BY a.published_at, a.id`,
+    [days, BODY_FOR_RELEVANCE],
   )
-  return rows.map(({ published_at, group_id, ...r }) => ({ ...r, publishedAt: published_at.toISOString(), groupId: group_id }))
+  return rows.map(({ published_at, group_id, full_title, body, ...r }) => ({
+    ...r,
+    publishedAt: published_at.toISOString(),
+    groupId: group_id,
+    ...(full_title ? { fullTitle: full_title } : {}),
+    ...(body ? { body } : {}),
+  }))
 }
+const BODY_FOR_RELEVANCE = 4_000
 
 // 같은 이슈 묶기를 다시 해서 바뀐 것만 저장한다. 수집이 끝날 때 한 번 (접속할 때마다 묶으면 느려서)
 async function regroupDb(stored) {
@@ -188,20 +199,13 @@ export async function collect(keywords) {
 
   const list = await listArticles({ regroup: true })
   if (dbEnabled()) await updateDaily(list.articles)
+  // 잘린 제목은 원문 제목으로 채운다 (뒤에서 조금씩, 다음 목록부터 보임). 같은 이슈 기사까지 본다
+  restoreTitles(dbEnabled() ? await loadRecentFromDb(LIST_DAYS) : [...memory.values()], { memory })
   return { fetched, added, failed, sources, ...list }
 }
 
 // 같은 이슈를 묶고 대표 기사에 중요도 점수를 매긴다. 같은 이슈 기사는 related로 붙인다
-// 관련도 (13 문서 F4). 네이버 검색은 본문 어딘가에 단어가 한 번만 나와도 결과로 준다
-// high: 제목에 키워드 / mid: 발췌에만 / low: 발췌에도 없거나, 발췌에만 있고 네이버 섹션이 정치·사회·생활·세계
-const OFF_TOPIC_SECTIONS = new Set(['100', '102', '103', '104'])
-// 키워드의 다른 표기(영문 등, aliases.js)도 같은 키워드로 본다
-export function relevanceOf(article) {
-  const has = (text) => hasKeyword(text, article.keyword)
-  if (has(article.title)) return 'high'
-  if (has(`${article.title} ${article.description ?? ''}`)) return OFF_TOPIC_SECTIONS.has(article.section) ? 'low' : 'mid'
-  return 'low'
-}
+// 관련도 (13 문서 F4)는 relevance.js: 키워드가 있느냐가 아니라 글에서 키워드 이야기가 차지하는 비중으로 정한다
 const RANK = { low: 0, mid: 1, high: 2 }
 
 // lists: 자사·경쟁사 목록 → 중요도의 경쟁사 언급, 자사 기사 표시(own)
@@ -221,15 +225,26 @@ function toIssues(stored, lists) {
       // 출처 단계 (14 문서 4-B): 1차 기업·학회·논문 / 2차 전문매체 / 3차 일반 뉴스
       const rep = { ...groupRep, tier: tierOf(groupRep, EXPERT_SOURCES) }
       // 같은 이슈 기사 중 가장 관련 높은 것을 이슈의 관련도로 (중요도 점수의 배수로도 쓴다)
-      const relevance = group.map(relevanceOf).reduce((a, b) => (RANK[b] > RANK[a] ? b : a), 'low')
+      const infos = group.map((a) => relevanceInfo(a, lists))
+      const relevance = infos.map((i) => i.level).reduce((a, b) => (RANK[b] > RANK[a] ? b : a), 'low')
+      const info = infos[group.indexOf(groupRep)]
       const { score, level, parts } = scoreArticle(rep, group.length, lists.competitors, { relevance, interests: lists.interests })
       const own = findMention(`${rep.title} ${rep.description ?? ''}`, lists.own)
       const related = group
         .filter((a) => a.id !== rep.id)
         .slice(0, 4)
-        .map((a) => ({ id: a.id, title: a.title, source: a.source, description: a.description, url: a.url, tier: tierOf(a, EXPERT_SOURCES) }))
+        .map((a) => ({ id: a.id, title: a.fullTitle ?? a.title, source: a.source, description: a.description, url: a.url, tier: tierOf(a, EXPERT_SOURCES) }))
+      // eslint-disable-next-line no-unused-vars
+      const { body, fullTitle, ...shown } = rep // 원문은 화면에 보내지 않는다
       return {
-        ...rep,
+        ...shown,
+        title: fullTitle ?? rep.title,
+        ...(fullTitle ? { titleRestored: true } : {}),
+        // 모음 기사 · 주제 밖 기사 속 기술 정보 · 키워드 이야기 문장 (relevance.js)
+        ...(info.roundup ? { roundup: true } : {}),
+        ...(info.topic ? { topicTag: info.topic } : {}),
+        ...(info.focus ? { focus: info.focus } : {}),
+        mentionWeight: info.weight,
         sameIssue: group.length - 1,
         importance: score,
         importanceLevel: level,
@@ -237,7 +252,7 @@ function toIssues(stored, lists) {
         related,
         own,
         relevance,
-        titleSentiment: titleSentiment(rep.title),
+        titleSentiment: titleSentiment(fullTitle ?? rep.title),
       }
     })
     .sort((x, y) => y.publishedAt.localeCompare(x.publishedAt))

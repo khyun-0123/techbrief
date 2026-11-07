@@ -18,11 +18,18 @@ const NEGATED = ['차질없이', '차질 없이', '우려 해소', '우려해소
 
 const count = (text, words) => words.filter((w) => text.includes(w)).length
 
+// 따옴표로 시작하는 제목(누군가의 말)이나 질문형 제목은 기사 속 사실이 아닐 수 있어 약하게 본다
+// → 긍정·부정 단어 차이가 2개 이상일 때만 긍정·부정, 아니면 중립 (hedged: true)
+const QUOTE_START = /^\s*["“”‘’'「『]/
+const QUESTION = /\?|？|까\s*$|일까|할까|(^|[\s…])왜($|[\s?])|무슨 일|정체는|이유는/
+
 export function titleSentiment(title) {
   let text = String(title ?? '')
+  const hedged = QUOTE_START.test(text) || QUESTION.test(text)
   const flipped = NEGATED.filter((w) => text.includes(w)).length
   for (const w of NEGATED) text = text.replaceAll(w, ' ')
   const diff = count(text, POSITIVE) + flipped - count(text, NEGATIVE)
-  const label = diff > 0 ? '긍정' : diff < 0 ? '부정' : '중립'
-  return { label, by: 'title' }
+  const need = hedged ? 2 : 1
+  const label = diff >= need ? '긍정' : diff <= -need ? '부정' : '중립'
+  return hedged ? { label, by: 'title', hedged } : { label, by: 'title' }
 }

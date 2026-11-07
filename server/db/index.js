@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS articles (
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS section text;
 -- 같은 이슈 묶음 (대표 기사 id). 수집이 끝날 때 다시 묶어 저장하고, 목록은 이 값을 그대로 쓴다
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS group_id text;
+-- 네이버가 「...」로 자른 제목을 원문 페이지 제목(og:title)으로 채운 것 (collector/titles.js). 없으면 title을 쓴다
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS full_title text;
 CREATE INDEX IF NOT EXISTS articles_published_idx ON articles (published_at DESC);
 CREATE INDEX IF NOT EXISTS articles_keyword_idx ON articles (keyword, published_at DESC);
 
@@ -88,6 +90,13 @@ CREATE TABLE IF NOT EXISTS article_texts (
   url         text,
   body        text NOT NULL,
   fetched_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- 논문 출처 결과 캐시 (server/papers). 검색 6시간 · 논문 수 24시간~30일 뒤 다시 받는다. 지난 것은 가끔 지움
+CREATE TABLE IF NOT EXISTS paper_cache (
+  key         text PRIMARY KEY,
+  value       jsonb NOT NULL,
+  expires_at  timestamptz NOT NULL
 );
 
 -- 직접 추가한 자료 (11/07 결정, 27 문서 3장): 링크 · DOI · 텍스트 · 파일. 21일 정리 대상 아님 (지울 때까지 남음)
