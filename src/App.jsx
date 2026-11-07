@@ -605,10 +605,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   }
 
   // 폴더로 담기 · 옮기기: 아직 선별 전이면 그 폴더로 선별, 선별한 기사면 폴더만 바꾼다 (끌어 놓기 · 폴더 메뉴)
+  // 끌어 놓기로 오는 id는 글자라서 글자로 비교한다 (샘플 기사 id는 숫자)
   function putInFolder(articleId, folderId) {
-    const article = byId.get(articleId) ?? extraArticles.find((x) => x.id === articleId)
+    const key = String(articleId)
+    const article = pool.find((x) => String(x.id) === key) ?? extraArticles.find((x) => String(x.id) === key)
     if (!article) return
-    if (selectedIds.includes(articleId)) setFolderOf((prev) => ({ ...prev, [articleId]: folderId }))
+    if (selectedIds.includes(article.id)) setFolderOf((prev) => ({ ...prev, [article.id]: folderId }))
     else toggleSelected(article, folderId)
   }
 
