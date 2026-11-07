@@ -90,6 +90,13 @@ CREATE TABLE IF NOT EXISTS article_texts (
   fetched_at  timestamptz NOT NULL DEFAULT now()
 );
 
+-- 논문 출처 결과 캐시 (server/papers). 검색 6시간 · 논문 수 24시간~30일 뒤 다시 받는다. 지난 것은 가끔 지움
+CREATE TABLE IF NOT EXISTS paper_cache (
+  key         text PRIMARY KEY,
+  value       jsonb NOT NULL,
+  expires_at  timestamptz NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS app_settings (
   key        text PRIMARY KEY,
   value      jsonb NOT NULL,

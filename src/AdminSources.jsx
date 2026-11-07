@@ -13,6 +13,39 @@ function formatAt(iso) {
   return iso ? new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : null
 }
 
+const PAPER_NAMES = { openalex: 'OpenAlex', crossref: 'Crossref', semanticscholar: 'Semantic Scholar', arxiv: 'arXiv' }
+
+// 논문 출처 사슬 상태 (server/papers): 순서대로 쓰고, 한도에 걸린 곳은 풀릴 때까지 건너뜀
+function PaperProviders({ list }) {
+  if (!list?.length) return null
+  return (
+    <div className="adm-sources-group">
+      <h3>논문 출처 (위에서부터 쓰고, 막히면 다음 곳)</h3>
+      <ul className="adm-sources">
+        {list.map((p) => (
+          <li key={p.id}>
+            <span className="name">
+              {p.order}. {p.name}
+              {p.keyed === false && <span className="muted"> · 키 없음</span>}
+            </span>
+            <span className="result">
+              {p.state === 'limited' ? (
+                <span className="adm-state bad">
+                  한도 도달 · {formatAt(p.limitedUntil)} 풀림{p.reason ? ` (${p.reason})` : ''}
+                </span>
+              ) : (
+                <span className="adm-state ok">정상</span>
+              )}
+              {' · '}
+              {p.lastOk ? `마지막 성공 ${formatAt(p.lastOk)}` : <span className="muted">아직 안 씀</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function AdminSources({ onToast }) {
   const [data, setData] = useState(null)
   const [off, setOff] = useState([])
@@ -69,7 +102,7 @@ function AdminSources({ onToast }) {
                     <label>
                       <input type="checkbox" checked={on} onChange={() => toggle(f.id)} />
                       <span className="name">{f.name}</span>
-                      <span className="lang">{f.paper ? '논문 검색 · Crossref' : f.lang === 'en' ? '영문' : '국문'}</span>
+                      <span className="lang">{f.paper ? `논문 검색 · ${r?.via?.length ? r.via.map((v) => PAPER_NAMES[v] ?? v).join(' · ') : 'OpenAlex 외 3곳'}` : f.lang === 'en' ? '영문' : '국문'}</span>
                     </label>
                     <span className="result">
                       {!r ? (
@@ -89,6 +122,7 @@ function AdminSources({ onToast }) {
           </ul>
         </div>
       ))}
+      <PaperProviders list={data.papers} />
       <div className="adm-sources-actions">
         <span className="adm-desc">
           쓸 수 없는 곳: 삼성디스플레이 · BOE 뉴스룸(RSS 없음), Display Daily · Counterpoint(접속 차단), Google 뉴스 RSS(개인 피드 리더 전용 약관). 공시(OpenDART) · 논문 키가 필요한 곳은 키 발급 뒤 연결.
