@@ -48,10 +48,11 @@ export function formatDate(iso, withTime = false) {
 // 업무망 문서에 붙여 넣기 좋은 개조식 텍스트
 export function toPlainText(saved) {
   const { report, articles, createdAt } = saved
-  const lines = [`${report.title} (${formatDate(createdAt)} · 기사 ${articles.length}건 기준)`, '']
+  const lines = [`${report.title} (${formatDate(createdAt)} · 기사 ${articles.filter((a) => !a.supplement).length}건 기준)`, '']
+  if (report.direction) lines.push(`방향: ${report.direction}`, '')
   for (const [key, label] of SECTIONS) {
     lines.push(`■ ${label}`)
-    const bullets = report.sections[key]?.bullets ?? []
+    const bullets = (report.sections[key]?.bullets ?? []).filter((b) => !b.excluded) // 뺀 줄은 넣지 않는다
     const facts = bullets.filter((b) => kindOf(b) === 'fact')
     const ai = bullets.filter((b) => kindOf(b) === 'ai')
     for (const b of facts) lines.push(` - ${b.text} [${b.refs.join('][')}]`)
@@ -63,7 +64,7 @@ export function toPlainText(saved) {
   }
   lines.push('[근거 기사]')
   articles.forEach((a, i) =>
-    lines.push(`[${i + 1}] ${a.title} — ${a.source}${a.publishedAt ? `, ${formatDate(a.publishedAt)}` : ''}${a.url ? ` ${a.url}` : ''}`),
+    lines.push(`[${i + 1}] ${a.supplement ? '(보충) ' : ''}${a.title} — ${a.source}${a.publishedAt ? `, ${formatDate(a.publishedAt)}` : ''}${a.url ? ` ${a.url}` : ''}`),
   )
   return lines.join('\n')
 }

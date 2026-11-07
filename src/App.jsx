@@ -3,6 +3,7 @@ import './App.css'
 import {
   deleteMaterialApi,
   deleteReportApi,
+  updateReportApi,
   fetchAdminMe,
   fetchArticles,
   fetchFavorites,
@@ -27,7 +28,6 @@ import { highlightPattern, matchesTerms } from './highlightTerms.js'
 import Pager from './Pager.jsx'
 import ProgressPanel from './ProgressPanel.jsx'
 import ReportArchive from './ReportArchive.jsx'
-import ReportDraft from './ReportDraft.jsx'
 import { loadReports, saveReports } from './reportStore.js'
 import { useSummaryQueue } from './summaryQueue.js'
 import { DEFAULT_KEYWORDS, SAMPLE_ARTICLES } from './sampleArticles.js'
@@ -45,7 +45,7 @@ import { formatPublished, load } from './utils.js'
 import { clientId, enableUsage, track, trackVisit } from './usage.js'
 import AddMaterial from './AddMaterial.jsx'
 import FolderBar from './FolderBar.jsx'
-import { dragArticle, INBOX, INBOX_FOLDER } from './folders.js'
+import { INBOX, INBOX_FOLDER } from './folders.js'
 
 const KEYWORDS_KEY = 'techbrief-keywords'
 const SELECTED_KEY = 'techbrief-selected'
@@ -350,6 +350,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       if (!reportsInDb) saveReports(next)
       return next
     })
+  }
+
+  // 보고서 고치기 (줄 빼기 · AI 보충 근거): 화면에 바로 반영하고, DB가 있으면 서버에도 저장
+  function handleReportUpdated(entry) {
+    updateReports((list) => list.map((r) => (r.id === entry.id ? entry : r)))
+    if (reportsInDb) updateReportApi(entry).catch(() => {})
   }
 
   async function handleDeleteReport(id) {
@@ -736,13 +742,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         </button>
         <button
           type="button"
-          className={screen === 'report' ? 'tab active' : 'tab'}
-          onClick={() => setScreen('report')}
-        >
-          보고서 초안
-        </button>
-        <button
-          type="button"
           className={screen === 'archive' ? 'tab active' : 'tab'}
           onClick={() => setScreen('archive')}
         >
@@ -831,20 +830,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         <ReportArchive
           reports={reports}
           onDelete={canDeleteReport ? handleDeleteReport : undefined}
-          onGoDraft={() => setScreen(reportArticles.length ? 'report' : 'select')}
-        />
-      ) : screen === 'report' ? (
-        <ReportDraft
-          articles={reportArticles}
-          aiSummaries={aiSummaries}
-          queue={queue}
-          reports={reports}
-          onSaved={(entry) => updateReports((list) => [entry, ...list])}
-          storageLabel={reportsInDb ? 'DB' : '이 브라우저'}
-          onUpdated={(entry) => updateReports((list) => list.map((r) => (r.id === entry.id ? entry : r)))}
-          onGoSelect={() => setScreen('select')}
-          onGoArchive={() => setScreen('archive')}
-          folderSummary={reportFolders}
+          onGoDraft={() => setScreen('select')}
+          onUpdated={handleReportUpdated}
         />
       ) : screen === 'select' ? (
         <SelectSummary
@@ -853,7 +840,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           setIncludedIds={setIncludedIds}
           onExclude={handleExclude}
           onGoCollect={() => setScreen('collect')}
-          onGoReport={() => setScreen('report')}
           aiSummaries={aiSummaries}
           queue={queue}
           folders={folders}
@@ -864,6 +850,13 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           onRenameFolder={renameFolder}
           onDeleteFolder={deleteFolder}
           onMaterialAdded={handleMaterialAdded}
+          reportArticles={reportArticles}
+          reports={reports}
+          onSaved={(entry) => updateReports((list) => [entry, ...list])}
+          onUpdated={handleReportUpdated}
+          onGoArchive={() => setScreen('archive')}
+          storageLabel={reportsInDb ? 'DB' : '이 브라우저'}
+          folderSummary={reportFolders}
         />
       ) : (
         <main className="page page-wide collect-page">
@@ -902,15 +895,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           </header>
           {refreshError && <p className="ai-error">{refreshError}</p>}
           {showAdd && <AddMaterial folders={folders} defaultFolder={targetFolder} onAdded={handleMaterialAdded} onClose={() => setShowAdd(false)} />}
-          <FolderBar
-            label="담을 폴더"
-            folders={folders}
-            counts={folderCounts}
-            active={targetFolder}
-            onPick={(id) => setTargetFolder(id ?? INBOX)}
-            onDropArticle={(folderId, articleId) => putInFolder(articleId, folderId)}
-            onCreate={(name) => setTargetFolder(createFolder(name))}
-          />
 
           {/* 오늘 수집 숫자 · 키워드 추이는 대시보드로 옮김 (11/07 팀 회의) */}
           <div className={features.has('collectPanel') ? 'content with-favs' : 'content with-favs no-settings'}>
@@ -923,6 +907,15 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               onRemoveRecent={(q) => saveRecent(recent.filter((r) => r !== q))}
             />
             <section className="panel list-panel">
+              {/* 「선별 추가」가 담을 폴더 (11/08: 끌어 놓기는 뺐다. 담긴 기사는 옆 폴더 메뉴로 옮김) */}
+              <FolderBar
+                label="담을 폴더"
+                folders={folders}
+                counts={folderCounts}
+                active={targetFolder}
+                onPick={(id) => setTargetFolder(id ?? INBOX)}
+                onCreate={(name) => setTargetFolder(createFolder(name))}
+              />
               <div className="filters">
                 <form className="search-form" onSubmit={handleSearch}>
                   <input
@@ -1067,12 +1060,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                       const job = queue.jobs.find((j) => j.id === a.id)
                       return (
                         <Fragment key={a.id}>
-                        <tr
-                          className={open || groupOpen ? 'row-open' : undefined}
-                          draggable
-                          onDragStart={(e) => dragArticle(e, a.id)}
-                          title="위 「담을 폴더」로 끌어다 놓으면 그 폴더에 담겨요"
-                        >
+                        <tr className={open || groupOpen ? 'row-open' : undefined}>
                           <td>
                             <div className="title" title={a.title}>
                               {a.importanceLevel === 'high' && (

@@ -116,22 +116,31 @@ function describeArticles(articles, itemKeys = Object.keys(ITEM_LABELS)) {
     .join('\n\n')
 }
 
-export function buildReportMessages(articles, { title, periodLabel }) {
+// 보고서 방향 (11/08 조장): 작성자가 한 줄로 준 주제 · 방향. 지시문에 넣어 무엇을 앞에 두고 강조할지 정하게 한다
+// 방향에 맞는 내용이 기사에 없으면 지어내지 않고 warnings에 적게 한다 (원칙 2)
+const DIRECTION_RULE = `- 작성자가 준 '보고서 방향'이 있으면 그 방향에 맞는 내용을 핵심 요약과 각 섹션 앞쪽에 두고 강조한다. 방향과 관계없는 내용은 줄인다.
+- 방향에 맞는 근거가 기사에 없으면 지어내지 말고 warnings에 '방향에 맞는 근거 부족: …'으로 적는다.`
+function directionLine(direction) {
+  const d = String(direction ?? '').trim().slice(0, 300)
+  return d ? `보고서 방향(작성자 요청): ${d}\n` : ''
+}
+
+export function buildReportMessages(articles, { title, periodLabel, direction }) {
   return [
     {
       role: 'system',
-      content: `너는 기술 동향 보고서를 쓰는 담당자를 돕는다. 경영진에게 올라가는 보고서 초안 한 편을 쓴다. 처음부터 끝까지 그대로 읽히는 깔끔한 문서로 쓴다.\n\n${SECTION_GUIDE}\n\n${RULES}\n- warnings에는 근거가 약한 부분을 한 줄씩 적는다.\n- 출력은 JSON만.`,
+      content: `너는 기술 동향 보고서를 쓰는 담당자를 돕는다. 경영진에게 올라가는 보고서 초안 한 편을 쓴다. 처음부터 끝까지 그대로 읽히는 깔끔한 문서로 쓴다.\n\n${SECTION_GUIDE}\n\n${RULES}\n${DIRECTION_RULE}\n- warnings에는 근거가 약한 부분을 한 줄씩 적는다.\n- 출력은 JSON만.`,
     },
     {
       role: 'user',
-      content: `보고서 제목: ${title}\n기간: ${periodLabel}\n\n기사 (원문 본문 또는 요약문)와 6항목 요약\n${describeArticles(articles)}`,
+      content: `보고서 제목: ${title}\n기간: ${periodLabel}\n${directionLine(direction)}\n기사 (원문 본문 또는 요약문)와 6항목 요약\n${describeArticles(articles)}`,
     },
   ]
 }
 
 // 기사가 많아(10건 초과) 몇 건씩 나눠 쓴 초안 조각들을 한 보고서로 합친다 (21 문서 6-3)
 // parts: [{ sections: { summary: { bullets: [{ text, refs, kind }] }, ... } }] — refs는 처음부터 전체 기사 번호
-export function buildMergeMessages(articles, parts, { title, periodLabel }) {
+export function buildMergeMessages(articles, parts, { title, periodLabel, direction }) {
   const list = articles.map((a) => `[${a.n}] ${a.title} (${a.source ?? '매체 미상'})`).join('\n')
   const drafts = SECTION_KEYS.map((k) => {
     const lines = parts.flatMap((p) =>
@@ -142,28 +151,28 @@ export function buildMergeMessages(articles, parts, { title, periodLabel }) {
   return [
     {
       role: 'system',
-      content: `너는 기술 동향 보고서를 쓰는 담당자를 돕는다. 기사가 많아 몇 묶음으로 나눠 쓴 초안 조각들을 경영진용 보고서 한 편으로 합친다.\n- 같은 내용은 하나의 글머리로 묶고 근거 번호를 모두 refs에 넣는다.\n- 근거 번호는 초안 조각에 적힌 번호를 그대로 쓴다 (전체 기사 번호). 새 번호를 만들지 않는다.\n- fact/ai 구분은 초안 조각의 표시를 따른다. fact와 ai를 한 글머리에 섞지 않는다.\n- 초안 조각에 없는 내용을 새로 지어내지 않는다.\n\n${SECTION_GUIDE}\n\n${RULES}\n- warnings에는 근거가 약한 부분을 한 줄씩 적는다.\n- 출력은 JSON만.`,
+      content: `너는 기술 동향 보고서를 쓰는 담당자를 돕는다. 기사가 많아 몇 묶음으로 나눠 쓴 초안 조각들을 경영진용 보고서 한 편으로 합친다.\n- 같은 내용은 하나의 글머리로 묶고 근거 번호를 모두 refs에 넣는다.\n- 근거 번호는 초안 조각에 적힌 번호를 그대로 쓴다 (전체 기사 번호). 새 번호를 만들지 않는다.\n- fact/ai 구분은 초안 조각의 표시를 따른다. fact와 ai를 한 글머리에 섞지 않는다.\n- 초안 조각에 없는 내용을 새로 지어내지 않는다.\n\n${SECTION_GUIDE}\n\n${RULES}\n${DIRECTION_RULE}\n- warnings에는 근거가 약한 부분을 한 줄씩 적는다.\n- 출력은 JSON만.`,
     },
     {
       role: 'user',
-      content: `보고서 제목: ${title}\n기간: ${periodLabel}\n\n전체 기사 목록\n${list}\n\n초안 조각 (섹션별로 모음)\n${drafts}`,
+      content: `보고서 제목: ${title}\n기간: ${periodLabel}\n${directionLine(direction)}\n전체 기사 목록\n${list}\n\n초안 조각 (섹션별로 모음)\n${drafts}`,
     },
   ]
 }
 
-export function buildSectionMessages(articles, { key, report }) {
+export function buildSectionMessages(articles, { key, report, direction }) {
   const others = SECTION_KEYS.filter((k) => k !== key)
     .map((k) => `${SECTION_TITLES[k]}: ${(report?.sections?.[k]?.bullets ?? []).map((b) => b.text).join(' / ')}`)
     .join('\n')
   return [
     {
       role: 'system',
-      content: `너는 기술 동향 보고서의 한 섹션만 다시 쓴다. 다른 섹션과 겹치지 않게, 기존과 다른 표현으로 쓴다.\n\n${SECTION_GUIDE}\n\n${RULES}\n- 출력은 JSON만 ({ "bullets": [...] }).`,
+      content: `너는 기술 동향 보고서의 한 섹션만 다시 쓴다. 다른 섹션과 겹치지 않게, 기존과 다른 표현으로 쓴다.\n\n${SECTION_GUIDE}\n\n${RULES}\n${DIRECTION_RULE}\n- 출력은 JSON만 ({ "bullets": [...] }).`,
     },
     {
       role: 'user',
       // 기사가 많으면 문맥 크기를 넘지 않게 이 섹션의 재료 항목만 (원문 본문은 서버가 붙이지 않음)
-      content: `다시 쓸 섹션: ${key}(${SECTION_TITLES[key]})\n\n다른 섹션(참고만):\n${others}\n\n기사와 요약\n${describeArticles(articles, articles.length > COMPACT_OVER ? SECTION_ITEMS[key] : undefined)}`,
+      content: `다시 쓸 섹션: ${key}(${SECTION_TITLES[key]})\n${directionLine(direction)}\n다른 섹션(참고만):\n${others}\n\n기사와 요약\n${describeArticles(articles, articles.length > COMPACT_OVER ? SECTION_ITEMS[key] : undefined)}`,
     },
   ]
 }
