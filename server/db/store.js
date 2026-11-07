@@ -144,6 +144,13 @@ export async function updateReport(id, report, articles) {
   ])
 }
 
+// 보고서를 만든 브라우저 번호 (11/08부터 기록, 그 전 보고서는 null)
+export async function reportOwner(id) {
+  if (!dbEnabled()) return memoryReports.find((x) => x.id === id)?.report?.createdBy ?? null
+  const { rows } = await query("SELECT report->>'createdBy' AS owner FROM reports WHERE id = $1", [id])
+  return rows[0]?.owner ?? null
+}
+
 export async function deleteReport(id) {
   if (!dbEnabled()) {
     const i = memoryReports.findIndex((x) => x.id === id)

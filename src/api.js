@@ -170,8 +170,8 @@ export function importReports(reports) {
   return postJson('/api/reports/import', { reports })
 }
 
-export async function deleteReportApi(id) {
-  const res = await fetch(`/api/reports/${encodeURIComponent(id)}`, { method: 'DELETE' })
+export async function deleteReportApi(id, clientId) {
+  const res = await fetch(`/api/reports/${encodeURIComponent(id)}?client=${encodeURIComponent(clientId ?? '')}`, { method: 'DELETE' })
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '보고서를 지우지 못했어요')
 }
 

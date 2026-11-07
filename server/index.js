@@ -22,10 +22,12 @@ import {
   listReports,
   saveReport,
   setKeywords,
+  reportOwner,
   updateReport,
   updateReportSection,
 } from './db/store.js'
 import { reinforceBullet } from './reinforce.js'
+import { searchPaperArticles } from './searchPapers.js'
 import { addJob, answerJob, cancelJob, listJobs, setDraftBuilder } from './reportJobs.js'
 import { chatJson, llmProviders, modelName, pingModel, providerLabel, selectProvider } from './llm/client.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
@@ -435,8 +437,13 @@ export async function handleApi(req, res) {
       return send(res, 202, await refreshStatus())
     }
     if (req.method === 'POST' && req.url === '/api/search') {
+      // 뉴스(네이버) + 논문을 같이 찾는다 (11/08). 논문이 막혀도 뉴스 결과는 그대로
       const { query, period } = await readJson(req)
-      return send(res, 200, await searchArticles(query, { period }))
+      const [news, papers] = await Promise.all([
+        searchArticles(query, { period }),
+        searchPaperArticles(query, period).catch((err) => ({ articles: [], note: `논문을 찾지 못했어요 (${err.message})` })),
+      ])
+      return send(res, 200, { ...news, articles: [...news.articles, ...papers.articles], newsCount: news.articles.length, paperCount: papers.articles.length, paperNote: papers.note })
     }
     if (req.method === 'GET' && req.url === '/api/favorites') {
       return send(res, 200, { favorites: await getSetting('favorite_queries', []) })
@@ -525,11 +532,17 @@ export async function handleApi(req, res) {
       return send(res, 200, { reports: await listReports() })
     }
     if (req.method === 'DELETE' && req.url.startsWith('/api/reports/')) {
-      // 공용 보고서함에서 지우면 되돌릴 수 없어 관리자만 (17 문서 3-3)
-      const admin = requireAdmin(req)
-      const id = decodeURIComponent(req.url.slice('/api/reports/'.length))
+      // 공용 보고서함에서 지우면 되돌릴 수 없다: 관리자 또는 그 보고서를 만든 브라우저만 (11/08 조장)
+      const [path, qs = ''] = req.url.split('?')
+      const id = decodeURIComponent(path.slice('/api/reports/'.length))
+      const admin = adminOf(req)
+      if (!admin) {
+        const client = new URLSearchParams(qs).get('client')
+        const owner = await reportOwner(id)
+        if (!client || !owner || owner !== client) throw Object.assign(new Error('보고서는 만든 브라우저나 관리자만 지울 수 있어요.'), { status: 403 })
+      }
       await deleteReport(id)
-      await logChange(admin, '보고서 삭제', id)
+      if (admin) await logChange(admin, '보고서 삭제', id)
       return send(res, 200, { ok: true })
     }
     if (req.method === 'POST' && req.url === '/api/reports') {

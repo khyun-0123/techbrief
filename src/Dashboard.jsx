@@ -52,7 +52,7 @@ function Dashboard({ stats, keywords, favorites, recent, periods, period, onPeri
             자료 검색
           </button>
         </form>
-        <p className="dash-note">네이버 뉴스에서 찾아 자료 현황 탭에 보여 줘요. 결과가 적으면 기간을 「최근 7일」이나 「전체」로 넓혀 보세요.</p>
+        <p className="dash-note">네이버 뉴스와 논문에서 찾아 자료 현황 탭에 보여 줘요. 결과가 적으면 기간을 「최근 7일」이나 「전체」로 넓혀 보세요.</p>
 
         {chipCount > 0 && (
           <details className="dash-more">
@@ -78,7 +78,7 @@ function Dashboard({ stats, keywords, favorites, recent, periods, period, onPeri
               <div className="dash-chips">
                 <span className="dash-chips-label">
                   ★ 즐겨찾기
-                  <small>네이버에서 찾기</small>
+                  <small>뉴스·논문에서 찾기</small>
                 </span>
                 <div className="dash-chips-list">
                   {favorites.map((k) => (

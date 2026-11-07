@@ -1,11 +1,11 @@
 // 보고서함 (11/08 조장 개편)
-// - 왼쪽 목록을 없앴다: 맨 위 「보고서 고르기」를 누르면 찾기 칸 + 목록이 펼쳐진다 (제목 · 방향 · 본문 · 근거 기사 제목에서 찾기)
-//   「내가 만든」: 이 브라우저에서 만든 보고서만 (브라우저 무작위 번호, IP는 쓰지 않음). 11/08 전 보고서는 누가 만들었는지 기록 없음
-// - ‹ › 로 앞뒤 보고서로 넘긴다
-// - 보고서 본문을 넓게, 근거 기사는 오른쪽. 두 칸 높이는 화면에 맞추고 각자 안에서 스크롤 (페이지 스크롤 없음)
+// - 목록 화면(기본): 찾기(제목 · 방향 · 본문 · 근거 기사 제목) · 「전체 | 내가 만든」 · 날짜별 묶음. 화면 높이에 맞추고 안에서 스크롤
+//   「내가 만든」: 이 브라우저에서 만든 보고서 (브라우저 무작위 번호, IP는 쓰지 않음). 11/08 전 보고서는 기록 없음
+// - 보고서 화면: 줄을 누르면 넓은 본문 | 근거 기사 (두 칸 높이 같게, 각자 스크롤). 「← 보고서 목록」으로 돌아감
+// - 지우기: 관리자 또는 그 보고서를 만든 브라우저
 // - 보고서를 열었을 때 그 보고서에 쓴 기사가 아직 선별 목록에 있으면 정리할지 한 번 묻는다
 // onDelete가 없으면 「지우기」를 숨긴다 (공용 보고서함은 관리자만 지움, 17 문서)
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { copyText, formatDate, toPlainText } from './reportStore.js'
 import { clientId, track } from './usage.js'
 import ReportView from './ReportView.jsx'
@@ -45,39 +45,36 @@ function Mark({ text, q }) {
   )
 }
 
-function ReportArchive({ reports, onDelete, onGoDraft, onUpdated, initialId, selectedIds = [], onCleanup }) {
+// 날짜 묶음 이름: 오늘 · 어제 · 11월 6일 (목)
+function dayLabel(iso) {
+  const d = new Date(iso)
+  const today = new Date()
+  const days = Math.round((new Date(today.toDateString()) - new Date(d.toDateString())) / 86_400_000)
+  if (days === 0) return '오늘'
+  if (days === 1) return '어제'
+  return d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })
+}
+
+// initialId가 있으면(진행 창 「보고서함에서 보기」) 그 보고서를 바로 연다. 없으면 목록부터
+function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, initialId, selectedIds = [], onCleanup }) {
   const [openId, setOpenId] = useState(initialId ?? null)
   const [asked, setAsked] = useState(() => load(ASKED_KEY, []))
   const [notice, setNotice] = useState('')
-  const [picking, setPicking] = useState(false)
   const [q, setQ] = useState('')
   const [mine, setMine] = useState(false)
-  const pickerRef = useRef(null)
   const me = clientId()
-  const open = reports.find((r) => r.id === openId) ?? reports[0]
-  const index = open ? reports.indexOf(open) : -1
+  const open = reports.find((r) => r.id === openId) ?? null
 
   const results = reports.filter((r) => (!mine || r.report.createdBy === me) && (!q.trim() || norm(textOf(r)).includes(norm(q))))
-
-  // 바깥을 누르면 목록 닫기
-  useEffect(() => {
-    if (!picking) return undefined
-    const close = (e) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target)) setPicking(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [picking])
-
-  function pick(id) {
-    if (!id) return
-    setOpenId(id)
-    setNotice('')
-    setPicking(false)
+  const groups = []
+  for (const r of results) {
+    const label = dayLabel(r.createdAt)
+    if (groups.at(-1)?.label !== label) groups.push({ label, items: [] })
+    groups.at(-1).items.push(r)
   }
 
   const leftover = open ? (open.inputs ?? []).filter((a) => selectedIds.includes(a.id)) : []
-  const askCleanup = onCleanup && leftover.length > 0 && !asked.includes(open.id)
+  const askCleanup = onCleanup && open && leftover.length > 0 && !asked.includes(open.id)
 
   function answerCleanup(action) {
     if (action !== 'keep') onCleanup(open, action)
@@ -107,76 +104,29 @@ function ReportArchive({ reports, onDelete, onGoDraft, onUpdated, initialId, sel
     }
   }
 
-  return (
-    <main className="page page-wide archive-page">
-      <header className="archive-head">
-        <h1>보고서함</h1>
-        {reports.length > 0 && (
-          <div className="archive-picker" ref={pickerRef}>
-            <button type="button" className="archive-nav" onClick={() => pick(reports[index - 1]?.id)} disabled={index <= 0} aria-label="더 최근 보고서" title="더 최근 보고서">
-              ‹
-            </button>
-            <button type="button" className="archive-current" aria-expanded={picking} onClick={() => setPicking((v) => !v)} title="보고서 고르기 · 찾기">
-              <span className="archive-current-title">{open.report.title}</span>
-              <span className="archive-current-meta">
-                {formatDate(open.createdAt, true)} · {index + 1} / {reports.length}
-              </span>
-              <span aria-hidden="true">▾</span>
-            </button>
-            <button type="button" className="archive-nav" onClick={() => pick(reports[index + 1]?.id)} disabled={index >= reports.length - 1} aria-label="이전 보고서" title="이전 보고서">
-              ›
-            </button>
-
-            {picking && (
-              <div className="archive-pop" role="dialog" aria-label="보고서 고르기">
-                <div className="archive-pop-tools">
-                  <input type="search" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목 · 방향 · 본문 · 근거 기사에서 찾기 (예: 탠덤)" aria-label="보고서 찾기" />
-                  <div className="composer-tabs" role="tablist" aria-label="누가 만든 보고서">
-                    <button type="button" role="tab" aria-selected={!mine} className={!mine ? 'active' : ''} onClick={() => setMine(false)}>
-                      전체
-                    </button>
-                    <button type="button" role="tab" aria-selected={mine} className={mine ? 'active' : ''} onClick={() => setMine(true)} title="이 브라우저에서 만든 보고서 (11/08부터 기록)">
-                      내가 만든
-                    </button>
-                  </div>
-                </div>
-                <p className="archive-pop-count">
-                  {results.length}건{q.trim() ? ` · 「${q.trim()}」` : ''}
-                  {mine && ' · 이 브라우저에서 만든 보고서 (11/08부터 기록)'}
-                </p>
-                <ul className="archive-results">
-                  {results.length === 0 && <li className="hint">맞는 보고서가 없어요.</li>}
-                  {results.map((r) => (
-                    <li key={r.id}>
-                      <button type="button" className={r.id === open.id ? 'archive-result active' : 'archive-result'} onClick={() => pick(r.id)}>
-                        <span className="title">
-                          <Mark text={r.report.title} q={q.trim()} />
-                          {r.report.createdBy === me && <span className="mine-badge">내가 만듦</span>}
-                        </span>
-                        <span className="meta">
-                          {formatDate(r.createdAt, true)} · 기사 {r.articles.filter((a) => !a.supplement).length}건{r.report.direction ? ` · 방향: ${r.report.direction}` : ''}
-                        </span>
-                        <span className="archive-preview">
-                          <Mark text={snippetOf(r, q.trim())} q={q.trim()} />
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+  // ── 보고서 화면 ──
+  if (open) {
+    return (
+      <main className="page page-wide archive-page">
+        <header className="archive-head">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              setOpenId(null)
+              setNotice('')
+            }}
+          >
+            ← 보고서 목록
+          </button>
+          <div className="archive-open-title">
+            <h1>{open.report.title}</h1>
+            <span className="hint">
+              {formatDate(open.createdAt, true)}
+              {open.report.createdBy === me && ' · 내가 만듦'}
+            </span>
           </div>
-        )}
-        <button type="button" className="btn primary" onClick={onGoDraft}>
-          새 보고서 만들기
-        </button>
-      </header>
-
-      {reports.length === 0 ? (
-        <section className="panel select-empty">
-          <p className="empty">아직 만든 보고서가 없어요.</p>
-        </section>
-      ) : (
+        </header>
         <div className="archive-body">
           {askCleanup && (
             <div className="cleanup-ask" role="status">
@@ -205,8 +155,8 @@ function ReportArchive({ reports, onDelete, onGoDraft, onUpdated, initialId, sel
                 <button type="button" className="btn" onClick={handleCopy}>
                   텍스트 복사
                 </button>
-                {onDelete && (
-                  <button type="button" className="btn-text danger" onClick={handleDelete}>
+                {onDelete && canDelete?.(open) && (
+                  <button type="button" className="btn-text danger" onClick={handleDelete} title="이 보고서를 만든 브라우저나 관리자만 지울 수 있어요">
                     지우기
                   </button>
                 )}
@@ -214,7 +164,72 @@ function ReportArchive({ reports, onDelete, onGoDraft, onUpdated, initialId, sel
             }
           />
         </div>
-      )}
+      </main>
+    )
+  }
+
+  // ── 목록 화면 ──
+  return (
+    <main className="page page-wide archive-page">
+      <header className="archive-head">
+        <h1>보고서함</h1>
+        <div className="archive-search">
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목 · 방향 · 본문 · 근거 기사에서 찾기 (예: 탠덤)" aria-label="보고서 찾기" />
+          <div className="composer-tabs" role="tablist" aria-label="누가 만든 보고서">
+            <button type="button" role="tab" aria-selected={!mine} className={!mine ? 'active' : ''} onClick={() => setMine(false)}>
+              전체 {reports.length}
+            </button>
+            <button type="button" role="tab" aria-selected={mine} className={mine ? 'active' : ''} onClick={() => setMine(true)} title="이 브라우저에서 만든 보고서 (11/08부터 기록)">
+              내가 만든 {reports.filter((r) => r.report.createdBy === me).length}
+            </button>
+          </div>
+        </div>
+        <button type="button" className="btn primary" onClick={onGoDraft}>
+          새 보고서 만들기
+        </button>
+      </header>
+
+      <section className="panel archive-table" aria-label="보고서 목록">
+        {reports.length === 0 ? (
+          <p className="empty">아직 만든 보고서가 없어요.</p>
+        ) : results.length === 0 ? (
+          <p className="empty">맞는 보고서가 없어요{mine ? ' (「내가 만든」은 11/08부터 기록해요)' : ''}.</p>
+        ) : (
+          <div className="archive-scroll">
+            {groups.map((g) => (
+              <section key={g.label} className="archive-group">
+                <h2>{g.label}</h2>
+                <ul>
+                  {g.items.map((r) => {
+                    const base = r.articles.filter((a) => !a.supplement).length
+                    const added = r.articles.length - base
+                    return (
+                      <li key={r.id}>
+                        <button type="button" className="archive-row" onClick={() => setOpenId(r.id)}>
+                          <span className="archive-row-main">
+                            <span className="title">
+                              <Mark text={r.report.title} q={q.trim()} />
+                              {r.report.createdBy === me && <span className="mine-badge">내가 만듦</span>}
+                            </span>
+                            {r.report.direction && <span className="archive-direction">방향: <Mark text={r.report.direction} q={q.trim()} /></span>}
+                            <span className="archive-preview">
+                              <Mark text={snippetOf(r, q.trim())} q={q.trim()} />
+                            </span>
+                          </span>
+                          <span className="archive-row-side">
+                            <span>기사 {base}건{added ? ` · 보충 ${added}` : ''}</span>
+                            <span className="hint">{new Date(r.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</span>
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
+        )}
+      </section>
     </main>
   )
 }

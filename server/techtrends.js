@@ -11,7 +11,7 @@ import { dbEnabled, query } from './db/index.js'
 import { getKeywords, getSetting, setSetting } from './db/store.js'
 import { chatJson, PRIORITY, PreemptedError } from './llm/client.js'
 import { countPatentsFor } from './patents.js'
-import { countMonthly, forceLimit, isLimited, LimitedError, openAlexGet as papersOpenAlexGet } from './papers/index.js'
+import { countMonthly, countRecent, forceLimit, isLimited, LimitedError, openAlexGet as papersOpenAlexGet } from './papers/index.js'
 
 const KEY = 'tech_trends'
 const DAY = 86_400_000
@@ -452,17 +452,43 @@ async function fetchWiki(keys) {
 //   지난 값이 있는데 쓰던 출처가 한도에 걸렸으면 다른 출처로 바꾸지 않고 지난 값을 그대로 둔다 (월별 값이라 하루 늦어도 됨)
 // - 용어마다 하루 한 번만 (20시간 안에 받았으면 건너뜀). 끝난 달은 30일 캐시라 보통 최근 두 달만 다시 받는다
 //   예전에는 200편 넘는 용어마다 13번씩 검색(1번 $0.001)해 하루 예산 $1을 이 단계에서 다 썼다 (11/07)
+// - 최근 4주(오늘까지 28일)와 그 전 28일 논문 수도 용어마다 하루 한 번 센다 (짧은 기간 비교용, 조장 11/08)
+//   날짜 목록 한 번으로 이번 달 · 지난달 값도 같이 채워서, 하루 OpenAlex 호출 수는 예전(최근 두 달 = 2번)보다 늘지 않는다
 const OPENALEX_EVERY_MS = 20 * 3600_000
+// 「오늘」은 한국 날짜 기준 (서버 시계는 UTC라 아침 9시 전에는 하루 늦음)
+export function recentWindows(now = Date.now()) {
+  const end = Date.parse(ymd(now + 9 * 3600_000))
+  return { cur: [ymd(end - 27 * DAY), ymd(end)], prev: [ymd(end - 55 * DAY), ymd(end - 28 * DAY)] }
+}
 async function fetchOpenAlex(keys) {
   const from = new Date(Date.now() - 400 * DAY)
   from.setUTCDate(1)
   const monthList = []
   for (let d = new Date(from); d < new Date(); d.setUTCMonth(d.getUTCMonth() + 1)) monthList.push(ymd(d).slice(0, 7))
+  const windows = recentWindows()
   for (const k of keys) {
     const term = (state.terms[k].query || state.terms[k].en)?.trim()
     if (!term) continue
     const slot = state.series.openalex?.[k]
-    if (slot?.series?.length && !slot.error && Date.now() - Date.parse(slot.at) < OPENALEX_EVERY_MS) continue
+    const monthlyFresh = slot?.series?.length && !slot.error && Date.now() - Date.parse(slot.at) < OPENALEX_EVERY_MS
+    const recentDue = slot?.recent?.cur?.[1] !== windows.cur[1]
+    if (monthlyFresh && !recentDue) continue
+    // 최근 4주: 실패하면 지난 값(있으면)을 그대로 두고 recentError만 적는다
+    let recent = slot?.recent ?? null
+    let recentError = null
+    if (recentDue) {
+      try {
+        const r = await countRecent(term, windows, { prefer: slot?.provider, months: monthList.slice(-2), big: Boolean(slot?.recent?.big) })
+        recent = { cur: windows.cur, prev: windows.prev, curN: r.cur, prevN: r.prev, provider: r.provider, big: r.big, at: new Date().toISOString() }
+      } catch (err) {
+        recentError = err.message
+      }
+    }
+    if (monthlyFresh) {
+      slot.recent = recent
+      slot.recentError = recentError
+      continue
+    }
     try {
       const { months, provider } = await countMonthly(term, monthList, { prefer: slot?.provider, hasHistory: Boolean(slot?.series?.length) })
       remember('openalex', k, monthList.map((m) => ({ t: `${m}-01`, v: months[m] ?? 0 })))
@@ -470,6 +496,8 @@ async function fetchOpenAlex(keys) {
     } catch (err) {
       failed('openalex', k, err)
     }
+    state.series.openalex[k].recent = recent
+    state.series.openalex[k].recentError = recentError
   }
 }
 
@@ -648,16 +676,82 @@ function monthWindows(series, win) {
   return { cur: cur.reduce((s, p) => s + p.v, 0), prev: prev.reduce((s, p) => s + p.v, 0), range: [prev[0].t, cur.at(-1).t], label: `${cur[0].t.slice(0, 7)}${n > 1 ? `~${cur.at(-1).t.slice(0, 7)}` : ''} vs 그 전 ${n}달` }
 }
 
+// 월별 출처를 4주보다 짧은 기간에 보여 줄 때 (조장 11/08)
+// - 논문: 하루 한 번 센 「최근 28일 vs 그 전 28일」(fetchOpenAlex의 recent). 날짜가 매일 있는 OpenAlex 값이라 진짜 4주 비교
+// - 특허: 데이터셋에 공개가 몇 달 늦게 들어와 최근 4주 값이 없다 → 마지막 온전한 달 vs 그 전 달로 바꾸고, 실제 날짜를 적는다
+// out.basis.note는 탭 위에 작게 보이고, 종합 표의 열 이름 옆에도 out.basis.short가 붙는다 (종합도 탭과 같은 값을 씀)
+const md = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`
+const monthLastDay = (t) => ymd(Date.UTC(Number(t.slice(0, 4)), Number(t.slice(5, 7)), 0))
+function shortMonthly(src, out, keys) {
+  const row = (k, slot, cur, prev, extra) => ({
+    key: k,
+    name: state.terms[k].name,
+    en: state.terms[k].en,
+    category: state.terms[k].category,
+    from: state.terms[k].from ?? ['article'],
+    cur,
+    prev,
+    growth: (cur + src.smooth) / (prev + src.smooth),
+    change: prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null,
+    points: slot.series.filter((p) => p.t >= ymd(Date.now() - 400 * DAY)),
+    at: slot.at ?? null,
+    ...extra,
+  })
+  const want = recentWindows()
+  if (src.id === 'openalex') {
+    const slots = keys.map((k) => [k, state.series.openalex?.[k]]).filter(([, s]) => s?.recent && s.series?.length)
+    // 용어마다 센 날이 다를 수 있다 (오늘 실패한 용어) → 가장 최근 구간 하나로만 비교한다
+    const latest = slots.map(([, s]) => s.recent.cur[1]).sort().at(-1)
+    const w = latest ? slots.find(([, s]) => s.recent.cur[1] === latest)[1].recent : want
+    out.basis = { short: '최근 4주', cur: w.cur, prev: w.prev, note: `논문은 최근 4주(${md(w.cur[0])}~${md(w.cur[1])}) 기준 · 그 전 4주(${md(w.prev[0])}~${md(w.prev[1])})와 비교 (월별 자료라 짧은 기간 대신)` }
+    out.at = slots.map(([, s]) => s.recent.at).sort().at(-1) ?? out.at
+    for (const [k, slot] of slots) {
+      const name = state.terms[k].name
+      if (slot.recent.cur[1] !== latest) {
+        out.skipped.push({ key: k, name, why: '최근 4주 값을 아직 못 받았어요' })
+        continue
+      }
+      const { curN: cur, prevN: prev } = slot.recent
+      if (cur + prev === 0) out.skipped.push({ key: k, name, why: '최근 8주 동안 논문이 없어요' })
+      else if (cur + prev < src.min) out.skipped.push({ key: k, name, why: '값이 너무 적어요' })
+      else out.ranking.push(row(k, slot, cur, prev, { basis: `${md(w.cur[0])}~${md(w.cur[1])} vs 그 전 4주`, stale: Boolean(slot.recentError) }))
+    }
+    if (!out.ranking.length)
+      out.empty = latest ? '최근 4주 동안 확인할 수 있는 논문 자료가 없어요.' : '최근 4주 동안 확인할 수 있는 논문 자료가 아직 없어요. 하루 한 번 갱신할 때 받아요.'
+  } else {
+    const lastFull = ymd(Date.now()).slice(0, 7) + '-01'
+    const monthsOf = (slot) => slot.series.filter((p) => p.t < lastFull)
+    const slots = keys.map((k) => [k, state.series[src.id]?.[k]]).filter(([, s]) => s?.series?.length && monthsOf(s).length >= 2)
+    const last = slots.map(([, s]) => monthsOf(s).at(-1).t).sort().at(-1)
+    if (last) {
+      const before = ymd(Date.UTC(Number(last.slice(0, 4)), Number(last.slice(5, 7)) - 2, 1))
+      const cur = [last, monthLastDay(last)]
+      const prev = [before, monthLastDay(before)]
+      const why = cur[1] < want.cur[0] ? '데이터셋에 늦게 들어와 최근 4주 자료가 없어요 → ' : ''
+      out.basis = { short: `${Number(last.slice(5, 7))}월`, cur, prev, note: `특허는 ${why}마지막 온전한 달(${md(cur[0])}~${md(cur[1])}) 기준 · 그 전 달(${md(prev[0])}~${md(prev[1])})과 비교` }
+      for (const [k, slot] of slots) {
+        const v = (t) => slot.series.find((p) => p.t === t)?.v ?? 0
+        const [c, p] = [v(last), v(before)]
+        const name = state.terms[k].name
+        if (c + p === 0) out.skipped.push({ key: k, name, why: '그 두 달 동안 특허가 없어요' })
+        else if (c + p < src.min) out.skipped.push({ key: k, name, why: '값이 너무 적어요' })
+        else out.ranking.push(row(k, slot, c, p, { basis: `${last.slice(0, 7)} vs ${before.slice(0, 7)}`, stale: Boolean(slot.errorAt && (!slot.at || slot.errorAt > slot.at)) }))
+      }
+    }
+    if (!out.ranking.length) out.empty = '최근 4주 동안 확인할 수 있는 특허 자료가 없어요.'
+  }
+  out.ranking.sort((a, b) => b.growth - a.growth)
+  return out
+}
+
 export async function getTechTrends({ period, from, to } = {}) {
   await load({ fresh: true })
   const win = windowOf(period, from, to)
   const keys = await candidates()
   const sources = SOURCES.map((src) => {
     const out = { id: src.id, label: src.label, axis: src.axis, unit: src.unit, note: src.note, daily: src.daily, at: state.runs[src.id] ?? null, ranking: [], skipped: [] }
-    if (!src.daily && win.days < 28) {
-      out.unavailable = '월 단위 자료예요. 「이번 달」이나 4주 이상으로 설정하면 보여요.'
-      return out
-    }
+    // 월별 출처(논문 · 특허)인데 고른 기간이 4주보다 짧으면 (조장 11/08): 「못 보여 줌」 대신 최근 4주로 바꿔 비교한다
+    if (!src.daily && win.days < 28) return shortMonthly(src, out, keys)
     for (const k of keys) {
       const slot = state.series[src.id]?.[k]
       const t = state.terms[k]
