@@ -31,9 +31,22 @@ export const SOURCES = [
   { id: 'patents', label: '특허 공개 건수', axis: '개발·투자', unit: '건', daily: false, smooth: 2, min: 5, note: 'Google Patents · 영문 제목 · 월별 (공개까지 약 18개월 늦음)' },
 ]
 
+const status = { running: false, phase: null, startedAt: null, finishedAt: null }
+// 진행 단계를 DB에도 남겨, 다른 사본이 받은 화면 요청에서도 「지금 갱신 중: …」을 보여 준다
+async function setPhase(phase) {
+  status.phase = phase
+  if (state) {
+    state.progress = phase ? { phase, startedAt: status.startedAt, at: new Date().toISOString() } : null
+    await save()
+  }
+}
+
 // ── 저장 상태 (app_settings 한 줄) ──
+// 갱신 중인 사본은 자기 state를 쓰고, 그 밖에는 매번 DB에서 다시 읽는다
+// (머지·코드 수정으로 Vite가 서버를 같은 프로세스 안에서 다시 올리면 모듈 사본이 여러 개 생김 — 11/07 실제로 화면이 옛 값을 보여 줌)
 let state = null
-async function load() {
+async function load({ fresh = false } = {}) {
+  if (fresh && !status.running) state = null
   state ??= (await getSetting(KEY, null)) ?? {}
   state.terms ??= {} // key → { name, en, category, aliases[], articles{id: day} }
   state.series ??= {} // source → key → { series[{t,v}], at, error?, errorAt? }
@@ -514,22 +527,22 @@ async function fetchReddit(keys) {
 }
 
 // ── 하루 한 번 도는 일 ──
-const status = { running: false, phase: null, startedAt: null, finishedAt: null }
 
 async function cycle(opts = {}) {
-  if (status.running) return
+  if (status.running || globalThis.__techTrendsRunning) return
+  globalThis.__techTrendsRunning = true
   status.running = true
   status.startedAt = new Date().toISOString()
   try {
     await load()
-    status.phase = '후보 찾기: 검색어'
+    await setPhase('후보 찾기: 검색어')
     await discoverSearch().catch((err) => console.warn(`[techtrends] 검색어 후보 실패: ${err.message}`))
-    status.phase = '후보 찾기: 논문 신규 키워드'
+    await setPhase('후보 찾기: 논문 신규 키워드')
     await discoverPapers().catch((err) => console.warn(`[techtrends] 논문 후보 실패: ${err.message}`))
-    status.phase = '후보 찾기: 기사'
+    await setPhase('후보 찾기: 기사')
     // 처음에는 60일치(약 1,700건)라 여러 번에 나눠 한다. 한 번에 400건
     for (let n = 0; n < 5; n++) if ((await extractTerms()) < 400) break
-    status.phase = '용어 검토 (제품명·넓은 말 거르기)'
+    await setPhase('용어 검토 (제품명·넓은 말 거르기)')
     await reviewTerms()
     const keys = await candidates()
     for (const [id, fn] of [
@@ -538,7 +551,7 @@ async function cycle(opts = {}) {
       ['openalex', fetchOpenAlex],
       ['patents', fetchPatents],
     ]) {
-      status.phase = SOURCES.find((s) => s.id === id).label
+      await setPhase(SOURCES.find((s) => s.id === id).label)
       try {
         const ran = await fn(keys)
         if (ran !== false) state.runs[id] = new Date().toISOString()
@@ -548,7 +561,7 @@ async function cycle(opts = {}) {
       await save()
     }
     if (!opts.skipReddit) {
-      status.phase = 'Reddit 글 수 (1분 간격)'
+      await setPhase('Reddit 글 수 (1분 간격)')
       await fetchReddit(keys)
       state.runs.reddit = new Date().toISOString()
     }
@@ -559,7 +572,8 @@ async function cycle(opts = {}) {
     console.warn(`[techtrends] 갱신 실패: ${err.message}`)
   } finally {
     status.running = false
-    status.phase = null
+    globalThis.__techTrendsRunning = false
+    await setPhase(null)
     status.finishedAt = new Date().toISOString()
   }
 }
@@ -569,9 +583,11 @@ export const refreshTechTrends = cycle
 
 // 서버가 켜지면 1분 뒤 한 번, 그 뒤 하루마다. TECH_TRENDS=off면 돌지 않음 (테스트 서버용)
 export function startTechTrends() {
-  if (process.env.TECH_TRENDS === 'off' || !dbEnabled() || globalThis.__techTrendsTimer) return
-  setTimeout(cycle, 60_000).unref?.()
-  globalThis.__techTrendsTimer = setInterval(cycle, CYCLE_MS)
+  if (process.env.TECH_TRENDS === 'off' || !dbEnabled()) return
+  globalThis.__techTrendsCycle = cycle // 서버가 다시 올라오면 새 코드의 cycle로 바뀜
+  if (globalThis.__techTrendsTimer) return
+  setTimeout(() => globalThis.__techTrendsCycle(), 60_000).unref?.()
+  globalThis.__techTrendsTimer = setInterval(() => globalThis.__techTrendsCycle(), CYCLE_MS)
   globalThis.__techTrendsTimer.unref?.()
 }
 
@@ -614,7 +630,7 @@ function monthWindows(series, win) {
 }
 
 export async function getTechTrends({ period, from, to } = {}) {
-  await load()
+  await load({ fresh: true })
   const win = windowOf(period, from, to)
   const keys = await candidates()
   const sources = SOURCES.map((src) => {
@@ -697,6 +713,10 @@ export async function getTechTrends({ period, from, to } = {}) {
     candidates: keys.length,
     extractedUntil: state.extractedUntil ?? null,
     updatedAt: state.updatedAt ?? null,
-    status: { ...status },
+    status: status.running
+      ? { ...status }
+      : state.progress && Date.now() - Date.parse(state.progress.at) < 15 * 60_000
+        ? { running: true, phase: state.progress.phase, startedAt: state.progress.startedAt }
+        : { running: false, phase: null },
   }
 }
