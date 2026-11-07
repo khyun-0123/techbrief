@@ -3180,3 +3180,253 @@ a.brand:focus-visible {
 .dash-more[open] summary {
   margin-bottom: 4px;
 }
+
+/* ── 선별 폴더 (27 문서 2장) ── */
+.folder-bar {
+  margin-top: var(--tb-space-2);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tb-space-2) var(--tb-space-3);
+  margin: 0 0 var(--tb-space-4);
+}
+.folder-bar-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tb-color-text-sub);
+}
+.folder-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tb-space-2);
+  min-width: 0;
+}
+.folder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 14px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.folder-chip:hover {
+  background: var(--tb-color-surface-hover);
+}
+.folder-chip.active {
+  border-color: var(--tb-color-primary);
+  background: var(--tb-color-primary);
+  color: var(--tb-color-on-primary);
+}
+.folder-chip.drop-over {
+  border-color: var(--tb-color-highlight);
+  border-style: dashed;
+  background: var(--tb-color-accent-soft);
+  color: var(--tb-color-text);
+}
+.folder-chip.folder-add {
+  border-style: dashed;
+  color: var(--tb-color-text-sub);
+}
+.folder-count {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.8;
+}
+.folder-checked {
+  font-size: 12px;
+  font-weight: 700;
+}
+.folder-new {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--tb-space-2);
+}
+.folder-new input {
+  min-width: 0;
+  width: 220px;
+  max-width: 100%;
+}
+.folder-actions {
+  display: inline-flex;
+  gap: var(--tb-space-3);
+  font-size: 13px;
+}
+.folder-select {
+  display: block;
+  margin-top: 6px;
+  max-width: 100%;
+  font-size: 13px;
+}
+.folder-target-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--tb-color-text-sub);
+}
+.folder-tag {
+  color: var(--tb-color-text-sub);
+}
+.folder-summary {
+  font-weight: 600;
+}
+tr[draggable='true'],
+li[draggable='true'] {
+  cursor: grab;
+}
+.detail-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tb-space-2);
+}
+.folder-move {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--tb-color-text-sub);
+}
+
+/* ── 직접 추가한 자료 (27 문서 3장) ── */
+.badge-material {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.add-material {
+  margin: var(--tb-space-4) 0;
+}
+.add-material-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--tb-space-2) var(--tb-space-4);
+}
+.add-material-head h2 {
+  margin: 0;
+}
+.add-material-head .hint {
+  flex: 1 1 260px;
+  margin: 0;
+}
+.seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tb-space-2);
+  margin: var(--tb-space-4) 0;
+}
+.seg-btn {
+  min-height: 36px;
+  padding: 4px 14px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.seg-btn.active {
+  border-color: var(--tb-color-primary);
+  background: var(--tb-color-primary);
+  color: var(--tb-color-on-primary);
+}
+.add-material-form {
+  display: grid;
+  gap: var(--tb-space-3);
+}
+.add-material-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 0;
+}
+.add-material-form small {
+  font-weight: 400;
+  color: var(--tb-color-text-sub);
+}
+.add-material-form input:not([type='checkbox']),
+.add-material-form select,
+.add-material-form textarea {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-weight: 400;
+}
+.add-material-form label.check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.add-material-form label.check small {
+  flex-basis: 100%;
+}
+.add-material-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--tb-space-3);
+  align-items: end;
+}
+.add-material-form .btn.primary {
+  justify-self: start;
+}
+
+/* ── 용어 백과 (27 문서 4장) ── */
+.wiki-panel {
+  margin-bottom: var(--tb-space-4);
+}
+.wiki-lookup h3 small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--tb-color-text-sub);
+}
+.wiki-form {
+  display: flex;
+  gap: var(--tb-space-2);
+  margin-bottom: var(--tb-space-2);
+}
+.wiki-form input {
+  flex: 1;
+  min-width: 0;
+}
+.chip-btn {
+  border: 1px solid var(--tb-color-line);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+.chip-btn:hover {
+  background: var(--tb-color-surface-hover);
+}
+.wiki-card {
+  margin-top: var(--tb-space-3);
+  padding: var(--tb-space-3) var(--tb-space-4);
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: var(--tb-radius-card-s);
+  background: var(--tb-color-bg);
+}
+.wiki-title {
+  margin: 0 0 var(--tb-space-2);
+}
+.wiki-title span {
+  color: var(--tb-color-text-sub);
+}
+.wiki-extract {
+  margin: 0 0 var(--tb-space-2);
+  line-height: 1.6;
+}

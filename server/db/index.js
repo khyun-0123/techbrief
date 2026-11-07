@@ -99,6 +99,33 @@ CREATE TABLE IF NOT EXISTS paper_cache (
   expires_at  timestamptz NOT NULL
 );
 
+-- 직접 추가한 자료 (11/07 결정, 27 문서 3장): 링크 · DOI · 텍스트 · 파일. 21일 정리 대상 아님 (지울 때까지 남음)
+-- added_by는 브라우저가 만든 무작위 값(이름 없음). 올린 브라우저와 관리자만 지울 수 있다
+CREATE TABLE IF NOT EXISTS materials (
+  id           text PRIMARY KEY,
+  kind         text NOT NULL,
+  title        text NOT NULL,
+  url          text,
+  source       text,
+  description  text,
+  body         text,
+  tier         integer NOT NULL DEFAULT 2,
+  ai_allowed   boolean NOT NULL DEFAULT true,
+  published_at timestamptz NOT NULL DEFAULT now(),
+  added_at     timestamptz NOT NULL DEFAULT now(),
+  added_by     text,
+  file_name    text,
+  doi          text
+);
+CREATE INDEX IF NOT EXISTS materials_added_idx ON materials (added_at DESC);
+
+-- 브라우저별 선별 폴더 (11/07 결정: 선별 정보 서버 기록, 이름 없음). data = { folders, folderOf, selectedIds }
+CREATE TABLE IF NOT EXISTS selections (
+  client_id   text PRIMARY KEY,
+  data        jsonb NOT NULL,
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS app_settings (
   key        text PRIMARY KEY,
   value      jsonb NOT NULL,

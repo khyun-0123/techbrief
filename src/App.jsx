@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import {
+  deleteMaterialApi,
   deleteReportApi,
   fetchAdminMe,
   fetchArticles,
@@ -9,12 +10,15 @@ import {
   fetchHealth,
   fetchKeywords,
   fetchLists,
+  fetchMaterials,
+  fetchSelection,
   fetchRefresh,
   fetchReports,
   importReports,
   lookupSummaries,
   runRefresh,
   saveFavoritesApi,
+  saveSelectionApi,
   searchNewsApi,
 } from './api.js'
 import FavoritesRail from './FavoritesRail.jsx'
@@ -38,7 +42,10 @@ import TestTools from './TestTools.jsx'
 import SentimentBadge, { sentimentLabel, sentimentOf as pickSentiment } from './SentimentBadge.jsx'
 import SummaryItems from './SummaryItems.jsx'
 import { formatPublished, load } from './utils.js'
-import { enableUsage, track, trackVisit } from './usage.js'
+import { clientId, enableUsage, track, trackVisit } from './usage.js'
+import AddMaterial from './AddMaterial.jsx'
+import FolderBar from './FolderBar.jsx'
+import { dragArticle, INBOX, INBOX_FOLDER } from './folders.js'
 
 const KEYWORDS_KEY = 'techbrief-keywords'
 const SELECTED_KEY = 'techbrief-selected'
@@ -56,6 +63,21 @@ const RECENT_MAX = 10
 const TIER_TITLE = { 1: '1차 출처: 기업 발표·학회·논문', 2: '2차 출처: 전문매체', 3: '3차 출처: 일반 뉴스' }
 const EXTRA_KEY = 'techbrief-extra-articles' // 「기사 찾기」 결과에서 선별한 기사 (수집 목록에 없는 것)
 const MAX_SAVED = 400
+// 선별 폴더 (11/07 결정, 27 문서 2장). 브라우저에 두고 서버(selections)에도 같이 저장한다
+const FOLDERS_KEY = 'techbrief-folders'
+const FOLDER_OF_KEY = 'techbrief-folder-of'
+const TARGET_FOLDER_KEY = 'techbrief-target-folder'
+
+// 「미분류」는 항상 맨 앞에 있다
+function withInbox(list) {
+  const rest = (Array.isArray(list) ? list : []).filter((f) => f?.id && f.id !== INBOX)
+  return [INBOX_FOLDER, ...rest]
+}
+
+// 직접 추가한 자료: 「발행」 칸에는 올린 때를 보여 준다 (논문 날짜는 제목 옆에)
+function materialView(m) {
+  return { ...m, hoursAgo: Math.max(0, (Date.now() - Date.parse(m.addedAt)) / 3600_000) }
+}
 
 // 서버 기사(publishedAt)를 화면에서 쓰는 모양(hoursAgo)으로 바꾼다
 function toView(a) {
@@ -136,6 +158,11 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [starting, setStarting] = useState(false)
   const [keywords, setKeywords] = useState(() => load(KEYWORDS_KEY, DEFAULT_KEYWORDS))
   const [selectedIds, setSelectedIds] = useState(() => load(SELECTED_KEY, []))
+  const [folders, setFolders] = useState(() => withInbox(load(FOLDERS_KEY, [])))
+  const [folderOf, setFolderOf] = useState(() => load(FOLDER_OF_KEY, {})) // { 기사 id: 폴더 id }
+  const [targetFolder, setTargetFolder] = useState(() => load(TARGET_FOLDER_KEY, INBOX)) // 자료 현황에서 「선별 추가」가 담을 폴더
+  const [materials, setMaterials] = useState([]) // 직접 추가한 자료 (서버)
+  const [showAdd, setShowAdd] = useState(false)
   const [includedIds, setIncludedIds] = useState(() => load(INCLUDED_KEY, []))
   const [screen, setScreen] = useState('dashboard')
   const [query, setQuery] = useState('')
@@ -195,7 +222,32 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     fetchLists()
       .then(setLists)
       .catch(() => {})
+    fetchMaterials()
+      .then(setMaterials)
+      .catch(() => {})
   }, [reloadArticles])
+
+  // 선별 폴더: 이 브라우저에 아무것도 없으면 서버에 저장해 둔 것을 불러온다 (브라우저 저장소를 지웠을 때)
+  const selectionLoaded = useRef(false)
+  useEffect(() => {
+    const id = clientId()
+    if (!id) {
+      selectionLoaded.current = true
+      return
+    }
+    fetchSelection(id)
+      .then((saved) => {
+        if (saved && load(SELECTED_KEY, []).length === 0 && saved.selectedIds?.length) {
+          setFolders(withInbox(saved.folders))
+          setFolderOf(saved.folderOf ?? {})
+          setSelectedIds(saved.selectedIds)
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        selectionLoaded.current = true
+      })
+  }, [])
 
   // 「지금 최신화」 (실험 기능 refreshButton). 일반 사용자는 서버가 10분에 한 번으로 막는다
   async function handleRefresh() {
@@ -376,6 +428,23 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   }, [selectedIds])
 
   useEffect(() => {
+    localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders))
+    localStorage.setItem(FOLDER_OF_KEY, JSON.stringify(folderOf))
+  }, [folders, folderOf])
+
+  useEffect(() => {
+    localStorage.setItem(TARGET_FOLDER_KEY, JSON.stringify(targetFolder))
+  }, [targetFolder])
+
+  // 서버에도 저장 (1.5초 모았다가 한 번). 불러오기가 끝나기 전에는 빈 값으로 덮지 않게 기다린다
+  useEffect(() => {
+    const id = clientId()
+    if (!id || !selectionLoaded.current) return undefined
+    const timer = setTimeout(() => saveSelectionApi(id, { folders, folderOf, selectedIds }).catch(() => {}), 1500)
+    return () => clearTimeout(timer)
+  }, [folders, folderOf, selectedIds])
+
+  useEffect(() => {
     localStorage.setItem(INCLUDED_KEY, JSON.stringify(includedIds))
   }, [includedIds])
 
@@ -387,18 +456,21 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const isSample = fetched.length === 0
   // 화면 전체에서 쓰는 기사: 수집 기사 + 찾기에서 선별한 기사 + 지금 찾기 결과
   const pool = useMemo(() => {
-    const base = isSample ? SAMPLE_ARTICLES : fetched.map(toView)
+    const base = [...(isSample ? SAMPLE_ARTICLES : fetched.map(toView)), ...materials.map(materialView)]
     const seen = new Set(base.map((a) => a.id))
     const more = [...extraArticles, ...(searchArticles ?? [])].filter((a) => !seen.has(a.id) && seen.add(a.id))
     return [...base, ...more.map(toView)]
-  }, [isSample, fetched, extraArticles, searchArticles])
+  }, [isSample, fetched, extraArticles, searchArticles, materials])
   const sources = useMemo(() => [...new Set(pool.map((a) => a.source))].sort(), [pool])
   // 출처 거르기: 'all' · 'tier:1'(1차 기업·학회·논문) · 'tier:2'(2차 전문매체) · 'tier:3'(3차 일반 뉴스) · 매체 이름
-  const sourceMatch = (a) => source === 'all' || (source.startsWith('tier:') ? String(a.tier ?? 3) === source.slice(5) : a.source === source)
+  const sourceMatch = (a) =>
+    source === 'all' || (source === 'material' ? Boolean(a.material) : source.startsWith('tier:') ? String(a.tier ?? 3) === source.slice(5) : a.source === source)
 
   // 수집 대상: 등록한 키워드에 해당하는 기사. 샘플은 키워드와 상관없이 모두 보여 준다 (샘플 키워드가 기본 키워드와 다름)
-  const collected = isSample ? SAMPLE_ARTICLES : fetched.map(toView).filter((a) => keywords.includes(a.keyword))
-  const todayIssues = collected.filter((a) => a.hoursAgo < 24)
+  const gathered = isSample ? SAMPLE_ARTICLES : fetched.map(toView).filter((a) => keywords.includes(a.keyword))
+  const todayIssues = gathered.filter((a) => a.hoursAgo < 24)
+  // 자료 현황 목록: 모은 기사 + 직접 추가한 자료
+  const collected = [...gathered, ...materials.map(materialView)]
   const countArticles = (list) => list.reduce((n, a) => n + 1 + (a.sameIssue ?? 0), 0)
 
   const maxHours = PERIODS.find((p) => p.value === period).hours
@@ -416,7 +488,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     : collected
     .filter(
       (a) =>
-        a.hoursAgo < maxHours &&
+        // 「직접 추가한 자료」만 볼 때는 기간과 상관없이 모두
+        (a.hoursAgo < maxHours || source === 'material') &&
         sourceMatch(a) &&
         (!q || matchesTerms(`${a.title} ${a.keyword}`, [q])),
     )
@@ -513,16 +586,18 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     setQuery('')
   }
 
-  function toggleSelected(article) {
+  function toggleSelected(article, folderId = targetFolder) {
     const { id } = article
     if (selectedIds.includes(id)) {
       setSelectedIds((prev) => prev.filter((x) => x !== id))
+      setFolderOf(({ [id]: _drop, ...rest }) => rest)
       // 선별을 풀면 보고서 포함 목록에서도 빼고, 아직 시작 전인 요약은 취소한다
       setIncludedIds((prev) => prev.filter((x) => x !== id))
       setExtraArticles((prev) => prev.filter((x) => x.id !== id))
       queue.remove(id)
     } else {
       setSelectedIds((prev) => [...prev, id])
+      setFolderOf((prev) => ({ ...prev, [id]: folders.some((f) => f.id === folderId) ? folderId : INBOX }))
       track('select', article.keyword || search?.query || '')
       // 수집 목록에 없는 기사(찾기 결과)는 따로 보관해 선별·보고서에서 계속 쓸 수 있게
       if (!fetched.some((x) => x.id === id)) {
@@ -531,7 +606,56 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         setExtraArticles((prev) => [...prev.filter((x) => x.id !== id), plain].slice(-100))
       }
       // 원문 기반(11/07): 요약이 없거나 발췌문 요약이면 선별 표시와 함께 요청 → 서버가 원문을 저장하고 원문으로 요약
-      if (aiSummaries[id]?.summary?.basisSource !== 'fulltext' && !opsValue.aiBlocked) queue.enqueue(article, { select: true })
+      // AI 요약을 허용하지 않은 직접 추가 자료는 요약하지 않는다
+      if (aiSummaries[id]?.summary?.basisSource !== 'fulltext' && !opsValue.aiBlocked && article.aiAllowed !== false) queue.enqueue(article, { select: true })
+    }
+  }
+
+  // 폴더로 담기 · 옮기기: 아직 선별 전이면 그 폴더로 선별, 선별한 기사면 폴더만 바꾼다 (끌어 놓기 · 폴더 메뉴)
+  // 끌어 놓기로 오는 id는 글자라서 글자로 비교한다 (샘플 기사 id는 숫자)
+  function putInFolder(articleId, folderId) {
+    const key = String(articleId)
+    const article = pool.find((x) => String(x.id) === key) ?? extraArticles.find((x) => String(x.id) === key)
+    if (!article) return
+    if (selectedIds.includes(article.id)) setFolderOf((prev) => ({ ...prev, [article.id]: folderId }))
+    else toggleSelected(article, folderId)
+  }
+
+  function createFolder(name) {
+    const id = `f-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
+    setFolders((prev) => [...prev, { id, name: name.slice(0, 40) }])
+    return id
+  }
+
+  function renameFolder(id, name) {
+    setFolders((prev) => prev.map((f) => (f.id === id ? { ...f, name: name.slice(0, 40) } : f)))
+  }
+
+  // 폴더를 지우면 안의 기사는 「미분류」로
+  function deleteFolder(id) {
+    if (id === INBOX) return
+    setFolders((prev) => prev.filter((f) => f.id !== id))
+    setFolderOf((prev) => Object.fromEntries(Object.entries(prev).map(([k, v]) => [k, v === id ? INBOX : v])))
+    if (targetFolder === id) setTargetFolder(INBOX)
+  }
+
+  const folderIdOf = (id) => (folders.some((f) => f.id === folderOf[id]) ? folderOf[id] : INBOX)
+  const folderCounts = {}
+  for (const id of selectedIds) folderCounts[folderIdOf(id)] = (folderCounts[folderIdOf(id)] ?? 0) + 1
+
+  // 직접 추가: 자료 목록에 넣고, 고르면 선별에도 담는다
+  function handleMaterialAdded(material, { select, folderId }) {
+    setMaterials((prev) => [material, ...prev.filter((m) => m.id !== material.id)])
+    if (select && !selectedIds.includes(material.id)) toggleSelected(materialView(material), folderId)
+  }
+
+  async function handleMaterialDelete(m) {
+    if (!window.confirm(`「${m.title}」 자료를 지울까요? 되돌릴 수 없어요.`)) return
+    try {
+      await deleteMaterialApi(m.id, clientId())
+      setMaterials((prev) => prev.filter((x) => x.id !== m.id))
+    } catch (err) {
+      window.alert(err.message)
     }
   }
 
@@ -541,6 +665,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
   function handleExclude(id) {
     setSelectedIds((prev) => prev.filter((x) => x !== id))
+    setFolderOf(({ [id]: _drop, ...rest }) => rest)
     setExtraArticles((prev) => prev.filter((x) => x.id !== id))
     setIncludedIds((prev) => prev.filter((x) => x !== id))
     queue.remove(id)
@@ -548,6 +673,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
   // 보고서에는 선별 화면에서 고른 순서대로
   const reportArticles = included.map((id) => candidates.find((a) => a.id === id)).filter(Boolean)
+  // 보고서에 들어가는 기사가 어느 폴더에서 왔는지 (여러 폴더를 묶어 쓸 수 있음)
+  const reportFolders = folders
+    .map((f) => [f.name, reportArticles.filter((a) => folderIdOf(a.id) === f.id).length])
+    .filter(([, n]) => n > 0)
+    .map(([name, n]) => `${name} ${n}건`)
+    .join(' · ')
 
   return (
     <OpsContext.Provider value={opsValue}>
@@ -713,6 +844,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           onUpdated={(entry) => updateReports((list) => list.map((r) => (r.id === entry.id ? entry : r)))}
           onGoSelect={() => setScreen('select')}
           onGoArchive={() => setScreen('archive')}
+          folderSummary={reportFolders}
         />
       ) : screen === 'select' ? (
         <SelectSummary
@@ -724,6 +856,14 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           onGoReport={() => setScreen('report')}
           aiSummaries={aiSummaries}
           queue={queue}
+          folders={folders}
+          folderIdOf={folderIdOf}
+          folderCounts={folderCounts}
+          onMove={putInFolder}
+          onCreateFolder={createFolder}
+          onRenameFolder={renameFolder}
+          onDeleteFolder={deleteFolder}
+          onMaterialAdded={handleMaterialAdded}
         />
       ) : (
         <main className="page page-wide collect-page">
@@ -746,6 +886,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   {starting || refreshRunning ? '최신화 중…' : '지금 최신화'}
                 </button>
               )}
+              <button type="button" className={showAdd ? 'btn primary' : 'btn'} aria-expanded={showAdd} onClick={() => setShowAdd((v) => !v)}>
+                + 자료 추가
+              </button>
               <button
                 type="button"
                 className="btn primary"
@@ -758,6 +901,16 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             </div>
           </header>
           {refreshError && <p className="ai-error">{refreshError}</p>}
+          {showAdd && <AddMaterial folders={folders} defaultFolder={targetFolder} onAdded={handleMaterialAdded} onClose={() => setShowAdd(false)} />}
+          <FolderBar
+            label="담을 폴더"
+            folders={folders}
+            counts={folderCounts}
+            active={targetFolder}
+            onPick={(id) => setTargetFolder(id ?? INBOX)}
+            onDropArticle={(folderId, articleId) => putInFolder(articleId, folderId)}
+            onCreate={(name) => setTargetFolder(createFolder(name))}
+          />
 
           {/* 오늘 수집 숫자 · 키워드 추이는 대시보드로 옮김 (11/07 팀 회의) */}
           <div className={features.has('collectPanel') ? 'content with-favs' : 'content with-favs no-settings'}>
@@ -802,6 +955,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                     <option value="tier:2">2차 · 전문매체</option>
                     <option value="tier:3">3차 · 일반 뉴스</option>
                   </optgroup>
+                  <option value="material">직접 추가한 자료 ({materials.length})</option>
                   <optgroup label="매체">
                     {sources.map((s) => (
                       <option key={s} value={s}>
@@ -913,7 +1067,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                       const job = queue.jobs.find((j) => j.id === a.id)
                       return (
                         <Fragment key={a.id}>
-                        <tr className={open || groupOpen ? 'row-open' : undefined}>
+                        <tr
+                          className={open || groupOpen ? 'row-open' : undefined}
+                          draggable
+                          onDragStart={(e) => dragArticle(e, a.id)}
+                          title="위 「담을 폴더」로 끌어다 놓으면 그 폴더에 담겨요"
+                        >
                           <td>
                             <div className="title" title={a.title}>
                               {a.importanceLevel === 'high' && (
@@ -930,6 +1089,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                               {a.topicTag && (
                                 <span className="badge-low" title={`제목은 ${a.topicTag} 이야기지만 발췌에 기술 정보가 있어 남겼어요`}>
                                   {a.topicTag} 기사 속 기술 정보
+                                </span>
+                              )}
+                              {a.material && (
+                                <span className="badge-material" title={a.aiAllowed === false ? 'AI 요약 · 보고서에 쓰지 않는 자료예요' : undefined}>
+                                  직접 추가 · {a.kindLabel}
+                                  {a.aiAllowed === false && ' · AI 안 씀'}
                                 </span>
                               )}
                               <SentimentBadge sentiment={pickSentiment(a, ai?.summary)} />
@@ -973,6 +1138,20 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                                   {[sort === 'importance' && `중요도 ${a.importance ?? 0}점`, ...reasons].filter(Boolean).join(' · ')}
                                 </span>
                               )}
+                              {a.material && (
+                                <span className="why-important">
+                                  {a.publishedAt && a.publishedAt.slice(0, 10) !== a.addedAt?.slice(0, 10) && `발행 ${a.publishedAt.slice(0, 10)} · `}
+                                  {a.fileName ? `파일 ${a.fileName}` : a.url ? '링크' : '텍스트'}
+                                  {a.addedBy && a.addedBy === clientId() && (
+                                    <>
+                                      {' · '}
+                                      <button type="button" className="link-btn" onClick={() => handleMaterialDelete(a)}>
+                                        자료 지우기
+                                      </button>
+                                    </>
+                                  )}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="source" title={`${a.source} · ${TIER_TITLE[a.tier ?? 3]}`}>
@@ -1001,8 +1180,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                               <button
                                 type="button"
                                 className="btn outline summary-btn"
-                                title={opsValue.aiBlocked ? AI_BLOCKED_TITLE : job?.status === 'error' ? `요약 오류: ${job.error}` : 'AI로 6항목 요약 (선별하지 않아도 됨)'}
-                                disabled={opsValue.aiBlocked}
+                                title={a.aiAllowed === false ? 'AI 요약을 허용하지 않은 자료예요' : opsValue.aiBlocked ? AI_BLOCKED_TITLE : job?.status === 'error' ? `요약 오류: ${job.error}` : 'AI로 6항목 요약 (선별하지 않아도 됨)'}
+                                disabled={opsValue.aiBlocked || a.aiAllowed === false}
                                 onClick={() => queue.enqueue(a)}
                               >
                                 {job?.status === 'error' ? '요약 재시도' : '요약 추가'}
@@ -1015,6 +1194,17 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                             >
                               {selected ? '선별됨 ✓' : '선별 추가'}
                             </button>
+                            {selected ? (
+                              <select className="folder-select" value={folderIdOf(a.id)} onChange={(e) => putInFolder(a.id, e.target.value)} aria-label="폴더 옮기기" title="담긴 폴더 (바꾸면 옮겨요)">
+                                {folders.map((f) => (
+                                  <option key={f.id} value={f.id}>
+                                    ▤ {f.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              folders.length > 1 && <span className="folder-target-note">→ {folders.find((f) => f.id === targetFolder)?.name ?? '미분류'}</span>
+                            )}
                           </td>
                         </tr>
                         {groupOpen && (

@@ -186,9 +186,20 @@ const memoryTexts = new Map() // id → { url, body, fetchedAt }
 
 export async function getArticleText(id) {
   if (!id) return null
-  if (!dbEnabled()) return memoryTexts.get(id)?.body ?? null
+  if (!dbEnabled()) {
+    if (memoryTexts.get(id)?.body) return memoryTexts.get(id).body
+    if (!String(id).startsWith('m-')) return null
+    const { getMaterial } = await import('../materials.js')
+    return (await getMaterial(id))?.body ?? null
+  }
   const { rows } = await query('SELECT body FROM article_texts WHERE article_id = $1', [id])
-  return rows[0]?.body ?? null
+  if (rows[0]?.body) return rows[0].body
+  // 직접 추가한 자료(m-…)는 materials에 본문이 있다
+  if (String(id).startsWith('m-')) {
+    const m = await query('SELECT body FROM materials WHERE id = $1', [id])
+    return m.rows[0]?.body ?? null
+  }
+  return null
 }
 
 export async function saveArticleText(id, url, body) {
@@ -214,4 +225,27 @@ export async function articleUrlOf(id) {
 export async function pruneArticleTexts() {
   if (!dbEnabled()) return
   await query(`DELETE FROM article_texts WHERE fetched_at < now() - interval '${TEXT_KEEP_DAYS} days'`)
+}
+
+// ── 브라우저별 선별 폴더 (selections) ──
+const memorySelections = new Map()
+
+export async function getSelection(clientId) {
+  if (!clientId) return null
+  if (!dbEnabled()) return memorySelections.get(clientId) ?? null
+  const { rows } = await query('SELECT data, updated_at FROM selections WHERE client_id = $1', [clientId])
+  return rows[0] ? { ...rows[0].data, updatedAt: rows[0].updated_at.toISOString() } : null
+}
+
+export async function saveSelection(clientId, data) {
+  if (!clientId) return
+  if (!dbEnabled()) {
+    memorySelections.set(clientId, { ...data, updatedAt: new Date().toISOString() })
+    return
+  }
+  await query(
+    `INSERT INTO selections (client_id, data, updated_at) VALUES ($1, $2, now())
+     ON CONFLICT (client_id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
+    [clientId, JSON.stringify(data)],
+  )
 }

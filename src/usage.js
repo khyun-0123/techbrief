@@ -10,7 +10,7 @@ export function enableUsage(on) {
   enabled = on
 }
 
-function clientId() {
+export function clientId() {
   try {
     let id = localStorage.getItem(CLIENT_KEY)
     if (!id) {
