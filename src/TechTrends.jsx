@@ -12,6 +12,18 @@ const PERIODS = [
   { id: 'custom', label: '직접 설정' },
 ]
 const SHOW = 10
+const FROM_LABEL = { search: '검색', paper: '논문 신규', article: '기사' }
+
+// 이 용어를 어디서 찾았는지 (검색어 · 논문 신규 키워드 · 기사). 기사만이면 표시 안 함
+function From({ from }) {
+  const shown = (from ?? []).filter((f) => f !== 'article')
+  if (!shown.length) return null
+  return shown.map((f) => (
+    <span key={f} className={`tt-from tt-from-${f}`} title={f === 'paper' ? '최근 6개월 디스플레이 논문에서 새로 늘어난 키워드' : '네이버 연관 검색어에서 찾은 용어'}>
+      {FROM_LABEL[f]}
+    </span>
+  ))
+}
 
 const fmtAt = (iso) => (iso ? new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '')
 const fmtDay = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`
@@ -80,6 +92,7 @@ function Composite({ data, onPick }) {
                   {r.name}
                 </button>
                 <span className="tt-cat">{r.category}</span>
+                <From from={r.from} />
               </td>
               <td>
                 <span className="tt-score" title="출처마다 순위를 0~100으로 바꿔 평균">
@@ -115,9 +128,12 @@ function SourceList({ src, win, onPick }) {
       <ol className="tt-list">
         {rows.map((r) => (
           <li key={r.key}>
-            <button type="button" className="tt-term" onClick={() => onPick(r.name)} title={`「${r.name}」 자료 찾기`}>
-              {r.name}
-            </button>
+            <span className="tt-namecell">
+              <button type="button" className="tt-term" onClick={() => onPick(r.name)} title={`「${r.name}」 자료 찾기`}>
+                {r.name}
+              </button>
+              <From from={r.from} />
+            </span>
             <span className="tt-cat">{r.category}</span>
             <Change change={r.change} growth={r.growth} cur={r.cur} />
             <span className="tt-vals">
@@ -230,7 +246,8 @@ function TechTrends({ onPick }) {
 
       {data && (
         <p className="tt-foot">
-          기술 용어 {data.terms}개 중 후보 {data.candidates}개
+          후보 {data.candidates}개 — 찾은 곳: 검색어 {data.searchStatus === 'no_key' ? '(네이버 검색광고 키 필요)' : `${data.from?.search ?? 0}개`} · 논문 신규 {data.from?.paper ?? 0}개 · 기사 {data.from?.article ?? 0}개
+          {data.hidden ? ` · 제품명·넓은 말 ${data.hidden}개는 AI 검토로 숨김` : ''}
           {data.updatedAt ? ` · ${fmtAt(data.updatedAt)} 갱신 (하루 한 번)` : ''}
           {data.status.running ? ` · 지금 갱신 중: ${data.status.phase}` : ''}
         </p>

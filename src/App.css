@@ -3103,3 +3103,23 @@ a.brand:focus-visible {
     justify-self: start;
   }
 }
+
+.tt-from {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.tt-from-paper {
+  border-color: var(--tb-color-text-sub);
+  color: var(--tb-color-text);
+  font-weight: 600;
+}
+
+.tt-namecell {
+  min-width: 0;
+}

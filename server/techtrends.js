@@ -1,6 +1,8 @@
 // 기술 트렌드 (25 문서, 11/07 조장 결정): 대시보드 첫 줄 「요즘 뜨는 기술」
-// 1. 용어 찾기: 모은 기사 제목에서 AI가 기술 용어만 뽑아 사전을 스스로 만든다 (기업·지역·행사·일반 단어는 버림)
-//    → 기사 수는 「후보를 찾는 데」만 쓰고 순위 점수에는 넣지 않는다 (담당자 "기사 많음 ≠ 중요")
+// 1. 후보 찾기 (세 갈래, 11/07 조장 결정) — 기사 수는 순위 점수에 넣지 않는다 (담당자 "기사 많음 ≠ 중요")
+//    ① 검색: 네이버 검색광고 키워드 도구의 연관 검색어 (키가 있으면) ② 논문: OpenAlex 디스플레이 논문 키워드 중 새로 뜬 것 (신규성)
+//    ③ 기사: 모은 기사 제목에서 AI가 기술 용어 뽑기 (보조)
+//    → 모은 용어를 AI가 한 번 더 검토해 제품명·일반어는 숨기고, 논문·특허용 영어 검색어를 정한다
 // 2. 신호 받기: 후보 용어마다 출처 5곳의 추이를 하루 한 번 받아 둔다
 //    네이버 검색량(관심, 일별) · Wikipedia 조회수(관심, 일별) · Reddit 글 수(현장 반응, 일별) · 논문 수(OpenAlex, 월별) · 특허 공개(BigQuery, 월별)
 // 3. 순위: 요청한 기간(이번 주·지난주·이번 달·직접)과 바로 전 같은 길이 기간을 비교해 출처마다 순위, 출처별 순위를 합쳐 종합 순위
@@ -13,8 +15,8 @@ import { countPatentsFor } from './patents.js'
 const KEY = 'tech_trends'
 const DAY = 86_400_000
 const UA = 'techbrief/0.1 (university team project; tech trend dashboard)'
-const MAX_TERMS = 40 // 신호를 받을 후보 수 (네이버 하루 1,000회 · OpenAlex 하루 약 1,000회 안)
-const MIN_ARTICLES = 2 // 최근 60일 기사 2건 이상에 나온 용어만 후보
+const MAX_TERMS = 150 // 안전 상한 (네이버 하루 1,000회 · OpenAlex 하루 약 1,000회 안). 기사 수로 자르지 않는다
+const MIN_ARTICLES = 2 // 기사 갈래 용어는 최근 60일 기사 2건 이상 (한 번 스친 말 거르기)
 const HISTORY_DAYS = 120
 const BATCH = 40 // AI에게 한 번에 주는 기사 제목 수
 const CYCLE_MS = 24 * 3600_000
@@ -79,6 +81,7 @@ function termPrompt(titles) {
         '너는 디스플레이 산업 기술 동향 분석가다. 기사 제목들에서 「디스플레이 산업의 기술 트렌드로 볼 만한 기술 용어」만 뽑는다.\n' +
         '- 디스플레이 패널·소재·부품·장비·공정, 디스플레이를 쓰는 기기와 직접 관련된 것만. 배터리·자동차 반도체·일반 AI·에너지 등 다른 산업 기술은 tech=false\n' +
         '- 약어와 그 약어가 들어간 더 구체적인 말이 같이 나오면 구체적인 말 하나만 (예: AR과 AR 글래스 → AR 글래스)\n' +
+        '- 특정 회사 제품 이름(아이패드 미니, 갤럭시 Z 폴드7, 아이폰 등)과 AI·TV·스마트폰·반도체 같은 넓은 말은 tech=false\n' +
         '- 뽑는 것: 디스플레이 방식·패널 기술(예: QD-OLED, 탠덤 OLED, LTPO, 마이크로LED), 공정·장비(잉크젯 프린팅, 증착, 레이저 전사), 소재·부품(OCA, 퀀텀닷, UTG), 새 응용 제품군(AR 글래스, 차량용 디스플레이, OLED 모니터)\n' +
         '- 버리는 것(tech=false): 회사·기관·사람·지역 이름, 쇼핑 행사·할인·가격, 정책·예산, 실적·주가, 「디스플레이」「기술」「패널」「제품」 같은 너무 일반적인 말\n' +
         '- name: 한국에서 통용되는 대표 표기 하나 (같은 기술의 다른 표기는 합친다. 예: 퀀텀닷·양자점 → 퀀텀닷, 마이크로 LED → 마이크로LED)\n' +
@@ -89,7 +92,7 @@ function termPrompt(titles) {
   ]
 }
 
-function upsertTerm(item, articleDays) {
+function upsertTerm(item, articleDays = [], from = 'article') {
   const k = keyOf(item.name)
   if (!k || k.length < 2) return
   // 다른 표기로 이미 있는 용어면 거기에 합친다 (이름 · 영어 · 원문 표기)
@@ -100,6 +103,8 @@ function upsertTerm(item, articleDays) {
   for (const a of [item.term, item.name, item.en]) if (a && !t.aliases.includes(a.trim())) t.aliases.push(a.trim())
   t.aliases = t.aliases.slice(0, 8)
   for (const [id, day] of articleDays) t.articles[id] = day
+  t.from = [...new Set([...(t.from ?? ['article']), from])]
+  return t
 }
 
 // 아직 안 본 기사 제목을 BATCH개씩 AI에게 보낸다. 사람 요청이 오면 자리를 내주고 다음에 이어서 한다
@@ -135,14 +140,203 @@ async function extractTerms(limit = 400) {
   return done
 }
 
-// 후보: 최근 60일 기사 2건 이상에 나온 기술 용어 + 자동 수집 키워드. 숨긴 용어는 뺀다
+// 후보: 검색·논문 갈래에서 온 용어 전부 + 기사 갈래는 2건 이상 + 자동 수집 키워드. AI 검토에서 숨긴 용어는 뺀다
+// 순서(상한에 걸릴 때만 의미): 자동 수집 키워드 → 검색·논문 갈래 → 최근에 처음 보인 용어
 async function candidates() {
   const forced = new Set((dbEnabled() ? await getKeywords() : []).map(keyOf))
+  const ok = ([k, t]) => !t.hidden && (forced.has(k) || (t.from ?? []).some((f) => f !== 'article') || Object.keys(t.articles).length >= MIN_ARTICLES)
+  const rank = ([k, t]) => (forced.has(k) ? 0 : (t.from ?? []).some((f) => f !== 'article') ? 1 : 2)
   return Object.entries(state.terms)
-    .filter(([k, t]) => !t.hidden && (Object.keys(t.articles).length >= MIN_ARTICLES || forced.has(k)))
-    .sort((a, b) => Object.keys(b[1].articles).length - Object.keys(a[1].articles).length)
+    .filter(ok)
+    .sort((a, b) => rank(a) - rank(b) || String(b[1].firstSeen).localeCompare(String(a[1].firstSeen)))
     .slice(0, MAX_TERMS)
     .map(([k]) => k)
+}
+
+// ── AI 검토: 처음 본 용어를 한 번 더 보고 제품명·일반어를 숨기고, 논문·특허용 영어 검색어를 정한다 ──
+const REVIEW_SCHEMA = {
+  type: 'object',
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          keep: { type: 'boolean' },
+          reason: { type: 'string' },
+          query_en: { type: 'string' },
+        },
+        required: ['name', 'keep', 'reason', 'query_en'],
+      },
+    },
+  },
+  required: ['items'],
+}
+
+async function reviewTerms() {
+  const todo = Object.entries(state.terms).filter(([, t]) => !t.reviewed)
+  for (let i = 0; i < todo.length; i += 60) {
+    const batch = todo.slice(i, i + 60)
+    let data
+    try {
+      ;({ data } = await chatJson({
+        messages: [
+          {
+            role: 'system',
+            content:
+              '디스플레이 산업 기술 트렌드 대시보드에 올릴 용어 목록이다. 용어마다 판단하라.\n' +
+              '- keep=false: 특정 회사 제품 이름(아이패드 미니, 아이폰 듀오, 갤럭시 Z 폴드7 등), 너무 넓은 말(AI, TV, 스마트폰, 반도체, 디스플레이, 터치스크린, 레이저, 증착처럼 분야 전체를 가리키는 말), 디스플레이와 무관한 기술\n' +
+              '- keep=true: 디스플레이 패널 방식·소재·부품·공정·장비, 디스플레이를 쓰는 새 기기 범주(AR 글래스, 차량용 디스플레이 등)처럼 트렌드로 볼 만한 구체적인 기술\n' +
+              '- query_en: 논문·특허 제목에서 이 기술을 찾을 영어 검색어 하나 (약어가 널리 쓰이면 약어. 예: QD-OLED, micro LED, optically clear adhesive). keep=false면 빈 문자열\n' +
+              '- reason: 한 줄',
+          },
+          { role: 'user', content: batch.map(([, t]) => `${t.name} (${t.en}, ${t.category})`).join('\n') },
+        ],
+        schema: REVIEW_SCHEMA,
+        schemaName: 'term_review',
+        priority: PRIORITY.BACKGROUND,
+        timeoutMs: 180_000,
+      }))
+    } catch (err) {
+      if (!(err instanceof PreemptedError)) console.warn(`[techtrends] 용어 검토 실패: ${err.message}`)
+      return
+    }
+    const byName = new Map((data.items ?? []).map((x) => [keyOf(x.name.replace(/\s*\(.*$/, '')), x]))
+    for (const [k, t] of batch) {
+      const r = byName.get(keyOf(t.name)) ?? byName.get(k)
+      if (!r) continue
+      t.reviewed = true
+      t.hidden = !r.keep
+      t.reviewNote = r.reason
+      t.query = r.keep ? r.query_en.trim() : ''
+    }
+    await save()
+  }
+}
+
+// ── 후보 갈래 ② 논문 신규성: OpenAlex 디스플레이 논문 키워드를 최근 6개월과 그 전 6개월로 비교 (일주일에 한 번) ──
+const PAPER_QUERY = 'OLED OR microLED OR "micro LED" OR "quantum dot display" OR microdisplay OR "display panel" OR "flexible display"'
+const PAPER_SCHEMA = {
+  type: 'object',
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          keyword: { type: 'string' },
+          name: { type: 'string' },
+          en: { type: 'string' },
+          category: { type: 'string', enum: [...CATEGORIES, '해당 없음'] },
+          tech: { type: 'boolean' },
+        },
+        required: ['keyword', 'name', 'en', 'category', 'tech'],
+      },
+    },
+  },
+  required: ['items'],
+}
+
+async function openAlexGet(url) {
+  for (const wait of [0, 5000, 15000]) {
+    if (wait) await sleep(wait)
+    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(30_000) })
+    if (res.status === 429) continue // 요청 제한: 조금 쉬고 다시
+    if (!res.ok) throw new Error(`응답 ${res.status}`)
+    return res.json()
+  }
+  throw new Error('응답 429')
+}
+
+async function discoverPapers() {
+  const apiKey = process.env.OPENALEX_API_KEY
+  if (!apiKey) return
+  const last = state.runs.discoverPapers ? Date.now() - Date.parse(state.runs.discoverPapers) : Infinity
+  if (last < 7 * DAY) return
+  const today = ymd(Date.now())
+  const mid = ymd(Date.now() - 182 * DAY)
+  const start = ymd(Date.now() - 364 * DAY)
+  const group = async (from, to) =>
+    (await openAlexGet(`https://api.openalex.org/works?filter=title_and_abstract.search:${encodeURIComponent(PAPER_QUERY)},from_publication_date:${from},to_publication_date:${to}&group_by=keywords.id&api_key=${apiKey}`)).group_by ?? []
+  const prev = new Map((await group(start, mid)).map((g) => [g.key_display_name, g.count]))
+  const cur = await group(mid, today)
+  const totPrev = [...prev.values()].reduce((a, b) => a + b, 0) || 1
+  const totCur = cur.reduce((a, g) => a + g.count, 0) || 1
+  // 비중이 1.5배 이상 늘었거나 그 전 상위 200에 없던 키워드 (상위 200만 주므로 「없음」은 「200위 밖」일 수 있음)
+  const rising = cur
+    .filter((g) => g.count >= 8)
+    .map((g) => ({ kw: g.key_display_name, cur: g.count, prev: prev.get(g.key_display_name) ?? 0, ratio: (g.count / totCur + 0.002) / ((prev.get(g.key_display_name) ?? 0) / totPrev + 0.002) }))
+    .filter((x) => x.ratio >= 1.5)
+    .sort((a, b) => b.ratio - a.ratio)
+    .slice(0, 30)
+  if (!rising.length) return
+  const { data } = await chatJson({
+    messages: [
+      {
+        role: 'system',
+        content:
+          '디스플레이 논문에서 최근 늘어난 영어 키워드들이다. 각각 디스플레이 산업의 기술 트렌드로 볼 만한 구체적인 기술인지 판단하라.\n' +
+          '- tech=false: 실험 방법·일반 물리 용어(efficiency, energy, simulation 등), 너무 넓은 말, 디스플레이와 무관한 것\n' +
+          '- name: 한국 업계에서 통용되는 표기 (예: tandem OLED → 탠덤 OLED, thin film encapsulation → 박막 봉지(TFE)). en: 영문 Wikipedia 문서가 있으면 그 제목',
+      },
+      { role: 'user', content: rising.map((x) => x.kw).join('\n') },
+    ],
+    schema: PAPER_SCHEMA,
+    schemaName: 'paper_terms',
+    priority: PRIORITY.BACKGROUND,
+    timeoutMs: 180_000,
+  })
+  const byKw = new Map(rising.map((x) => [x.kw.toLowerCase(), x]))
+  for (const item of data.items ?? []) {
+    if (!item.tech || !CATEGORIES.includes(item.category)) continue
+    const t = upsertTerm({ term: item.keyword, name: item.name, en: item.en, category: item.category }, [], 'paper')
+    const r = byKw.get(item.keyword.toLowerCase())
+    if (t && r) {
+      t.paperNovelty = { cur: r.cur, prev: r.prev, at: today }
+      t.query ||= item.keyword
+    }
+  }
+  state.runs.discoverPapers = new Date().toISOString()
+  await save()
+}
+
+// ── 후보 갈래 ① 검색: 네이버 검색광고 키워드 도구 (연관 검색어 + 월 검색수). 키가 있어야 함 (일주일에 한 번) ──
+// 키: NAVER_SEARCHAD_CUSTOMER_ID · NAVER_SEARCHAD_ACCESS_LICENSE · NAVER_SEARCHAD_SECRET_KEY (searchad.naver.com → 도구 → API 사용 관리)
+const SEARCH_SEEDS = ['디스플레이', 'OLED', '마이크로LED', '디스플레이 패널']
+async function discoverSearch() {
+  const customer = process.env.NAVER_SEARCHAD_CUSTOMER_ID
+  const license = process.env.NAVER_SEARCHAD_ACCESS_LICENSE
+  const secret = process.env.NAVER_SEARCHAD_SECRET_KEY
+  if (!customer || !license || !secret) {
+    state.searchStatus = 'no_key'
+    return
+  }
+  const last = state.runs.discoverSearch ? Date.now() - Date.parse(state.runs.discoverSearch) : Infinity
+  if (last < 7 * DAY) return
+  const { createHmac } = await import('node:crypto')
+  const seeds = [...new Set([...SEARCH_SEEDS, ...(dbEnabled() ? await getKeywords() : [])])].slice(0, 5) // 한 번에 5개까지
+  const uri = '/keywordstool'
+  const ts = String(Date.now())
+  const sig = createHmac('sha256', secret).update(`${ts}.GET.${uri}`).digest('base64')
+  const res = await fetch(`https://api.searchad.naver.com${uri}?hintKeywords=${encodeURIComponent(seeds.map((x) => x.replace(/\s+/g, '')).join(','))}&showDetail=1`, {
+    headers: { 'X-Timestamp': ts, 'X-API-KEY': license, 'X-Customer': customer, 'X-Signature': sig },
+    signal: AbortSignal.timeout(20_000),
+  })
+  if (!res.ok) {
+    state.searchStatus = `error ${res.status}`
+    return
+  }
+  const list = ((await res.json()).keywordList ?? [])
+    .map((x) => ({ kw: x.relKeyword, n: (Number(x.monthlyPcQcCnt) || 5) + (Number(x.monthlyMobileQcCnt) || 5) }))
+    .sort((a, b) => b.n - a.n)
+    .slice(0, 200)
+  // 검색어 목록을 AI가 기사 제목처럼 보고 기술 용어만 고른다
+  const { data } = await chatJson({ messages: termPrompt(list.map((x) => `${x.kw} (월 검색 ${x.n}회)`)), schema: TERM_SCHEMA, schemaName: 'tech_terms', priority: PRIORITY.BACKGROUND, timeoutMs: 180_000 })
+  for (const item of data.items ?? []) if (item.tech && CATEGORIES.includes(item.category)) upsertTerm(item, [], 'search')
+  state.searchStatus = 'ok'
+  state.runs.discoverSearch = new Date().toISOString()
+  await save()
 }
 
 // ── 2. 출처별로 받기 ──
@@ -231,13 +425,9 @@ async function fetchOpenAlex(keys) {
     const term = encodeURIComponent(`"${extra.term}"`)
     return `https://api.openalex.org/works?filter=title_and_abstract.search:${term},from_publication_date:${extra.from},to_publication_date:${extra.to}&${extra.q}&api_key=${apiKey}`
   }
-  const get = async (url) => {
-    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(30_000) })
-    if (!res.ok) throw new Error(`응답 ${res.status}`)
-    return res.json()
-  }
+  const get = openAlexGet
   for (const k of keys) {
-    const term = state.terms[k].en?.trim()
+    const term = (state.terms[k].query || state.terms[k].en)?.trim()
     if (!term) continue
     try {
       const months = {}
@@ -251,14 +441,14 @@ async function fetchOpenAlex(keys) {
           const [y, mo] = m.split('-').map(Number)
           const last = ymd(Date.UTC(y, mo, 0))
           months[m] = (await get(base({ term, from: `${m}-01`, to: last, q: 'per-page=1&select=id' }))).meta.count
-          await sleep(150)
+          await sleep(400)
         }
       }
       remember('openalex', k, Object.entries(months).map(([m, v]) => ({ t: `${m}-01`, v })))
     } catch (err) {
       failed('openalex', k, err)
     }
-    await sleep(300)
+    await sleep(1000)
   }
 }
 
@@ -266,10 +456,12 @@ async function fetchOpenAlex(keys) {
 async function fetchPatents(keys) {
   const last = state.runs.patents ? Date.now() - Date.parse(state.runs.patents) : Infinity
   const have = state.series.patents ?? {}
-  const changed = keys.some((k) => !have[k] && state.terms[k].en)
+  const changed = keys.some((k) => !have[k] && state.terms[k].query)
   if (!(last > 30 * DAY || (changed && last > 7 * DAY))) return false
   const esc = (s) => s.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[\s-]+/g, '[- ]?')
-  const cols = keys.filter((k) => state.terms[k].en && state.terms[k].en.length >= 3).map((k) => ({ keyword: k, pattern: `\\b${esc(state.terms[k].en)}` }))
+  // AI 검토에서 정한 영어 검색어(약어 포함)와 영어 별칭을 함께 찾는다. 검색어가 없으면(너무 넓은 말) 빼기
+  const words = (t) => [...new Set([t.query, ...(t.aliases ?? [])].filter((a) => a && /^[\x20-\x7e]+$/.test(a) && a.length >= 3).map((a) => a.toLowerCase()))]
+  const cols = keys.filter((k) => state.terms[k].query).map((k) => ({ keyword: k, pattern: words(state.terms[k]).map((w) => `\\b${esc(w)}`).join('|') }))
   try {
     const series = await countPatentsFor(cols)
     // 데이터셋의 마지막 달은 갱신 도중이라 빼 둔다
@@ -324,15 +516,21 @@ async function fetchReddit(keys) {
 // ── 하루 한 번 도는 일 ──
 const status = { running: false, phase: null, startedAt: null, finishedAt: null }
 
-async function cycle() {
+async function cycle(opts = {}) {
   if (status.running) return
   status.running = true
   status.startedAt = new Date().toISOString()
   try {
     await load()
-    status.phase = '용어 찾기'
+    status.phase = '후보 찾기: 검색어'
+    await discoverSearch().catch((err) => console.warn(`[techtrends] 검색어 후보 실패: ${err.message}`))
+    status.phase = '후보 찾기: 논문 신규 키워드'
+    await discoverPapers().catch((err) => console.warn(`[techtrends] 논문 후보 실패: ${err.message}`))
+    status.phase = '후보 찾기: 기사'
     // 처음에는 60일치(약 1,700건)라 여러 번에 나눠 한다. 한 번에 400건
     for (let n = 0; n < 5; n++) if ((await extractTerms()) < 400) break
+    status.phase = '용어 검토 (제품명·넓은 말 거르기)'
+    await reviewTerms()
     const keys = await candidates()
     for (const [id, fn] of [
       ['naver', fetchNaver],
@@ -349,9 +547,11 @@ async function cycle() {
       }
       await save()
     }
-    status.phase = 'Reddit 글 수 (1분 간격)'
-    await fetchReddit(keys)
-    state.runs.reddit = new Date().toISOString()
+    if (!opts.skipReddit) {
+      status.phase = 'Reddit 글 수 (1분 간격)'
+      await fetchReddit(keys)
+      state.runs.reddit = new Date().toISOString()
+    }
     state.updatedAt = new Date().toISOString()
     await save()
     console.log(`[techtrends] 기술 트렌드 갱신: 용어 ${Object.keys(state.terms).length}개 · 후보 ${keys.length}개`)
@@ -404,7 +604,7 @@ const sumIn = (series, [a, b]) => series.filter((p) => p.t >= a && p.t <= b).red
 
 // 월별 출처: 기간이 4주 이상일 때만. 기간 길이만큼의 달(최소 1달)을 데이터의 마지막 온전한 달에서부터 센다
 function monthWindows(series, win) {
-  const n = Math.max(1, Math.round(win.days / 30))
+  const n = Math.max(3, Math.round(win.days / 30)) // 한 달은 편수가 적어 흔들림 → 최소 3개월끼리
   const lastFull = ymd(Date.now()).slice(0, 7) + '-01'
   const months = series.filter((p) => p.t < lastFull && p.t <= win.cur[1])
   if (months.length < n * 2) return null
@@ -456,6 +656,7 @@ export async function getTechTrends({ period, from, to } = {}) {
         name: t.name,
         en: t.en,
         category: t.category,
+        from: t.from ?? ['article'],
         cur: Math.round(cur * 10) / 10,
         prev: Math.round(prev * 10) / 10,
         growth: (cur + src.smooth) / (prev + src.smooth),
@@ -476,7 +677,7 @@ export async function getTechTrends({ period, from, to } = {}) {
     const n = s.ranking.length
     if (n < 2) continue
     s.ranking.forEach((r, i) => {
-      const e = (byKey[r.key] ??= { key: r.key, name: r.name, en: r.en, category: r.category, parts: {} })
+      const e = (byKey[r.key] ??= { key: r.key, name: r.name, en: r.en, category: r.category, from: r.from, parts: {} })
       e.parts[s.id] = { pct: Math.round((1 - i / (n - 1)) * 100), change: r.change, growth: r.growth, rank: i + 1, of: n }
     })
   }
@@ -490,6 +691,9 @@ export async function getTechTrends({ period, from, to } = {}) {
     sources: sources.map((s) => ({ ...s, ranking: s.ranking })),
     composite,
     terms: Object.keys(state.terms).length,
+    hidden: Object.values(state.terms).filter((t) => t.hidden).length,
+    from: Object.fromEntries(['search', 'paper', 'article'].map((f) => [f, keys.filter((k) => (state.terms[k].from ?? ['article']).includes(f)).length])),
+    searchStatus: state.searchStatus ?? 'no_key',
     candidates: keys.length,
     extractedUntil: state.extractedUntil ?? null,
     updatedAt: state.updatedAt ?? null,
