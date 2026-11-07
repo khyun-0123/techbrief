@@ -129,6 +129,21 @@ export async function updateReportSection(id, key, bullets) {
   )
 }
 
+// 보고서 고치기 (줄 빼기 · AI 보충 근거 찾기): 본문(report)과 근거 목록(articles)을 통째로 바꾼다
+export async function updateReport(id, report, articles) {
+  if (!dbEnabled()) {
+    const r = memoryReports.find((x) => x.id === id)
+    if (r) Object.assign(r, { report, articles })
+    return
+  }
+  await query('UPDATE reports SET report = $2, articles = $3, title = $4, updated_at = now() WHERE id = $1', [
+    id,
+    report,
+    JSON.stringify(articles),
+    report.title,
+  ])
+}
+
 export async function deleteReport(id) {
   if (!dbEnabled()) {
     const i = memoryReports.findIndex((x) => x.id === id)

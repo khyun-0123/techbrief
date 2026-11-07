@@ -120,9 +120,11 @@ function reportArticle(article, aiSummary) {
 }
 
 // mode: 'all'이면 10건이 넘어도 전부 넣는다 (서버가 나눠 쓰고 합침, 오래 걸림)
-export function requestReport({ articles, aiSummaries, title, periodLabel, mode }) {
+// direction: 보고서 방향 한 줄 (11/08) — AI가 무엇을 앞에 두고 강조할지
+export function requestReport({ articles, aiSummaries, title, direction, periodLabel, mode }) {
   return postJson('/api/reports', {
     title,
+    direction,
     periodLabel,
     mode,
     articles: articles.map((a) => reportArticle(a, aiSummaries[a.id])),
@@ -357,10 +359,19 @@ export async function saveSelectionApi(clientId, data) {
   if (!res.ok) throw new Error('선별 폴더를 서버에 저장하지 못했어요')
 }
 
-// ── 용어 백과 (위키백과 요약) ──
-export async function lookupWikiApi(term) {
-  const res = await fetch(`/api/wiki?q=${encodeURIComponent(term)}`)
+
+// 보고서 고치기 (줄 빼기 · 근거 보충) — DB가 있으면 서버에 저장
+export async function updateReportApi(entry) {
+  const res = await fetch(`/api/reports/${encodeURIComponent(entry.id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ report: entry.report, articles: entry.articles }),
+  })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error ?? '위키백과를 찾지 못했어요')
-  return data.result
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+}
+
+// AI 해설 한 줄의 근거를 우리 자료 · 위키백과에서 찾기
+export function reinforceApi({ text, inputs, existing }) {
+  return postJson('/api/reports/reinforce', { text, inputs, existing })
 }

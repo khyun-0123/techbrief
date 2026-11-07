@@ -22,8 +22,10 @@ import {
   listReports,
   saveReport,
   setKeywords,
+  updateReport,
   updateReportSection,
 } from './db/store.js'
+import { reinforceBullet } from './reinforce.js'
 import { chatJson, llmProviders, modelName, pingModel, providerLabel, selectProvider } from './llm/client.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
@@ -192,7 +194,8 @@ async function handleReport(req, res) {
   const picked = readReportArticles(body, all ? MAX_REPORT_ALL : MAX_REPORT_ARTICLES)
   for (const a of picked) if (await materialBlocksAi(String(a.id ?? ''))) return send(res, 403, { error: `AI 입력을 허용하지 않은 자료가 있어요: ${a.title}` })
   const title = body.title?.trim() || '테크 동향 브리핑'
-  const opts = { title, periodLabel: body.periodLabel ?? '오늘' }
+  const direction = String(body.direction ?? '').trim().slice(0, 300)
+  const opts = { title, periodLabel: body.periodLabel ?? '오늘', direction }
   const long = picked.length > MAX_REPORT_ARTICLES
   const articles = long ? picked : await attachBodies(picked)
   const { data, model } = long ? await draftLongReport(articles, opts) : await draftReport(articles, opts)
@@ -204,7 +207,7 @@ async function handleReport(req, res) {
   const entry = {
     id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
     articleKey: articles.map((a) => String(a.id ?? '')).sort().join('|'),
-    report: { title, sections, warnings: [...reportWarnings(sections), ...(data.warnings ?? [])] },
+    report: { title, direction, sections, warnings: [...reportWarnings(sections), ...(data.warnings ?? [])] },
     model,
     createdAt,
     periodLabel: body.periodLabel ?? '오늘',
@@ -224,7 +227,7 @@ async function handleReportSection(req, res) {
   const articles = picked.length > MAX_REPORT_ARTICLES ? picked : await attachBodies(picked)
   if (!SECTION_KEYS.includes(body.key)) return send(res, 400, { error: '없는 섹션이에요.' })
   const { data, model } = await chatJson({
-    messages: buildSectionMessages(articles, { key: body.key, report: body.report }),
+    messages: buildSectionMessages(articles, { key: body.key, report: body.report, direction: body.report?.direction }),
     schema: SECTION_SCHEMA,
     schemaName: 'report_section',
     report: true,
@@ -524,6 +527,19 @@ export async function handleApi(req, res) {
     }
     if (req.method === 'POST' && req.url === '/api/reports') {
       return await handleReport(req, res)
+    }
+    // 보고서 고치기: 줄 빼기 · 되살리기, AI 보충 근거 반영 (11/08). 보고서함은 팀 공용이라 누구나 고칠 수 있다
+    if (req.method === 'PUT' && req.url.startsWith('/api/reports/')) {
+      const id = decodeURIComponent(req.url.slice('/api/reports/'.length))
+      const { report, articles } = await readJson(req)
+      if (!report?.sections || !Array.isArray(articles)) return send(res, 400, { error: '보고서 형식이 아니에요.' })
+      if (dbEnabled()) await updateReport(id, report, articles)
+      return send(res, 200, { ok: true })
+    }
+    // AI 해설 한 줄의 근거를 우리 자료 · 위키백과에서 찾아 고쳐 쓴다
+    if (req.method === 'POST' && req.url === '/api/reports/reinforce') {
+      const { text, inputs = [], existing = [] } = await readJson(req)
+      return send(res, 200, await reinforceBullet({ text, inputs: inputs.slice(0, 40), existing: existing.slice(0, 80) }))
     }
     if (req.method === 'POST' && req.url === '/api/reports/section') {
       return await handleReportSection(req, res)

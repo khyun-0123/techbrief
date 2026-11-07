@@ -10,6 +10,10 @@
 }
 
 .topbar {
+  /* 스크롤해도 맨 위에 붙어 있게 (11/08 조장) */
+  position: sticky;
+  top: 0;
+  z-index: 60;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -3223,12 +3227,6 @@ a.brand:focus-visible {
   background: var(--tb-color-primary);
   color: var(--tb-color-on-primary);
 }
-.folder-chip.drop-over {
-  border-color: var(--tb-color-highlight);
-  border-style: dashed;
-  background: var(--tb-color-accent-soft);
-  color: var(--tb-color-text);
-}
 .folder-chip.folder-add {
   border-style: dashed;
   color: var(--tb-color-text-sub);
@@ -3274,10 +3272,6 @@ a.brand:focus-visible {
 }
 .folder-summary {
   font-weight: 600;
-}
-tr[draggable='true'],
-li[draggable='true'] {
-  cursor: grab;
 }
 .detail-top {
   display: flex;
@@ -3386,47 +3380,342 @@ li[draggable='true'] {
   justify-self: start;
 }
 
-/* ── 용어 백과 (27 문서 4장) ── */
-.wiki-panel {
-  margin-bottom: var(--tb-space-4);
+
+/* ── 11/08 화면 정리 ── */
+
+/* 자료 현황: 담을 폴더 줄은 목록 카드 맨 위 */
+.list-panel > .folder-bar {
+  margin: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--tb-color-line-soft);
 }
-.wiki-lookup h3 small {
-  font-size: 12px;
+
+/* 휴대폰: 기사 표를 카드처럼 (칸이 좁아 제목이 한 글자씩 꺾이던 문제) */
+@media (max-width: 760px) {
+  .list-panel {
+    overflow-x: visible;
+  }
+  table.articles,
+  table.articles tbody,
+  table.articles tr,
+  table.articles td {
+    display: block;
+    width: 100%;
+  }
+  table.articles colgroup,
+  table.articles thead {
+    display: none;
+  }
+  table.articles tr {
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--tb-color-line-soft);
+  }
+  table.articles td {
+    padding: 2px 12px;
+    border: none;
+  }
+  table.articles td.source,
+  table.articles td.time,
+  table.articles td:nth-child(4) {
+    display: inline-block;
+    width: auto;
+    max-width: 60%;
+    padding-right: 4px;
+    font-size: 13px;
+    color: var(--tb-color-text-sub);
+  }
+  table.articles td.actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding-top: 8px;
+  }
+  table.articles td.actions .btn {
+    margin: 0;
+  }
+  table.articles tr.group-row,
+  table.articles tr.summary-row {
+    padding-top: 0;
+  }
+}
+
+/* ── 선별·요약 + 보고서 (11/08) ── */
+.select-report {
+  display: grid;
+  grid-template-columns: minmax(320px, 5fr) minmax(0, 7fr);
+  gap: 20px;
+  align-items: start;
+  margin-top: 20px;
+}
+.select-list {
+  min-width: 0;
+  overflow: hidden;
+}
+.select-list > .folder-bar {
+  margin: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--tb-color-line-soft);
+}
+.select-list .candidate-header {
+  flex-wrap: wrap;
+}
+.candidate-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.select-list .candidates {
+  max-height: calc(100vh - 230px);
+  overflow-y: auto;
+}
+.select-list .candidate {
+  display: block;
+  padding: 0;
+  cursor: default;
+}
+.candidate-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+}
+.candidate-row input {
+  margin-top: 3px;
+  flex: none;
+}
+.select-list .candidate-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.select-list .candidate-text .title {
+  font-weight: 600;
+  line-height: 1.45;
+}
+.select-list .candidate-text:hover .title {
+  text-decoration: underline;
+}
+.candidate-caret {
+  flex: none;
+  color: var(--tb-color-text-sub);
+}
+.select-list .candidate.open {
+  background: var(--tb-color-bg);
+}
+.candidate-detail {
+  padding: 4px 16px 16px 46px;
+}
+.candidate-detail-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.composer {
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+.composer-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.composer-head h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+.composer-head p {
+  margin: 0;
+}
+.composer-form {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+.composer-form label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.composer-form label > span {
+  font-weight: 700;
+}
+.composer-form label small {
+  display: block;
+  margin-top: 2px;
   font-weight: 400;
   color: var(--tb-color-text-sub);
 }
-.wiki-form {
-  display: flex;
-  gap: var(--tb-space-2);
-  margin-bottom: var(--tb-space-2);
-}
-.wiki-form input {
-  flex: 1;
+.composer-form input,
+.composer-form select {
+  width: 100%;
   min-width: 0;
 }
-.chip-btn {
-  border: 1px solid var(--tb-color-line);
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
+.composer-period {
+  max-width: 220px;
 }
-.chip-btn:hover {
+.composer-go {
+  justify-self: start;
+}
+.composer-form .report-mode-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+.composer-list {
+  padding: 16px 20px;
+}
+.composer-list h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.composer-list ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+.composer-list li {
+  display: flex;
+  gap: 8px;
+}
+
+/* 좁은 칸 보고서: 근거 기사는 보고서 아래 */
+.report-layout.stacked {
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 0;
+}
+.report-layout.stacked .report-doc {
+  padding: 20px;
+}
+.report-direction {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--tb-color-line-focus);
+  background: var(--tb-color-bg);
+  font-size: 14px;
+}
+
+/* 줄 빼기 · 근거 찾기 */
+.report-bullets li {
+  position: relative;
+}
+.line-tools {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.report-bullets li:hover .line-tools,
+.report-bullets li:focus-within .line-tools,
+.report-bullets li.is-finding .line-tools {
+  opacity: 1;
+}
+@media (hover: none) {
+  .line-tools {
+    opacity: 1;
+  }
+}
+.line-btn {
+  padding: 2px 8px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.line-btn:hover:not(:disabled) {
   background: var(--tb-color-surface-hover);
 }
-.wiki-card {
-  margin-top: var(--tb-space-3);
-  padding: var(--tb-space-3) var(--tb-space-4);
-  border: 1px solid var(--tb-color-line-soft);
-  border-radius: var(--tb-radius-card-s);
-  background: var(--tb-color-bg);
-}
-.wiki-title {
-  margin: 0 0 var(--tb-space-2);
-}
-.wiki-title span {
+.line-btn:disabled {
+  cursor: default;
   color: var(--tb-color-text-sub);
 }
-.wiki-extract {
-  margin: 0 0 var(--tb-space-2);
-  line-height: 1.6;
+.line-remove {
+  color: var(--tb-color-danger);
+}
+.report-bullets li.is-finding {
+  background: var(--tb-color-warning-soft);
+}
+.basis-supplement {
+  border: 1px solid var(--tb-color-line);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+}
+.basis-noref {
+  background: var(--tb-color-bg-strong);
+  color: var(--tb-color-text-sub);
+}
+.excluded-lines {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--tb-color-text-sub);
+}
+.excluded-lines summary {
+  cursor: pointer;
+}
+.excluded-lines ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.excluded-lines li {
+  margin: 4px 0;
+}
+.excluded-lines .line-btn {
+  margin-left: 6px;
+}
+
+@media (max-width: 1100px) {
+  .select-report {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .select-list .candidates {
+    max-height: 60vh;
+  }
+}
+@media (max-width: 640px) {
+  .candidate-detail {
+    padding-left: 16px;
+  }
+  .report-toolbar {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .report-doc-head {
+    flex-wrap: wrap;
+  }
+  .report-layout.stacked .report-doc {
+    padding: 16px;
+  }
+  .composer-form {
+    padding: 16px;
+  }
+}
+
+@media print {
+  .line-tools,
+  .excluded-lines {
+    display: none !important;
+  }
 }

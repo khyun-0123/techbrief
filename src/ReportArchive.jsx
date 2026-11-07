@@ -5,7 +5,7 @@ import { copyText, formatDate, toPlainText } from './reportStore.js'
 import { track } from './usage.js'
 import ReportView from './ReportView.jsx'
 
-function ReportArchive({ reports, onDelete, onGoDraft }) {
+function ReportArchive({ reports, onDelete, onGoDraft, onUpdated }) {
   const [openId, setOpenId] = useState(null)
   const [notice, setNotice] = useState('')
   const open = reports.find((r) => r.id === openId) ?? reports[0]
@@ -69,6 +69,7 @@ function ReportArchive({ reports, onDelete, onGoDraft }) {
           <div>
             <ReportView
               saved={open}
+              onChange={onUpdated}
               tools={
                 <>
                   {notice && <span className="toolbar-note">{notice}</span>}

@@ -36,8 +36,8 @@ export async function exportPptx(saved) {
 
   // 기사에서 확인된 내용 → (줄 바꿔) AI 해설·제안 순서. 둘을 섞지 않는다 (15 문서 F15)
   function runs(list) {
-    const facts = (list ?? []).filter((b) => kindOf(b) === 'fact')
-    const ai = (list ?? []).filter((b) => kindOf(b) === 'ai')
+    const facts = (list ?? []).filter((b) => !b.excluded && kindOf(b) === 'fact')
+    const ai = (list ?? []).filter((b) => !b.excluded && kindOf(b) === 'ai')
     const out = []
     const push = (text, options = {}) => out.push({ text, options })
     facts.forEach((b, i) => {
