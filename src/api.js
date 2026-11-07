@@ -313,3 +313,12 @@ export async function fetchTrends() {
   if (!res.ok) throw new Error(data.error ?? '키워드 추이를 불러오지 못했어요')
   return data
 }
+
+// 요즘 뜨는 기술 (25 문서): 기간별 출처마다 순위 + 종합. period: week | lastweek | month | custom(from, to)
+export async function fetchTechTrends({ period = 'week', from, to } = {}) {
+  const q = new URLSearchParams({ period, ...(from && { from }), ...(to && { to }) })
+  const res = await fetch(`/api/tech-trends?${q}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? '기술 트렌드를 불러오지 못했어요')
+  return data
+}

@@ -53,7 +53,17 @@ async function accessToken(key) {
 
 // keywords 중 정규식이 있는 것만 한 번의 쿼리로 월별로 센다
 async function queryCounts(key, keywords) {
-  const cols = keywords.map((k) => ({ keyword: k, pattern: patentPatternOf(k) })).filter((c) => c.pattern)
+  return countByPattern(key, keywords.map((k) => ({ keyword: k, pattern: patentPatternOf(k) })).filter((c) => c.pattern))
+}
+
+// 기술 트렌드(techtrends.js)용: 아무 용어나 [{ keyword, pattern }]로 받아 한 번의 쿼리로 센다 (약 18GB 읽음)
+export async function countPatentsFor(cols) {
+  const key = readKey()
+  if (!key) throw new Error('Google Cloud 키(gcp-key.json)가 없어요')
+  return countByPattern(key, cols)
+}
+
+async function countByPattern(key, cols) {
   if (cols.length === 0) return {}
   const select = cols.map((c, i) => `COUNTIF(REGEXP_CONTAINS(LOWER(t.text), r'${c.pattern.replace(/'/g, '')}')) AS k${i}`).join(', ')
   const sql = `SELECT CAST(FLOOR(publication_date / 100) AS INT64) AS ym, ${select}

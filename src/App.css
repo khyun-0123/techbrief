@@ -2820,6 +2820,293 @@ a.brand:focus-visible {
   }
 }
 
+/* ── 요즘 뜨는 기술 (25 문서, 11/07) ── */
+.tt {
+  margin-top: 16px;
+  padding: 16px 20px 16px;
+}
+
+.tt-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tt-head h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
+.tt-sub {
+  margin: 4px 0 0;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+}
+
+.tt-periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tt-chip {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: #fff;
+  color: var(--tb-color-text);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.tt-chip.on {
+  border-color: var(--tb-color-text);
+  background: var(--tb-color-text);
+  color: #fff;
+  font-weight: 600;
+}
+
+.tt-custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 12px;
+  font-size: var(--fs-sm);
+}
+
+.tt-custom input {
+  margin-left: 4px;
+}
+
+.tt-note {
+  color: var(--tb-color-text-sub);
+}
+
+.tt-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 14px;
+  border-bottom: 1px solid var(--tb-color-line);
+  overflow-x: auto;
+}
+
+.tt-tab {
+  display: grid;
+  justify-items: start;
+  padding: 8px 12px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tt-tab small {
+  font-size: var(--fs-xs);
+  color: var(--tb-color-text-faint);
+}
+
+.tt-tab.on {
+  border-bottom-color: var(--tb-color-text);
+  color: var(--tb-color-text);
+  font-weight: 600;
+}
+
+.tt-table-wrap {
+  overflow-x: auto;
+}
+
+.tt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.tt-table th {
+  padding: 10px 8px 6px;
+  color: var(--tb-color-text-sub);
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tt-table td {
+  padding: 8px;
+  border-top: 1px solid var(--tb-color-bg-strong);
+  white-space: nowrap;
+}
+
+.tt-rank {
+  width: 36px;
+  color: var(--tb-color-text-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-term {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--tb-color-text);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tt-term:hover {
+  text-decoration: underline;
+}
+
+.tt-cat {
+  margin-left: 8px;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+}
+
+.tt-score {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 96px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--tb-color-bg-strong);
+  overflow: hidden;
+}
+
+.tt-score-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--tb-color-text-faint);
+  opacity: 0.45;
+}
+
+.tt-score b {
+  position: relative;
+  padding-left: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-chg {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tt-chg.up {
+  color: var(--tb-color-text);
+  font-weight: 700;
+}
+
+.tt-chg.down,
+.tt-chg.flat,
+.tt-na {
+  color: var(--tb-color-text-sub);
+}
+
+.tt-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: tt;
+}
+
+.tt-list li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto 104px 96px auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--tb-color-bg-strong);
+  counter-increment: tt;
+  font-size: var(--fs-sm);
+}
+
+.tt-list li::before {
+  content: counter(tt);
+  color: var(--tb-color-text-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-list li .tt-cat {
+  display: none;
+}
+
+.tt-vals {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-vals small {
+  color: var(--tb-color-text-faint);
+}
+
+.tt-mini {
+  width: 96px;
+  height: 24px;
+}
+
+.tt-mini-prev,
+.tt-mini-cur {
+  fill: none;
+  stroke-width: 1.5;
+}
+
+.tt-mini-prev {
+  stroke: var(--tb-color-text-faint);
+}
+
+.tt-mini-cur {
+  stroke: var(--tb-color-text);
+}
+
+.tt-stale {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.tt-empty {
+  margin: 12px 0 0;
+  padding: 20px 12px;
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-bg-strong);
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+
+.tt-foot {
+  margin: 10px 0 0;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+}
+
+.tt-more {
+  margin-top: 6px;
+}
+
+@media (max-width: 640px) {
+  .tt-list li {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+  }
+
+  .tt-list li .tt-vals,
+  .tt-list li .tt-mini {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+}
+
+.tt-from {
+  margin-left: 6px;
+  padding: 1px 6px;
 /* 요약 근거 원문/발췌문 (11/07). 발췌문은 확인이 필요하다는 뜻으로 글자를 진하게 */
 .summary-source {
   display: inline-block;
@@ -2829,6 +3116,18 @@ a.brand:focus-visible {
   border-radius: var(--tb-radius-full);
   color: var(--tb-color-text-sub);
   font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.tt-from-paper {
+  border-color: var(--tb-color-text-sub);
+  color: var(--tb-color-text);
+  font-weight: 600;
+}
+
+.tt-namecell {
+  min-width: 0;
+}
 }
 
 .summary-source-excerpt {
