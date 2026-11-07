@@ -39,7 +39,7 @@ export function useSummaryQueue({ onDone }) {
     setJobs((list) => list.map((j) => (j.id === next.id ? { ...j, status: 'running', startedAt } : j)))
 
     track('summary', next.article.keyword ?? '')
-    requestSummary(next.article, { refresh: next.refresh })
+    requestSummary(next.article, { refresh: next.refresh, select: next.select })
       .then((result) => {
         const took = Date.now() - startedAt
         onDoneRef.current?.(next.id, result)
@@ -63,11 +63,11 @@ export function useSummaryQueue({ onDone }) {
   }, [jobs, now])
 
   // 같은 기사가 대기·진행 중이면 다시 넣지 않는다. 끝난 기사는 새로 넣는다
-  const enqueue = useCallback((article, { refresh = false } = {}) => {
+  const enqueue = useCallback((article, { refresh = false, select = false } = {}) => {
     setJobs((list) => {
       const existing = list.find((j) => j.id === article.id)
       if (existing && (existing.status === 'queued' || existing.status === 'running')) return list
-      const job = { id: article.id, title: article.title, article, refresh, status: 'queued', addedAt: Date.now() }
+      const job = { id: article.id, title: article.title, article, refresh, select, status: 'queued', addedAt: Date.now() }
       return [...list.filter((j) => j.id !== article.id), job]
     })
   }, [])

@@ -82,6 +82,14 @@ CREATE TABLE IF NOT EXISTS usage_events (
 CREATE INDEX IF NOT EXISTS usage_events_created_idx ON usage_events (created_at);
 
 -- 앱 설정·상태 (자동 최신화 주기, 마지막 실행 시각 등). 팀원 앱이 같이 본다
+-- 선별한 기사의 원문 본문 (11/06·11/07 결정: 선별한 기사만, 논문 포함). 90일 지나면 지움 (23 문서)
+CREATE TABLE IF NOT EXISTS article_texts (
+  article_id  text PRIMARY KEY,
+  url         text,
+  body        text NOT NULL,
+  fetched_at  timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS app_settings (
   key        text PRIMARY KEY,
   value      jsonb NOT NULL,

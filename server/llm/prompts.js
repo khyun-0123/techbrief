@@ -50,7 +50,7 @@ const SYSTEM = `너는 기술 동향 보고 담당자를 돕는 분석가다.
 
 규칙
 - 개조식, 명사형 종결("~함", "~임"). 항목당 1~2문장.
-- 기사에 있는 내용이면 basis를 "article"로, refs에 기사 번호를 넣는다.
+- 기사에 있는 내용이면 basis를 "article"로, refs에 기사 번호를 넣는다. '원문 본문'이 있으면 본문을 먼저 근거로 쓴다.
 - 기사에 없어 일반 지식으로 보충한 내용은 basis를 "ai_background"로, refs는 빈 배열.
 - 활용 방안처럼 너의 제안이면 basis를 "ai_suggestion"으로, refs는 빈 배열.
 - 수치·회사명·날짜는 기사에 있는 것만 쓴다. 지어내지 않는다.
@@ -69,6 +69,8 @@ export function buildSummaryMessages(articles) {
     const parts = [`[${i + 1}] 제목: ${a.title}`, `매체: ${a.source ?? '미상'}`]
     if (a.keyword) parts.push(`수집 키워드: ${a.keyword}`)
     if (a.description) parts.push(`요약문: ${a.description}`)
+    // 원문 본문이 있으면 요약문보다 본문을 먼저 근거로 쓴다 (11/07 결정: 요약도 원문 기반)
+    if (a.body) parts.push(`원문 본문:\n${a.body}`)
     return parts.join(' / ')
   })
   return [

@@ -13,8 +13,19 @@ const BASIS_LABEL = {
   ai_suggestion: 'AI 제안',
 }
 
+// 원문 기반 요약 (11/07): 원문 본문으로 만든 요약인지, 원문을 못 가져와 발췌문으로 만든 요약인지
+const SOURCE_LABEL = {
+  fulltext: ['원문 기준', '기사 원문 본문을 읽고 만든 요약이에요'],
+  excerpt: ['발췌문 기준', '원문을 가져오지 못해 검색 결과 발췌문으로 만든 요약이에요. 원문에서 확인하세요'],
+}
+
 function SummaryItems({ summary }) {
+  const src = SOURCE_LABEL[summary.basisSource ?? 'excerpt']
   return (
+    <>
+    <p className={`summary-source summary-source-${summary.basisSource ?? 'excerpt'}`} title={src[1]}>
+      {src[0]}
+    </p>
     <dl className="ai-summary">
       {ITEM_LABELS.map(([key, label]) => {
         const item = summary.items?.[key]
@@ -31,6 +42,7 @@ function SummaryItems({ summary }) {
         )
       })}
     </dl>
+    </>
   )
 }
 
