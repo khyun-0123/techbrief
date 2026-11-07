@@ -1,14 +1,13 @@
 // 보고서 칸 (선별·요약 오른쪽, 11/08 조장)
 // 작성: ① 보고서 제목 ② 보고서 방향(한 줄, AI 지시문에 들어감) ③ 자료 조사 수준 → 「보고서 만들기」는 서버 대기열에 넣는다
 //       다른 탭에 가도 오른쪽 아래 진행 창에서 진행 상황을 보고, 요약 안 된 기사를 써야 하면 거기서 묻는다
-// 미리보기: 이 브라우저에서 마지막으로 만든 보고서 (줄 빼기 · 섹션 다시 쓰기 · 복사 · 내보내기)
+// 미리보기: 체크한 기사 요약이 섹션별로 어떻게 들어가는지 (재료 미리보기). 만든 보고서는 보고서함에서 본다
 // 기간: 예전에는 「오늘 · 이번 주 · 이번 달」을 골랐지만 보고서 머리글에만 붙는 글자였다 → 기사 날짜로 자동 (11/8)
 import { useState } from 'react'
-import { createReportJob, requestReportSection } from './api.js'
-import { articleKey, copyText, toPlainText } from './reportStore.js'
+import { createReportJob } from './api.js'
+import { articleKey } from './reportStore.js'
 import { clientId, track } from './usage.js'
 import { AI_BLOCKED_TITLE, useOps } from './ops.js'
-import ReportView from './ReportView.jsx'
 import { load } from './utils.js'
 
 const DRAFT_INPUT_KEY = 'techbrief-report-input' // 제목 · 방향 · 조사 수준 (쓰던 것 남기기)
@@ -108,16 +107,14 @@ function MaterialsPreview({ articles, aiSummaries, title, direction, jobs }) {
   )
 }
 
-function ReportComposer({ articles: picked, aiSummaries, queue, reports, onUpdated, onGoArchive, storageLabel, folderSummary, reportJobs = [], onJobAdded, lastReportId }) {
+function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderSummary, reportJobs = [], onJobAdded, onOpenReport }) {
   const [saved0] = useState(() => load(DRAFT_INPUT_KEY, {}))
   const [title, setTitle] = useState(saved0.title ?? '테크 동향 브리핑')
   const [direction, setDirection] = useState(saved0.direction ?? '')
   const [level, setLevel] = useState(saved0.level ?? 'owned')
   const [mode, setMode] = useState('top')
   const [sending, setSending] = useState(false)
-  const [regenKey, setRegenKey] = useState(null)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const { aiBlocked } = useOps()
 
   function remember(patch) {
@@ -135,17 +132,9 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, onUpdat
   const leftOut = tooMany && !useAll ? picked.filter((a) => !articles.includes(a)) : []
 
   const key = articleKey(picked.map((a) => a.id))
-  // 미리보기 (11/08: 항상 누를 수 있게)
-  // - 지금 체크한 기사로 만든 보고서가 있으면 그 보고서 (가장 최근)
-  // - 없으면 「재료 미리보기」: 체크한 기사 요약이 섹션별로 어떻게 들어가는지 + 만드는 중이면 진행
-  // - 「지난 보고서 보기」: 이 브라우저에서 마지막으로 만든 보고서
-  const matching = reports.find((r) => r.articleKey === key && picked.length > 0)
-  const last = reports.find((r) => r.id === lastReportId)
-  const [showLast, setShowLast] = useState(false)
-  const current = showLast ? last : matching
-  const changed = current && current.articleKey && current.articleKey !== key
-  const [view, setView] = useState(() => (matching ? 'preview' : 'compose'))
-  const showReport = view === 'preview' && current
+  // 미리보기 = 재료 미리보기만 (11/08 조장). 지금 체크한 기사로 만든 보고서가 있으면 한 줄로 알리고 보고서함에서 연다
+  const matching = picked.length > 0 ? reports.find((r) => r.articleKey === key) : null
+  const [view, setView] = useState('compose')
   const activeJobs = reportJobs.filter((j) => ACTIVE.includes(j.status))
 
   const missing = articles.filter((a) => !aiSummaries[a.id])
@@ -167,27 +156,6 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, onUpdat
     }
   }
 
-  async function handleRegenerate(sectionKey) {
-    setRegenKey(sectionKey)
-    setError('')
-    try {
-      const inputs = current.inputs ?? articles
-      const summaries = Object.fromEntries(inputs.map((a) => [a.id, a.summary ? { summary: a.summary } : aiSummaries[a.id]]))
-      const result = await requestReportSection({ articles: inputs, aiSummaries: summaries, key: sectionKey, report: current.report, reportId: current.id })
-      onUpdated({ ...current, report: { ...current.report, sections: { ...current.report.sections, [sectionKey]: { bullets: result.bullets } } } })
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setRegenKey(null)
-    }
-  }
-
-  async function handleCopy() {
-    await copyText(toPlainText(current))
-    track('export', 'copy')
-    setNotice('복사했어요.')
-  }
-
   return (
     <aside className="panel composer" aria-label="보고서">
       <div className="composer-head">
@@ -202,65 +170,29 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, onUpdat
             aria-selected={view === 'preview'}
             className={view === 'preview' ? 'active' : ''}
             onClick={() => setView('preview')}
-            title="체크한 기사로 만든 보고서, 아직 없으면 섹션별 재료 미리보기"
+            title="체크한 기사 요약이 섹션별로 어떻게 들어가는지 미리 보기"
           >
             미리보기
           </button>
         </div>
       </div>
 
-      {view === 'preview' && !showReport ? (
+      {view === 'preview' ? (
         <div className="composer-body">
+          {matching && (
+            <p className="composer-note">
+              ✓ 지금 체크한 기사로 만든 보고서가 있어요 ·{' '}
+              <button type="button" className="link-btn" onClick={() => onOpenReport?.(matching.id)}>
+                보고서함에서 보기
+              </button>
+            </p>
+          )}
           <MaterialsPreview articles={articles} aiSummaries={aiSummaries} title={title} direction={direction} jobs={activeJobs} />
           <div className="composer-foot">
-            {last && (
-              <button type="button" className="btn" onClick={() => setShowLast(true)}>
-                지난 보고서 보기 — 「{last.report.title}」 {new Date(last.createdAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              </button>
-            )}
             <button type="button" className="btn primary composer-go" onClick={() => setView('compose')}>
               작성으로 가서 보고서 만들기
             </button>
           </div>
-        </div>
-      ) : showReport ? (
-        <div className="composer-body">
-          <p className="composer-note">
-            {changed ? (
-              <span className="note-warn">지금 체크한 기사와 다른 기사로 만든 지난 보고서예요.</span>
-            ) : (
-              <span>✓ 지금 체크한 기사로 만든 보고서 · 보고서함에 저장됨 ({storageLabel})</span>
-            )}{' '}
-            {showLast && (
-              <>
-                ·{' '}
-                <button type="button" className="link-btn" onClick={() => setShowLast(false)}>
-                  지금 체크한 기사로 돌아가기
-                </button>{' '}
-              </>
-            )}
-            ·{' '}
-            <button type="button" className="link-btn" onClick={onGoArchive}>
-              보고서함에서 보기
-            </button>
-          </p>
-          {error && <p className="ai-error">{error}</p>}
-          <ReportView
-            saved={current}
-            stacked
-            onChange={onUpdated}
-            onRegenerate={aiBlocked ? undefined : handleRegenerate}
-            regenKey={regenKey}
-            busy={Boolean(regenKey)}
-            tools={
-              <>
-                {notice && <span className="toolbar-note">{notice}</span>}
-                <button type="button" className="btn primary" onClick={handleCopy}>
-                  텍스트 복사
-                </button>
-              </>
-            }
-          />
         </div>
       ) : (
         <div className="composer-body">

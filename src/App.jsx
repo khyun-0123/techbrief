@@ -67,7 +67,6 @@ const RECENT_MAX = 10
 const TIER_TITLE = { 1: '1차 출처: 기업 발표·학회·논문', 2: '2차 출처: 전문매체', 3: '3차 출처: 일반 뉴스' }
 const EXTRA_KEY = 'techbrief-extra-articles' // 「기사 찾기」 결과에서 선별한 기사 (수집 목록에 없는 것)
 const MAX_SAVED = 400
-const LAST_REPORT_KEY = 'techbrief-last-report'
 // 선별 폴더 (11/07 결정, 27 문서 2장). 브라우저에 두고 서버(selections)에도 같이 저장한다
 const FOLDERS_KEY = 'techbrief-folders'
 const FOLDER_OF_KEY = 'techbrief-folder-of'
@@ -203,7 +202,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [reportsInDb, setReportsInDb] = useState(false) // true면 보고서함을 서버 DB에 저장
   // 보고서 작업 대기열 (11/08): 서버가 만들고, 화면은 3초마다 상태를 받아 진행 창에 보여 준다
   const [reportJobs, setReportJobs] = useState([])
-  const [lastReportId, setLastReportId] = useState(() => load(LAST_REPORT_KEY, null)) // 선별·요약 「미리보기」에 보여 줄 보고서
   const ingestedJobs = useRef(new Set())
   const [archiveTarget, setArchiveTarget] = useState(null) // 진행 창 「보고서함에서 보기」로 바로 열 보고서
 
@@ -384,12 +382,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               if (!reportsInDb) saveReports(next)
               return next
             })
-            setLastReportId(entry.id)
-            try {
-              localStorage.setItem(LAST_REPORT_KEY, JSON.stringify(entry.id))
-            } catch {
-              // 저장 공간을 못 쓰면 이번 화면에서만
-            }
           }
         })
         .catch(() => {})
@@ -951,12 +943,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           onMaterialAdded={handleMaterialAdded}
           reportArticles={reportArticles}
           reports={reports}
-          onUpdated={handleReportUpdated}
-          onGoArchive={() => setScreen('archive')}
           reportJobs={reportJobs}
           onJobAdded={(job) => setReportJobs((prev) => [...prev.filter((j) => j.id !== job.id), job])}
-          lastReportId={lastReportId}
-          storageLabel={reportsInDb ? 'DB' : '이 브라우저'}
+          onOpenReport={(id) => {
+            setArchiveTarget(id)
+            setScreen('archive')
+          }}
           folderSummary={reportFolders}
         />
       ) : (
@@ -1383,7 +1375,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         onCancel={handleJobCancel}
         quiet={screen === 'select'}
         onOpenReport={(id) => {
-          setLastReportId(id)
           setArchiveTarget(id)
           setScreen('archive')
           window.scrollTo({ top: 0 })
