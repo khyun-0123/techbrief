@@ -6,6 +6,7 @@ import { articleKey, copyText, SECTIONS, toPlainText } from './reportStore.js'
 import { track } from './usage.js'
 import { AI_BLOCKED_TITLE, useOps } from './ops.js'
 import ReportView from './ReportView.jsx'
+import WikiLookup from './WikiLookup.jsx'
 import { load } from './utils.js'
 
 const REPORT_AVG_KEY = 'techbrief-report-avg-ms-v2' // 원문 반영 뒤 소요 시간이 달라져 새로 잰다
@@ -43,7 +44,7 @@ const SECTION_PLAN = {
 }
 const BASIS_SHORT = { article: '기사 근거', ai_background: 'AI 보충', ai_suggestion: 'AI 제안' }
 
-function ReportDraft({ articles: picked, aiSummaries, queue, reports, onSaved, onUpdated, onGoSelect, onGoArchive, storageLabel }) {
+function ReportDraft({ articles: picked, aiSummaries, queue, reports, onSaved, onUpdated, onGoSelect, onGoArchive, storageLabel, folderSummary }) {
   const [title, setTitle] = useState('테크 동향 브리핑')
   const [period, setPeriod] = useState('today')
   const [generating, setGenerating] = useState(null) // { startedAt }
@@ -194,6 +195,9 @@ function ReportDraft({ articles: picked, aiSummaries, queue, reports, onSaved, o
             </>
           }
         />
+        <section className="panel wiki-panel">
+          <WikiLookup />
+        </section>
       </main>
     )
   }
@@ -206,6 +210,7 @@ function ReportDraft({ articles: picked, aiSummaries, queue, reports, onSaved, o
           <h1>보고서 초안</h1>
           <p>
             선별·요약에서 체크한 기사 {picked.length}건{leftOut.length > 0 ? ` 중 중요도 높은 ${articles.length}건` : ''}으로 만들어요. 아래는 보고서에 담길 재료예요.
+            {folderSummary && <span className="folder-summary"> 폴더: {folderSummary}</span>}
           </p>
         </div>
         <div className="header-actions">
@@ -230,6 +235,10 @@ function ReportDraft({ articles: picked, aiSummaries, queue, reports, onSaved, o
             ))}
           </select>
         </label>
+      </section>
+
+      <section className="panel wiki-panel">
+        <WikiLookup />
       </section>
 
       {tooMany && (

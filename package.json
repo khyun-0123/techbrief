@@ -22,7 +22,8 @@
     "pptxgenjs": "^4.0.1",
     "pretendard": "1.3.9",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "unpdf": "^1.9.1"
   },
   "devDependencies": {
     "@storybook/addon-docs": "10.6.5",

@@ -9,7 +9,9 @@ import { getTechTrends, startTechTrends } from './techtrends.js'
 import { similarity } from './collector/dedupe.js'
 import { fetchBodies } from './collector/fulltext.js'
 import { getLists, saveLists } from './collector/lists.js'
-import { getArticleText, getSetting, pruneArticleTexts, setSetting } from './db/store.js'
+import { getArticleText, getSelection, getSetting, pruneArticleTexts, saveSelection, setSetting } from './db/store.js'
+import { addMaterial, deleteMaterial, listMaterials, materialBlocksAi } from './materials.js'
+import { lookupWiki } from './wiki.js'
 import { dbEnabled, dbStatus } from './db/index.js'
 import {
   deleteReport,
@@ -57,11 +59,11 @@ function send(res, status, data, headers = {}) {
   res.end(JSON.stringify(data))
 }
 
-async function readJson(req) {
+async function readJson(req, max = MAX_BODY) {
   let raw = ''
   for await (const chunk of req) {
     raw += chunk
-    if (raw.length > MAX_BODY) throw Object.assign(new Error('요청이 너무 커요.'), { status: 413 })
+    if (raw.length > max) throw Object.assign(new Error('요청이 너무 커요.'), { status: 413 })
   }
   try {
     return JSON.parse(raw || '{}')
@@ -73,6 +75,7 @@ async function readJson(req) {
 async function handleSummary(req, res) {
   const { article, related = [], refresh = false, select = false } = await readJson(req)
   if (!article?.title) return send(res, 400, { error: 'article.title이 필요해요.' })
+  if (await materialBlocksAi(String(article.id ?? ''))) return send(res, 403, { error: 'AI 요약을 허용하지 않은 자료예요. 원문을 직접 읽어 주세요.' })
   send(res, 200, await summarizeArticle(article, related, { refresh, select: Boolean(select) }))
 }
 
@@ -185,6 +188,7 @@ async function handleReport(req, res) {
   const body = await readJson(req)
   const all = body.mode === 'all'
   const picked = readReportArticles(body, all ? MAX_REPORT_ALL : MAX_REPORT_ARTICLES)
+  for (const a of picked) if (await materialBlocksAi(String(a.id ?? ''))) return send(res, 403, { error: `AI 입력을 허용하지 않은 자료가 있어요: ${a.title}` })
   const title = body.title?.trim() || '테크 동향 브리핑'
   const opts = { title, periodLabel: body.periodLabel ?? '오늘' }
   const long = picked.length > MAX_REPORT_ARTICLES
@@ -454,6 +458,41 @@ export async function handleApi(req, res) {
       const saved = await setKeywords(keywords)
       await logChange(admin, '자동 수집 키워드', diffWords(before, saved))
       return send(res, 200, { keywords: saved })
+    }
+    // 직접 추가한 자료 (27 문서 3장). 파일은 base64로 받아 크기 제한을 따로 둔다
+    if (req.method === 'GET' && req.url === '/api/materials') {
+      return send(res, 200, { materials: await listMaterials() })
+    }
+    if (req.method === 'POST' && req.url === '/api/materials') {
+      const input = await readJson(req, 15_000_000)
+      return send(res, 200, { material: await addMaterial(input, input.clientId) })
+    }
+    if (req.method === 'DELETE' && req.url.startsWith('/api/materials/')) {
+      const [path, qs = ''] = req.url.split('?')
+      const id = decodeURIComponent(path.slice('/api/materials/'.length))
+      await deleteMaterial(id, { clientId: new URLSearchParams(qs).get('client'), admin: Boolean(adminOf(req)) })
+      return send(res, 200, { ok: true })
+    }
+    // 브라우저별 선별 폴더 (11/07 결정: 선별 정보 서버 기록). 이름 없이 브라우저 무작위 id로
+    if (req.method === 'GET' && req.url.startsWith('/api/selections')) {
+      const client = new URLSearchParams(req.url.split('?')[1] ?? '').get('client')
+      return send(res, 200, { selection: await getSelection(client) })
+    }
+    if (req.method === 'PUT' && req.url === '/api/selections') {
+      const { clientId, folders = [], folderOf = {}, selectedIds = [] } = await readJson(req)
+      if (!clientId) return send(res, 400, { error: 'clientId가 필요해요.' })
+      const data = {
+        folders: folders.slice(0, 50).map((f) => ({ id: String(f.id).slice(0, 40), name: String(f.name ?? '').slice(0, 40) })),
+        folderOf: Object.fromEntries(Object.entries(folderOf).slice(0, 2000).map(([k, v]) => [String(k).slice(0, 200), String(v).slice(0, 40)])),
+        selectedIds: selectedIds.slice(0, 2000).map((x) => String(x).slice(0, 200)),
+      }
+      await saveSelection(String(clientId).slice(0, 64), data)
+      return send(res, 200, { ok: true })
+    }
+    // 용어 백과 (위키백과 요약). 보고서 근거가 아니라 용어 이해용 (27 문서 4장)
+    if (req.method === 'GET' && req.url.startsWith('/api/wiki')) {
+      const term = new URLSearchParams(req.url.split('?')[1] ?? '').get('q')
+      return send(res, 200, await lookupWiki(term))
     }
     if (req.method === 'GET' && req.url === '/api/reports') {
       return send(res, 200, { stored: dbEnabled(), reports: dbEnabled() ? await listReports() : [] })

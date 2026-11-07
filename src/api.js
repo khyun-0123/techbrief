@@ -322,3 +322,45 @@ export async function fetchTechTrends({ period = 'week', from, to } = {}) {
   if (!res.ok) throw new Error(data.error ?? '기술 트렌드를 불러오지 못했어요')
   return data
 }
+
+// ── 직접 추가한 자료 (27 문서 3장) ──
+export async function fetchMaterials() {
+  const res = await fetch('/api/materials')
+  if (!res.ok) throw new Error('추가한 자료를 불러오지 못했어요')
+  return (await res.json()).materials
+}
+
+// input: { kind: 'link'|'doi'|'text'|'file', url?, doi?, title?, text?, source?, fileName?, fileBase64?, tier?, aiAllowed? }
+export async function addMaterialApi(input, clientId) {
+  return (await postJson('/api/materials', { ...input, clientId })).material
+}
+
+export async function deleteMaterialApi(id, clientId) {
+  const res = await fetch(`/api/materials/${encodeURIComponent(id)}?client=${encodeURIComponent(clientId ?? '')}`, { method: 'DELETE' })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+}
+
+// ── 선별 폴더 (브라우저별, 이름 없음) ──
+export async function fetchSelection(clientId) {
+  const res = await fetch(`/api/selections?client=${encodeURIComponent(clientId)}`)
+  if (!res.ok) throw new Error('선별 폴더를 불러오지 못했어요')
+  return (await res.json()).selection
+}
+
+export async function saveSelectionApi(clientId, data) {
+  const res = await fetch('/api/selections', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId, ...data }),
+  })
+  if (!res.ok) throw new Error('선별 폴더를 서버에 저장하지 못했어요')
+}
+
+// ── 용어 백과 (위키백과 요약) ──
+export async function lookupWikiApi(term) {
+  const res = await fetch(`/api/wiki?q=${encodeURIComponent(term)}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? '위키백과를 찾지 못했어요')
+  return data.result
+}
