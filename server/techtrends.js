@@ -452,12 +452,13 @@ async function fetchWiki(keys) {
 //   지난 값이 있는데 쓰던 출처가 한도에 걸렸으면 다른 출처로 바꾸지 않고 지난 값을 그대로 둔다 (월별 값이라 하루 늦어도 됨)
 // - 용어마다 하루 한 번만 (20시간 안에 받았으면 건너뜀). 끝난 달은 30일 캐시라 보통 최근 두 달만 다시 받는다
 //   예전에는 200편 넘는 용어마다 13번씩 검색(1번 $0.001)해 하루 예산 $1을 이 단계에서 다 썼다 (11/07)
-// - 최근 4주(오늘까지 28일)와 그 전 28일 논문 수도 용어마다 하루 한 번 센다 (짧은 기간 비교용, 조장 11/08)
+// - 최근 4주(어제까지 28일)와 그 전 28일 논문 수도 용어마다 하루 한 번 센다 (짧은 기간 비교용, 조장 11/08)
 //   날짜 목록 한 번으로 이번 달 · 지난달 값도 같이 채워서, 하루 OpenAlex 호출 수는 예전(최근 두 달 = 2번)보다 늘지 않는다
 const OPENALEX_EVERY_MS = 20 * 3600_000
-// 「오늘」은 한국 날짜 기준 (서버 시계는 UTC라 아침 9시 전에는 하루 늦음)
+// 끝은 「어제」(한국 날짜). OpenAlex는 논문이 실린 뒤 보통 하루 늦게 들어와 오늘까지 세면 마지막 날이 늘 덜 잡힌다 (조장 11/08)
+// 서버 시계는 UTC라 한국 날짜로 바꿔서 하루를 뺀다
 export function recentWindows(now = Date.now()) {
-  const end = Date.parse(ymd(now + 9 * 3600_000))
+  const end = Date.parse(ymd(now + 9 * 3600_000)) - DAY
   return { cur: [ymd(end - 27 * DAY), ymd(end)], prev: [ymd(end - 55 * DAY), ymd(end - 28 * DAY)] }
 }
 async function fetchOpenAlex(keys) {
@@ -628,14 +629,59 @@ export async function discoverSearchNow() {
 // 관리 화면·스크립트에서 바로 한 번 돌리기
 export const refreshTechTrends = cycle
 
+// 논문 수만 지금 한 번 (최근 4주 값을 하루 갱신까지 기다리지 않고 받을 때, 11/08). 뉴스 · Reddit 등은 돌지 않는다
+export async function refreshPapersNow() {
+  if (status.running || globalThis.__techTrendsRunning) throw new Error('기술 트렌드 갱신이 이미 돌고 있어요')
+  globalThis.__techTrendsRunning = true
+  status.running = true
+  try {
+    await load({ fresh: true })
+    const keys = await candidates()
+    await fetchOpenAlex(keys)
+    state.runs.openalex = new Date().toISOString()
+    await save()
+    const got = keys.filter((k) => state.series.openalex?.[k]?.recent).length
+    return { candidates: keys.length, recent: got, window: recentWindows() }
+  } finally {
+    status.running = false
+    globalThis.__techTrendsRunning = false
+  }
+}
+
 // 서버가 켜지면 1분 뒤 한 번, 그 뒤 하루마다. TECH_TRENDS=off면 돌지 않음 (테스트 서버용)
 export function startTechTrends() {
   if (process.env.TECH_TRENDS === 'off' || !dbEnabled()) return
   globalThis.__techTrendsCycle = cycle // 서버가 다시 올라오면 새 코드의 cycle로 바뀜
+  schedulePaperRetry()
   if (globalThis.__techTrendsTimer) return
   setTimeout(() => globalThis.__techTrendsCycle(), 60_000).unref?.()
   globalThis.__techTrendsTimer = setInterval(() => globalThis.__techTrendsCycle(), CYCLE_MS)
   globalThis.__techTrendsTimer.unref?.()
+}
+
+// OpenAlex 하루 예산이 풀리는 때(00:00 UTC = 한국 09:00) 10분 뒤, 최근 4주 논문 수가 비어 있는 용어가 있으면 논문만 다시 센다
+// 하루 갱신(24시간마다)을 기다리지 않게 (11/08)
+function schedulePaperRetry() {
+  if (globalThis.__techTrendsPaperRetry) return
+  const next = new Date()
+  next.setUTCHours(24, 10, 0, 0)
+  globalThis.__techTrendsPaperRetry = setTimeout(async () => {
+    globalThis.__techTrendsPaperRetry = null
+    try {
+      await load({ fresh: true })
+      const keys = await candidates()
+      const want = recentWindows().cur[1]
+      if (keys.some((k) => state.series.openalex?.[k]?.recent?.cur?.[1] !== want)) {
+        const r = await refreshPapersNow()
+        console.log(`[techtrends] 논문 최근 4주 다시 셈: 후보 ${r.candidates}개 중 ${r.recent}개`)
+      }
+    } catch (err) {
+      console.warn(`[techtrends] 논문 다시 세기 실패: ${err.message}`)
+    } finally {
+      schedulePaperRetry()
+    }
+  }, next.getTime() - Date.now())
+  globalThis.__techTrendsPaperRetry.unref?.()
 }
 
 // ── 3. 기간 비교 · 순위 ──
@@ -716,8 +762,13 @@ function shortMonthly(src, out, keys) {
       else if (cur + prev < src.min) out.skipped.push({ key: k, name, why: '값이 너무 적어요' })
       else out.ranking.push(row(k, slot, cur, prev, { basis: `${md(w.cur[0])}~${md(w.cur[1])} vs 그 전 4주`, stale: Boolean(slot.recentError) }))
     }
+    const limited = keys.some((k) => /한도|예산/.test(state.series.openalex?.[k]?.recentError ?? ''))
     if (!out.ranking.length)
-      out.empty = latest ? '최근 4주 동안 확인할 수 있는 논문 자료가 없어요.' : '최근 4주 동안 확인할 수 있는 논문 자료가 아직 없어요. 하루 한 번 갱신할 때 받아요.'
+      out.empty = limited
+        ? '논문 자료(OpenAlex)가 하루 한도에 걸려 최근 4주 값을 아직 못 받았어요. 한도가 풀리는 오전 9시 10분쯤 다시 받아요.'
+        : latest
+          ? '최근 4주 동안 확인할 수 있는 논문 자료가 없어요.'
+          : '최근 4주 논문 수를 아직 못 받았어요. 논문 자료(OpenAlex) 한도가 풀리는 오전 9시 10분쯤 다시 받아요.'
   } else {
     const lastFull = ymd(Date.now()).slice(0, 7) + '-01'
     const monthsOf = (slot) => slot.series.filter((p) => p.t < lastFull)

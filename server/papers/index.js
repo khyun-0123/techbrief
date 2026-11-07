@@ -210,8 +210,10 @@ export async function countMonthly(term, months, { prefer = null, hasHistory = f
 export async function countRecent(term, windows, { prefer = null, months = [], big = false } = {}) {
   const t = term.toLowerCase()
   const day = windows.cur[1]
-  let order = COUNT_IDS
-  if (prefer && COUNT_IDS.includes(prefer) && !(await isLimited(prefer))) order = [prefer, ...COUNT_IDS.filter((id) => id !== prefer)]
+  // 최근 4주 비교는 OpenAlex로만 센다 (11/08 실측: OpenAlex가 한도에 걸려 arXiv로 넘어가자 프리프린트만 세어
+  // OLED 4주 11편처럼 엉뚱한 값이 나옴). 막혀 있으면 LimitedError → 부르는 쪽이 「한도, 풀리면 다시」로 표시
+  void prefer
+  const order = ['openalex']
   const { value, provider } = await viaChain(order, async (p) => {
     const cacheKey = `recent:${p.id}:${t}:${windows.prev[0]}:${day}`
     const hit = await cacheGet(cacheKey).catch(() => null)
