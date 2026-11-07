@@ -1,0 +1,85 @@
+// 논문 수집 대상 (확인 2026-11-08, OpenAlex /sources · /topics에서 ID와 이름 직접 조회)
+// ① 디스플레이 전문 학술지: 최근 7일 논문 전부
+// ② 큰 종합 학술지: 디스플레이 주제(primary_topic)인 논문만
+// OpenAlex가 막히면 Crossref(ISSN으로)·Semantic Scholar(학술지 이름으로)로 같은 요청을 한다 (index.js)
+import { searchPapers, TTL } from './index.js'
+
+export const DISPLAY_JOURNALS = [
+  { openalex: 'S184312719', issn: '1071-0922', name: 'Journal of the Society for Information Display' },
+  { openalex: 'S4210171700', issn: '0097-966X', name: 'SID Symposium Digest of Technical Papers' },
+  { openalex: 'S2764415853', issn: '1598-0316', name: 'Journal of Information Display' },
+  { openalex: 'S2498964232', issn: '2047-7538', name: 'Light: Science & Applications' },
+  { openalex: 'S108229257', issn: '2195-1071', name: 'Advanced Optical Materials' },
+  { openalex: 'S120392215', issn: '1749-4885', name: 'Nature Photonics' },
+  { openalex: 'S4210239724', issn: '2520-1131', name: 'Nature Electronics' },
+]
+
+export const BIG_JOURNALS = [
+  { openalex: 'S99352657', issn: '0935-9648', name: 'Advanced Materials' },
+  { openalex: 'S135204980', issn: '1616-301X', name: 'Advanced Functional Materials' },
+  { openalex: 'S135184319', issn: '2330-4022', name: 'ACS Photonics' },
+  { openalex: 'S178776955', issn: '1094-4087', name: 'Optics Express' },
+  { openalex: 'S19887683', issn: '0741-3106', name: 'IEEE Electron Device Letters' },
+  { openalex: 'S162355128', issn: '0018-9383', name: 'IEEE Transactions on Electron Devices' },
+  { openalex: 'S99846442', issn: '1566-1199', name: 'Organic Electronics' },
+]
+
+// OpenAlex 주제(topic) 이름은 실제 조회값. words는 Crossref·Semantic Scholar·arXiv로 넘어갔을 때 쓸 검색 낱말
+export const DISPLAY_TOPICS = [
+  { id: 'T10611', name: 'Organic Light-Emitting Diodes Research', words: ['OLED', 'organic light-emitting'] },
+  { id: 'T10099', name: 'GaN-based semiconductor devices and materials', words: ['micro-LED', 'microLED'] },
+  { id: 'T10321', name: 'Quantum Dots Synthesis And Properties', words: ['quantum dot light-emitting', 'QLED', 'QD-OLED'] },
+  { id: 'T10623', name: 'Thin-Film Transistor Technologies', words: ['thin-film transistor', 'oxide TFT'] },
+  { id: 'T10306', name: 'Liquid Crystal Research Advancements', words: ['liquid crystal display'] },
+  // 이름은 「광학 영상 기술」이지만 홀로그램 · AR 근안 디스플레이 논문이 여기 들어간다 (OpenAlex에 AR/VR 디스플레이 전용 주제는 없음)
+  { id: 'T11408', name: 'Advanced Optical Imaging Technologies', words: ['augmented reality display', 'near-eye display', 'holographic display'] },
+]
+
+// 경쟁사 기술 표시 (고객사는 WOLED, QD-OLED는 경쟁사 기술)
+const QD_OLED = /\bQD[\s-]?OLED\b|quantum[\s-]dot[\s-]organic light/i
+export const isCompetitorTech = (w) => QD_OLED.test(`${w.title} ${w.abstract}`)
+
+// 주제 묶음이 넓어서(예: GaN 주제에 심자외선 LED, 광학 영상 주제에 3D 프린팅) OLED 주제가 아니면 디스플레이 낱말이 있어야 남긴다
+// (11/08 실측: OLED 주제만 쓴 상위 12편은 모두 OLED, 6개 주제를 합치면 상위 8편 중 3편이 디스플레이와 무관)
+const DISPLAY_WORDS = /\b(?:displays?|pixels?|micro[\s-]?LEDs?|mini[\s-]?LEDs?|[AQW]?OLEDs?|QLEDs?)\b|near[\s-]eye|augmented reality|virtual reality|AR glasses|backplane|thin[\s-]film transistor|\bTFTs?\b|liquid crystal|electroluminesc/i
+export const isDisplayPaper = (w) => w.topic?.id === 'T10611' || DISPLAY_WORDS.test(`${w.title} ${w.abstract}`)
+
+// 「Issue Information」 · 표지 같은 논문 아닌 항목
+const NOT_PAPER = /^(issue information|cover (image|picture)|masthead|front matter|back cover|inside (front|back) cover|table of contents|editorial board|correction)/i
+
+const ymd = (ms) => new Date(ms).toISOString().slice(0, 10)
+
+// 최근 days일 논문 (① + ②). 결과: { works: [...], providers: ['openalex', ...] }
+// SID Digest는 OpenAlex에서 conference-paper라 그 종류도 받는다
+export async function recentPapers(days = 7) {
+  const from = ymd(Date.now() - days * 86_400_000)
+  const to = ymd(Date.now())
+  const a = await searchPapers({ sources: DISPLAY_JOURNALS, from, to, sort: 'date', limit: 100, types: ['article', 'conference-paper'] })
+  const b = await searchPapers({ sources: BIG_JOURNALS, topics: DISPLAY_TOPICS, from, to, sort: 'date', limit: 100 })
+  const seen = new Set()
+  const works = []
+  for (const w of [...a.works, ...b.works.filter(isDisplayPaper)]) {
+    const id = w.doi || w.url
+    if (!w.title || NOT_PAPER.test(w.title) || seen.has(id)) continue
+    seen.add(id)
+    works.push({ ...w, competitorTech: isCompetitorTech(w) })
+  }
+  return { works, providers: [...new Set([a.provider, b.provider])] }
+}
+
+// 「요즘 많이 인용되는 논문」 (일주일 캐시): 디스플레이 주제 + 최근 12개월, 인용 많은 순으로 받아
+// 오래된 논문이 유리하지 않게 「인용 수 ÷ 나온 뒤 개월 수」로 다시 줄 세운다
+export async function popularPapers(limit = 10) {
+  const from = ymd(Date.now() - 365 * 86_400_000)
+  const to = ymd(Date.now())
+  const { works, provider } = await searchPapers({ topics: DISPLAY_TOPICS, from, to, sort: 'cited', limit: 50, types: ['article'] }, { ttlMs: TTL.popular })
+  const months = (d) => Math.max(1, (Date.now() - Date.parse(d)) / (30.4 * 86_400_000))
+  return {
+    provider,
+    works: works
+      .filter((w) => w.title && w.date && !NOT_PAPER.test(w.title) && isDisplayPaper(w))
+      .map((w) => ({ ...w, perMonth: Math.round((w.cited / months(w.date)) * 10) / 10, competitorTech: isCompetitorTech(w) }))
+      .sort((x, y) => y.perMonth - x.perMonth)
+      .slice(0, limit),
+  }
+}

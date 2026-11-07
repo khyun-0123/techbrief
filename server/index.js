@@ -5,6 +5,8 @@ import { pathToFileURL } from 'node:url'
 import { collect, getSources, listArticles, saveSources, searchArticles } from './collector/index.js'
 import { feedList } from './collector/feeds.js'
 import { getTrends } from './trends.js'
+import { paperProviderStatus } from './papers/index.js'
+import { popularPapers } from './papers/journals.js'
 import { getTechTrends, startTechTrends } from './techtrends.js'
 import { similarity } from './collector/dedupe.js'
 import { fetchBodies } from './collector/fulltext.js'
@@ -328,13 +330,21 @@ export async function handleApi(req, res) {
       const q = new URL(req.url, 'http://x').searchParams
       return send(res, 200, await getTechTrends({ period: q.get('period'), from: q.get('from'), to: q.get('to') }))
     }
+    // 최근 12개월 디스플레이 주제 논문 중 「달마다 인용이 많이 붙는」 순 (일주일 캐시, server/papers/journals.js). 화면은 아직 없음
+    if (req.method === 'GET' && req.url === '/api/papers/popular') {
+      try {
+        return send(res, 200, await popularPapers())
+      } catch (err) {
+        return send(res, 503, { error: `논문 출처가 모두 막혀 있어요: ${err.message}` })
+      }
+    }
     if (req.method === 'GET' && req.url === '/api/trends') {
       return send(res, 200, await getTrends())
     }
     // 수집 출처 (14 문서 4-B): 네이버 밖 출처 목록 · 켜기/끄기 · 지난 수집 결과. 관리자만
     if (req.method === 'GET' && req.url === '/api/admin/sources') {
       requireAdmin(req)
-      return send(res, 200, { list: feedList(), ...(await getSources()) })
+      return send(res, 200, { list: feedList(), ...(await getSources()), papers: await paperProviderStatus() })
     }
     if (req.method === 'PUT' && req.url === '/api/admin/sources') {
       const admin = requireAdmin(req)

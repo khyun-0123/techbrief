@@ -11,11 +11,12 @@ import { dbEnabled, query } from './db/index.js'
 import { getKeywords, getSetting, setSetting } from './db/store.js'
 import { chatJson, PRIORITY, PreemptedError } from './llm/client.js'
 import { countPatentsFor } from './patents.js'
+import { countMonthly, forceLimit, isLimited, LimitedError, openAlexGet as papersOpenAlexGet } from './papers/index.js'
 
 const KEY = 'tech_trends'
 const DAY = 86_400_000
 const UA = 'techbrief/0.1 (university team project; tech trend dashboard)'
-const MAX_TERMS = 150 // 안전 상한 (네이버 하루 1,000회 · OpenAlex 하루 약 1,000회 안). 기사 수로 자르지 않는다
+const MAX_TERMS = 150 // 안전 상한 (네이버 하루 1,000회 · OpenAlex 하루 $1 = 검색 약 1,000회 안, 논문 수는 캐시로 용어당 하루 2~3회). 기사 수로 자르지 않는다
 const MIN_ARTICLES = 2 // 기사 갈래 용어는 최근 60일 기사 2건 이상 (한 번 스친 말 거르기)
 const HISTORY_DAYS = 120
 const BATCH = 40 // AI에게 한 번에 주는 기사 제목 수
@@ -27,7 +28,7 @@ export const SOURCES = [
   { id: 'naver', label: '네이버 검색량', axis: '관심', unit: '', daily: true, smooth: 5, min: 10, note: '네이버 데이터랩 · 용어마다 그 기간 최대 100' },
   { id: 'wiki', label: 'Wikipedia 조회수', axis: '관심', unit: '회', daily: true, smooth: 30, min: 50, note: '영문 Wikipedia 문서 조회수' },
   { id: 'reddit', label: 'Reddit 글 수', axis: '현장 반응', unit: '건', daily: true, smooth: 1, min: 3, note: 'Reddit 검색 RSS · 최신 100건씩 쌓음' },
-  { id: 'openalex', label: '논문 수', axis: '연구', unit: '편', daily: false, smooth: 1, min: 3, note: 'OpenAlex · 제목·초록 · 월별' },
+  { id: 'openalex', label: '논문 수', axis: '연구', unit: '편', daily: false, smooth: 1, min: 3, note: 'OpenAlex(막히면 Semantic Scholar · arXiv) · 제목·초록 · 월별 · 하루 한 번' },
   { id: 'patents', label: '특허 공개 건수', axis: '개발·투자', unit: '건', daily: false, smooth: 2, min: 5, note: 'Google Patents · 영문 제목 · 월별 (공개까지 약 18개월 늦음)' },
 ]
 
@@ -251,15 +252,17 @@ const PAPER_SCHEMA = {
   required: ['items'],
 }
 
-async function openAlexGet(url) {
-  for (const wait of [0, 5000, 15000]) {
-    if (wait) await sleep(wait)
-    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(30_000) })
-    if (res.status === 429) continue // 요청 제한: 조금 쉬고 다시
-    if (!res.ok) throw new Error(`응답 ${res.status}`)
-    return res.json()
+// OpenAlex는 server/papers를 거쳐 부른다: 키 · 요청 간격 · 하루 예산(쉬는 중이면 바로 오류)을 한 곳에서 관리
+async function openAlexGet(path) {
+  if (await isLimited('openalex')) throw new Error('OpenAlex 하루 예산 도달 (다음 00:00 UTC = 한국 09:00에 풀림)')
+  try {
+    const data = await papersOpenAlexGet(path)
+    if (data.__exhausted) await forceLimit('openalex', data.__exhausted, '하루 예산을 거의 다 씀')
+    return data
+  } catch (err) {
+    if (err instanceof LimitedError) await forceLimit('openalex', err.until, err.message)
+    throw err
   }
-  throw new Error('응답 429')
 }
 
 async function discoverPapers() {
@@ -271,7 +274,7 @@ async function discoverPapers() {
   const mid = ymd(Date.now() - 182 * DAY)
   const start = ymd(Date.now() - 364 * DAY)
   const group = async (from, to) =>
-    (await openAlexGet(`https://api.openalex.org/works?filter=title_and_abstract.search:${encodeURIComponent(PAPER_QUERY)},from_publication_date:${from},to_publication_date:${to}&group_by=keywords.id&api_key=${apiKey}`)).group_by ?? []
+    (await openAlexGet(`/works?filter=title_and_abstract.search:${encodeURIComponent(PAPER_QUERY)},from_publication_date:${from},to_publication_date:${to}&group_by=keywords.id`)).group_by ?? []
   const prev = new Map((await group(start, mid)).map((g) => [g.key_display_name, g.count]))
   const cur = await group(mid, today)
   const totPrev = [...prev.values()].reduce((a, b) => a + b, 0) || 1
@@ -444,40 +447,29 @@ async function fetchWiki(keys) {
   }
 }
 
-// 최근 13개월 논문을 월별로 센다. 200편 이하면 날짜 목록을 받아 세고, 많으면 달마다 개수만 묻는다
+// 최근 13개월 논문을 월별로 센다 (server/papers의 사슬 + 캐시)
+// - 출처: OpenAlex(키) → 막히면 Semantic Scholar → arXiv. 한 용어의 달 값은 한 출처에서만 받는다 (섞으면 추이가 틀어짐)
+//   지난 값이 있는데 쓰던 출처가 한도에 걸렸으면 다른 출처로 바꾸지 않고 지난 값을 그대로 둔다 (월별 값이라 하루 늦어도 됨)
+// - 용어마다 하루 한 번만 (20시간 안에 받았으면 건너뜀). 끝난 달은 30일 캐시라 보통 최근 두 달만 다시 받는다
+//   예전에는 200편 넘는 용어마다 13번씩 검색(1번 $0.001)해 하루 예산 $1을 이 단계에서 다 썼다 (11/07)
+const OPENALEX_EVERY_MS = 20 * 3600_000
 async function fetchOpenAlex(keys) {
-  const apiKey = process.env.OPENALEX_API_KEY
-  if (!apiKey) throw new Error('OpenAlex 키가 없어요')
   const from = new Date(Date.now() - 400 * DAY)
   from.setUTCDate(1)
-  const base = (extra) => {
-    const term = encodeURIComponent(`"${extra.term}"`)
-    return `https://api.openalex.org/works?filter=title_and_abstract.search:${term},from_publication_date:${extra.from},to_publication_date:${extra.to}&${extra.q}&api_key=${apiKey}`
-  }
-  const get = openAlexGet
+  const monthList = []
+  for (let d = new Date(from); d < new Date(); d.setUTCMonth(d.getUTCMonth() + 1)) monthList.push(ymd(d).slice(0, 7))
   for (const k of keys) {
     const term = (state.terms[k].query || state.terms[k].en)?.trim()
     if (!term) continue
+    const slot = state.series.openalex?.[k]
+    if (slot?.series?.length && !slot.error && Date.now() - Date.parse(slot.at) < OPENALEX_EVERY_MS) continue
     try {
-      const months = {}
-      for (let d = new Date(from); d < new Date(); d.setUTCMonth(d.getUTCMonth() + 1)) months[ymd(d).slice(0, 7)] = 0
-      const today = ymd(Date.now())
-      const first = await get(base({ term, from: ymd(from), to: today, q: 'select=publication_date&per-page=200' }))
-      if (first.meta.count <= 200) {
-        for (const w of first.results ?? []) if (w.publication_date?.slice(0, 7) in months) months[w.publication_date.slice(0, 7)]++
-      } else {
-        for (const m of Object.keys(months)) {
-          const [y, mo] = m.split('-').map(Number)
-          const last = ymd(Date.UTC(y, mo, 0))
-          months[m] = (await get(base({ term, from: `${m}-01`, to: last, q: 'per-page=1&select=id' }))).meta.count
-          await sleep(400)
-        }
-      }
-      remember('openalex', k, Object.entries(months).map(([m, v]) => ({ t: `${m}-01`, v })))
+      const { months, provider } = await countMonthly(term, monthList, { prefer: slot?.provider, hasHistory: Boolean(slot?.series?.length) })
+      remember('openalex', k, monthList.map((m) => ({ t: `${m}-01`, v: months[m] ?? 0 })))
+      state.series.openalex[k].provider = provider
     } catch (err) {
       failed('openalex', k, err)
     }
-    await sleep(1000)
   }
 }
 
