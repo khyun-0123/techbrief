@@ -4452,3 +4452,21 @@ a.brand:focus-visible {
 .data-move .check small {
   color: var(--tb-color-text-sub);
 }
+
+/* 재료 미리보기 (선별·요약 오른쪽 「미리보기」, 보고서 만들기 전) */
+.materials-preview {
+  padding: 16px 20px;
+}
+.materials-preview .report-doc-head h2 {
+  font-size: 18px;
+}
+.materials-preview .section-sources li {
+  line-height: 1.5;
+}
+.composer-body > .composer-foot .btn:not(.composer-go) {
+  justify-self: start;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

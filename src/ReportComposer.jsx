@@ -41,6 +41,73 @@ function periodOf(articles) {
   return lo === hi ? `${lo} 기사` : `${lo} ~ ${hi} 기사`
 }
 
+// 재료 미리보기: 보고서를 만들기 전, 체크한 기사의 요약이 섹션마다 어떤 재료로 들어가는지 (예전 보고서 초안 화면의 미리보기)
+const SECTION_PLAN = [
+  ['핵심 요약', '경영진이 먼저 알아야 할 내용, 3줄 이내', []],
+  ['기술 개요', '어떤 기술이고 어떤 원리인지', [['concept', '컨셉'], ['principle', '원리']]],
+  ['업계 동향', '타사의 개발 · 활용 현황과 장단점', [['competitors', '타사 현황'], ['pros_cons', '장단점']]],
+  ['시사점', '우리 회사 활용 방안과 기대 효과', [['application', '활용 방안'], ['effect', '효과성']]],
+]
+const BASIS_SHORT = { article: '기사 근거', ai_background: 'AI 보충', ai_suggestion: 'AI 제안' }
+
+function MaterialsPreview({ articles, aiSummaries, title, direction, jobs }) {
+  return (
+    <div className="materials-preview">
+      {jobs.length > 0 && (
+        <p className="composer-jobs">
+          {jobs.map((j) => (
+            <span key={j.id}>
+              「{j.title}」 {j.status === 'queued' ? `대기 ${j.queuePos}번째` : j.status === 'need_confirm' ? '확인 필요 — 오른쪽 아래 진행 창' : `${j.step} ${j.progress ?? 0}%`}
+            </span>
+          ))}
+        </p>
+      )}
+      <header className="report-doc-head">
+        <h2>{title || '제목 없음'}</h2>
+        <span>재료 미리보기 · 기사 {articles.length}건</span>
+      </header>
+      {direction && <p className="report-direction">방향: {direction}</p>}
+      {articles.length === 0 ? (
+        <p className="hint">왼쪽에서 보고서에 넣을 기사를 체크하면, 섹션마다 어떤 내용이 들어갈지 여기에 보여 줘요.</p>
+      ) : (
+        <>
+          <p className="hint">아직 만들기 전이에요. 「보고서 만들기」를 누르면 AI가 아래 재료를 섹션별로 묶어 개조식으로 정리해요.</p>
+          {SECTION_PLAN.map(([label, desc, items]) => (
+            <section key={label} className="report-section">
+              <div className="report-section-head">
+                <h3>■ {label}</h3>
+              </div>
+              <p className="section-desc">{desc}</p>
+              <ul className="section-sources">
+                {articles.map((a, i) => {
+                  const ai = aiSummaries[a.id]
+                  if (!ai) return <li key={a.id} className="muted">[{i + 1}] 요약 대기 중 · {a.title}</li>
+                  if (items.length === 0) {
+                    return (
+                      <li key={a.id}>
+                        <b>[{i + 1}]</b> {ai.summary.headline || a.title}
+                      </li>
+                    )
+                  }
+                  return items.map(([k, l]) => {
+                    const item = ai.summary.items?.[k]
+                    if (!item) return null
+                    return (
+                      <li key={`${a.id}-${k}`}>
+                        <b>[{i + 1}]</b> {l}: {item.text} <span className={`basis basis-${item.basis}`}>{BASIS_SHORT[item.basis]}</span>
+                      </li>
+                    )
+                  })
+                })}
+              </ul>
+            </section>
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
+
 function ReportComposer({ articles: picked, aiSummaries, queue, reports, onUpdated, onGoArchive, storageLabel, folderSummary, reportJobs = [], onJobAdded, lastReportId }) {
   const [saved0] = useState(() => load(DRAFT_INPUT_KEY, {}))
   const [title, setTitle] = useState(saved0.title ?? '테크 동향 브리핑')
@@ -68,9 +135,16 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, onUpdat
   const leftOut = tooMany && !useAll ? picked.filter((a) => !articles.includes(a)) : []
 
   const key = articleKey(picked.map((a) => a.id))
-  const current = reports.find((r) => r.id === lastReportId)
+  // 미리보기 (11/08: 항상 누를 수 있게)
+  // - 지금 체크한 기사로 만든 보고서가 있으면 그 보고서 (가장 최근)
+  // - 없으면 「재료 미리보기」: 체크한 기사 요약이 섹션별로 어떻게 들어가는지 + 만드는 중이면 진행
+  // - 「지난 보고서 보기」: 이 브라우저에서 마지막으로 만든 보고서
+  const matching = reports.find((r) => r.articleKey === key && picked.length > 0)
+  const last = reports.find((r) => r.id === lastReportId)
+  const [showLast, setShowLast] = useState(false)
+  const current = showLast ? last : matching
   const changed = current && current.articleKey && current.articleKey !== key
-  const [view, setView] = useState(() => (current && !changed ? 'preview' : 'compose'))
+  const [view, setView] = useState(() => (matching ? 'preview' : 'compose'))
   const showReport = view === 'preview' && current
   const activeJobs = reportJobs.filter((j) => ACTIVE.includes(j.status))
 
@@ -128,22 +202,43 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, onUpdat
             aria-selected={view === 'preview'}
             className={view === 'preview' ? 'active' : ''}
             onClick={() => setView('preview')}
-            disabled={!current}
-            title={current ? '이 브라우저에서 마지막으로 만든 보고서' : '아직 만든 보고서가 없어요'}
+            title="체크한 기사로 만든 보고서, 아직 없으면 섹션별 재료 미리보기"
           >
             미리보기
           </button>
         </div>
       </div>
 
-      {showReport ? (
+      {view === 'preview' && !showReport ? (
+        <div className="composer-body">
+          <MaterialsPreview articles={articles} aiSummaries={aiSummaries} title={title} direction={direction} jobs={activeJobs} />
+          <div className="composer-foot">
+            {last && (
+              <button type="button" className="btn" onClick={() => setShowLast(true)}>
+                지난 보고서 보기 — 「{last.report.title}」 {new Date(last.createdAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </button>
+            )}
+            <button type="button" className="btn primary composer-go" onClick={() => setView('compose')}>
+              작성으로 가서 보고서 만들기
+            </button>
+          </div>
+        </div>
+      ) : showReport ? (
         <div className="composer-body">
           <p className="composer-note">
             {changed ? (
-              <span className="note-warn">지금 체크한 기사와 다른 기사로 만든 보고서예요.</span>
+              <span className="note-warn">지금 체크한 기사와 다른 기사로 만든 지난 보고서예요.</span>
             ) : (
-              <span>✓ 보고서함에 저장됨 ({storageLabel})</span>
+              <span>✓ 지금 체크한 기사로 만든 보고서 · 보고서함에 저장됨 ({storageLabel})</span>
             )}{' '}
+            {showLast && (
+              <>
+                ·{' '}
+                <button type="button" className="link-btn" onClick={() => setShowLast(false)}>
+                  지금 체크한 기사로 돌아가기
+                </button>{' '}
+              </>
+            )}
             ·{' '}
             <button type="button" className="link-btn" onClick={onGoArchive}>
               보고서함에서 보기
