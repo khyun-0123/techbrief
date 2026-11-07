@@ -2702,6 +2702,18 @@ a.brand:focus-visible {
   font-size: var(--fs-xs);
 }
 
+.trend-asof {
+  display: block;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+}
+
+/* 지난 값: 글자색만 한 단계 진하게 + 앞에 「지난 값」 글자 (색만으로 구분하지 않음) */
+.trend-asof.stale {
+  color: var(--tb-color-text-sub);
+  font-weight: 600;
+}
+
 .trend-empty {
   display: grid;
   place-items: center;

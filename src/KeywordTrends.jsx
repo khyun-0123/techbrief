@@ -13,9 +13,10 @@ const fmtDay = (t, monthly) => {
   const [y, m, d] = t.split('-')
   return monthly ? `${y.slice(2)}년 ${Number(m)}월` : `${Number(m)}월 ${Number(d)}일`
 }
+const fmtAt = (iso) => new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
 const fmtNum = (v) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}천` : String(Math.round(v * 10) / 10))
 
-function Spark({ title, unit, series, note, source, monthly = false }) {
+function Spark({ title, unit, series, note, source, asOf, monthly = false }) {
   const [hover, setHover] = useState(null)
   const pts = useMemo(() => {
     if (!series?.length) return []
@@ -69,6 +70,13 @@ function Spark({ title, unit, series, note, source, monthly = false }) {
         <p className="trend-empty">{note ?? '아직 데이터가 없어요.'}</p>
       )}
       {source && <span className="trend-source">{source}</span>}
+      {/* 언제 받은 값인지. 새로 받기에 실패해 지난 값을 보여 주는 중이면 따로 표시 (11/07) */}
+      {asOf?.at && pts.length > 1 && (
+        <span className={asOf.stale ? 'trend-asof stale' : 'trend-asof'} title={asOf.error ? `새로 받기 실패: ${asOf.error}` : undefined}>
+          {asOf.stale ? '지난 값 · ' : ''}
+          {fmtAt(asOf.at)} {asOf.label ?? '받음'}
+        </span>
+      )}
     </figure>
   )
 }
@@ -88,7 +96,7 @@ const PATENT_NOTE = {
   error: '특허 집계를 받지 못했어요.',
 }
 
-function TrendCard({ item, naverStatus, patentStatus }) {
+function TrendCard({ item, naverStatus, naverAt, naverStale, naverError, patentStatus, patentAt }) {
   const s = item.newsSurge
   return (
     <article className="trend-card">
@@ -105,21 +113,26 @@ function TrendCard({ item, naverStatus, patentStatus }) {
       </header>
       <div className="trend-grid">
         <Spark title="뉴스 기사량" unit="건" series={item.news.filter((p) => p.t < today)} source="테크브리프 수집 · 오늘은 빼고" />
-        <Spark title="네이버 검색량" unit="" series={item.naver} note={NAVER_NOTE[naverStatus]} source="네이버 데이터랩 · 최대 100 기준" />
+        <Spark title="네이버 검색량" unit="" series={item.naver} note={NAVER_NOTE[naverStatus]} source="네이버 데이터랩 · 최대 100 기준" asOf={{ at: naverAt, stale: naverStale, error: naverError }} />
         <Spark
           title="전 세계 관심도"
           unit="회"
           series={item.wiki?.series}
           note={item.wiki ? `받지 못했어요${item.wiki.error ? ` (${item.wiki.error})` : ''}` : '영문 문서가 정해지지 않은 키워드예요.'}
           source={item.wiki ? `Wikipedia 「${item.wiki.article}」 조회수` : null}
+          asOf={item.wiki}
         />
-        <Spark
-          title="해외 보도량"
-          unit="건"
-          series={item.gdelt?.series}
-          note={item.gdelt ? (item.gdelt.error === '요청 제한' ? 'GDELT 요청 제한에 걸렸어요. 6시간 뒤 다시 받아요.' : 'GDELT 서버가 응답하지 않았어요. 6시간 뒤 다시 받아요.') : '영문 검색어가 정해지지 않은 키워드예요.'}
-          source={item.gdelt ? `GDELT 「${item.gdelt.term}」` : null}
-        />
+        {/* GDELT: 이 서버 IP가 막혀 30분마다 다시 시도. 24시간 동안 한 번도 못 받으면 서버가 retired로 보내 칸을 뺀다 */}
+        {!item.gdelt?.retired && (
+          <Spark
+            title="해외 보도량"
+            unit="건"
+            series={item.gdelt?.series}
+            note={item.gdelt ? `GDELT 요청 제한에 걸렸어요. 30분마다 다시 시도해요${item.gdelt.retryAt ? ` (마지막 시도 ${fmtAt(item.gdelt.retryAt)})` : ''}.` : '영문 검색어가 정해지지 않은 키워드예요.'}
+            source={item.gdelt ? `GDELT 「${item.gdelt.term}」` : null}
+            asOf={item.gdelt}
+          />
+        )}
         <Spark
           title="특허 공개 건수"
           monthly
@@ -127,6 +140,7 @@ function TrendCard({ item, naverStatus, patentStatus }) {
           series={item.patents}
           note={item.patents === null && patentStatus === 'ok' ? '특허 검색어가 정해지지 않은 키워드예요.' : PATENT_NOTE[patentStatus] ?? '아직 데이터가 없어요.'}
           source="Google Patents · 월별, 영문 제목 · 최근 달은 덜 잡힘"
+          asOf={{ at: patentAt, label: '집계 (30일마다)' }}
         />
       </div>
     </article>
@@ -157,7 +171,7 @@ function KeywordTrends() {
       </div>
       {open && data && (
         <div className="trend-cards">
-          {data.items.length === 0 ? <p className="trend-empty">자동 수집 키워드가 없어요.</p> : data.items.map((item) => <TrendCard key={item.keyword} item={item} naverStatus={data.naverStatus} patentStatus={data.patentStatus} />)}
+          {data.items.length === 0 ? <p className="trend-empty">자동 수집 키워드가 없어요.</p> : data.items.map((item) => <TrendCard key={item.keyword} item={item} naverStatus={data.naverStatus} naverAt={data.naverAt} naverStale={data.naverStale} naverError={data.naverError} patentStatus={data.patentStatus} patentAt={data.patentAt} />)}
         </div>
       )}
     </section>
