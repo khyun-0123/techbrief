@@ -91,8 +91,10 @@ function rowToEntry(r) {
 
 // ip: 요청한 사람의 IP → 각 보고서에 mine(내가 만든 것)만 붙인다. withIp: 관리 페이지에서만 만든 IP까지
 export async function listReports(limit = 30, { ip = null, withIp = false } = {}) {
+  // 만든 브라우저 번호(createdBy)는 내보내지 않는다. 내 것인지는 mine으로 (11/09)
   const mark = (entry, createdIp) => ({
     ...entry,
+    report: (({ createdBy: _c, ...rest }) => rest)(entry.report ?? {}),
     mine: Boolean(ip && createdIp && createdIp === ip),
     ...(withIp ? { createdIp: createdIp ?? null } : {}),
   })

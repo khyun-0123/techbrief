@@ -516,8 +516,9 @@ export async function handleApi(req, res) {
       return send(res, 200, { keywords: saved })
     }
     // 직접 추가한 자료 (27 문서 3장). 파일은 base64로 받아 크기 제한을 따로 둔다
-    if (req.method === 'GET' && req.url === '/api/materials') {
-      return send(res, 200, { materials: await listMaterials() })
+    if (req.method === 'GET' && (req.url === '/api/materials' || req.url.startsWith('/api/materials?'))) {
+      const client = new URLSearchParams(req.url.split('?')[1] ?? '').get('client')
+      return send(res, 200, { materials: await listMaterials(300, client) })
     }
     if (req.method === 'POST' && req.url === '/api/materials') {
       const input = await readJson(req, 15_000_000)
@@ -615,15 +616,15 @@ export async function handleApi(req, res) {
     }
     if (req.method === 'GET' && req.url.startsWith('/api/report-jobs')) {
       const client = new URLSearchParams(req.url.split('?')[1] ?? '').get('client')
-      return send(res, 200, { jobs: listJobs(client) })
+      return send(res, 200, { jobs: client ? listJobs(client) : [] }) // 번호 없이 전체 목록은 주지 않음 (11/09)
     }
     if (req.method === 'POST' && /^\/api\/report-jobs\/[\w-]+\/(answer|cancel)$/.test(req.url)) {
+      // 작업을 만든 브라우저(clientId)이면서 같은 IP일 때만 답하기 · 취소 (11/09)
       const [, , , id, action] = req.url.split('/')
-      if (action === 'answer') {
-        const { use } = await readJson(req)
-        return send(res, 200, { job: answerJob(id, use) })
-      }
-      return send(res, 200, { job: cancelJob(id) })
+      const { use, clientId } = await readJson(req)
+      const who = { clientId, ip: clientIp(req) }
+      if (action === 'answer') return send(res, 200, { job: answerJob(id, use, who) })
+      return send(res, 200, { job: cancelJob(id, who) })
     }
     // AI 해설 한 줄의 근거를 우리 자료 · 위키백과에서 찾아 고쳐 쓴다
     if (req.method === 'POST' && req.url === '/api/reports/reinforce') {

@@ -156,7 +156,8 @@ async function fromFile({ fileName = '', fileBase64 = '' }) {
   throw fail('PDF · TXT · MD · HTML · EML 파일만 올릴 수 있어요. Word·PPT는 PDF로 저장해 올려 주세요.')
 }
 
-function toArticle(row) {
+// mine: 이 브라우저가 올린 자료인지. 올린 브라우저 번호(added_by) 자체는 내보내지 않는다 (11/09: 번호를 알면 남의 자료를 지울 수 있었음)
+function toArticle(row, clientId = null) {
   return {
     id: row.id,
     material: true,
@@ -171,7 +172,7 @@ function toArticle(row) {
     aiAllowed: row.ai_allowed !== false,
     publishedAt: new Date(row.published_at ?? row.added_at).toISOString(),
     addedAt: new Date(row.added_at).toISOString(),
-    addedBy: row.added_by || null,
+    mine: Boolean(clientId && row.added_by && row.added_by === clientId),
     fileName: row.file_name || undefined,
     importance: 0,
     relevance: 'high',
@@ -213,7 +214,7 @@ export async function addMaterial(input, clientId) {
   }
   if (!dbEnabled()) {
     memory.set(row.id, row)
-    return toArticle(row)
+    return toArticle(row, row.added_by)
   }
   await query(
     `INSERT INTO materials (id, kind, title, url, source, description, body, tier, ai_allowed, published_at, added_at, added_by, file_name, doi)
@@ -223,14 +224,14 @@ export async function addMaterial(input, clientId) {
   return toArticle(row)
 }
 
-export async function listMaterials(limit = 300) {
-  if (!dbEnabled()) return [...memory.values()].sort((a, b) => b.added_at.localeCompare(a.added_at)).slice(0, limit).map(toArticle)
+export async function listMaterials(limit = 300, clientId = null) {
+  if (!dbEnabled()) return [...memory.values()].sort((a, b) => b.added_at.localeCompare(a.added_at)).slice(0, limit).map((r) => toArticle(r, clientId))
   const { rows } = await query(
     `SELECT id, kind, title, url, source, description, tier, ai_allowed, published_at, added_at, added_by, file_name
        FROM materials ORDER BY added_at DESC LIMIT $1`,
     [limit],
   )
-  return rows.map(toArticle)
+  return rows.map((r) => toArticle(r, clientId))
 }
 
 export async function getMaterial(id) {

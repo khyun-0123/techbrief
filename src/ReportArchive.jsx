@@ -64,7 +64,7 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
   const [mine, setMine] = useState(false)
   const me = clientId()
   // 내가 만든 보고서: 공용 보고서함이면 서버가 IP로 알려 준 mine, 브라우저에만 있으면 예전처럼 브라우저 번호 (11/08)
-  const isMine = (r) => r.mine ?? r.report.createdBy === me
+  const isMine = (r) => r.mine ?? r.report.createdBy === me // mine: 서버가 IP로 판단 (createdBy는 11/09부터 내려오지 않음)
   const open = reports.find((r) => r.id === openId) ?? null
 
   const results = reports.filter((r) => (!mine || isMine(r)) && (!q.trim() || norm(textOf(r)).includes(norm(q))))

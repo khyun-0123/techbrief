@@ -40,7 +40,7 @@ export function setDraftBuilder(fn) {
 }
 
 function pub(job) {
-  const { body: _b, entry: _e, waiter: _w, cancel: _c, ip: _ip, ...rest } = job // IP는 화면에 보내지 않음
+  const { body: _b, entry: _e, waiter: _w, cancel: _c, ip: _ip, clientId: _id, ...rest } = job // IP · 브라우저 번호는 화면에 보내지 않음
   const queued = [...jobs.values()].filter((j) => j.status === 'queued')
   return { ...rest, queuePos: job.status === 'queued' ? queued.findIndex((j) => j.id === job.id) + 1 : 0 }
 }
@@ -79,16 +79,24 @@ export function addJob(body, clientId, ip = null) {
   return pub(job)
 }
 
-export function answerJob(id, use) {
+function checkOwner(job, { clientId, ip } = {}) {
+  const sameClient = job.clientId && job.clientId === String(clientId ?? '')
+  const sameIp = !job.ip || job.ip === ip
+  if (!sameClient || !sameIp) throw Object.assign(new Error('이 작업을 만든 브라우저에서만 답하거나 취소할 수 있어요.'), { status: 403 })
+}
+
+export function answerJob(id, use, who) {
   const job = jobs.get(id)
+  if (job) checkOwner(job, who)
   if (!job || job.status !== 'need_confirm') throw Object.assign(new Error('답할 수 있는 작업이 아니에요.'), { status: 400 })
   job.waiter?.(Boolean(use))
   return pub(job)
 }
 
-export function cancelJob(id) {
+export function cancelJob(id, who) {
   const job = jobs.get(id)
   if (!job) throw Object.assign(new Error('없는 작업이에요.'), { status: 404 })
+  checkOwner(job, who)
   if (job.status === 'queued' || job.status === 'need_confirm') {
     job.status = 'cancelled'
     job.step = '취소됨'

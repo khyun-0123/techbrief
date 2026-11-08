@@ -345,8 +345,8 @@ export async function fetchTechTrends({ period = 'week', from, to } = {}) {
 }
 
 // ── 직접 추가한 자료 (27 문서 3장) ──
-export async function fetchMaterials() {
-  const res = await fetch('/api/materials')
+export async function fetchMaterials(clientId) {
+  const res = await fetch(`/api/materials?client=${encodeURIComponent(clientId ?? '')}`)
   if (!res.ok) throw new Error('추가한 자료를 불러오지 못했어요')
   return (await res.json()).materials
 }
@@ -413,10 +413,10 @@ export async function fetchReportJobs(clientId) {
   return (await res.json()).jobs
 }
 
-export async function answerReportJob(id, use) {
-  return (await postJson(`/api/report-jobs/${encodeURIComponent(id)}/answer`, { use })).job
+export async function answerReportJob(id, use, clientId) {
+  return (await postJson(`/api/report-jobs/${encodeURIComponent(id)}/answer`, { use, clientId })).job
 }
 
-export async function cancelReportJob(id) {
-  return (await postJson(`/api/report-jobs/${encodeURIComponent(id)}/cancel`, {})).job
+export async function cancelReportJob(id, clientId) {
+  return (await postJson(`/api/report-jobs/${encodeURIComponent(id)}/cancel`, { clientId })).job
 }
