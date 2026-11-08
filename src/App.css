@@ -199,7 +199,7 @@ select {
 }
 
 .col-keyword {
-  width: 108px;
+  width: 150px; /* 핵심어 해시태그 2~3개 (11/09) */
 }
 
 .col-actions {
@@ -2688,6 +2688,37 @@ a.brand:focus-visible {
   white-space: nowrap;
   vertical-align: middle;
 }
+/* 핵심어 해시태그 (11/09): 테두리 없는 작은 글자 버튼, 칸 안에서 줄바꿈 */
+.tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 8px;
+  max-width: 100%;
+}
+.tag {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--tb-color-text-sub);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tag:hover {
+  color: var(--tb-color-text);
+  text-decoration: underline;
+}
+.tag-more {
+  color: var(--tb-color-text-faint);
+  font-size: 12px;
+  line-height: 1.6;
+}
 .articles th.center,
 .articles td.center {
   text-align: center;
@@ -3761,6 +3792,9 @@ a.brand:focus-visible {
     margin: 0;
   }
   table.articles .row-actions {
+    justify-content: flex-start;
+  }
+  table.articles .tags {
     justify-content: flex-start;
   }
   table.articles tr.group-row,

@@ -15,6 +15,7 @@ import {
   fetchKeywords,
   fetchLists,
   fetchMaterials,
+  fetchTechTrends,
   fetchSelection,
   fetchRefresh,
   fetchReports,
@@ -25,6 +26,7 @@ import {
   saveSelectionApi,
   searchNewsApi,
 } from './api.js'
+import { buildTagDict, tagsOf } from './hashtags.js'
 import SelectToggle from './SelectToggle.jsx'
 import FavoritesRail from './FavoritesRail.jsx'
 import Highlight from './Highlight.jsx'
@@ -161,6 +163,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [featureStates, setFeatureStates] = useState({}) // 실험 기능 { key: 'off' | 'test' | 'all' }
   const [featureList, setFeatureList] = useState([]) // [{ key, label }] 테스트 띠에 한글 이름으로 보여 줄 때
   const features = useMemo(() => enabledFeatures(featureStates, mode), [featureStates, mode])
+  const [techTerms, setTechTerms] = useState([]) // 핵심어 사전용 기술 용어
   const [lists, setLists] = useState(null) // 자사·경쟁사·관심 기술 (「수집 설정」 칸 실험 기능에서 보기만)
   const [refreshError, setRefreshError] = useState('')
   const [starting, setStarting] = useState(false)
@@ -260,6 +263,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       .catch(() => {})
     fetchLists()
       .then(setLists)
+      .catch(() => {})
+    // 핵심어 사전에 넣을 요즘 뜨는 기술 용어 (하루 한 번 갱신되는 값, 실패하면 빼고)
+    fetchTechTrends()
+      .then((d) => setTechTerms([...new Set([...(d.composite ?? []), ...(d.sources ?? []).flatMap((s) => s.ranking ?? [])].map((r) => r.name).filter(Boolean))]))
       .catch(() => {})
     fetchMaterials(clientId())
       .then(setMaterials)
@@ -583,6 +590,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
   const maxHours = PERIODS.find((p) => p.value === period).hours
   const q = query.trim().toLowerCase()
+  // 핵심어 해시태그 (hashtags.js): 사전은 목록이 바뀔 때만 다시 만든다
+  const tagDict = useMemo(
+    () => buildTagDict([keywords, recommended, lists?.own, lists?.competitors, lists?.interests, techTerms]),
+    [keywords, recommended, lists, techTerms],
+  )
+  const tagsFor = (a) => tagsOf(a, aiSummaries[a.id]?.summary, tagDict)
   const byId = new Map(pool.map((a) => [a.id, a]))
   // 자사·자회사만 나온 기사 (경쟁사도 함께 나오면 경쟁사 소식이라 남긴다)
   const isOwnOnly = (a) => Boolean(a.own) && !a.scoreParts?.competitorName
@@ -600,7 +613,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         // 「직접 추가한 자료」만 볼 때는 기간과 상관없이 모두
         (a.hoursAgo < maxHours || source === 'material') &&
         sourceMatch(a) &&
-        (!q || matchesTerms(`${a.title} ${a.keyword}`, [q])),
+        (!q || matchesTerms(`${a.title} ${a.keyword} ${tagsFor(a).join(' ')}`, [q])),
     )
     .sort((a, b) => (sort === 'importance' ? (b.importance ?? 0) - (a.importance ?? 0) : 0) || a.hoursAgo - b.hoursAgo)
   // 강조할 검색어: 네이버 찾기 결과면 찾은 말, 모은 기사에서 거르는 중이면 입력한 말 (Highlight.jsx)
@@ -1189,7 +1202,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                       <th>제목</th>
                       <th className="center">출처</th>
                       <th className="center">발행</th>
-                      <th className="center">키워드</th>
+                      <th className="center" title="기사 제목 · 내용에 나온 우리 용어(키워드 · 회사 · 관심 기술 · 뜨는 기술)와 요약 핵심어. 누르면 그 말로 걸러요">핵심어</th>
                       <th className="center">작업</th>
                     </tr>
                   </thead>
@@ -1291,8 +1304,20 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                             {a.source}
                           </td>
                           <td className="time center">{formatPublished(a.hoursAgo)}</td>
-                          <td className="center">
-                            <span className="chip kw-chip">{a.keyword}</span>
+                          <td className="center tags-cell">
+                            {(() => {
+                              const tags = tagsFor(a)
+                              return (
+                                <span className="tags" title={tags.length > 3 ? tags.map((t) => `#${t}`).join(' ') : undefined}>
+                                  {tags.slice(0, 3).map((t) => (
+                                    <button key={t} type="button" className="tag" onClick={() => setQuery(t)} title={`「${t}」 들어간 기사만 보기`}>
+                                      #{t}
+                                    </button>
+                                  ))}
+                                  {tags.length > 3 && <span className="tag-more">+{tags.length - 3}</span>}
+                                </span>
+                              )
+                            })()}
                           </td>
                           <td className="actions">
                             {/* 작업 (11/09 조장: 같은 모양 버튼 두 개): 요약 · 선별 버튼을 같은 폭 · 같은 높이로.
