@@ -62,7 +62,7 @@ const PAGE_SIZE_KEY = 'techbrief-page-size'
 const EXCLUDE_OWN_KEY = 'techbrief-exclude-own'
 const SHOW_LOW_KEY = 'techbrief-show-low'
 const SUMMARIZED_FIRST_KEY = 'techbrief-summarized-first'
-const RECENT_KEY = 'techbrief-recent-searches' // 최근 검색어 (이 브라우저에만)
+const RECENT_KEY = 'techbrief-recent-searches' // 최근 검색어: 11/09부터 서버(IP별)에 두고, 예전 브라우저 값은 처음 한 번 올린다
 const RECENT_MAX = 10
 // 출처 단계 (14 문서 4-B). 서버 collector/feeds.js와 같은 구분
 const TIER_TITLE = { 1: '1차 출처: 기업 발표·학회·논문', 2: '2차 출처: 전문매체', 3: '3차 출처: 일반 뉴스' }
@@ -197,8 +197,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   // 요약된 기사 먼저: 지금 정렬은 그대로 두고 요약된 기사를 위로 (요약을 먼저 보고 고르게)
   const [summarizedFirst, setSummarizedFirst] = useState(() => load(SUMMARIZED_FIRST_KEY, true))
   const [sentimentFilter, setSentimentFilter] = useState('all') // 긍정·중립·부정 거르기 (F5)
-  const [favorites, setFavorites] = useState([]) // 즐겨찾는 검색어 (F3, 팀 공용)
-  const [recent, setRecent] = useState(() => load(RECENT_KEY, [])) // 최근 검색어 (이 브라우저에만)
+  const [recommended, setRecommended] = useState([]) // 추천 검색어 (공용, 관리자가 고름)
+  const [favorites, setFavorites] = useState([]) // 즐겨찾기 ☆ (IP별, 11/09)
+  const [recent, setRecent] = useState(() => load(RECENT_KEY, [])) // 최근 검색어 (IP별, 서버 값이 오기 전엔 브라우저 값)
   const [pageSize, setPageSize] = useState(() => load(PAGE_SIZE_KEY, 20))
   const [sort, setSort] = useState('importance') // 기본은 중요도순, 최신순은 선택
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
@@ -244,7 +245,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   useEffect(() => {
     reloadArticles().catch(() => {})
     fetchFavorites()
-      .then(setFavorites)
+      .then((d) => {
+        setRecommended(d.recommended ?? [])
+        setFavorites(d.favorites ?? [])
+        if (Array.isArray(d.recent)) setRecent(d.recent)
+        else if (load(RECENT_KEY, []).length) saveFavoritesApi({ recent: load(RECENT_KEY, []) }).catch(() => {}) // 예전 브라우저 값 올리기
+      })
       .catch(() => {})
     fetchFeatures()
       .then((f) => {
@@ -640,11 +646,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
   function saveRecent(next) {
     setRecent(next)
-    try {
-      localStorage.setItem(RECENT_KEY, JSON.stringify(next))
-    } catch {
-      // 저장 공간을 못 쓰면 이번 화면에서만 유지
-    }
+    saveFavoritesApi({ recent: next }).catch(() => {}) // 실패하면 이번 화면에서만 유지
   }
 
   // 기간(p)도 함께 보낸다: 오늘·7일은 최신순으로 그 기간만, 전체는 정확도순 100건 (18 문서)
@@ -677,7 +679,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   async function changeFavorites(next) {
     setFavorites(next)
     try {
-      setFavorites(await saveFavoritesApi(next))
+      setFavorites((await saveFavoritesApi({ favorites: next })).favorites ?? next)
     } catch (err) {
       setSearch((prev) => (prev ? { ...prev, error: err.message } : prev))
     }
@@ -935,6 +937,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             collectedLabel: refreshRunning ? '최신화 중…' : collectedAt ? `마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 수집 전',
           }}
           keywords={keywords}
+          recommended={recommended}
           favorites={favorites}
           recent={recent}
           periods={PERIODS}
@@ -1035,6 +1038,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           {/* 오늘 수집 숫자 · 키워드 추이는 대시보드로 옮김 (11/07 팀 회의) */}
           <div className={features.has('collectPanel') ? 'content with-favs' : 'content with-favs no-settings'}>
             <FavoritesRail
+              recommended={recommended}
               favorites={favorites}
               recent={recent}
               active={search?.query}

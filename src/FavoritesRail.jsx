@@ -1,6 +1,7 @@
-// 왼쪽 검색어 목록 (13 문서 F3)
-// - 즐겨찾기 ☆: 팀이 같이 쓰는 검색어 (DB). 자동 수집 키워드와 별개
-// - 최근 검색어: 「네이버에서 찾기」를 하면 자동으로 쌓임 (이 브라우저에만, 최신 10개). ☆를 누르면 즐겨찾기로
+// 왼쪽 검색어 목록 (13 문서 F3, 11/09 조장 결정으로 셋으로 나눔)
+// - 추천 검색어: 관리자가 관리 페이지에서 고르는 공용 목록. ☆를 누르면 내 즐겨찾기에도 담김
+// - 즐겨찾기 ☆: 나(IP)만 보이는 검색어 (서버). 자동 수집 키워드와 별개
+// - 최근 검색어: 「뉴스·논문에서 찾기」를 하면 자동으로 쌓임 (IP별, 최신 10개). ☆를 누르면 즐겨찾기로
 function QueryItem({ q, active, starred, onSearch, onStar, onRemove, removeLabel }) {
   return (
     <li className={q === active ? 'fav-item active' : 'fav-item'}>
@@ -26,14 +27,24 @@ function QueryItem({ q, active, starred, onSearch, onStar, onRemove, removeLabel
   )
 }
 
-function FavoritesRail({ favorites, recent, active, onSearch, onToggleFavorite, onRemoveRecent }) {
-  const recentOnly = recent.filter((q) => !favorites.includes(q))
+function FavoritesRail({ recommended = [], favorites, recent, active, onSearch, onToggleFavorite, onRemoveRecent }) {
+  const recentOnly = recent.filter((q) => !favorites.includes(q) && !recommended.includes(q))
   return (
     <nav className="panel fav-rail" aria-label="검색어">
+      {recommended.length > 0 && (
+        <div className="fav-section">
+          <h2 className="fav-title" title="관리자가 고른 팀 공용 검색어">추천 검색어</h2>
+          <ul className="fav-list">
+            {recommended.map((q) => (
+              <QueryItem key={q} q={q} active={active} starred={favorites.includes(q)} onSearch={onSearch} onStar={onToggleFavorite} />
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="fav-section">
-        <h2 className="fav-title">즐겨찾기</h2>
+        <h2 className="fav-title" title="나만 보이는 검색어">즐겨찾기</h2>
         {favorites.length === 0 ? (
-          <p className="fav-empty">최근 검색어의 ☆를 누르면 여기에 모여요</p>
+          <p className="fav-empty">검색어의 ☆를 누르면 여기에 모여요 (나만 보여요)</p>
         ) : (
           <ul className="fav-list">
             {favorites.map((q) => (

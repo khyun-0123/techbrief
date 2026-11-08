@@ -290,6 +290,15 @@ async function checkRunCooldown(req) {
 // 1) Sec-Fetch-Site가 있으면 same-origin(이 화면) · none(사용자가 직접 연 것)만 받는다 (포트까지 구분)
 // 2) 없으면(오래된 브라우저) Origin의 주소:포트가 Host와 같아야 한다
 // 3) 둘 다 없으면 브라우저가 아닌 요청(curl · 스크립트)이라 통과 — 쿠키를 대신 실어 보내는 공격이 아님
+const RECOMMENDED_SETTING = 'recommended_queries'
+async function recommendedQueries() {
+  const saved = await getSetting(RECOMMENDED_SETTING, null)
+  return saved ?? (await getSetting('favorite_queries', [])) // 처음엔 예전 공용 즐겨찾기
+}
+function cleanQueries(list, max) {
+  return [...new Set(list.map((q) => String(q).trim().slice(0, 50)).filter(Boolean))].slice(0, max)
+}
+
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 function crossOrigin(req) {
   if (!UNSAFE_METHODS.has(req.method)) return false
@@ -474,15 +483,42 @@ export async function handleApi(req, res) {
       ])
       return send(res, 200, { ...news, articles: [...news.articles, ...papers.articles], newsCount: news.articles.length, paperCount: papers.articles.length, paperNote: papers.note })
     }
+    // 검색어 (11/09 조장 결정): 「추천 검색어」는 관리자가 관리 페이지에서 고르는 공용 목록,
+    // 즐겨찾기 ☆ · 최근 검색어는 IP별 (선별 폴더와 같은 방식). 예전 공용 즐겨찾기(favorite_queries)는 추천 검색어의 처음 값으로 쓴다
     if (req.method === 'GET' && req.url === '/api/favorites') {
-      return send(res, 200, { favorites: await getSetting('favorite_queries', []) })
+      const ip = clientIp(req)
+      return send(res, 200, {
+        recommended: await recommendedQueries(),
+        favorites: await getSetting(`favorite_queries:ip:${ip}`, []),
+        recent: await getSetting(`recent_queries:ip:${ip}`, null), // null = 아직 서버에 없음 (브라우저 것을 올림)
+      })
     }
     if (req.method === 'PUT' && req.url === '/api/favorites') {
-      // 즐겨찾는 검색어 (13 문서 F3). 자동 수집 키워드와 별개, 팀 공용, 최대 30개
-      const { favorites = [] } = await readJson(req)
-      const list = [...new Set(favorites.map((q) => String(q).trim().slice(0, 50)).filter(Boolean))].slice(0, 30)
-      await setSetting('favorite_queries', list)
-      return send(res, 200, { favorites: list })
+      const ip = clientIp(req)
+      const body = await readJson(req)
+      const out = {}
+      if (Array.isArray(body.favorites)) {
+        out.favorites = cleanQueries(body.favorites, 30)
+        await setSetting(`favorite_queries:ip:${ip}`, out.favorites)
+      }
+      if (Array.isArray(body.recent)) {
+        out.recent = cleanQueries(body.recent, 10)
+        await setSetting(`recent_queries:ip:${ip}`, out.recent)
+      }
+      return send(res, 200, out)
+    }
+    if (req.method === 'GET' && req.url === '/api/admin/recommended-queries') {
+      requireAdmin(req)
+      return send(res, 200, { recommended: await recommendedQueries() })
+    }
+    if (req.method === 'PUT' && req.url === '/api/admin/recommended-queries') {
+      const admin = requireAdmin(req)
+      const before = await recommendedQueries()
+      const { recommended = [] } = await readJson(req)
+      const list = cleanQueries(recommended, 20)
+      await setSetting(RECOMMENDED_SETTING, list)
+      await logChange(admin, '추천 검색어', diffWords(before, list))
+      return send(res, 200, { recommended: list })
     }
     if (req.method === 'GET' && req.url === '/api/lists') {
       return send(res, 200, await getLists())
