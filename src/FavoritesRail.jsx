@@ -31,7 +31,7 @@ function FavoritesRail({ favorites, recent, active, onSearch, onToggleFavorite, 
   return (
     <nav className="panel fav-rail" aria-label="검색어">
       <div className="fav-section">
-        <h2 className="fav-title">★ 즐겨찾기</h2>
+        <h2 className="fav-title">즐겨찾기</h2>
         {favorites.length === 0 ? (
           <p className="fav-empty">최근 검색어의 ☆를 누르면 여기에 모여요</p>
         ) : (

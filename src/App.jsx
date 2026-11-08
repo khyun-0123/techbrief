@@ -1180,11 +1180,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   </colgroup>
                   <thead>
                     <tr>
+                      {/* 정렬 (11/09): 읽는 글(제목 · 출처)은 왼쪽, 짧은 값(발행 · 키워드)은 가운데, 버튼(작업)은 오른쪽 */}
                       <th>제목</th>
                       <th>출처</th>
-                      <th>발행</th>
-                      <th>키워드</th>
-                      <th>작업</th>
+                      <th className="center">발행</th>
+                      <th className="center">키워드</th>
+                      <th className="right">작업</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1284,53 +1285,56 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                             {a.tier && a.tier <= 2 && <span className={`tier tier-${a.tier}`}>{a.tier}차</span>}
                             {a.source}
                           </td>
-                          <td className="time">{formatPublished(a.hoursAgo)}</td>
-                          <td>
-                            <span className="chip">{a.keyword}</span>
+                          <td className="time center">{formatPublished(a.hoursAgo)}</td>
+                          <td className="center">
+                            <span className="chip kw-chip">{a.keyword}</span>
                           </td>
                           <td className="actions">
-                            {ai ? (
-                              <button
-                                type="button"
-                                className={open ? 'btn-text summary-link open' : 'btn-text summary-link'}
-                                aria-expanded={Boolean(open)}
-                                onClick={() => setOpenSummaryId(open ? null : a.id)}
-                              >
-                                {open ? '요약 접기' : '요약 보기'}
-                              </button>
-                            ) : job?.status === 'queued' || job?.status === 'running' ? (
-                              <button type="button" className="btn summary-btn" disabled>
-                                {job.status === 'running' ? '요약 중…' : '요약 대기'}
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="btn outline summary-btn"
-                                title={a.aiAllowed === false ? 'AI 요약을 허용하지 않은 자료예요' : opsValue.aiBlocked ? AI_BLOCKED_TITLE : job?.status === 'error' ? `요약 오류: ${job.error}` : 'AI로 6항목 요약 (선별하지 않아도 됨)'}
-                                disabled={opsValue.aiBlocked || a.aiAllowed === false}
-                                onClick={() => queue.enqueue(a)}
-                              >
-                                {job?.status === 'error' ? '요약 재시도' : '요약 추가'}
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              className={selected ? 'btn primary' : 'btn outline'}
-                              onClick={() => toggleSelected(a)}
-                            >
-                              {selected ? '선별됨 ✓' : '선별 추가'}
-                            </button>
-                            {selected ? (
-                              <select className="folder-select" value={folderIdOf(a.id)} onChange={(e) => putInFolder(a.id, e.target.value)} aria-label="폴더 옮기기" title="담긴 폴더 (바꾸면 옮겨요)">
-                                {folders.map((f) => (
-                                  <option key={f.id} value={f.id}>
-                                    ▤ {f.name}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              folders.length > 1 && <span className="folder-target-note">→ {folders.find((f) => f.id === targetFolder)?.name ?? '미분류'}</span>
-                            )}
+                            {/* 작업 (11/09): 요약 · 선별을 한 줄에. 선별되면 「✓ 선별됨 | 폴더 ▾」가 붙은 한 덩어리 (예전엔 폴더 메뉴가 아랫줄로 내려가 줄 높이가 들쭉날쭉) */}
+                            <div className="row-actions">
+                              {ai ? (
+                                <button
+                                  type="button"
+                                  className={open ? 'btn-text summary-link open' : 'btn-text summary-link'}
+                                  aria-expanded={Boolean(open)}
+                                  onClick={() => setOpenSummaryId(open ? null : a.id)}
+                                >
+                                  {open ? '요약 접기' : '요약 보기'}
+                                </button>
+                              ) : job?.status === 'queued' || job?.status === 'running' ? (
+                                <button type="button" className="btn summary-btn" disabled>
+                                  {job.status === 'running' ? '요약 중…' : '요약 대기'}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn outline summary-btn"
+                                  title={a.aiAllowed === false ? 'AI 요약을 허용하지 않은 자료예요' : opsValue.aiBlocked ? AI_BLOCKED_TITLE : job?.status === 'error' ? `요약 오류: ${job.error}` : 'AI로 6항목 요약 (선별하지 않아도 됨)'}
+                                  disabled={opsValue.aiBlocked || a.aiAllowed === false}
+                                  onClick={() => queue.enqueue(a)}
+                                >
+                                  {job?.status === 'error' ? '요약 재시도' : '요약 추가'}
+                                </button>
+                              )}
+                              {selected ? (
+                                <span className="select-group">
+                                  <button type="button" className="btn primary" onClick={() => toggleSelected(a)} title="누르면 선별에서 빠져요">
+                                    ✓ 선별됨
+                                  </button>
+                                  <select className="folder-select" value={folderIdOf(a.id)} onChange={(e) => putInFolder(a.id, e.target.value)} aria-label="담긴 폴더 (바꾸면 옮겨요)" title="담긴 폴더 (바꾸면 옮겨요)">
+                                    {folders.map((f) => (
+                                      <option key={f.id} value={f.id}>
+                                        {f.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </span>
+                              ) : (
+                                <button type="button" className="btn outline" onClick={() => toggleSelected(a)} title={`「${folders.find((f) => f.id === targetFolder)?.name ?? '미분류'}」 폴더에 담아요 (담을 폴더는 목록 위에서 골라요)`}>
+                                  선별 추가
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                         {groupOpen && (

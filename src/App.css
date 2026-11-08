@@ -203,7 +203,7 @@ select {
 }
 
 .col-actions {
-  width: 212px;
+  width: 272px; /* 「요약 보기 · ✓ 선별됨 | 폴더 ▾」가 한 줄에 들어가는 폭 (11/09) */
 }
 
 /* 작업 칸 버튼은 글자가 바뀌어도 폭이 그대로 */
@@ -2102,7 +2102,11 @@ a.btn {
 
 .fav-title {
   margin: 0;
-  font-size: 15px;
+  padding-left: 6px; /* 목록 별과 같은 줄에서 시작 */
+  font-size: 14px;
+}
+.fav-empty {
+  padding-left: 6px;
 }
 
 .fav-empty {
@@ -2118,12 +2122,15 @@ a.btn {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .fav-item {
   display: flex;
   align-items: center;
+  gap: 6px; /* 별과 글자 사이 (11/09: 예전엔 별 왼쪽 여백 6 + 글자 왼쪽 여백 8로 벌어져 보였음) */
+  min-height: 32px;
+  padding: 0 4px 0 6px;
   border-radius: var(--tb-radius-input);
 }
 
@@ -2135,7 +2142,7 @@ a.btn {
 .fav-go {
   flex: 1;
   min-width: 0;
-  padding: 6px 8px;
+  padding: 6px 0;
   border: none;
   background: none;
   color: var(--tb-color-text);
@@ -2154,7 +2161,7 @@ a.btn {
 }
 
 .fav-remove {
-  padding: 4px 8px;
+  padding: 4px 6px;
   border: none;
   background: none;
   color: var(--tb-color-text-faint);
@@ -2177,11 +2184,14 @@ a.btn {
 }
 
 .fav-toggle {
-  padding: 4px 2px 4px 6px;
+  flex: none;
+  width: 14px;
+  padding: 0;
   border: none;
   background: none;
   color: var(--tb-color-text-faint);
-  font-size: 15px;
+  font-size: 12px;
+  text-align: left;
   line-height: 1;
   cursor: pointer;
 }
@@ -2200,7 +2210,7 @@ a.btn {
   }
 
   .content.with-favs.no-settings {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr); /* 1fr은 표의 최소 폭 밑으로 줄지 않아 휴대폰에서 가로로 넘쳤음 (11/09) */
   }
 
   .fav-rail {
@@ -2672,14 +2682,75 @@ a.brand:focus-visible {
   border-radius: 6px;
 }
 
-/* 목록의 키워드 칩: 긴 키워드(예: 마이크로 디스플레이)가 옆 버튼을 덮지 않게 */
+/* 목록의 키워드 칩: 긴 키워드(예: 마이크로 디스플레이)가 옆 버튼을 덮지 않게.
+   11/09: 높이 30 · 왼쪽만 넓은 여백(지우기 × 자리)이라 글자가 위로 붙어 보였음 → 높이 26 · 양쪽 같은 여백 · 글자 줄 높이로 가운데 */
 .articles td .chip {
   display: inline-block;
   max-width: 100%;
+  min-height: 0;
+  height: 26px;
+  padding: 0 10px;
   overflow: hidden;
+  font-size: 12px;
+  line-height: 24px;
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: middle;
+}
+.articles th.center,
+.articles td.center {
+  text-align: center;
+}
+.articles th.right {
+  text-align: right;
+}
+
+/* 작업 칸 (11/09): 한 줄 · 오른쪽 맞춤 · 버튼 높이 36 */
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.row-actions .btn {
+  min-height: 0;
+  height: 36px;
+  margin: 0;
+  padding: 0 14px;
+  font-size: 14px;
+}
+.row-actions .summary-link {
+  min-width: 0;
+  margin: 0;
+  white-space: nowrap;
+}
+.select-group {
+  display: inline-flex;
+  align-items: stretch;
+}
+.select-group .btn {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.select-group .folder-select {
+  display: block;
+  height: 36px;
+  max-width: 96px;
+  margin: 0;
+  padding: 0 6px 0 10px;
+  border: 1px solid var(--tb-color-primary);
+  border-left: 1px solid rgb(255 255 255 / 30%);
+  border-radius: 0 var(--tb-radius-button) var(--tb-radius-button) 0;
+  background: var(--tb-color-primary);
+  color: var(--tb-color-on-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.select-group .folder-select option {
+  background: #fff;
+  color: var(--tb-color-text);
 }
 
 /* 키워드 추이 (KeywordTrends.jsx) — 단위가 다른 신호는 한 축에 겹치지 않고 작은 그래프로 나눔 */
@@ -3633,6 +3704,9 @@ a.brand:focus-visible {
   }
   table.articles td.actions .btn {
     margin: 0;
+  }
+  table.articles .row-actions {
+    justify-content: flex-start;
   }
   table.articles tr.group-row,
   table.articles tr.summary-row {
