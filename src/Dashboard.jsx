@@ -52,7 +52,7 @@ function Dashboard({ stats, keywords, favorites, recent, periods, period, onPeri
             자료 검색
           </button>
         </form>
-        <p className="dash-note">네이버 뉴스와 논문에서 찾아 자료 현황 탭에 보여 줘요. 결과가 적으면 기간을 「최근 7일」이나 「전체」로 넓혀 보세요.</p>
+        <p className="dash-note">네이버 뉴스와 논문에서 찾아 자료 현황 탭에 보여 줘요. 기본은 「전체」(정확도 높은 100건)예요. 최신 기사만 보려면 「오늘」이나 「최근 7일」로 좁혀 보세요.</p>
 
         {chipCount > 0 && (
           <details className="dash-more">

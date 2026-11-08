@@ -1330,23 +1330,6 @@ a.btn {
   white-space: nowrap;
 }
 
-/* 좁으면 AI 모델 이름은 숨기고 연결 상태 점만 (마우스를 올리면 이름) */
-@media (max-width: 1200px) {
-  .llm-pick {
-    display: none !important;
-  }
-}
-
-/* AI 모델 선택 (맥미니 Qwen / OpenRouter) */
-.llm-pick {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--tb-color-line);
-  font-size: 13px;
-  white-space: nowrap;
-}
-
 .llm-select {
   padding: 3px 6px;
   border: 1px solid rgb(255 255 255 / 25%);
@@ -1487,6 +1470,13 @@ a.btn {
   margin: 0;
 }
 
+
+.conn-status {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
 
 .db-status.on {
   color: #86efac;
@@ -2813,7 +2803,7 @@ a.brand:focus-visible {
 .dash-search {
   display: grid;
   gap: 12px;
-  margin-top: 0;
+  margin-top: 24px; /* 제목 · 설명과 띄움 (11/09, 다른 화면의 첫 칸과 같은 간격) */
   padding: 16px 20px 20px;
 }
 
@@ -2962,21 +2952,47 @@ a.brand:focus-visible {
   color: var(--tb-color-text-sub);
 }
 
+/* 출처 탭 (11/09): 성격(관심 · 현장 반응 · 연구 · 개발·투자)별로 묶고, 묶음 이름을 앞에 작게 둔다.
+   예전엔 탭마다 아래에 작은 글씨를 달았고, 밑줄을 -1px 겹치느라 세로로 넘쳐 스크롤 막대가 생겼다 → 밑줄은 안쪽 그림자로 */
 .tt-tabs {
   display: flex;
-  gap: 4px;
+  flex-wrap: wrap;
+  align-items: stretch;
   margin-top: 14px;
-  border-bottom: 1px solid var(--tb-color-line);
-  overflow-x: auto;
+  box-shadow: inset 0 -1px 0 var(--tb-color-line);
+}
+
+.tt-tab-group {
+  display: flex;
+  align-items: stretch;
+}
+.tt-tab-group + .tt-tab-group {
+  margin-left: 12px;
+  padding-left: 12px;
+  background: linear-gradient(var(--tb-color-line), var(--tb-color-line)) left center / 1px 16px no-repeat;
+}
+/* 좁은 화면: 탭을 한 줄로 두고 옆으로 밀어 본다 (막대는 숨김) */
+@media (max-width: 720px) {
+  .tt-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tt-tabs::-webkit-scrollbar {
+    display: none;
+  }
+}
+.tt-tab-axis {
+  align-self: center;
+  margin-right: 2px;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
 }
 
 .tt-tab {
-  display: grid;
-  justify-items: start;
-  padding: 8px 12px;
+  padding: 10px 10px;
   border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
   background: none;
   color: var(--tb-color-text-sub);
   font-size: var(--fs-sm);
@@ -2984,13 +3000,8 @@ a.brand:focus-visible {
   cursor: pointer;
 }
 
-.tt-tab small {
-  font-size: var(--fs-xs);
-  color: var(--tb-color-text-faint);
-}
-
 .tt-tab.on {
-  border-bottom-color: var(--tb-color-text);
+  box-shadow: inset 0 -2px 0 var(--tb-color-text);
   color: var(--tb-color-text);
   font-weight: 600;
 }
@@ -3827,6 +3838,28 @@ a.brand:focus-visible {
   margin: 0;
   font-size: 18px;
 }
+.composer-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.composer-made {
+  padding: 2px 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: none;
+  color: var(--tb-color-text-sub);
+  font: inherit;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.composer-made:hover {
+  border-color: var(--tb-color-text);
+  color: var(--tb-color-text);
+}
 .composer-tabs {
   display: inline-flex;
   padding: 3px;
@@ -3955,13 +3988,6 @@ a.brand:focus-visible {
   margin: 0;
   color: var(--tb-color-warning);
   font-size: 14px;
-}
-.composer-note {
-  margin: 0;
-  padding: 10px 20px;
-  border-bottom: 1px solid var(--tb-color-line-soft);
-  font-size: 13px;
-  color: var(--tb-color-text-sub);
 }
 .composer .report-layout.stacked {
   display: block;

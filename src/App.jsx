@@ -171,7 +171,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [includedIds, setIncludedIds] = useState(() => load(INCLUDED_KEY, []))
   const [screen, setScreen] = useState('dashboard')
   const [query, setQuery] = useState('')
-  const [period, setPeriod] = useState('today')
+  const [period, setPeriod] = useState('all') // 기본 「전체」 (11/09 조장). 모은 기사 목록은 서버가 7일치만 보냄 (30 문서 1장)
   const [source, setSource] = useState('all')
   const [fetched, setFetched] = useState(() => load(ARTICLES_KEY, []))
   const [collectedAt, setCollectedAt] = useState(() => load(COLLECTED_AT_KEY, null))
@@ -847,26 +847,27 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               선별 <strong>{selectedIds.length}</strong>
             </button>
           </span>
-          {/* AI 모델은 모두에게 적용되므로 관리자 화면에서 고른다. 여기서는 보기만 (17 문서) */}
-          {health?.llm && (
-            <span className="llm-pick" title="요약·보고서에 쓰는 AI 모델 (관리자가 정해요)">
-              AI 모델 {llmLabel} · {health.llm.providers.find((p) => p.id === health.llm.current)?.model.split('/').pop() || '설정 없음'}
-            </span>
-          )}
+          {/* 연결 상태만 보여 준다 (11/09: 모델 이름은 메뉴 막대에서 빼고 마우스를 올리면 보임). 모델은 관리자 화면에서 고른다 (17 문서) */}
           {health === null ? null : health.error ? (
             <span className="ai-status off">● 서버 연결 안 됨</span>
-          ) : health.modelReachable ? (
-            <span className="ai-status on" title={`AI 모델에 연결됨 (${health.model})`}>
-              ● 연결됨
-              {health.db?.enabled && (
-                <span className={health.db.ok ? 'db-status on' : 'db-status off'} title={health.db.ok ? `기사 ${health.db.articles} · 요약 ${health.db.summaries} · 보고서 ${health.db.reports}` : health.db.error}>
-                  {health.db.ok ? ' · DB' : ' · DB 오류'}
-                </span>
-              )}
-            </span>
           ) : (
-            <span className="ai-status off" title={`${llmLabel}(AI 서버)에 닿지 않아요. 요약·보고서를 만들 수 없어요`}>
-              ● AI 연결 안 됨
+            <span className="conn-status">
+              <span
+                className={health.modelReachable ? 'ai-status on' : 'ai-status off'}
+                title={
+                  health.modelReachable
+                    ? `AI 연결됨 · ${llmLabel} · ${health.llm?.providers.find((p) => p.id === health.llm.current)?.model.split('/').pop() || health.model || ''}`
+                    : `${llmLabel}(AI 서버)에 닿지 않아요. 요약·보고서를 만들 수 없어요`
+                }
+              >
+                ● AI {health.modelReachable ? '연결' : '끊김'}
+              </span>
+              <span
+                className={health.db?.enabled && health.db.ok ? 'db-status on' : 'db-status off'}
+                title={!health.db?.enabled ? 'DB 없이 실행 중 (서버를 끄면 자료가 사라져요)' : health.db.ok ? `DB 연결됨 · 기사 ${health.db.articles} · 요약 ${health.db.summaries} · 보고서 ${health.db.reports}` : health.db.error}
+              >
+                ● DB {!health.db?.enabled ? '없음' : health.db.ok ? '연결' : '오류'}
+              </span>
             </span>
           )}
           <button type="button" className="topbar-link" onClick={() => setShowMove(true)} title="선별 · 폴더 등 이 브라우저의 자료를 파일로 내보내거나 불러와요 (자리 이동 · 다른 PC)">
