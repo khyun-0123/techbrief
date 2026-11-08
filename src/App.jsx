@@ -1260,7 +1260,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                             {ai ? (
                               <button
                                 type="button"
-                                className={open ? 'btn summary-btn open' : 'btn summary-btn'}
+                                className={open ? 'btn-text summary-link open' : 'btn-text summary-link'}
                                 aria-expanded={Boolean(open)}
                                 onClick={() => setOpenSummaryId(open ? null : a.id)}
                               >

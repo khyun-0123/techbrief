@@ -63,12 +63,45 @@ function Mini({ points, curFrom }) {
   )
 }
 
+// 1~3위 카드: 대시보드에서 눈이 먼저 가는 곳 (11/09 디자인 정리, 28 문서 4장)
+// 출처마다 오름폭이 가장 큰 신호 하나를 같이 보여 준다 ("왜 떴나")
+function TopThree({ rows, cols, onPick }) {
+  return (
+    <ol className="tt-top3" aria-label="종합 1~3위">
+      {rows.slice(0, 3).map((r, i) => {
+        const best = cols
+          .map((s) => ({ s, p: r.parts[s.id] }))
+          .filter(({ p }) => p && (p.change === null || p.change === undefined || p.change > 0))
+          .sort((a, b) => (b.p.change ?? Infinity) - (a.p.change ?? Infinity))[0]
+        return (
+          <li key={r.key} className="tt-top3-card">
+            <span className="tt-top3-rank">{i + 1}위</span>
+            <button type="button" className="tt-top3-name" onClick={() => onPick(r.name)} title={`「${r.name}」 자료 찾기`}>
+              {r.name}
+            </button>
+            <span className="tt-top3-meta">
+              {r.category} · 종합 <b>{r.score}</b>
+            </span>
+            {best && (
+              <span className="tt-top3-why">
+                {best.s.label} <Change change={best.p.change} growth={best.p.growth} cur={1} />
+              </span>
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
 function Composite({ data, onPick }) {
   const [more, setMore] = useState(false)
   const cols = data.sources.filter((s) => s.ranking.length >= 2)
   if (data.composite.length === 0) return <p className="tt-empty">출처 2곳 이상에 값이 있는 용어가 아직 없어요. 하루 한 번 받는 값이 쌓이면 보여요.</p>
   const rows = more ? data.composite : data.composite.slice(0, SHOW)
   return (
+    <>
+    <TopThree rows={data.composite} cols={cols} onPick={onPick} />
     <div className="tt-table-wrap">
       <table className="tt-table">
         <thead>
@@ -86,7 +119,7 @@ function Composite({ data, onPick }) {
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={r.key}>
+            <tr key={r.key} className={i < 3 ? 'tt-row-top' : undefined}>
               <td className="tt-rank">{i + 1}</td>
               <td>
                 <button type="button" className="tt-term" onClick={() => onPick(r.name)} title={`「${r.name}」 자료 찾기`}>
@@ -114,9 +147,9 @@ function Composite({ data, onPick }) {
           {more ? '접기' : `${data.composite.length - SHOW}개 더 보기`}
         </button>
       )}
-      {/* 짧은 기간이면 논문 · 특허는 다른 기간으로 비교한 값이 들어간다 (탭과 같은 값) */}
-      {cols.some((s) => s.basis) && <p className="tt-foot">{cols.filter((s) => s.basis).map((s) => s.basis.note).join(' · ')}</p>}
+      {/* 짧은 기간이면 논문 · 특허는 다른 기간으로 비교한 값이 들어간다 (탭과 같은 값). 아래 「기준 · 출처」에 접어 둠 */}
     </div>
+    </>
   )
 }
 
@@ -264,13 +297,21 @@ function TechTrends({ onPick }) {
         src && <SourceList src={src} win={win} onPick={onPick} />
       ))}
 
+      {/* 기준 설명은 접어 둔다 (11/09 디자인 정리: 회색 각주 두 줄 → 갱신 시각만 보이고 나머지는 펼쳐 봄) */}
       {data && (
+        <details className="tt-notes">
+          <summary>
+            {data.updatedAt ? `${fmtAt(data.updatedAt)} 갱신 (하루 한 번)` : '갱신 전'}
+            {data.status.running ? ` · 지금 갱신 중: ${data.status.phase}` : ''} · 기준 · 출처
+          </summary>
+          {tab === 'composite' && data.sources.some((s) => s.ranking.length >= 2 && s.basis) && (
+            <p className="tt-foot">{data.sources.filter((s) => s.ranking.length >= 2 && s.basis).map((s) => s.basis.note).join(' · ')}</p>
+          )}
         <p className="tt-foot">
           후보 {data.candidates}개 — 찾은 곳: 검색어 {data.searchStatus === 'no_key' ? '(네이버 검색광고 키 필요)' : `${data.from?.search ?? 0}개`} · 논문 신규 {data.from?.paper ?? 0}개 · 기사 {data.from?.article ?? 0}개
           {data.hidden ? ` · 제품명·넓은 말 ${data.hidden}개는 AI 검토로 숨김` : ''}
-          {data.updatedAt ? ` · ${fmtAt(data.updatedAt)} 갱신 (하루 한 번)` : ''}
-          {data.status.running ? ` · 지금 갱신 중: ${data.status.phase}` : ''}
         </p>
+        </details>
       )}
     </section>
   )

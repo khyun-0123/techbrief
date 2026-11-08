@@ -124,7 +124,7 @@ function SelectSummary({
         {ai ? (
           <>
             <SummaryItems summary={ai.summary} />
-            {ai.summary.warnings?.length > 0 && <p className="ai-warning">⚠ {ai.summary.warnings.join(' / ')}</p>}
+            {ai.summary.warnings?.length > 0 && <p className="ai-warning">확인할 점: {ai.summary.warnings.join(' / ')}</p>}
             <p className="hint">
               모델 {ai.model} · {new Date(ai.createdAt).toLocaleString('ko-KR')}
             </p>
@@ -170,11 +170,31 @@ function SelectSummary({
       {showAdd && <AddMaterial folders={folders} defaultFolder={folder ?? INBOX} selectByDefault onAdded={onMaterialAdded} onClose={() => setShowAdd(false)} />}
 
       {candidates.length === 0 ? (
-        <section className="panel select-empty">
-          <p className="empty">아직 선별한 기사가 없어요. 자료 현황에서 「선별 추가」를 눌러 주세요.</p>
-          <button type="button" className="btn primary" onClick={onGoCollect}>
-            자료 현황으로 가기
-          </button>
+        // 빈 상태: 보고서까지 가는 3단계를 보여 준다 (11/09 디자인 정리, 28 문서 4장)
+        <section className="panel select-empty" aria-labelledby="select-empty-title">
+          <h2 id="select-empty-title">아직 선별한 기사가 없어요</h2>
+          <ol className="select-steps">
+            <li>
+              <b>자료 현황에서 기사 고르기</b>
+              <span>기사 줄의 「선별 추가」를 누르면 여기로 모여요. 폴더를 골라 나눠 담을 수 있어요.</span>
+            </li>
+            <li>
+              <b>요약 확인하기</b>
+              <span>선별한 기사는 AI가 6항목으로 요약해요. 요약을 보고 보고서에 넣을 기사를 체크해요.</span>
+            </li>
+            <li>
+              <b>보고서 만들기</b>
+              <span>필요하면 방향을 적고 「보고서 만들기」를 눌러요. 다 만들어지면 보고서함에 저장돼요.</span>
+            </li>
+          </ol>
+          <div className="select-empty-actions">
+            <button type="button" className="btn primary" onClick={onGoCollect}>
+              자료 현황으로 가기
+            </button>
+            <button type="button" className="btn outline" onClick={() => setShowAdd(true)}>
+              내 자료 올리기
+            </button>
+          </div>
         </section>
       ) : (
         <div className="select-report">

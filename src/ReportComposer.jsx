@@ -74,7 +74,7 @@ function MaterialsPreview({ articles, aiSummaries, title, direction, jobs }) {
           {SECTION_PLAN.map(([label, desc, items]) => (
             <section key={label} className="report-section">
               <div className="report-section-head">
-                <h3>■ {label}</h3>
+                <h3>{label}</h3>
               </div>
               <p className="section-desc">{desc}</p>
               <ul className="section-sources">
