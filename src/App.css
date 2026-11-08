@@ -4329,20 +4329,46 @@ a.brand:focus-visible {
 
 /* 보고서함: 선별 정리 묻기 */
 .cleanup-ask {
-  margin-bottom: 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--tb-color-line);
-  border-radius: var(--tb-radius-card-s);
-  background: var(--tb-color-surface);
-}
-.cleanup-ask p {
-  margin: 0 0 10px;
-}
-.cleanup-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
+  margin-left: auto;
+  padding: 4px 4px 4px 14px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text-sub);
+  font-size: 13px;
+}
+.cleanup-ask strong {
+  color: var(--tb-color-text);
+}
+.cleanup-btn {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cleanup-btn.primary {
+  border-color: var(--tb-color-primary);
+  background: var(--tb-color-primary);
+  color: var(--tb-color-on-primary);
+}
+.cleanup-ask .btn-text {
+  padding: 4px 8px;
+}
+@media (max-width: 720px) {
+  .cleanup-ask {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 
 /* 진행 창: 보고서 작업 질문 */
@@ -4539,9 +4565,6 @@ a.brand:focus-visible {
     min-height: 0;
     display: flex;
     flex-direction: column;
-  }
-  .archive-body > .cleanup-ask {
-    flex: none;
   }
   .archive-body .report-layout {
     flex: 1;

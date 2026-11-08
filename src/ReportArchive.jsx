@@ -128,26 +128,25 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
               {isMine(open) && ' · 내가 만듦'}
             </span>
           </div>
-        </header>
-        <div className="archive-body">
+          {/* 선별에 남은 기사 묻기: 큰 상자 대신 제목 줄 오른쪽 한 줄 (11/09 조장: 보고서 위 자리를 너무 차지함) */}
           {askCleanup && (
             <div className="cleanup-ask" role="status">
-              <p>
-                <strong>이 보고서에 쓴 기사 {leftover.length}건</strong>이 아직 선별 목록에 있어요. 어떻게 할까요?
-              </p>
-              <div className="cleanup-actions">
-                <button type="button" className="btn primary" onClick={() => answerCleanup('archive')}>
-                  「보관」 폴더로 옮기기
-                </button>
-                <button type="button" className="btn" onClick={() => answerCleanup('remove')}>
-                  선별에서 빼기
-                </button>
-                <button type="button" className="btn-text" onClick={() => answerCleanup('keep')}>
-                  그대로 두기
-                </button>
-              </div>
+              <span title="이 보고서에 쓴 기사가 아직 선별 목록에 있어요">
+                선별에 남은 기사 <strong>{leftover.length}건</strong>
+              </span>
+              <button type="button" className="cleanup-btn primary" onClick={() => answerCleanup('archive')} title="「보관」 폴더로 옮겨요 (선별에는 남음)">
+                보관 폴더로
+              </button>
+              <button type="button" className="cleanup-btn" onClick={() => answerCleanup('remove')} title="선별 목록에서 빼요">
+                빼기
+              </button>
+              <button type="button" className="btn-text" onClick={() => answerCleanup('keep')}>
+                그대로
+              </button>
             </div>
           )}
+        </header>
+        <div className="archive-body">
           <ReportView
             saved={open}
             onChange={onUpdated}
