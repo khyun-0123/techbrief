@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { Readability } from '@mozilla/readability'
 import { JSDOM, VirtualConsole } from 'jsdom'
 import { dbEnabled, query } from './db/index.js'
+import { FetchBlocked, safeFetch } from './safeFetch.js'
 
 const MAX_TEXT = 200_000 // 저장하는 본문 길이(글자)
 const MAX_FILE = 10 * 1024 * 1024 // 올릴 수 있는 파일 크기
@@ -55,14 +56,15 @@ async function fromLink(url) {
   if (!/^https?:\/\//i.test(url ?? '')) throw fail('http:// 또는 https://로 시작하는 주소를 넣어 주세요.')
   let res
   try {
-    res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'text/html,application/pdf' }, redirect: 'follow', signal: AbortSignal.timeout(TIMEOUT_MS) })
-  } catch {
+    res = await safeFetch(url, { headers: { 'User-Agent': UA, Accept: 'text/html,application/pdf' }, signal: AbortSignal.timeout(TIMEOUT_MS) }, { maxBytes: MAX_FILE })
+  } catch (err) {
+    if (err instanceof FetchBlocked && err.code === 'EPRIVATE') throw fail('이 서버 · 회사 내부망 주소는 가져올 수 없어요. 파일로 올려 주세요.')
+    if (err instanceof FetchBlocked && err.code === 'ETOOBIG') throw fail('페이지가 너무 커요.', 413)
     throw fail('주소를 열지 못했어요. 주소가 맞는지, 로그인이 필요한 페이지인지 확인해 주세요.', 502)
   }
   if (!res.ok) throw fail(`페이지를 가져오지 못했어요 (응답 ${res.status}).`, 502)
   const type = res.headers.get('content-type') ?? ''
-  const buf = Buffer.from(await res.arrayBuffer())
-  if (buf.length > MAX_FILE) throw fail('페이지가 너무 커요.', 413)
+  const buf = res.buffer
   const host = new URL(res.url || url).hostname.replace(/^www\./, '')
   if (type.includes('pdf')) {
     const pdf = await pdfText(buf)
