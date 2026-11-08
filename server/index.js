@@ -285,9 +285,29 @@ async function checkRunCooldown(req) {
   }
 }
 
+// 다른 출처에서 브라우저가 대신 보낸 변경 요청 막기 (11/08, 요즘 표준 방식 — Go 1.25 CrossOriginProtection과 같음)
+// 쿠키와 SameSite는 포트를 구분하지 않아, 같은 서버의 다른 포트 앱(예: :3040)이 관리자 브라우저로 3038에 요청을 보낼 수 있다.
+// 1) Sec-Fetch-Site가 있으면 same-origin(이 화면) · none(사용자가 직접 연 것)만 받는다 (포트까지 구분)
+// 2) 없으면(오래된 브라우저) Origin의 주소:포트가 Host와 같아야 한다
+// 3) 둘 다 없으면 브라우저가 아닌 요청(curl · 스크립트)이라 통과 — 쿠키를 대신 실어 보내는 공격이 아님
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+function crossOrigin(req) {
+  if (!UNSAFE_METHODS.has(req.method)) return false
+  const site = req.headers['sec-fetch-site']
+  if (site) return site !== 'same-origin' && site !== 'none'
+  const origin = req.headers.origin
+  if (!origin) return false
+  try {
+    return new URL(origin).host !== req.headers.host
+  } catch {
+    return true
+  }
+}
+
 // /api 요청을 처리한다. Vite 개발 서버와 단독 서버가 같이 쓴다
 export async function handleApi(req, res) {
   try {
+    if (crossOrigin(req)) return send(res, 403, { error: '다른 사이트에서 보낸 요청은 받지 않아요.' })
     // 운영 상태(점검 중 · AI 정지)면 일반 사용자의 요청을 막는다. 관리 페이지에서 보낸 관리자 요청만 그대로 (19 문서 6장, 11/08 원칙)
     if (!adminHere(req)) await checkOps(req)
     if (req.method === 'GET' && req.url === '/api/health') {
