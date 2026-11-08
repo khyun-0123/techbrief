@@ -15,8 +15,11 @@ const LOG_KEY = 'admin_log'
 const LOG_MAX = 200
 
 const sessions = new Map() // token → { name(아이디), expiresAt }. 서버를 다시 켜면 다시 로그인
-let fails = 0
-let lockedUntil = 0
+// 로그인 잠금 (11/09): IP마다 5번 틀리면 그 IP만 10분. 여러 IP로 나눠 맞혀 보는 것은 전체 50번에서 전체 10분으로 막는다
+// 터널(포트 포워딩)로 들어오면 모두 127.0.0.1이라 지금 3038에서는 예전처럼 다 같이 잠긴다 (29 문서)
+const GLOBAL_MAX_FAILS = 50
+const ipLocks = new Map() // ip → { fails, lockedUntil }
+const globalLock = { fails: 0, lockedUntil: 0, since: 0 } // since: 전체 횟수를 세기 시작한 때 (10분 지나면 다시 셈)
 const reset = { fails: 0, lockedUntil: 0 } // 리셋 조합도 따로 횟수를 막는다 (맞혀서 무한히 풀지 못하게)
 
 function adminId() {
@@ -118,36 +121,48 @@ function tryReset(id, password) {
     throw wrong(0)
   }
   reset.fails = 0
-  fails = 0
-  lockedUntil = 0
+  ipLocks.clear()
+  globalLock.fails = 0
+  globalLock.lockedUntil = 0
   console.log('[admin] 로그인 대기를 리셋했어요')
   return { reset: true }
 }
 
 // 성공하면 { cookie, name }, 잠금 리셋이면 { reset: true }
-export function login({ id, password }) {
+export function login({ id, password }, ip = null) {
   if (!adminConfigured()) {
     throw Object.assign(new Error('관리자 비밀번호가 설정되지 않았어요. 서버 .env.local에 ADMIN_PASSWORD를 넣어 주세요.'), { status: 503 })
   }
   const resetResult = tryReset(id, password)
   if (resetResult) return resetResult
-  if (Date.now() < lockedUntil) {
-    const min = Math.ceil((lockedUntil - Date.now()) / 60_000)
+  const key = ip || 'unknown'
+  if (ipLocks.size > 1000) for (const [k, v] of ipLocks) if (v.lockedUntil < Date.now() && !v.fails) ipLocks.delete(k)
+  const mine = ipLocks.get(key) ?? { fails: 0, lockedUntil: 0 }
+  ipLocks.set(key, mine)
+  const until = Math.max(mine.lockedUntil, globalLock.lockedUntil)
+  if (Date.now() < until) {
+    const min = Math.ceil((until - Date.now()) / 60_000)
     throw Object.assign(new Error(`비밀번호를 여러 번 틀려 로그인이 ${min}분 동안 막혔어요.`), { status: 429, locked: true })
   }
   // 아이디와 비밀번호를 둘 다 비교한다 (어느 쪽이 틀렸는지는 알려 주지 않음)
   const idOk = samePassword(String(id ?? '').trim(), adminId())
   const pwOk = samePassword(password, adminPassword())
   if (!idOk || !pwOk) {
-    fails += 1
-    if (fails >= MAX_FAILS) {
-      fails = 0
-      lockedUntil = Date.now() + LOCK_MS
+    mine.fails += 1
+    if (Date.now() - globalLock.since > LOCK_MS) Object.assign(globalLock, { fails: 0, since: Date.now() })
+    globalLock.fails += 1
+    if (globalLock.fails >= GLOBAL_MAX_FAILS) {
+      globalLock.fails = 0
+      globalLock.lockedUntil = Date.now() + LOCK_MS
+    }
+    if (mine.fails >= MAX_FAILS) {
+      mine.fails = 0
+      mine.lockedUntil = Date.now() + LOCK_MS
       throw Object.assign(new Error(`비밀번호를 ${MAX_FAILS}번 틀려 로그인이 ${LOCK_MS / 60_000}분 동안 막혔어요.`), { status: 429, locked: true })
     }
-    throw wrong(MAX_FAILS - fails)
+    throw wrong(MAX_FAILS - mine.fails)
   }
-  fails = 0
+  ipLocks.delete(key)
   const token = randomBytes(32).toString('hex')
   const who = adminId()
   sessions.set(token, { name: who, expiresAt: Date.now() + SESSION_MS })

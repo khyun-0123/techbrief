@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { Readability } from '@mozilla/readability'
 import { JSDOM, VirtualConsole } from 'jsdom'
 import { dbEnabled, query } from './db/index.js'
+import { FetchBlocked, safeFetch } from './safeFetch.js'
 
 const MAX_TEXT = 200_000 // 저장하는 본문 길이(글자)
 const MAX_FILE = 10 * 1024 * 1024 // 올릴 수 있는 파일 크기
@@ -55,14 +56,15 @@ async function fromLink(url) {
   if (!/^https?:\/\//i.test(url ?? '')) throw fail('http:// 또는 https://로 시작하는 주소를 넣어 주세요.')
   let res
   try {
-    res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'text/html,application/pdf' }, redirect: 'follow', signal: AbortSignal.timeout(TIMEOUT_MS) })
-  } catch {
+    res = await safeFetch(url, { headers: { 'User-Agent': UA, Accept: 'text/html,application/pdf' }, signal: AbortSignal.timeout(TIMEOUT_MS) }, { maxBytes: MAX_FILE })
+  } catch (err) {
+    if (err instanceof FetchBlocked && err.code === 'EPRIVATE') throw fail('이 서버 · 회사 내부망 주소는 가져올 수 없어요. 파일로 올려 주세요.')
+    if (err instanceof FetchBlocked && err.code === 'ETOOBIG') throw fail('페이지가 너무 커요.', 413)
     throw fail('주소를 열지 못했어요. 주소가 맞는지, 로그인이 필요한 페이지인지 확인해 주세요.', 502)
   }
   if (!res.ok) throw fail(`페이지를 가져오지 못했어요 (응답 ${res.status}).`, 502)
   const type = res.headers.get('content-type') ?? ''
-  const buf = Buffer.from(await res.arrayBuffer())
-  if (buf.length > MAX_FILE) throw fail('페이지가 너무 커요.', 413)
+  const buf = res.buffer
   const host = new URL(res.url || url).hostname.replace(/^www\./, '')
   if (type.includes('pdf')) {
     const pdf = await pdfText(buf)
@@ -154,7 +156,8 @@ async function fromFile({ fileName = '', fileBase64 = '' }) {
   throw fail('PDF · TXT · MD · HTML · EML 파일만 올릴 수 있어요. Word·PPT는 PDF로 저장해 올려 주세요.')
 }
 
-function toArticle(row) {
+// mine: 이 브라우저가 올린 자료인지. 올린 브라우저 번호(added_by) 자체는 내보내지 않는다 (11/09: 번호를 알면 남의 자료를 지울 수 있었음)
+function toArticle(row, clientId = null) {
   return {
     id: row.id,
     material: true,
@@ -169,7 +172,7 @@ function toArticle(row) {
     aiAllowed: row.ai_allowed !== false,
     publishedAt: new Date(row.published_at ?? row.added_at).toISOString(),
     addedAt: new Date(row.added_at).toISOString(),
-    addedBy: row.added_by || null,
+    mine: Boolean(clientId && row.added_by && row.added_by === clientId),
     fileName: row.file_name || undefined,
     importance: 0,
     relevance: 'high',
@@ -211,7 +214,7 @@ export async function addMaterial(input, clientId) {
   }
   if (!dbEnabled()) {
     memory.set(row.id, row)
-    return toArticle(row)
+    return toArticle(row, row.added_by)
   }
   await query(
     `INSERT INTO materials (id, kind, title, url, source, description, body, tier, ai_allowed, published_at, added_at, added_by, file_name, doi)
@@ -221,14 +224,14 @@ export async function addMaterial(input, clientId) {
   return toArticle(row)
 }
 
-export async function listMaterials(limit = 300) {
-  if (!dbEnabled()) return [...memory.values()].sort((a, b) => b.added_at.localeCompare(a.added_at)).slice(0, limit).map(toArticle)
+export async function listMaterials(limit = 300, clientId = null) {
+  if (!dbEnabled()) return [...memory.values()].sort((a, b) => b.added_at.localeCompare(a.added_at)).slice(0, limit).map((r) => toArticle(r, clientId))
   const { rows } = await query(
     `SELECT id, kind, title, url, source, description, tier, ai_allowed, published_at, added_at, added_by, file_name
        FROM materials ORDER BY added_at DESC LIMIT $1`,
     [limit],
   )
-  return rows.map(toArticle)
+  return rows.map((r) => toArticle(r, clientId))
 }
 
 export async function getMaterial(id) {

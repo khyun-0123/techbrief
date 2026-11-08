@@ -4,6 +4,7 @@
 // - 실패하면 null → 보고서는 지금처럼 네이버 발췌문으로 쓴다
 import { Readability } from '@mozilla/readability'
 import { JSDOM, VirtualConsole } from 'jsdom'
+import { safeFetch } from '../safeFetch.js'
 import { cleanText } from './normalize.js'
 
 const TIMEOUT_MS = 10_000
@@ -39,14 +40,13 @@ export async function fetchBody(url) {
   const hit = cache.get(url)
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.text
   try {
-    const res = await fetch(url, {
+    // 내부 주소 · 너무 큰 페이지는 safeFetch가 막는다(오류 → null)
+    const res = await safeFetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (techbrief report draft)', Accept: 'text/html' },
-      redirect: 'follow',
       signal: AbortSignal.timeout(TIMEOUT_MS),
-    })
+    }, { maxBytes: MAX_HTML })
     if (!res.ok || !(res.headers.get('content-type') ?? '').includes('html')) return null
-    const buf = Buffer.from(await res.arrayBuffer())
-    if (buf.length > MAX_HTML) return null
+    const buf = res.buffer
     const html = decode(buf, res.headers.get('content-type') ?? '')
     // 페이지의 스크립트·CSS 오류 메시지는 무시한다
     const dom = new JSDOM(html, { url, virtualConsole: new VirtualConsole() })
@@ -81,13 +81,12 @@ export async function fetchOgTitle(url) {
   if (!url || !/^https?:\/\//.test(url)) return null
   if (ogTitles.has(url)) return ogTitles.get(url)
   try {
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (techbrief title check)', Accept: 'text/html' },
-      redirect: 'follow',
       signal: AbortSignal.timeout(TIMEOUT_MS),
-    })
+    }, { maxBytes: HEAD_MAX, truncate: true })
     if (!res.ok || !(res.headers.get('content-type') ?? '').includes('html')) return null
-    const buf = Buffer.from(await res.arrayBuffer()).subarray(0, HEAD_MAX)
+    const buf = res.buffer
     const html = decode(buf, res.headers.get('content-type') ?? '')
     const tag = html.match(/<meta[^>]+property=["']og:title["'][^>]*>/i)?.[0] ?? html.match(/<meta[^>]+content=[^>]+property=["']og:title["'][^>]*>/i)?.[0]
     const raw = tag?.match(/content=(["'])([\s\S]*?)\1/i)?.[2]

@@ -231,7 +231,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     fetchLists()
       .then(setLists)
       .catch(() => {})
-    fetchMaterials()
+    fetchMaterials(clientId())
       .then(setMaterials)
       .catch(() => {})
   }, [reloadArticles])
@@ -401,12 +401,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   }
 
   async function handleJobAnswer(jobId, use) {
-    await answerReportJob(jobId, use).catch(() => {})
+    await answerReportJob(jobId, use, clientId()).catch(() => {})
     refreshReportJobs()
   }
 
   async function handleJobCancel(jobId) {
-    await cancelReportJob(jobId).catch(() => {})
+    await cancelReportJob(jobId, clientId()).catch(() => {})
     refreshReportJobs()
   }
 
@@ -1236,7 +1236,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                                 <span className="why-important">
                                   {a.publishedAt && a.publishedAt.slice(0, 10) !== a.addedAt?.slice(0, 10) && `발행 ${a.publishedAt.slice(0, 10)} · `}
                                   {a.fileName ? `파일 ${a.fileName}` : a.url ? '링크' : '텍스트'}
-                                  {a.addedBy && a.addedBy === clientId() && (
+                                  {a.mine && (
                                     <>
                                       {' · '}
                                       <button type="button" className="link-btn" onClick={() => handleMaterialDelete(a)}>
