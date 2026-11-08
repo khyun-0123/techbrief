@@ -1,10 +1,12 @@
 // 내 자료 옮기기 (11/08 조장: 자리 · 부서 이동 대비)
 // 선별 · 폴더 · 보고서 체크 · 찾기로 담은 기사 · 최근 검색어 · 보고서 작성 입력은 이 브라우저(무작위 번호)에 묶여 있다
 // → 파일로 내보내고, 새 PC · 새 브라우저에서 불러와 이어서 쓴다
-// - 복원용은 JSON (폴더처럼 겹친 구조를 그대로 담음). 엑셀로 볼 선별 목록은 CSV로 따로
+// - 복원용은 JSON (폴더처럼 겹친 구조를 그대로 담음). 11/09: 엑셀 목록(CSV)은 빼고 「설정 → 정리본 받기」로 대신
+// - 11/09: 즐겨찾기 ☆ · 최근 검색어는 서버(IP별)에 있으므로 파일에 같이 담고, 불러올 때 새 자리 IP로 올린다
 // - 「이 파일의 사용자로 이어 쓰기」: 브라우저 번호도 옮긴다 → 「내가 만든 보고서」 · 내 보고서 · 내 자료 지우기 권한이 따라옴
 // 보고서함 · 직접 추가 자료 · AI 요약은 서버에 있어 어느 브라우저에서나 보이므로 파일에 넣지 않는다
 import { useEffect, useState } from 'react'
+import { saveFavoritesApi } from './api.js'
 import { clientId } from './usage.js'
 import { load } from './utils.js'
 
@@ -32,11 +34,10 @@ function download(name, text, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }
 
-const stamp = () => new Date().toISOString().slice(0, 10)
-const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+const stamp = () => new Date().toLocaleDateString('sv-SE') // 이 컴퓨터 날짜 (YYYY-MM-DD)
 
-// rows: 선별 기사 [{ folder, title, source, publishedAt, url, included }]
-function DataMove({ rows, onClose }) {
+// favorites · recent: 지금 IP의 즐겨찾기 · 최근 검색어 (서버 값)
+function DataMove({ favorites = [], recent = [], onClose }) {
   const [file, setFile] = useState(null) // { data, name }
   const [error, setError] = useState('')
   const [mode, setMode] = useState('merge')
@@ -53,14 +54,8 @@ function DataMove({ rows, onClose }) {
   function exportJson() {
     const data = { app: 'techbrief', version: 1, exportedAt: new Date().toISOString(), clientId: localStorage.getItem(CLIENT_KEY), items: {} }
     for (const key of Object.keys(KEYS)) data.items[key] = load(key, null)
+    data.server = { favorites, recent }
     download(`techbrief-내자료-${stamp()}.json`, JSON.stringify(data, null, 1), 'application/json')
-  }
-
-  function exportCsv() {
-    const head = ['폴더', '제목', '출처', '발행일', '보고서 체크', '링크']
-    const lines = [head, ...rows.map((r) => [r.folder, r.title, r.source, r.publishedAt?.slice(0, 10) ?? '', r.included ? 'Y' : '', r.url ?? ''])]
-    // 엑셀에서 한글이 깨지지 않게 BOM을 붙인다
-    download(`techbrief-선별목록-${stamp()}.csv`, `﻿${lines.map((l) => l.map(csvCell).join(',')).join('\r\n')}`, 'text/csv;charset=utf-8')
   }
 
   async function readFile(f) {
@@ -76,8 +71,8 @@ function DataMove({ rows, onClose }) {
     }
   }
 
-  function apply() {
-    const { items, clientId } = file.data
+  async function apply() {
+    const { items, clientId, server } = file.data
     const arr = (v) => (Array.isArray(v) ? v : [])
     const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {})
     const next = {}
@@ -108,6 +103,11 @@ function DataMove({ rows, onClose }) {
       setError('브라우저 저장 공간에 쓰지 못했어요.')
       return
     }
+    // 즐겨찾기 · 최근 검색어 → 이 자리(IP)의 서버 값으로
+    if (server) {
+      const pick = (theirs, mine) => (mode === 'replace' ? theirs ?? [] : [...new Set([...(mine ?? []), ...(theirs ?? [])])])
+      await saveFavoritesApi({ favorites: pick(server.favorites, favorites), recent: pick(server.recent, recent).slice(0, 10) }).catch(() => {})
+    }
     window.location.reload()
   }
 
@@ -115,15 +115,15 @@ function DataMove({ rows, onClose }) {
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <section className="panel modal data-move" role="dialog" aria-modal="true" aria-label="내 자료 옮기기">
+      <section className="panel modal data-move" role="dialog" aria-modal="true" aria-label="새 자리로 옮기기">
         <div className="modal-head">
-          <h2>내 자료 옮기기</h2>
+          <h2>새 자리로 옮기기</h2>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="닫기" autoFocus>
             ×
           </button>
         </div>
         <p className="hint">
-          선별 · 폴더 · 보고서 체크 · 찾기로 담은 기사 · 최근 검색어는 <strong>이 브라우저</strong>에 저장돼요. 자리를 옮기거나 다른 PC · 브라우저에서 쓰려면 파일로 내보내고 새 자리에서 불러오세요. 보고서함 · 직접 추가한 자료 · AI 요약은 서버에 있어 어디서나 보여요.
+          선별 · 폴더 · 보고서 체크 · 찾기로 담은 기사는 <strong>이 브라우저</strong>에, 즐겨찾기 · 최근 검색어는 <strong>지금 자리(IP)</strong>에 저장돼요. 자리를 옮기거나 다른 PC · 브라우저에서 쓰려면 파일로 내보내고 새 자리에서 불러오세요. 보고서함 · 직접 추가한 자료 · AI 요약은 서버에 있어 어디서나 보여요.
         </p>
 
         <h3>내보내기</h3>
@@ -131,11 +131,8 @@ function DataMove({ rows, onClose }) {
           <button type="button" className="btn primary" onClick={exportJson}>
             내 자료 파일 받기 (.json)
           </button>
-          <button type="button" className="btn" onClick={exportCsv} disabled={rows.length === 0}>
-            선별 목록 표 받기 (.csv, {rows.length}건)
-          </button>
         </div>
-        <p className="hint">json은 새 자리에서 그대로 되살리는 파일, csv는 엑셀로 보는 목록이에요. 이 브라우저 번호: {myId ? `${String(myId).slice(0, 8)}…` : '없음'}</p>
+        <p className="hint">새 자리에서 그대로 되살리는 파일이에요. 읽기용 정리본(보고서 · 선별 목록)은 「설정 → 내 보고서 · 선별 정리본 받기」로 받아요. 이 브라우저 번호: {myId ? `${String(myId).slice(0, 8)}…` : '없음'}</p>
 
         <h3>불러오기</h3>
         <input type="file" accept=".json,application/json" onChange={(e) => readFile(e.target.files?.[0])} aria-label="내 자료 파일 고르기" />

@@ -27,6 +27,8 @@ import {
   searchNewsApi,
 } from './api.js'
 import { buildTagDict, tagsOf } from './hashtags.js'
+import SettingsMenu from './SettingsMenu.jsx'
+import { buildBundleHtml } from './exportBundle.js'
 import SelectToggle from './SelectToggle.jsx'
 import FavoritesRail from './FavoritesRail.jsx'
 import Highlight from './Highlight.jsx'
@@ -164,6 +166,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [featureList, setFeatureList] = useState([]) // [{ key, label }] 테스트 띠에 한글 이름으로 보여 줄 때
   const features = useMemo(() => enabledFeatures(featureStates, mode), [featureStates, mode])
   const [techTerms, setTechTerms] = useState([]) // 핵심어 사전용 기술 용어
+  const [tagsOpen, setTagsOpen] = useState(() => new Set()) // 「+N」을 눌러 키워드를 모두 펼친 기사
   const [lists, setLists] = useState(null) // 자사·경쟁사·관심 기술 (「수집 설정」 칸 실험 기능에서 보기만)
   const [refreshError, setRefreshError] = useState('')
   const [starting, setStarting] = useState(false)
@@ -698,6 +701,25 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     }
   }
 
+  // 「설정 → 내 보고서 · 선별 정리본 받기」 (11/09): 내가 만든 보고서 전문 + 선별 목록(폴더별, 한 줄 요약)을 HTML 파일로
+  function downloadBundle() {
+    const html = buildBundleHtml({
+      reports: reports.filter((r) => r.mine),
+      folders: folders.map((f) => ({
+        name: f.name,
+        articles: candidates
+          .filter((a) => folderIdOf(a.id) === f.id)
+          .map((a) => ({ title: a.title, source: a.source, publishedAt: a.publishedAt, url: a.url, headline: aiSummaries[a.id]?.summary?.headline, included: included.includes(a.id) })),
+      })),
+    })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
+    a.download = `테크브리프-정리본-${new Date().toLocaleDateString('sv-SE')}.html` // 이 컴퓨터 날짜 (YYYY-MM-DD)
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+    track('export', 'bundle')
+  }
+
   function closeSearch() {
     searchSeq.current++ // 찾는 중에 닫으면 늦게 온 응답이 다시 열지 않게
     setSearch(null)
@@ -916,12 +938,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               </span>
             </span>
           )}
-          <button type="button" className="topbar-link" onClick={() => setShowMove(true)} title="선별 · 폴더 등 이 브라우저의 자료를 파일로 내보내거나 불러와요 (자리 이동 · 다른 PC)">
-            내 자료
-          </button>
-          <a className="admin-link" href="/admin" title="키워드·회사·관심 기술·자동 최신화·AI 모델 설정">
-            {admin ? `관리자 (${admin.name})` : '관리자'}
-          </a>
+          {/* 「내 자료」 · 「관리자」는 「설정」 하나로 모음 (11/09 조장) */}
+          <SettingsMenu admin={admin} reportCount={reports.filter((r) => r.mine).length} selectedCount={selectedIds.length} onBundle={downloadBundle} onMove={() => setShowMove(true)} />
         </span>
       </nav>
       {ops.mode !== 'normal' && (isTest || ops.mode !== 'maintenance') && (
@@ -1073,7 +1091,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 <form className="search-form" onSubmit={handleSearch}>
                   <input
                     type="search"
-                    placeholder="기사 찾기 (키워드·제목)"
+                    placeholder="자료 찾기 (제목·키워드)"
                     aria-label="기사 찾기"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
@@ -1202,7 +1220,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                       <th>제목</th>
                       <th className="center">출처</th>
                       <th className="center">발행</th>
-                      <th className="center" title="기사 제목 · 내용에 나온 우리 용어(키워드 · 회사 · 관심 기술 · 뜨는 기술)와 요약 핵심어. 누르면 그 말로 걸러요">핵심어</th>
+                      <th className="center" title="기사 제목 · 내용에 나온 우리 용어(수집 키워드 · 회사 · 관심 기술 · 뜨는 기술)와 요약 핵심어. 누르면 그 말로 걸러요">키워드</th>
                       <th className="center">작업</th>
                     </tr>
                   </thead>
@@ -1307,14 +1325,26 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                           <td className="center tags-cell">
                             {(() => {
                               const tags = tagsFor(a)
+                              const all = tagsOpen.has(a.id)
+                              const toggle = () =>
+                                setTagsOpen((prev) => {
+                                  const next = new Set(prev)
+                                  if (all) next.delete(a.id)
+                                  else next.add(a.id)
+                                  return next
+                                })
                               return (
-                                <span className="tags" title={tags.length > 3 ? tags.map((t) => `#${t}`).join(' ') : undefined}>
-                                  {tags.slice(0, 3).map((t) => (
-                                    <button key={t} type="button" className="tag" onClick={() => setQuery(t)} title={`「${t}」 들어간 기사만 보기`}>
+                                <span className="tags">
+                                  {(all ? tags : tags.slice(0, 3)).map((t) => (
+                                    <button key={t} type="button" className="tag" onClick={() => setQuery(t)} title={`「${t}」 들어간 자료만 보기`}>
                                       #{t}
                                     </button>
                                   ))}
-                                  {tags.length > 3 && <span className="tag-more">+{tags.length - 3}</span>}
+                                  {tags.length > 3 && (
+                                    <button type="button" className="tag-more" onClick={toggle} aria-expanded={all} title={all ? '접기' : `키워드 ${tags.length - 3}개 더 보기`}>
+                                      {all ? '접기' : `+${tags.length - 3}`}
+                                    </button>
+                                  )}
                                 </span>
                               )
                             })()}
@@ -1418,19 +1448,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           </div>
         </main>
       )}
-      {showMove && (
-        <DataMove
-          rows={candidates.map((a) => ({
-            folder: folders.find((f) => f.id === folderIdOf(a.id))?.name ?? '미분류',
-            title: a.title,
-            source: a.source,
-            publishedAt: a.publishedAt,
-            url: a.url,
-            included: included.includes(a.id),
-          }))}
-          onClose={() => setShowMove(false)}
-        />
-      )}
+      {showMove && <DataMove favorites={favorites} recent={recent} onClose={() => setShowMove(false)} />}
       <ProgressPanel
         queue={queue}
         reportJobs={reportJobs}
