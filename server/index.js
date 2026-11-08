@@ -348,7 +348,7 @@ export async function handleApi(req, res) {
       return send(res, 200, { configured: adminConfigured(), admin: adminOf(req) })
     }
     if (req.method === 'POST' && req.url === '/api/admin/login') {
-      const result = login(await readJson(req))
+      const result = login(await readJson(req), clientIp(req))
       if (result.reset) return send(res, 200, { reset: true }) // 잠금 리셋: 로그인은 하지 않음
       return send(res, 200, { admin: { name: result.name } }, { 'Set-Cookie': result.cookie })
     }
