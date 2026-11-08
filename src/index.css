@@ -43,3 +43,21 @@ textarea {
   font-family: inherit;
   line-height: normal;
 }
+
+/* 움직임 줄이기 (OS 설정 「동작 줄이기」를 켠 사용자): 전환 · 깜빡임 효과를 끈다.
+   로딩 스피너는 멈추면 화면이 멈춘 것처럼 보여서 천천히만 돌린다 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .adm-spinner {
+    animation-duration: 2.4s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
