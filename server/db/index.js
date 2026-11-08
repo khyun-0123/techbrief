@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS reports (
   updated_at   timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS reports_created_idx ON reports (created_at DESC);
+-- 보고서를 만든 사람의 IP (11/08): 일반 화면에서는 같은 IP만 지울 수 있다. 화면(다른 사용자)에는 보내지 않는다
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS created_ip text;
 
 -- 정기 수집 키워드 (팀이 같이 쓰도록 브라우저가 아니라 DB에 둔다). position은 화면 순서
 CREATE TABLE IF NOT EXISTS keywords (

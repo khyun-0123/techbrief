@@ -22,7 +22,8 @@ import {
   listReports,
   saveReport,
   setKeywords,
-  reportOwner,
+  reportOwnerIp,
+  deleteReportsOlderThan,
   updateReport,
   updateReportSection,
 } from './db/store.js'
@@ -39,7 +40,7 @@ import {
   SECTION_KEYS,
   SECTION_SCHEMA,
 } from './llm/reportPrompts.js'
-import { adminConfigured, adminOf, changeLog, diffWords, login, logChange, logout, requireAdmin } from './admin.js'
+import { adminConfigured, adminHere, adminOf, changeLog, clientIp, diffWords, login, logChange, logout, requireAdmin } from './admin.js'
 import { refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
 import { featureList, FEATURES, getFeatures, saveFeatures } from './features.js'
 import { summarizeArticle, summarizeOnly } from './summarize.js'
@@ -52,6 +53,9 @@ const STARTED_AT = new Date().toISOString()
 const SUPERVISED = process.env.TECHBRIEF_SUPERVISED === '1'
 const RESTART_EXIT_CODE = 75
 
+// 보고서 자동 삭제 주기 (관리 페이지에서 고름, 0 = 끄기). 기본 꺼짐 (11/08)
+const REPORT_RETENTION_SETTING = 'report_retention_days'
+const REPORT_RETENTION_CHOICES = [0, 30, 90, 180, 365]
 const REPORT_TIMEOUT_MS = 240_000 // 보고서는 출력이 길어 요약보다 오래 걸린다
 // 보고서 한 번에 넣는 기사 수 (맥미니 문맥 크기 기준). 넘으면 화면이 고르게 한다 (21 문서 6-3)
 // - 중요도 높은 10건만 (빠름) / 전부 (REPORT_CHUNK건씩 나눠 쓰고 합침, 오래 걸림, 최대 MAX_REPORT_ALL건)
@@ -225,8 +229,8 @@ setDraftBuilder(buildReportEntry)
 
 async function handleReport(req, res) {
   const entry = await buildReportEntry(await readJson(req))
-  if (dbEnabled()) await saveReport(entry)
-  send(res, 200, { entry, stored: dbEnabled() })
+  if (dbEnabled()) await saveReport(entry, clientIp(req))
+  send(res, 200, { entry: { ...entry, mine: true }, stored: dbEnabled() })
 }
 
 async function handleReportSection(req, res) {
@@ -259,15 +263,20 @@ export function startScheduler() {
   const prune = () => {
     pruneUsage().catch((err) => console.warn(`[usage] 오래된 기록 정리 실패: ${err.message}`))
     pruneArticleTexts().catch((err) => console.warn(`[texts] 오래된 원문 정리 실패: ${err.message}`)) // 원문은 90일만
+    // 보고서 자동 삭제: 관리자가 정한 기간(기본 꺼짐)이 지난 보고서
+    getSetting(REPORT_RETENTION_SETTING, 0)
+      .then((days) => deleteReportsOlderThan(Number(days) || 0))
+      .then((n) => n && console.log(`[reports] 자동 삭제 ${n}개`))
+      .catch((err) => console.warn(`[reports] 자동 삭제 실패: ${err.message}`))
   }
   prune()
   setInterval(prune, 86_400_000).unref()
 }
 
-// 일반 사용자의 「지금 최신화」는 10분에 한 번 (17 문서 3-2). 관리자는 제한 없음
+// 일반 사용자의 「지금 최신화」는 10분에 한 번 (17 문서 3-2). 관리 페이지에서 누른 관리자만 제한 없음 (11/08 원칙)
 const RUN_COOLDOWN_MS = 10 * 60_000
 async function checkRunCooldown(req) {
-  if (adminOf(req)) return
+  if (adminHere(req)) return
   const { lastRunAt, running } = await refreshStatus()
   if (running) return // 이미 돌고 있으면 startRefresh가 알아서 합친다
   const wait = lastRunAt ? Date.parse(lastRunAt) + RUN_COOLDOWN_MS - Date.now() : 0
@@ -279,8 +288,8 @@ async function checkRunCooldown(req) {
 // /api 요청을 처리한다. Vite 개발 서버와 단독 서버가 같이 쓴다
 export async function handleApi(req, res) {
   try {
-    // 운영 상태(점검 중 · AI 정지)면 일반 사용자의 요청을 막는다. 관리자는 그대로 (19 문서 6장)
-    if (!adminOf(req)) await checkOps(req)
+    // 운영 상태(점검 중 · AI 정지)면 일반 사용자의 요청을 막는다. 관리 페이지에서 보낸 관리자 요청만 그대로 (19 문서 6장, 11/08 원칙)
+    if (!adminHere(req)) await checkOps(req)
     if (req.method === 'GET' && req.url === '/api/health') {
       const [modelReachable, db] = await Promise.all([pingModel(), dbStatus()])
       return send(res, 200, {
@@ -497,23 +506,25 @@ export async function handleApi(req, res) {
     if (req.method === 'DELETE' && req.url.startsWith('/api/materials/')) {
       const [path, qs = ''] = req.url.split('?')
       const id = decodeURIComponent(path.slice('/api/materials/'.length))
-      await deleteMaterial(id, { clientId: new URLSearchParams(qs).get('client'), admin: Boolean(adminOf(req)) })
+      await deleteMaterial(id, { clientId: new URLSearchParams(qs).get('client'), admin: Boolean(adminHere(req)) })
       return send(res, 200, { ok: true })
     }
-    // 브라우저별 선별 폴더 (11/07 결정: 선별 정보 서버 기록). 이름 없이 브라우저 무작위 id로
+    // 선별 폴더 (11/07 결정: 선별 정보 서버 기록). 11/08부터 IP별로 담는다: 같은 IP면 어느 브라우저에서나 같은 선별
+    // (예전 브라우저 무작위 번호 기록과 섞이지 않게 'ip:' 앞머리. 보내 온 clientId는 쓰지 않음)
     if (req.method === 'GET' && req.url.startsWith('/api/selections')) {
-      const client = new URLSearchParams(req.url.split('?')[1] ?? '').get('client')
-      return send(res, 200, { selection: await getSelection(client) })
+      const ip = clientIp(req)
+      return send(res, 200, { selection: ip ? await getSelection(`ip:${ip}`) : null })
     }
     if (req.method === 'PUT' && req.url === '/api/selections') {
-      const { clientId, folders = [], folderOf = {}, selectedIds = [] } = await readJson(req)
-      if (!clientId) return send(res, 400, { error: 'clientId가 필요해요.' })
+      const { folders = [], folderOf = {}, selectedIds = [] } = await readJson(req)
+      const ip = clientIp(req)
+      if (!ip) return send(res, 400, { error: '접속 주소를 알 수 없어요.' })
       const data = {
         folders: folders.slice(0, 50).map((f) => ({ id: String(f.id).slice(0, 40), name: String(f.name ?? '').slice(0, 40) })),
         folderOf: Object.fromEntries(Object.entries(folderOf).slice(0, 2000).map(([k, v]) => [String(k).slice(0, 200), String(v).slice(0, 40)])),
         selectedIds: selectedIds.slice(0, 2000).map((x) => String(x).slice(0, 200)),
       }
-      await saveSelection(String(clientId).slice(0, 64), data)
+      await saveSelection(`ip:${ip}`, data)
       return send(res, 200, { ok: true })
     }
     // 용어 백과 (위키백과 요약). 보고서 근거가 아니라 용어 이해용 (27 문서 4장)
@@ -522,24 +533,43 @@ export async function handleApi(req, res) {
       return send(res, 200, await lookupWiki(term))
     }
     if (req.method === 'GET' && req.url === '/api/reports') {
-      return send(res, 200, { stored: dbEnabled(), reports: dbEnabled() ? await listReports(200) : [] })
+      return send(res, 200, { stored: dbEnabled(), reports: dbEnabled() ? await listReports(200, { ip: clientIp(req) }) : [] })
+    }
+    // 관리 페이지 보고서 관리 (11/08): 전체 목록(만든 IP 포함) · 자동 삭제 주기
+    if (req.method === 'GET' && req.url === '/api/admin/reports') {
+      requireAdmin(req)
+      const retentionDays = Number(await getSetting(REPORT_RETENTION_SETTING, 0)) || 0
+      return send(res, 200, { stored: dbEnabled(), retentionDays, reports: await listReports(1000, { withIp: true }) })
+    }
+    if (req.method === 'PUT' && req.url === '/api/admin/reports/retention') {
+      const admin = requireAdmin(req)
+      const days = Number((await readJson(req)).days)
+      if (!REPORT_RETENTION_CHOICES.includes(days)) return send(res, 400, { error: '고를 수 있는 기간이 아니에요.' })
+      await setSetting(REPORT_RETENTION_SETTING, days)
+      const deleted = await deleteReportsOlderThan(days)
+      await logChange(admin, '보고서 자동 삭제', days ? `만든 지 ${days}일 지난 보고서 (지금 ${deleted}개 지움)` : '꺼짐')
+      return send(res, 200, { retentionDays: days, deleted })
     }
     if (req.method === 'POST' && req.url === '/api/reports/import') {
       // 브라우저(localStorage)에 있던 보고서함을 DB로 옮긴다. 이미 있는 건 건너뜀
       if (!dbEnabled()) return send(res, 400, { error: 'DB가 설정되지 않았어요.' })
       const { reports = [] } = await readJson(req)
-      for (const r of reports.slice(0, 30)) if (r?.id && r.report) await saveReport(r)
-      return send(res, 200, { reports: await listReports() })
+      const ip = clientIp(req)
+      for (const r of reports.slice(0, 30)) if (r?.id && r.report) await saveReport(r, ip)
+      return send(res, 200, { reports: await listReports(30, { ip }) })
     }
     if (req.method === 'DELETE' && req.url.startsWith('/api/reports/')) {
-      // 공용 보고서함에서 지우면 되돌릴 수 없다: 관리자 또는 그 보고서를 만든 브라우저만 (11/08 조장)
-      const [path, qs = ''] = req.url.split('?')
+      // 공용 보고서함에서 지우면 되돌릴 수 없다 (11/08): 일반 화면에서는 그 보고서를 만든 IP만,
+      // 관리자는 관리 페이지에서만 모든 보고서를 지운다 (일반 화면에서는 관리자도 일반 사용자와 같음)
+      const [path] = req.url.split('?')
       const id = decodeURIComponent(path.slice('/api/reports/'.length))
-      const admin = adminOf(req)
+      const admin = adminHere(req)
       if (!admin) {
-        const client = new URLSearchParams(qs).get('client')
-        const owner = await reportOwner(id)
-        if (!client || !owner || owner !== client) throw Object.assign(new Error('보고서는 만든 브라우저나 관리자만 지울 수 있어요.'), { status: 403 })
+        const ip = clientIp(req)
+        const owner = await reportOwnerIp(id)
+        if (!ip || !owner || owner !== ip) {
+          throw Object.assign(new Error('보고서는 만든 사람(같은 IP)만 지울 수 있어요. 다른 보고서는 관리 페이지에서 관리자가 지워요.'), { status: 403 })
+        }
       }
       await deleteReport(id)
       if (admin) await logChange(admin, '보고서 삭제', id)
@@ -561,7 +591,7 @@ export async function handleApi(req, res) {
     if (req.method === 'POST' && req.url === '/api/report-jobs') {
       const body = await readJson(req)
       if (!(body.articles ?? []).length) return send(res, 400, { error: '보고서에 넣을 기사가 없어요.' })
-      return send(res, 202, { job: addJob(body, body.clientId) })
+      return send(res, 202, { job: addJob(body, body.clientId, clientIp(req)) })
     }
     if (req.method === 'GET' && req.url.startsWith('/api/report-jobs')) {
       const client = new URLSearchParams(req.url.split('?')[1] ?? '').get('client')

@@ -2047,3 +2047,12 @@ a.adm-brand:focus-visible {
   color: var(--tb-color-text-sub);
   line-height: 1.5;
 }
+
+/* 보고서 관리 (11/08) */
+.adm input.adm-input {
+  width: 220px;
+}
+
+.adm-sub {
+  color: var(--adm-muted);
+}

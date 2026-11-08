@@ -74,6 +74,7 @@ export async function saveSummary(id, result, aliasIds = []) {
 
 // ── 보고서 ──
 const memoryReports = []
+const memoryReportIps = new Map() // DB 없을 때 보고서 id → 만든 IP
 
 function rowToEntry(r) {
   return {
@@ -88,20 +89,28 @@ function rowToEntry(r) {
   }
 }
 
-export async function listReports(limit = 30) {
-  if (!dbEnabled()) return memoryReports.slice(0, limit)
+// ip: 요청한 사람의 IP → 각 보고서에 mine(내가 만든 것)만 붙인다. withIp: 관리 페이지에서만 만든 IP까지
+export async function listReports(limit = 30, { ip = null, withIp = false } = {}) {
+  const mark = (entry, createdIp) => ({
+    ...entry,
+    mine: Boolean(ip && createdIp && createdIp === ip),
+    ...(withIp ? { createdIp: createdIp ?? null } : {}),
+  })
+  if (!dbEnabled()) return memoryReports.slice(0, limit).map((e) => mark(e, memoryReportIps.get(e.id)))
   const { rows } = await query('SELECT * FROM reports ORDER BY created_at DESC LIMIT $1', [limit])
-  return rows.map(rowToEntry)
+  return rows.map((r) => mark(rowToEntry(r), r.created_ip))
 }
 
-export async function saveReport(entry) {
+// ip: 만든 사람의 IP (일반 화면에서 지울 수 있는 사람). 화면에는 보내지 않는다
+export async function saveReport(entry, ip = null) {
   if (!dbEnabled()) {
     memoryReports.unshift(entry)
+    if (ip) memoryReportIps.set(entry.id, ip)
     return
   }
   await query(
-    `INSERT INTO reports (id, title, period_label, article_key, report, articles, inputs, model, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO NOTHING`,
+    `INSERT INTO reports (id, title, period_label, article_key, report, articles, inputs, model, created_at, created_ip)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING`,
     [
       entry.id,
       entry.report.title,
@@ -112,6 +121,7 @@ export async function saveReport(entry) {
       JSON.stringify(entry.inputs ?? null),
       entry.model,
       entry.createdAt,
+      ip,
     ],
   )
 }
@@ -151,17 +161,37 @@ export async function updateReport(id, report, articles) {
   )
 }
 
-// 보고서를 만든 브라우저 번호 (11/08부터 기록, 그 전 보고서는 null)
-export async function reportOwner(id) {
-  if (!dbEnabled()) return memoryReports.find((x) => x.id === id)?.report?.createdBy ?? null
-  const { rows } = await query("SELECT report->>'createdBy' AS owner FROM reports WHERE id = $1", [id])
-  return rows[0]?.owner ?? null
+// 보고서를 만든 IP (11/08부터 기록, 그 전 보고서는 null → 관리 페이지에서만 지움)
+export async function reportOwnerIp(id) {
+  if (!dbEnabled()) return memoryReportIps.get(id) ?? null
+  const { rows } = await query('SELECT created_ip FROM reports WHERE id = $1', [id])
+  return rows[0]?.created_ip ?? null
+}
+
+// 보고서 자동 삭제: 만든 지 days일이 지난 보고서를 지운다. 지운 개수를 돌려준다
+export async function deleteReportsOlderThan(days) {
+  if (!(days > 0)) return 0
+  const cutoff = Date.now() - days * 86_400_000
+  if (!dbEnabled()) {
+    let n = 0
+    for (let i = memoryReports.length - 1; i >= 0; i--) {
+      if (Date.parse(memoryReports[i].createdAt) < cutoff) {
+        memoryReportIps.delete(memoryReports[i].id)
+        memoryReports.splice(i, 1)
+        n++
+      }
+    }
+    return n
+  }
+  const { rowCount } = await query(`DELETE FROM reports WHERE created_at < now() - make_interval(days => $1)`, [days])
+  return rowCount
 }
 
 export async function deleteReport(id) {
   if (!dbEnabled()) {
     const i = memoryReports.findIndex((x) => x.id === id)
     if (i >= 0) memoryReports.splice(i, 1)
+    memoryReportIps.delete(id)
     return
   }
   await query('DELETE FROM reports WHERE id = $1', [id])

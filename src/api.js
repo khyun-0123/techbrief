@@ -170,6 +170,25 @@ export function importReports(reports) {
   return postJson('/api/reports/import', { reports })
 }
 
+// 관리 페이지 보고서 관리: 전체 목록(만든 IP 포함) · 자동 삭제 주기 (11/08)
+export async function fetchAdminReports() {
+  const res = await fetch('/api/admin/reports')
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? '보고서 목록을 불러오지 못했어요')
+  return data
+}
+
+export async function saveReportRetentionApi(days) {
+  const res = await fetch('/api/admin/reports/retention', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ days }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? '자동 삭제 설정을 저장하지 못했어요')
+  return data
+}
+
 export async function deleteReportApi(id, clientId) {
   const res = await fetch(`/api/reports/${encodeURIComponent(id)}?client=${encodeURIComponent(clientId ?? '')}`, { method: 'DELETE' })
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '보고서를 지우지 못했어요')
