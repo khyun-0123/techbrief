@@ -117,7 +117,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
         {report.warnings?.length > 0 &&
           (stacked ? (
             <details className="report-warnings-fold">
-              <summary>⚠ 확인할 점 {report.warnings.length}개</summary>
+              <summary>확인할 점 {report.warnings.length}개</summary>
               <ul className="report-warnings">
                 {report.warnings.map((w) => (
                   <li key={w}>{w}</li>
@@ -125,12 +125,22 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
               </ul>
             </details>
           ) : (
-            <ul className="report-warnings">
-              {report.warnings.map((w) => (
-                <li key={w}>⚠ {w}</li>
-              ))}
-            </ul>
+            <div className="report-warnings">
+              <p className="report-warnings-title">확인할 점 {report.warnings.length}개</p>
+              <ul>
+                {report.warnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            </div>
           ))}
+
+        {/* AI 해설 안내는 보고서마다 한 번만 (11/09 디자인 정리, 28 문서 4장). 섹션에는 짧은 표시만 */}
+        {SECTIONS.some(([key]) => (report.sections[key]?.bullets ?? []).some((b) => !b.excluded && kindOf(b) === 'ai')) && (
+          <p className="report-ai-notice">
+            <span className="report-ai-chip">AI 해설·제안</span> 표시가 붙은 줄은 기사에서 확인된 내용이 아니에요. 확인한 뒤에 쓰세요.
+          </p>
+        )}
 
         {SECTIONS.map(([key, label]) => {
           const list = (report.sections[key]?.bullets ?? []).map((b, i) => ({ b, i }))
@@ -140,7 +150,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
           return (
             <section key={key} className="report-section">
               <div className="report-section-head">
-                <h3>■ {label}</h3>
+                <h3>{label}</h3>
                 {onRegenerate && (
                   <button type="button" className="btn-text" onClick={() => onRegenerate(key)} disabled={working}>
                     {regenKey === key ? '다시 쓰는 중…' : '다시 쓰기'}
@@ -173,7 +183,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
               )}
               {ai.length > 0 && (
                 <div className="report-ai">
-                  <p className="report-ai-label">AI 해설·제안 · 기사에서 확인된 내용이 아니에요, 확인 후 쓰세요</p>
+                  <p className="report-ai-label">AI 해설·제안</p>
                   <ul className="report-bullets">
                     {ai.map(({ b, i }) => (
                       <li key={i}>

@@ -581,9 +581,8 @@
   gap: 28px;
   padding: 36px 32px 28px;
   overflow: hidden;
-  /* LG 공식 그라데이션 「Deep Heritage Red → 검정」을 아래쪽에만 은은하게 (레드는 강조로만) */
+  /* 11/09 디자인 정리: 아래쪽 빨간 빛 번짐을 뺐다. 레드는 「새 신호」 표시 같은 점 강조에만 쓴다 (20 문서) */
   background:
-    radial-gradient(circle at 100% 100%, rgb(165 0 52 / 55%), transparent 60%),
     radial-gradient(rgb(255 255 255 / 7%) 1px, transparent 1px) 0 0 / 18px 18px,
     linear-gradient(160deg, var(--primitive-color-warm-gray-15) 0%, var(--primitive-color-warm-gray-5) 100%);
   color: #fff;
