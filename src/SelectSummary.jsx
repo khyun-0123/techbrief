@@ -120,7 +120,7 @@ function SelectSummary({
             </div>
           </div>
         )}
-        {job?.status === 'error' && <p className="ai-error">요약 오류: {job.error}</p>}
+        {job?.status === 'error' && <p className="ai-error" role="alert">요약 오류: {job.error}</p>}
         {ai ? (
           <>
             <SummaryItems summary={ai.summary} />

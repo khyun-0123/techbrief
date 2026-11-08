@@ -307,7 +307,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
                 )}
               </p>
             )}
-            {error && <p className="ai-error">{error}</p>}
+            {error && <p className="ai-error" role="alert">{error}</p>}
             <button type="button" className="btn primary composer-go" onClick={handleSend} disabled={!canSend} title={aiBlocked ? AI_BLOCKED_TITLE : picked.length === 0 ? '왼쪽에서 보고서에 넣을 기사를 체크하세요' : undefined}>
               {sending ? '대기열에 넣는 중…' : `체크한 기사 ${articles.length}건으로 보고서 만들기`}
             </button>

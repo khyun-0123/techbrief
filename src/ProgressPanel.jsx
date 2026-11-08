@@ -9,9 +9,10 @@ function seconds(ms) {
   return s >= 60 ? `${Math.floor(s / 60)}분 ${s % 60}초` : `${s}초`
 }
 
-function Gauge({ value, status }) {
+// label: 무엇의 진행인지 (스크린리더가 「진행 표시줄 40%」만 읽지 않게)
+function Gauge({ value, status, label }) {
   return (
-    <div className={`gauge gauge-${status}`} role="progressbar" aria-valuenow={value} aria-valuemin={0} aria-valuemax={100}>
+    <div className={`gauge gauge-${status}`} role="progressbar" aria-label={label} aria-valuenow={value} aria-valuemin={0} aria-valuemax={100}>
       <div className="gauge-fill" style={{ width: `${value}%` }} />
     </div>
   )
@@ -44,7 +45,7 @@ function ReportJobs({ jobs, onAnswer, onCancel, onOpenReport, onHide }) {
           </div>
           {['running', 'need_confirm', 'queued'].includes(j.status) && (
             <>
-              <Gauge value={j.progress ?? 0} status="running" />
+              <Gauge value={j.progress ?? 0} status="running" label={`보고서 「${j.title}」 진행`} />
               <p className="progress-sub">{j.step}</p>
             </>
           )}
@@ -80,7 +81,7 @@ function ReportJobs({ jobs, onAnswer, onCancel, onOpenReport, onHide }) {
               </button>
             </p>
           )}
-          {j.status === 'error' && <p className="progress-error">{j.error}</p>}
+          {j.status === 'error' && <p className="progress-error" role="alert">{j.error}</p>}
         </li>
       ))}
     </ul>
@@ -113,7 +114,7 @@ function ProgressPanel({ queue, reportJobs = [], onAnswer, onCancel, onOpenRepor
     <aside className="progress-panel" aria-label="AI 요약 진행">
       <div className="progress-head">
         <strong>AI 작업 진행</strong>
-        <span className="progress-count">
+        <span className="progress-count" aria-live="polite">
           {jobs.length > 0 && `요약 ${done}/${jobs.length}`}
           {errors > 0 && ` · 오류 ${errors}`}
           {reports.length > 0 && `${jobs.length > 0 ? ' · ' : ''}보고서 ${reports.filter((j) => j.status === 'done').length}/${reports.length}`}
@@ -130,7 +131,7 @@ function ProgressPanel({ queue, reportJobs = [], onAnswer, onCancel, onOpenRepor
 
       {jobs.length > 0 && (
         <>
-          <Gauge value={overall} status={active ? 'running' : 'done'} />
+          <Gauge value={overall} status={active ? 'running' : 'done'} label="전체 요약 진행" />
           <p className="progress-sub">
             {active ? `요약 ${overall}% · 남은 시간 약 ${seconds(remainingMs)} (예상)` : '모든 요약이 끝났어요'}
           </p>
@@ -173,8 +174,8 @@ function ProgressPanel({ queue, reportJobs = [], onAnswer, onCancel, onOpenRepor
                       </button>
                     )}
                   </div>
-                  <Gauge value={value} status={job.status} />
-                  {job.status === 'error' && <p className="progress-error">{job.error}</p>}
+                  <Gauge value={value} status={job.status} label={`요약 「${job.title ?? '기사'}」 진행`} />
+                  {job.status === 'error' && <p className="progress-error" role="alert">{job.error}</p>}
                 </li>
               )
             })}

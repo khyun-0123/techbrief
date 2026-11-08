@@ -255,7 +255,7 @@ function TechTrends({ onPick }) {
         ))}
       </div>
 
-      {error && <p className="ai-error">{error}</p>}
+      {error && <p className="ai-error" role="alert">{error}</p>}
       {data && (data.terms === 0 ? (
         <p className="tt-empty">{data.status.running ? `기사에서 기술 용어를 찾는 중이에요 (${data.status.phase}). 처음 한 번은 30분쯤 걸려요.` : '아직 찾은 기술 용어가 없어요.'}</p>
       ) : tab === 'composite' ? (

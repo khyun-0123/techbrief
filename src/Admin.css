@@ -779,6 +779,11 @@
   box-shadow: 0 0 0 3px rgb(0 0 0 / 10%);
 }
 
+.adm-field input:focus-visible {
+  outline: 2px solid var(--tb-color-line-focus);
+  outline-offset: 2px;
+}
+
 .adm-field input[aria-invalid='true'] {
   border-color: var(--tb-color-danger);
 }
@@ -870,8 +875,8 @@
 }
 
 .adm-login-submit:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgb(0 0 0 / 25%);
+  outline: 2px solid var(--tb-color-line-focus);
+  outline-offset: 2px;
 }
 
 .adm-login-submit:disabled {

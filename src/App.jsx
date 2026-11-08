@@ -794,6 +794,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         <button
           type="button"
           className={screen === 'dashboard' ? 'tab active' : 'tab'}
+          aria-current={screen === 'dashboard' ? 'page' : undefined}
           onClick={() => setScreen('dashboard')}
         >
           대시보드
@@ -801,6 +802,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         <button
           type="button"
           className={screen === 'collect' ? 'tab active' : 'tab'}
+          aria-current={screen === 'collect' ? 'page' : undefined}
           onClick={() => setScreen('collect')}
         >
           자료 현황
@@ -808,6 +810,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         <button
           type="button"
           className={screen === 'select' ? 'tab active' : 'tab'}
+          aria-current={screen === 'select' ? 'page' : undefined}
           onClick={() => setScreen('select')}
         >
           선별·요약
@@ -815,6 +818,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         <button
           type="button"
           className={screen === 'archive' ? 'tab active' : 'tab'}
+          aria-current={screen === 'archive' ? 'page' : undefined}
           onClick={() => {
             setArchiveTarget(null)
             setScreen('archive')
@@ -823,7 +827,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           보고서함{reports.length > 0 && <span className="tab-count">{reports.length}</span>}
         </button>
         {isTest && (
-          <button type="button" className={screen === 'tools' ? 'tab active' : 'tab'} onClick={() => setScreen('tools')}>
+          <button
+            type="button"
+            className={screen === 'tools' ? 'tab active' : 'tab'}
+            aria-current={screen === 'tools' ? 'page' : undefined}
+            onClick={() => setScreen('tools')}
+          >
             시험 도구
           </button>
         )}
@@ -987,7 +996,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               </button>
             </div>
           </header>
-          {refreshError && <p className="ai-error">{refreshError}</p>}
+          {refreshError && <p className="ai-error" role="alert">{refreshError}</p>}
           {showAdd && <AddMaterial folders={folders} defaultFolder={targetFolder} onAdded={handleMaterialAdded} onClose={() => setShowAdd(false)} />}
 
           {/* 오늘 수집 숫자 · 키워드 추이는 대시보드로 옮김 (11/07 팀 회의) */}
@@ -1058,7 +1067,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               </div>
               {search ? (
                 <div className="search-banner">
-                  <span>
+                  <span aria-live="polite">
                     <strong>‘{search.query}’</strong> 찾기 결과 · 뉴스 {searchScope(search.period)}
                     {search.articles && ` · 뉴스 ${search.newsCount ?? 0}건 · 논문 ${search.paperCount ?? 0}건`}
                     {search.paperNote && <span className="search-note"> · {search.paperNote}</span>}
@@ -1109,7 +1118,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   자사·자회사 기사 제외 <span className="own-count">{ownCount}건</span>
                 </label>
               </div>
-              {search?.error && <p className="ai-error search-error">{search.error}</p>}
+              {search?.error && <p className="ai-error search-error" role="alert">{search.error}</p>}
 
               {visible.length === 0 ? (
                 <p className="empty">

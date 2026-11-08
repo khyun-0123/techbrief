@@ -197,9 +197,17 @@
 }
 
 .tb-input:focus {
-  outline: none;
   border-color: var(--tb-color-line-focus);
   box-shadow: 0 0 0 3px var(--tb-color-bg-strong);
+}
+
+.tb-input:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.tb-input:focus-visible {
+  outline: 2px solid var(--tb-color-line-focus);
+  outline-offset: 2px;
 }
 
 .tb-input[aria-invalid='true'] {
