@@ -1185,12 +1185,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   </colgroup>
                   <thead>
                     <tr>
-                      {/* 정렬 (11/09): 읽는 글(제목 · 출처)은 왼쪽, 짧은 값(발행 · 키워드)은 가운데, 버튼(작업)은 오른쪽 */}
-                      <th>제목</th>
-                      <th>출처</th>
+                      {/* 정렬 (11/09 조장): 머리글은 모두 가운데. 칸 안은 출처 · 발행 · 키워드 · 작업 가운데, 제목 본문만 왼쪽(여러 줄 글이라 읽기 쉽게) */}
+                      <th className="center">제목</th>
+                      <th className="center">출처</th>
                       <th className="center">발행</th>
                       <th className="center">키워드</th>
-                      <th className="right">작업</th>
+                      <th className="center">작업</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1286,7 +1286,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                               )}
                             </div>
                           </td>
-                          <td className="source" title={`${a.source} · ${TIER_TITLE[a.tier ?? 3]}`}>
+                          <td className="source center" title={`${a.source} · ${TIER_TITLE[a.tier ?? 3]}`}>
                             {a.tier && a.tier <= 2 && <span className={`tier tier-${a.tier}`}>{a.tier}차</span>}
                             {a.source}
                           </td>
@@ -1295,33 +1295,29 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                             <span className="chip kw-chip">{a.keyword}</span>
                           </td>
                           <td className="actions">
-                            {/* 작업 (11/09 다시 짬): 자리 두 칸을 고정 — 왼쪽 요약(글자 버튼) · 오른쪽 선별(폭이 같은 버튼).
-                                폴더 옮기기 · 빼기는 「✓ 선별됨 ▾」 메뉴 안으로 (SelectToggle) */}
+                            {/* 작업 (11/09 조장: 같은 모양 버튼 두 개): 요약 · 선별 버튼을 같은 폭 · 같은 높이로.
+                                내용을 여는 버튼(요약 보기)은 옅은 테두리, 하는 버튼(요약하기 · + 선별)은 진한 테두리 · 굵게, 선별됨은 옅은 바탕.
+                                폴더 옮기기 · 빼기는 「✓ 선별됨 ▾」 메뉴 안 (SelectToggle) */}
                             <div className="row-actions">
-                              <span className="slot-summary">
-                                {ai ? (
-                                  <button
-                                    type="button"
-                                    className={open ? 'btn-text summary-link open' : 'btn-text summary-link'}
-                                    aria-expanded={Boolean(open)}
-                                    onClick={() => setOpenSummaryId(open ? null : a.id)}
-                                  >
-                                    {open ? '요약 접기' : '요약 보기'}
-                                  </button>
-                                ) : job?.status === 'queued' || job?.status === 'running' ? (
-                                  <span className="summary-wait">{job.status === 'running' ? '요약 중…' : '요약 대기'}</span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className="btn-text summary-add"
-                                    title={a.aiAllowed === false ? 'AI 요약을 허용하지 않은 자료예요' : opsValue.aiBlocked ? AI_BLOCKED_TITLE : job?.status === 'error' ? `요약 오류: ${job.error}` : 'AI로 6항목 요약 (선별하지 않아도 됨)'}
-                                    disabled={opsValue.aiBlocked || a.aiAllowed === false}
-                                    onClick={() => queue.enqueue(a)}
-                                  >
-                                    {job?.status === 'error' ? '요약 재시도' : '+ 요약'}
-                                  </button>
-                                )}
-                              </span>
+                              {ai ? (
+                                <button type="button" className={open ? 'act-btn view open' : 'act-btn view'} aria-expanded={Boolean(open)} onClick={() => setOpenSummaryId(open ? null : a.id)}>
+                                  {open ? '요약 접기' : '요약 보기'}
+                                </button>
+                              ) : job?.status === 'queued' || job?.status === 'running' ? (
+                                <button type="button" className="act-btn wait" disabled>
+                                  {job.status === 'running' ? '요약 중…' : '요약 대기'}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className={job?.status === 'error' ? 'act-btn do error' : 'act-btn do'}
+                                  title={a.aiAllowed === false ? 'AI 요약을 허용하지 않은 자료예요' : opsValue.aiBlocked ? AI_BLOCKED_TITLE : job?.status === 'error' ? `요약 오류: ${job.error}` : 'AI로 6항목 요약 (선별하지 않아도 됨)'}
+                                  disabled={opsValue.aiBlocked || a.aiAllowed === false}
+                                  onClick={() => queue.enqueue(a)}
+                                >
+                                  {job?.status === 'error' ? '다시 요약' : '요약하기'}
+                                </button>
+                              )}
                               <SelectToggle
                                 selected={selected}
                                 folders={folders}

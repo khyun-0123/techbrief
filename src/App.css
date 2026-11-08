@@ -203,7 +203,7 @@ select {
 }
 
 .col-actions {
-  width: 212px; /* 요약 72 + 간격 12 + 선별 96 + 칸 여백 32 (11/09) */
+  width: 228px; /* 버튼 92 × 2 + 간격 8 + 칸 여백 32 (11/09) */
 }
 
 /* 작업 칸 버튼은 글자가 바뀌어도 폭이 그대로 */
@@ -373,21 +373,6 @@ tr.row-open td {
   white-space: nowrap;
 }
 
-/* 요약이 있는 기사의 「요약 보기」는 테두리 없는 글자 버튼 (11/09 디자인 정리: 한 화면 버튼 40개 → 줄마다 상자 하나).
-   테두리 상자는 할 일(요약 추가 · 선별 추가)에만 쓴다 */
-.summary-link {
-  min-width: 72px;
-  margin-right: 6px;
-  color: var(--tb-color-text);
-  font-size: 14px;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.summary-link.open {
-  background: var(--tb-color-bg-strong);
-  text-decoration: none;
-}
 
 .btn {
   padding: 8px 16px;
@@ -2711,61 +2696,63 @@ a.brand:focus-visible {
   text-align: right;
 }
 
-/* 작업 칸 (11/09 다시 짬): 자리 두 칸 고정 → 줄마다 버튼 위치가 같다
-   왼쪽: 요약(글자 버튼, 폭 72) · 오른쪽: 선별(테두리 버튼, 폭 96, 선별 전후 같은 폭) */
+/* 작업 칸 (11/09 조장: 같은 모양 버튼 두 개) — 요약 · 선별 버튼 폭 92 · 높이 32로 같게, 줄마다 위치 같음
+   보기(옅은 테두리) / 하기(진한 테두리 · 굵게) / 기다림(흐리게) / 선별됨(옅은 바탕) */
 .row-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-}
-.slot-summary {
-  display: inline-flex;
   justify-content: center;
-  width: 72px;
+  gap: 8px;
 }
-.row-actions .summary-link,
-.row-actions .summary-add {
-  min-width: 0;
-  margin: 0;
-  padding: 6px 4px;
-  font-size: 13px;
-  white-space: nowrap;
-}
-.row-actions .summary-add {
-  color: var(--tb-color-text-sub);
-  font-weight: 600;
-}
-.summary-wait {
-  color: var(--tb-color-text-faint);
-  font-size: 13px;
-}
+.act-btn,
 .sel-toggle {
-  width: 96px;
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--tb-color-text);
+  flex: none;
+  width: 92px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--tb-color-line);
   border-radius: var(--tb-radius-button);
   background: var(--tb-color-surface);
   color: var(--tb-color-text);
   font: inherit;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
 }
+.act-btn:hover:not(:disabled),
 .sel-toggle:hover {
   background: var(--tb-color-bg-strong);
 }
-/* 선별됨: 검정 면 대신 옅은 바탕 + 검정 글자 (한 화면에 검정 버튼이 여러 개 생기지 않게, 20 문서 원칙 3) */
+.act-btn.do,
+.sel-toggle:not(.on) {
+  border-color: var(--tb-color-text);
+  font-weight: 700;
+}
+.act-btn.view.open {
+  background: var(--tb-color-bg-strong);
+}
+.act-btn.error {
+  border-color: var(--tb-color-danger);
+  color: var(--tb-color-danger);
+}
+.act-btn.wait,
+.act-btn:disabled {
+  border-style: dashed;
+  color: var(--tb-color-text-faint);
+  cursor: default;
+}
+/* 선별됨: 검정 면 대신 옅은 바탕 (한 화면에 검정 버튼이 여러 개 생기지 않게, 20 문서 원칙 3) */
 .sel-toggle.on {
   border-color: var(--tb-color-line);
   background: var(--tb-color-bg-strong);
+  font-weight: 700;
 }
 .sel-toggle.on span {
   margin-left: 2px;
   font-size: 10px;
 }
+.act-btn:focus-visible,
 .sel-toggle:focus-visible {
   outline: 2px solid var(--tb-color-line-focus);
   outline-offset: 2px;
