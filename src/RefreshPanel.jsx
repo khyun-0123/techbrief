@@ -118,7 +118,7 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, canEdi
           <p className="hint">앱이 켜져 있을 때만 자동으로 돌아요. 꺼져 있던 동안 놓친 예정은 켜진 뒤 한 번 실행해요.</p>
         </div>
       )}
-      {error && <p className="ai-error">{error}</p>}
+      {error && <p className="ai-error" role="alert">{error}</p>}
     </div>
   )
 }

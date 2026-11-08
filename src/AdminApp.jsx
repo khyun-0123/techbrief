@@ -28,6 +28,7 @@ import LogoMark from './Logo.jsx'
 import AdminRefresh from './AdminRefresh.jsx'
 import AdminUsage from './AdminUsage.jsx'
 import AdminOps from './AdminOps.jsx'
+import AdminReports from './AdminReports.jsx'
 import AdminSources from './AdminSources.jsx'
 import { OPS_LABEL } from './ops.js'
 
@@ -38,6 +39,7 @@ const SECTIONS = [
   ['refresh', '자동 최신화', '언제 기사를 모으고, 자동 요약을 할지 정해요.'],
   ['llm', 'AI 모델', '요약·보고서에 쓸 AI 서버를 골라요. 모든 사용자에게 바로 적용돼요.'],
   ['features', '실험 기능', '새 기능을 테스트 페이지에서 먼저 써 보고, 괜찮으면 모두에게 켜요.'],
+  ['reports', '보고서 관리', '모든 보고서를 보고 지워요. 오래된 보고서 자동 삭제 주기를 정해요. 일반 화면에서는 관리자도 자기 보고서만 지울 수 있어요.'],
   ['ops', '운영', '일반 화면을 점검 중 · AI 기능 정지 · 공지로 바꾸고, 서버를 다시 켜요.'],
   ['log', '변경 기록', '언제 누가 무엇을 바꿨는지 최근 200건까지 남아요.'],
 ]
@@ -788,6 +790,16 @@ function AdminApp() {
             health={health}
             refreshRunning={Boolean(refresh?.running)}
             dirtyCount={dirty.length}
+          />
+        )}
+
+        {section === 'reports' && (
+          <AdminReports
+            onToast={setToast}
+            onChanged={() => {
+              fetchAdminLog().then(setLog).catch(() => {})
+              fetchHealth().then(setHealth).catch(() => {})
+            }}
           />
         )}
 

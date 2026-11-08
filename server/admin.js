@@ -57,6 +57,32 @@ function cookieHeader(token, maxAgeSec) {
 }
 
 // 로그인한 관리자면 { name }, 아니면 null
+// 관리자 권한은 관리 페이지(/admin, /admin/test)에서 보낸 요청에만 쓴다 (11/08 원칙).
+// 일반 화면에서는 관리자로 로그인해 있어도 일반 사용자와 같은 권한이다. 화면은 같은 출처라 Referer가 항상 붙는다
+export function adminHere(req) {
+  const admin = adminOf(req)
+  if (!admin) return null
+  let page = ''
+  try {
+    page = new URL(req.headers.referer ?? '').pathname
+  } catch {
+    return null
+  }
+  return page === '/admin' || page.startsWith('/admin/') ? admin : null
+}
+
+// 요청한 사람의 IP. 같은 컴퓨터의 프록시(Caddy · cloudflared 등)를 거쳐 오면 프록시가 넣어 준 원래 주소를 쓴다
+// 주의: SSH · VS Code 포트 포워딩으로 들어오면 모두 127.0.0.1로 같다 (11/08 확인)
+// 맨 뒤 값을 쓴다: 프록시는 받은 X-Forwarded-For 뒤에 실제 주소를 덧붙이므로, 앞쪽 값은 사용자가 지어 보낼 수 있다 (29 문서)
+export function clientIp(req) {
+  const remote = String(req.socket?.remoteAddress ?? '').replace(/^::ffff:/, '')
+  if (remote === '127.0.0.1' || remote === '::1') {
+    const forwarded = String(req.headers['x-forwarded-for'] ?? '').split(',').at(-1).trim()
+    if (forwarded) return forwarded.replace(/^::ffff:/, '').slice(0, 64)
+  }
+  return remote || null
+}
+
 export function adminOf(req) {
   const token = readCookie(req, COOKIE)
   const session = token && sessions.get(token)

@@ -63,9 +63,11 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
   const [q, setQ] = useState('')
   const [mine, setMine] = useState(false)
   const me = clientId()
+  // 내가 만든 보고서: 공용 보고서함이면 서버가 IP로 알려 준 mine, 브라우저에만 있으면 예전처럼 브라우저 번호 (11/08)
+  const isMine = (r) => r.mine ?? r.report.createdBy === me
   const open = reports.find((r) => r.id === openId) ?? null
 
-  const results = reports.filter((r) => (!mine || r.report.createdBy === me) && (!q.trim() || norm(textOf(r)).includes(norm(q))))
+  const results = reports.filter((r) => (!mine || isMine(r)) && (!q.trim() || norm(textOf(r)).includes(norm(q))))
   const groups = []
   for (const r of results) {
     const label = dayLabel(r.createdAt)
@@ -123,7 +125,7 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
             <h1>{open.report.title}</h1>
             <span className="hint">
               {formatDate(open.createdAt, true)}
-              {open.report.createdBy === me && ' · 내가 만듦'}
+              {isMine(open) && ' · 내가 만듦'}
             </span>
           </div>
         </header>
@@ -180,7 +182,7 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
               전체 {reports.length}
             </button>
             <button type="button" role="tab" aria-selected={mine} className={mine ? 'active' : ''} onClick={() => setMine(true)} title="이 브라우저에서 만든 보고서 (11/08부터 기록)">
-              내가 만든 {reports.filter((r) => r.report.createdBy === me).length}
+              내가 만든 {reports.filter(isMine).length}
             </button>
           </div>
         </div>
@@ -209,7 +211,7 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
                           <span className="archive-row-main">
                             <span className="title">
                               <Mark text={r.report.title} q={q.trim()} />
-                              {r.report.createdBy === me && <span className="mine-badge">내가 만듦</span>}
+                              {isMine(r) && <span className="mine-badge">내가 만듦</span>}
                             </span>
                             {r.report.direction && <span className="archive-direction">방향: <Mark text={r.report.direction} q={q.trim()} /></span>}
                             <span className="archive-preview">

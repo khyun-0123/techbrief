@@ -110,7 +110,7 @@ function AddMaterial({ folders, defaultFolder, selectByDefault = false, onAdded,
             <input type="file" accept=".pdf,.txt,.md,.csv,.html,.htm,.eml" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
             <small>
               PDF · TXT · MD · HTML · EML(메일 저장 파일), 10MB까지. Word · PPT는 PDF로 저장해 올려 주세요. 스캔한 그림 PDF는 글자를 읽지 못해요.
-              {file && file.size > MAX_FILE && <strong className="ai-error"> 파일이 10MB를 넘어요.</strong>}
+              {file && file.size > MAX_FILE && <strong className="ai-error" role="alert"> 파일이 10MB를 넘어요.</strong>}
             </small>
           </label>
         )}
@@ -162,7 +162,7 @@ function AddMaterial({ folders, defaultFolder, selectByDefault = false, onAdded,
             </label>
           )}
         </div>
-        {error && <p className="ai-error">{error}</p>}
+        {error && <p className="ai-error" role="alert">{error}</p>}
         {done && (
           <p className="hint" role="status">
             {done}

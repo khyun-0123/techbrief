@@ -4,7 +4,7 @@
 // - 복원용은 JSON (폴더처럼 겹친 구조를 그대로 담음). 엑셀로 볼 선별 목록은 CSV로 따로
 // - 「이 파일의 사용자로 이어 쓰기」: 브라우저 번호도 옮긴다 → 「내가 만든 보고서」 · 내 보고서 · 내 자료 지우기 권한이 따라옴
 // 보고서함 · 직접 추가 자료 · AI 요약은 서버에 있어 어느 브라우저에서나 보이므로 파일에 넣지 않는다
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { clientId } from './usage.js'
 import { load } from './utils.js'
 
@@ -40,6 +40,13 @@ function DataMove({ rows, onClose }) {
   const [file, setFile] = useState(null) // { data, name }
   const [error, setError] = useState('')
   const [mode, setMode] = useState('merge')
+
+  // Esc로 닫기 (다른 확인 창과 같게)
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
   const [adopt, setAdopt] = useState(true)
   const myId = clientId()
 
@@ -111,7 +118,7 @@ function DataMove({ rows, onClose }) {
       <section className="panel modal data-move" role="dialog" aria-modal="true" aria-label="내 자료 옮기기">
         <div className="modal-head">
           <h2>내 자료 옮기기</h2>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="닫기">
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="닫기" autoFocus>
             ×
           </button>
         </div>
@@ -132,7 +139,7 @@ function DataMove({ rows, onClose }) {
 
         <h3>불러오기</h3>
         <input type="file" accept=".json,application/json" onChange={(e) => readFile(e.target.files?.[0])} aria-label="내 자료 파일 고르기" />
-        {error && <p className="ai-error">{error}</p>}
+        {error && <p className="ai-error" role="alert">{error}</p>}
         {file && (
           <div className="data-move-preview">
             <p>

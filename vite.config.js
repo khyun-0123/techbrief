@@ -1,3 +1,4 @@
+import path from 'node:path'
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv } from 'vite'
 
@@ -28,6 +29,24 @@ export default defineConfig(({ mode }) => {
       // 공용 서버에서는 계정마다 배정된 PORT를 쓴다 (예: user38 → 3038)
       port: Number(process.env.PORT ?? 5173),
       strictPort: true,
+      // 개발 서버는 프로젝트 폴더의 파일을 주소로 그대로 내려 준다 (예: /gcp-key.json → 11/08 실제로 열렸음).
+      // 화면이 쓰지 않는 키 · 로그 · 서버 코드 · 문서는 막는다. 앞 6줄은 Vite 기본값 (deny를 적으면 기본값이 사라져서 같이 적음)
+      fs: {
+        deny: [
+          '.env',
+          '.env.*',
+          '*.{crt,pem,key,p12,pfx,cer,der}',
+          '.npmrc',
+          '.yarnrc.yml',
+          '**/.git/**',
+          '*-key.json',
+          '*.log',
+          'CLAUDE.md',
+          `${path.resolve('server')}/**`,
+          `${path.resolve('scripts')}/**`,
+          `${path.resolve('docs')}/**`,
+        ],
+      },
     },
   }
 })

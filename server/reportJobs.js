@@ -40,7 +40,7 @@ export function setDraftBuilder(fn) {
 }
 
 function pub(job) {
-  const { body: _b, entry: _e, waiter: _w, cancel: _c, ...rest } = job
+  const { body: _b, entry: _e, waiter: _w, cancel: _c, ip: _ip, ...rest } = job // IP는 화면에 보내지 않음
   const queued = [...jobs.values()].filter((j) => j.status === 'queued')
   return { ...rest, queuePos: job.status === 'queued' ? queued.findIndex((j) => j.id === job.id) + 1 : 0 }
 }
@@ -57,11 +57,13 @@ function step(job, label, progress) {
   job.updatedAt = new Date().toISOString()
 }
 
-export function addJob(body, clientId) {
+// ip: 요청한 사람의 IP → 만든 보고서에 기록 (일반 화면에서 그 IP만 지울 수 있음)
+export function addJob(body, clientId, ip = null) {
   const level = LEVELS[body.level] ? body.level : 'selected'
   const job = {
     id: `rj-${randomUUID().slice(0, 8)}`,
     clientId: String(clientId ?? '').slice(0, 64) || null,
+    ip,
     title: String(body.title ?? '').trim() || '테크 동향 브리핑',
     level,
     levelLabel: LEVELS[level],
@@ -199,7 +201,8 @@ async function run(job) {
     if (left) entry.report.warnings.splice(1, 0, `AI 해설·제안 ${left}개는 근거를 찾지 못했어요 — 확인 후 쓰세요`)
   }
   step(job, '저장하는 중', 95)
-  if (dbEnabled()) await saveReport(entry)
+  if (dbEnabled()) await saveReport(entry, job.ip)
+  entry.mine = true // 만든 사람 화면에서 바로 지울 수 있게
   job.entry = entry
   job.entryId = entry.id
   job.result = entry // 화면이 바로 보고서함에 넣는다 (DB가 없을 때도)

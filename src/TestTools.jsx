@@ -82,7 +82,7 @@ function TestTools({ providers }) {
             {search?.loading ? '찾는 중…' : '네이버에서 찾기'}
           </button>
         </form>
-        {search?.error && <p className="ai-error">{search.error}</p>}
+        {search?.error && <p className="ai-error" role="alert">{search.error}</p>}
         {search?.result && (
           <>
             <dl className="tools-stats">
@@ -167,7 +167,7 @@ function TestTools({ providers }) {
                         )}
                       </h3>
                       {r.loading && <p className="hint">요약 중… (한 번에 하나씩 처리해요)</p>}
-                      {r.error && <p className="ai-error">{r.error}</p>}
+                      {r.error && <p className="ai-error" role="alert">{r.error}</p>}
                       {r.result && (
                         <>
                           <SummaryItems summary={r.result.summary} />
