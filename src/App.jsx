@@ -1185,8 +1185,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   </colgroup>
                   <thead>
                     <tr>
-                      {/* 정렬 (11/09 조장): 머리글은 모두 가운데. 칸 안은 출처 · 발행 · 키워드 · 작업 가운데, 제목 본문만 왼쪽(여러 줄 글이라 읽기 쉽게) */}
-                      <th className="center">제목</th>
+                      {/* 정렬 (11/09 조장): 머리글은 그 칸 내용과 같은 쪽. 제목(여러 줄 글)만 왼쪽, 출처 · 발행 · 키워드 · 작업은 가운데 */}
+                      <th>제목</th>
                       <th className="center">출처</th>
                       <th className="center">발행</th>
                       <th className="center">키워드</th>
