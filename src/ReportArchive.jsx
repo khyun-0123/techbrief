@@ -5,8 +5,8 @@
 // - 지우기: 관리자 또는 그 보고서를 만든 브라우저
 // - 보고서를 열었을 때 그 보고서에 쓴 기사가 아직 선별 목록에 있으면 정리할지 한 번 묻는다
 // onDelete가 없으면 「지우기」를 숨긴다 (공용 보고서함은 관리자만 지움, 17 문서)
-import { useState } from 'react'
-import { copyText, formatDate, toPlainText } from './reportStore.js'
+import { useEffect, useState } from 'react'
+import { copyText, toPlainText } from './reportStore.js'
 import { clientId, track } from './usage.js'
 import ReportView from './ReportView.jsx'
 import { load } from './utils.js'
@@ -56,8 +56,12 @@ function dayLabel(iso) {
 }
 
 // initialId가 있으면(진행 창 「보고서함에서 보기」) 그 보고서를 바로 연다. 없으면 목록부터
-function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, initialId, selectedIds = [], onCleanup }) {
+function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, initialId, selectedIds = [], onCleanup, onOpened }) {
   const [openId, setOpenId] = useState(initialId ?? null)
+  useEffect(() => {
+    if (openId) onOpened?.(openId) // 「새」 표시 지우기
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId])
   const [asked, setAsked] = useState(() => load(ASKED_KEY, []))
   const [notice, setNotice] = useState('')
   const [q, setQ] = useState('')
@@ -110,46 +114,44 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
   if (open) {
     return (
       <main className="page page-wide archive-page">
-        <header className="archive-head">
-          <button
-            type="button"
-            className="btn"
-            onClick={() => {
-              setOpenId(null)
-              setNotice('')
-            }}
-          >
-            ← 보고서 목록
-          </button>
-          <div className="archive-open-title">
-            <h1>{open.report.title}</h1>
-            <span className="hint">
-              {formatDate(open.createdAt, true)}
-              {isMine(open) && ' · 내가 만듦'}
-            </span>
-          </div>
-          {/* 선별에 남은 기사 묻기: 큰 상자 대신 제목 줄 오른쪽 한 줄 (11/09 조장: 보고서 위 자리를 너무 차지함) */}
-          {askCleanup && (
-            <div className="cleanup-ask" role="status">
-              <span title="이 보고서에 쓴 기사가 아직 선별 목록에 있어요">
-                선별에 남은 기사 <strong>{leftover.length}건</strong>
-              </span>
-              <button type="button" className="cleanup-btn primary" onClick={() => answerCleanup('archive')} title="「보관」 폴더로 옮겨요 (선별에는 남음)">
-                보관 폴더로
-              </button>
-              <button type="button" className="cleanup-btn" onClick={() => answerCleanup('remove')} title="선별 목록에서 빼요">
-                빼기
-              </button>
-              <button type="button" className="btn-text" onClick={() => answerCleanup('keep')}>
-                그대로
-              </button>
-            </div>
-          )}
-        </header>
         <div className="archive-body">
+          {/* 보고서 화면 (11/09): 위의 큰 제목 줄을 없애고 「← 보고서 목록」 · 선별 정리 · 내보내기를 보고서 위 한 줄(스크롤해도 붙어 있음)에 모음.
+              제목은 보고서 머리(report-doc-head)에 한 번만 */}
           <ReportView
             saved={open}
             onChange={onUpdated}
+            lead={
+              <>
+                <button
+                  type="button"
+                  className="btn-text report-back"
+                  onClick={() => {
+                    setOpenId(null)
+                    setNotice('')
+                  }}
+                >
+                  ← 보고서 목록
+                </button>
+                {isMine(open) && <span className="report-mine">내가 만듦</span>}
+              {/* 선별에 남은 기사 묻기: 큰 상자 대신 제목 줄 오른쪽 한 줄 (11/09 조장: 보고서 위 자리를 너무 차지함) */}
+              {askCleanup && (
+                <div className="cleanup-ask" role="status">
+                  <span title="이 보고서에 쓴 기사가 아직 선별 목록에 있어요">
+                    선별에 남은 기사 <strong>{leftover.length}건</strong>
+                  </span>
+                  <button type="button" className="cleanup-btn primary" onClick={() => answerCleanup('archive')} title="「보관」 폴더로 옮겨요 (선별에는 남음)">
+                    보관 폴더로
+                  </button>
+                  <button type="button" className="cleanup-btn" onClick={() => answerCleanup('remove')} title="선별 목록에서 빼요">
+                    빼기
+                  </button>
+                  <button type="button" className="btn-text" onClick={() => answerCleanup('keep')}>
+                    그대로
+                  </button>
+                </div>
+              )}
+              </>
+            }
             tools={
               <>
                 {notice && <span className="toolbar-note">{notice}</span>}

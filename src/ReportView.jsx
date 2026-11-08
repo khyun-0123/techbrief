@@ -12,7 +12,8 @@ const SUPPLEMENT_LABEL = { data: '우리 자료', wiki: '위키백과', 'data+wi
 
 // tools: 보고서 맨 위 오른쪽 도구 줄 (복사·지우기 등) · onChange(entry): 고친 보고서 저장 (없으면 보기만)
 // stacked: 좁은 칸(선별·요약 오른쪽)에서는 근거 목록을 보고서 아래에
-function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stacked = false }) {
+// lead: 도구 줄 왼쪽에 둘 것 (보고서함의 「← 보고서 목록」 등)
+function ReportView({ saved, onRegenerate, regenKey, busy, tools, lead, onChange, stacked = false }) {
   const { report } = saved
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState('')
@@ -57,7 +58,8 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, onChange, stac
   return (
     <div className={stacked ? 'report-layout stacked' : 'report-layout'}>
       <article className={stacked ? 'report-doc' : 'panel report-doc'}>
-        <div className="report-toolbar">
+        <div className={lead ? 'report-toolbar with-lead' : 'report-toolbar'}>
+          {lead && <div className="report-toolbar-lead">{lead}</div>}
           {exportError && <span className="toolbar-error">{exportError}</span>}
           {tools}
           {stacked ? (

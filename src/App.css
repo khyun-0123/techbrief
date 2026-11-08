@@ -1636,6 +1636,76 @@ a.btn {
   margin: 0;
 }
 
+/* 보고서함 보고서 화면 (11/09): 「← 보고서 목록」 · 선별 정리 · 내보내기를 한 줄에, 스크롤해도 위에 붙어 있게 */
+@media (min-width: 1101px) {
+  /* 넓은 화면은 보고서 칸이 따로 스크롤되므로 도구 줄을 칸 맨 위에 붙인다 (좁은 화면은 페이지 전체가 스크롤돼서 붙이지 않음) */
+  .report-toolbar.with-lead {
+    position: sticky;
+    top: -28px; /* 보고서 칸 위 여백(28px)만큼 올려 맨 위에 붙임 */
+    z-index: 3;
+  }
+}
+.report-toolbar.with-lead {
+  flex-wrap: wrap;
+  margin: -28px -32px 16px;
+  padding: 12px 32px;
+  border-bottom: 1px solid var(--tb-color-line-soft);
+  border-radius: var(--tb-radius-card) var(--tb-radius-card) 0 0;
+  background: var(--tb-color-surface);
+}
+.report-toolbar-lead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-right: auto;
+  min-width: 0;
+}
+.report-back {
+  padding: 6px 10px 6px 4px;
+  color: var(--tb-color-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+.report-mine {
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+}
+.report-toolbar-lead .cleanup-ask {
+  margin-left: 0;
+}
+@media (max-width: 720px) {
+  /* 휴대폰: 보고서 칸 옆 여백을 줄여 글 폭을 넓힌다 (도구 줄도 같은 여백) */
+  .archive-body .report-doc {
+    padding: 16px;
+  }
+  .report-toolbar.with-lead {
+    gap: 6px;
+    margin: -16px -16px 12px;
+    padding: 10px 16px;
+  }
+  .report-toolbar.with-lead .btn {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  .report-toolbar-lead .cleanup-ask {
+    padding: 4px 4px 4px 10px;
+    gap: 4px;
+  }
+  .report-toolbar-lead .cleanup-btn {
+    padding: 0 8px;
+  }
+}
+.tab-new {
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .toolbar-note {
   margin-right: 4px;
   color: var(--tb-color-success);
