@@ -73,10 +73,11 @@ export function adminHere(req) {
 
 // 요청한 사람의 IP. 같은 컴퓨터의 프록시(Caddy · cloudflared 등)를 거쳐 오면 프록시가 넣어 준 원래 주소를 쓴다
 // 주의: SSH · VS Code 포트 포워딩으로 들어오면 모두 127.0.0.1로 같다 (11/08 확인)
+// 맨 뒤 값을 쓴다: 프록시는 받은 X-Forwarded-For 뒤에 실제 주소를 덧붙이므로, 앞쪽 값은 사용자가 지어 보낼 수 있다 (29 문서)
 export function clientIp(req) {
   const remote = String(req.socket?.remoteAddress ?? '').replace(/^::ffff:/, '')
   if (remote === '127.0.0.1' || remote === '::1') {
-    const forwarded = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim()
+    const forwarded = String(req.headers['x-forwarded-for'] ?? '').split(',').at(-1).trim()
     if (forwarded) return forwarded.replace(/^::ffff:/, '').slice(0, 64)
   }
   return remote || null
