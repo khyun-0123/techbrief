@@ -203,7 +203,7 @@ select {
 }
 
 .col-actions {
-  width: 272px; /* 「요약 보기 · ✓ 선별됨 | 폴더 ▾」가 한 줄에 들어가는 폭 (11/09) */
+  width: 212px; /* 요약 72 + 간격 12 + 선별 96 + 칸 여백 32 (11/09) */
 }
 
 /* 작업 칸 버튼은 글자가 바뀌어도 폭이 그대로 */
@@ -2102,11 +2102,11 @@ a.btn {
 
 .fav-title {
   margin: 0;
-  padding-left: 6px; /* 목록 별과 같은 줄에서 시작 */
+  padding-left: 10px; /* 목록 별과 같은 줄에서 시작 */
   font-size: 14px;
 }
 .fav-empty {
-  padding-left: 6px;
+  padding-left: 10px;
 }
 
 .fav-empty {
@@ -2128,9 +2128,9 @@ a.btn {
 .fav-item {
   display: flex;
   align-items: center;
-  gap: 6px; /* 별과 글자 사이 (11/09: 예전엔 별 왼쪽 여백 6 + 글자 왼쪽 여백 8로 벌어져 보였음) */
+  gap: 4px; /* 별과 글자 사이 (11/09) */
   min-height: 32px;
-  padding: 0 4px 0 6px;
+  padding: 0 10px; /* 양쪽 같은 여백 (지우기 ×도 이 안쪽에 둔다) */
   border-radius: var(--tb-radius-input);
 }
 
@@ -2161,7 +2161,9 @@ a.btn {
 }
 
 .fav-remove {
-  padding: 4px 6px;
+  margin-left: 2px;
+  padding: 0;
+  line-height: 1;
   border: none;
   background: none;
   color: var(--tb-color-text-faint);
@@ -2185,13 +2187,13 @@ a.btn {
 
 .fav-toggle {
   flex: none;
-  width: 14px;
+  width: auto;
   padding: 0;
   border: none;
   background: none;
   color: var(--tb-color-text-faint);
   font-size: 12px;
-  text-align: left;
+  line-height: 1;
   line-height: 1;
   cursor: pointer;
 }
@@ -2241,6 +2243,10 @@ a.btn {
 
   .fav-item {
     border: 1px solid var(--primitive-color-warm-gray-80);
+  }
+  .fav-title,
+  .fav-empty {
+    padding-left: 0;
   }
 }
 
@@ -2705,52 +2711,114 @@ a.brand:focus-visible {
   text-align: right;
 }
 
-/* 작업 칸 (11/09): 한 줄 · 오른쪽 맞춤 · 버튼 높이 36 */
+/* 작업 칸 (11/09 다시 짬): 자리 두 칸 고정 → 줄마다 버튼 위치가 같다
+   왼쪽: 요약(글자 버튼, 폭 72) · 오른쪽: 선별(테두리 버튼, 폭 96, 선별 전후 같은 폭) */
 .row-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 12px;
 }
-.row-actions .btn {
-  min-height: 0;
-  height: 36px;
-  margin: 0;
-  padding: 0 14px;
-  font-size: 14px;
+.slot-summary {
+  display: inline-flex;
+  justify-content: center;
+  width: 72px;
 }
-.row-actions .summary-link {
+.row-actions .summary-link,
+.row-actions .summary-add {
   min-width: 0;
   margin: 0;
+  padding: 6px 4px;
+  font-size: 13px;
   white-space: nowrap;
 }
-.select-group {
-  display: inline-flex;
-  align-items: stretch;
-}
-.select-group .btn {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
-}
-.select-group .folder-select {
-  display: block;
-  height: 36px;
-  max-width: 96px;
-  margin: 0;
-  padding: 0 6px 0 10px;
-  border: 1px solid var(--tb-color-primary);
-  border-left: 1px solid rgb(255 255 255 / 30%);
-  border-radius: 0 var(--tb-radius-button) var(--tb-radius-button) 0;
-  background: var(--tb-color-primary);
-  color: var(--tb-color-on-primary);
-  font-size: 13px;
+.row-actions .summary-add {
+  color: var(--tb-color-text-sub);
   font-weight: 600;
-  text-overflow: ellipsis;
+}
+.summary-wait {
+  color: var(--tb-color-text-faint);
+  font-size: 13px;
+}
+.sel-toggle {
+  width: 96px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--tb-color-text);
+  border-radius: var(--tb-radius-button);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
 }
-.select-group .folder-select option {
-  background: #fff;
+.sel-toggle:hover {
+  background: var(--tb-color-bg-strong);
+}
+/* 선별됨: 검정 면 대신 옅은 바탕 + 검정 글자 (한 화면에 검정 버튼이 여러 개 생기지 않게, 20 문서 원칙 3) */
+.sel-toggle.on {
+  border-color: var(--tb-color-line);
+  background: var(--tb-color-bg-strong);
+}
+.sel-toggle.on span {
+  margin-left: 2px;
+  font-size: 10px;
+}
+.sel-toggle:focus-visible {
+  outline: 2px solid var(--tb-color-line-focus);
+  outline-offset: 2px;
+}
+.sel-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 168px;
+  padding: 6px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-card-s);
+  background: var(--tb-color-surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+}
+.sel-menu-label {
+  margin: 4px 8px 4px;
+  color: var(--tb-color-text-faint);
+  font-size: 12px;
+}
+.sel-menu button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  border-radius: var(--tb-radius-input);
+  background: none;
   color: var(--tb-color-text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.sel-menu button:hover,
+.sel-menu button:focus-visible {
+  background: var(--tb-color-bg-strong);
+  outline: none;
+}
+.sel-menu button.on {
+  font-weight: 700;
+}
+.sel-menu button.danger {
+  color: var(--tb-color-danger);
+}
+.sel-menu-check {
+  width: 14px;
+  font-size: 12px;
+}
+.sel-menu hr {
+  margin: 4px 0;
+  border: none;
+  border-top: 1px solid var(--tb-color-line-soft);
 }
 
 /* 키워드 추이 (KeywordTrends.jsx) — 단위가 다른 신호는 한 축에 겹치지 않고 작은 그래프로 나눔 */
