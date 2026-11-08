@@ -132,7 +132,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
   const leftOut = tooMany && !useAll ? picked.filter((a) => !articles.includes(a)) : []
 
   const key = articleKey(picked.map((a) => a.id))
-  // 미리보기 = 재료 미리보기만 (11/08 조장). 지금 체크한 기사로 만든 보고서가 있으면 한 줄로 알리고 보고서함에서 연다
+  // 미리보기 = 재료 미리보기만 (11/08 조장). 지금 체크한 기사로 만든 보고서가 있으면 제목 옆에 알리고 보고서함에서 연다
   const matching = picked.length > 0 ? reports.find((r) => r.articleKey === key) : null
   const [view, setView] = useState('compose')
   const activeJobs = reportJobs.filter((j) => ACTIVE.includes(j.status))
@@ -159,7 +159,15 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
   return (
     <aside className="panel composer" aria-label="보고서">
       <div className="composer-head">
-        <h2>보고서</h2>
+        {/* 만든 보고서 안내는 제목 옆 작은 버튼으로 (11/09: 한 줄을 차지해 스크롤이 늘던 것) */}
+        <div className="composer-title">
+          <h2>보고서</h2>
+          {matching && (
+            <button type="button" className="composer-made" onClick={() => onOpenReport?.(matching.id)} title="지금 체크한 기사로 만든 보고서가 있어요 — 보고서함에서 열기">
+              ✓ 만든 보고서 있음 · 보기
+            </button>
+          )}
+        </div>
         <div className="composer-tabs" role="tablist" aria-label="보고서">
           <button type="button" role="tab" aria-selected={view === 'compose'} className={view === 'compose' ? 'active' : ''} onClick={() => setView('compose')}>
             작성
@@ -179,14 +187,6 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
 
       {view === 'preview' ? (
         <div className="composer-body">
-          {matching && (
-            <p className="composer-note">
-              ✓ 지금 체크한 기사로 만든 보고서가 있어요 ·{' '}
-              <button type="button" className="link-btn" onClick={() => onOpenReport?.(matching.id)}>
-                보고서함에서 보기
-              </button>
-            </p>
-          )}
           <MaterialsPreview articles={articles} aiSummaries={aiSummaries} title={title} direction={direction} jobs={activeJobs} />
           <div className="composer-foot">
             <button type="button" className="btn primary composer-go" onClick={() => setView('compose')}>

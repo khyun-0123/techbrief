@@ -15,6 +15,7 @@ import {
   fetchKeywords,
   fetchLists,
   fetchMaterials,
+  fetchTechTrends,
   fetchSelection,
   fetchRefresh,
   fetchReports,
@@ -25,6 +26,10 @@ import {
   saveSelectionApi,
   searchNewsApi,
 } from './api.js'
+import { buildTagDict, tagsOf } from './hashtags.js'
+import SettingsMenu from './SettingsMenu.jsx'
+import { buildBundleHtml } from './exportBundle.js'
+import SelectToggle from './SelectToggle.jsx'
 import FavoritesRail from './FavoritesRail.jsx'
 import Highlight from './Highlight.jsx'
 import { highlightPattern, matchesTerms } from './highlightTerms.js'
@@ -61,7 +66,7 @@ const PAGE_SIZE_KEY = 'techbrief-page-size'
 const EXCLUDE_OWN_KEY = 'techbrief-exclude-own'
 const SHOW_LOW_KEY = 'techbrief-show-low'
 const SUMMARIZED_FIRST_KEY = 'techbrief-summarized-first'
-const RECENT_KEY = 'techbrief-recent-searches' // 최근 검색어 (이 브라우저에만)
+const RECENT_KEY = 'techbrief-recent-searches' // 최근 검색어: 11/09부터 서버(IP별)에 두고, 예전 브라우저 값은 처음 한 번 올린다
 const RECENT_MAX = 10
 // 출처 단계 (14 문서 4-B). 서버 collector/feeds.js와 같은 구분
 const TIER_TITLE = { 1: '1차 출처: 기업 발표·학회·논문', 2: '2차 출처: 전문매체', 3: '3차 출처: 일반 뉴스' }
@@ -136,6 +141,9 @@ function scoreTitle(a) {
   return `중요도 ${a.importance ?? 0}점 = (${parts.join(' + ')})${relevance} · 60점 이상이면 중요`
 }
 
+const NEW_REPORTS_KEY = 'techbrief.newReports' // 아직 안 연 새 보고서 id
+const SEEN_REPORTS_KEY = 'techbrief.seenReports' // 한 번이라도 연 보고서 id (새로 고침 뒤 다시 「새」로 뜨지 않게)
+
 const PERIODS = [
   { value: 'today', label: '오늘', hours: 24 },
   { value: 'week', label: '최근 7일', hours: 24 * 7 },
@@ -157,6 +165,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [featureStates, setFeatureStates] = useState({}) // 실험 기능 { key: 'off' | 'test' | 'all' }
   const [featureList, setFeatureList] = useState([]) // [{ key, label }] 테스트 띠에 한글 이름으로 보여 줄 때
   const features = useMemo(() => enabledFeatures(featureStates, mode), [featureStates, mode])
+  const [techTerms, setTechTerms] = useState([]) // 핵심어 사전용 기술 용어
+  const [tagsOpen, setTagsOpen] = useState(() => new Set()) // 「+N」을 눌러 키워드를 모두 펼친 기사
   const [lists, setLists] = useState(null) // 자사·경쟁사·관심 기술 (「수집 설정」 칸 실험 기능에서 보기만)
   const [refreshError, setRefreshError] = useState('')
   const [starting, setStarting] = useState(false)
@@ -171,7 +181,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [includedIds, setIncludedIds] = useState(() => load(INCLUDED_KEY, []))
   const [screen, setScreen] = useState('dashboard')
   const [query, setQuery] = useState('')
-  const [period, setPeriod] = useState('today')
+  const [period, setPeriod] = useState('all') // 기본 「전체」 (11/09 조장). 모은 기사 목록은 서버가 7일치만 보냄 (30 문서 1장)
   const [source, setSource] = useState('all')
   const [fetched, setFetched] = useState(() => load(ARTICLES_KEY, []))
   const [collectedAt, setCollectedAt] = useState(() => load(COLLECTED_AT_KEY, null))
@@ -193,8 +203,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   // 요약된 기사 먼저: 지금 정렬은 그대로 두고 요약된 기사를 위로 (요약을 먼저 보고 고르게)
   const [summarizedFirst, setSummarizedFirst] = useState(() => load(SUMMARIZED_FIRST_KEY, true))
   const [sentimentFilter, setSentimentFilter] = useState('all') // 긍정·중립·부정 거르기 (F5)
-  const [favorites, setFavorites] = useState([]) // 즐겨찾는 검색어 (F3, 팀 공용)
-  const [recent, setRecent] = useState(() => load(RECENT_KEY, [])) // 최근 검색어 (이 브라우저에만)
+  const [recommended, setRecommended] = useState([]) // 추천 검색어 (공용, 관리자가 고름)
+  const [favorites, setFavorites] = useState([]) // 즐겨찾기 ☆ (IP별, 11/09)
+  const [recent, setRecent] = useState(() => load(RECENT_KEY, [])) // 최근 검색어 (IP별, 서버 값이 오기 전엔 브라우저 값)
   const [pageSize, setPageSize] = useState(() => load(PAGE_SIZE_KEY, 20))
   const [sort, setSort] = useState('importance') // 기본은 중요도순, 최신순은 선택
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
@@ -204,6 +215,26 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [reportJobs, setReportJobs] = useState([])
   const ingestedJobs = useRef(new Set())
   const [archiveTarget, setArchiveTarget] = useState(null) // 진행 창 「보고서함에서 보기」로 바로 열 보고서
+  // 이 브라우저에서 만들어졌고 아직 안 연 보고서 (11/09): 「보고서함」 탭을 누르면 가장 최근 것이 바로 열린다. 한 번 열면 빠짐
+  const [newReportIds, setNewReportIds] = useState(() => load(NEW_REPORTS_KEY, []))
+  useEffect(() => {
+    try {
+      localStorage.setItem(NEW_REPORTS_KEY, JSON.stringify(newReportIds))
+    } catch {
+      // 저장이 막힌 브라우저면 이번 접속 동안만 기억
+    }
+  }, [newReportIds])
+  function markReportSeen(id) {
+    setNewReportIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev))
+    const seen = load(SEEN_REPORTS_KEY, [])
+    if (!seen.includes(id)) {
+      try {
+        localStorage.setItem(SEEN_REPORTS_KEY, JSON.stringify([id, ...seen].slice(0, 200)))
+      } catch {
+        // 무시
+      }
+    }
+  }
 
   // 서버에 쌓인 기사를 불러온다. 앱을 열 때, 최신화가 끝났을 때
   const reloadArticles = useCallback(async () => {
@@ -220,7 +251,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   useEffect(() => {
     reloadArticles().catch(() => {})
     fetchFavorites()
-      .then(setFavorites)
+      .then((d) => {
+        setRecommended(d.recommended ?? [])
+        setFavorites(d.favorites ?? [])
+        if (Array.isArray(d.recent)) setRecent(d.recent)
+        else if (load(RECENT_KEY, []).length) saveFavoritesApi({ recent: load(RECENT_KEY, []) }).catch(() => {}) // 예전 브라우저 값 올리기
+      })
       .catch(() => {})
     fetchFeatures()
       .then((f) => {
@@ -230,6 +266,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       .catch(() => {})
     fetchLists()
       .then(setLists)
+      .catch(() => {})
+    // 핵심어 사전에 넣을 요즘 뜨는 기술 용어 (하루 한 번 갱신되는 값, 실패하면 빼고)
+    fetchTechTrends()
+      .then((d) => setTechTerms([...new Set([...(d.composite ?? []), ...(d.sources ?? []).flatMap((s) => s.ranking ?? [])].map((r) => r.name).filter(Boolean))]))
       .catch(() => {})
     fetchMaterials(clientId())
       .then(setMaterials)
@@ -376,6 +416,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             if (j.status !== 'done' || !j.result || ingestedJobs.current.has(j.id)) continue
             ingestedJobs.current.add(j.id)
             const entry = j.result
+            if (!load(SEEN_REPORTS_KEY, []).includes(entry.id)) setNewReportIds((prev) => (prev.includes(entry.id) ? prev : [entry.id, ...prev]))
             setReports((prev) => {
               if (prev.some((r) => r.id === entry.id)) return prev
               const next = [entry, ...prev]
@@ -552,6 +593,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
   const maxHours = PERIODS.find((p) => p.value === period).hours
   const q = query.trim().toLowerCase()
+  // 핵심어 해시태그 (hashtags.js): 사전은 목록이 바뀔 때만 다시 만든다
+  const tagDict = useMemo(
+    () => buildTagDict([keywords, recommended, lists?.own, lists?.competitors, lists?.interests, techTerms]),
+    [keywords, recommended, lists, techTerms],
+  )
+  const tagsFor = (a) => tagsOf(a, aiSummaries[a.id]?.summary, tagDict)
   const byId = new Map(pool.map((a) => [a.id, a]))
   // 자사·자회사만 나온 기사 (경쟁사도 함께 나오면 경쟁사 소식이라 남긴다)
   const isOwnOnly = (a) => Boolean(a.own) && !a.scoreParts?.competitorName
@@ -569,7 +616,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         // 「직접 추가한 자료」만 볼 때는 기간과 상관없이 모두
         (a.hoursAgo < maxHours || source === 'material') &&
         sourceMatch(a) &&
-        (!q || matchesTerms(`${a.title} ${a.keyword}`, [q])),
+        (!q || matchesTerms(`${a.title} ${a.keyword} ${tagsFor(a).join(' ')}`, [q])),
     )
     .sort((a, b) => (sort === 'importance' ? (b.importance ?? 0) - (a.importance ?? 0) : 0) || a.hoursAgo - b.hoursAgo)
   // 강조할 검색어: 네이버 찾기 결과면 찾은 말, 모은 기사에서 거르는 중이면 입력한 말 (Highlight.jsx)
@@ -615,11 +662,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
   function saveRecent(next) {
     setRecent(next)
-    try {
-      localStorage.setItem(RECENT_KEY, JSON.stringify(next))
-    } catch {
-      // 저장 공간을 못 쓰면 이번 화면에서만 유지
-    }
+    saveFavoritesApi({ recent: next }).catch(() => {}) // 실패하면 이번 화면에서만 유지
   }
 
   // 기간(p)도 함께 보낸다: 오늘·7일은 최신순으로 그 기간만, 전체는 정확도순 100건 (18 문서)
@@ -652,10 +695,29 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   async function changeFavorites(next) {
     setFavorites(next)
     try {
-      setFavorites(await saveFavoritesApi(next))
+      setFavorites((await saveFavoritesApi({ favorites: next })).favorites ?? next)
     } catch (err) {
       setSearch((prev) => (prev ? { ...prev, error: err.message } : prev))
     }
+  }
+
+  // 「설정 → 내 보고서 · 선별 정리본 받기」 (11/09): 내가 만든 보고서 전문 + 선별 목록(폴더별, 한 줄 요약)을 HTML 파일로
+  function downloadBundle() {
+    const html = buildBundleHtml({
+      reports: reports.filter((r) => r.mine),
+      folders: folders.map((f) => ({
+        name: f.name,
+        articles: candidates
+          .filter((a) => folderIdOf(a.id) === f.id)
+          .map((a) => ({ title: a.title, source: a.source, publishedAt: a.publishedAt, url: a.url, headline: aiSummaries[a.id]?.summary?.headline, included: included.includes(a.id) })),
+      })),
+    })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
+    a.download = `테크브리프-정리본-${new Date().toLocaleDateString('sv-SE')}.html` // 이 컴퓨터 날짜 (YYYY-MM-DD)
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+    track('export', 'bundle')
   }
 
   function closeSearch() {
@@ -820,11 +882,17 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           className={screen === 'archive' ? 'tab active' : 'tab'}
           aria-current={screen === 'archive' ? 'page' : undefined}
           onClick={() => {
-            setArchiveTarget(null)
+            // 새로 만들어진(아직 안 연) 내 보고서가 있으면 그것부터, 없으면 목록
+            setArchiveTarget(newReportIds.find((id) => reports.some((r) => r.id === id)) ?? null)
             setScreen('archive')
           }}
         >
           보고서함{reports.length > 0 && <span className="tab-count">{reports.length}</span>}
+          {newReportIds.some((id) => reports.some((r) => r.id === id)) && (
+            <span className="tab-new" title="새로 만들어진 보고서가 있어요 — 누르면 바로 열려요">
+              새 {newReportIds.filter((id) => reports.some((r) => r.id === id)).length}
+            </span>
+          )}
         </button>
         {isTest && (
           <button
@@ -847,34 +915,31 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               선별 <strong>{selectedIds.length}</strong>
             </button>
           </span>
-          {/* AI 모델은 모두에게 적용되므로 관리자 화면에서 고른다. 여기서는 보기만 (17 문서) */}
-          {health?.llm && (
-            <span className="llm-pick" title="요약·보고서에 쓰는 AI 모델 (관리자가 정해요)">
-              AI 모델 {llmLabel} · {health.llm.providers.find((p) => p.id === health.llm.current)?.model.split('/').pop() || '설정 없음'}
-            </span>
-          )}
+          {/* 연결 상태만 보여 준다 (11/09: 모델 이름은 메뉴 막대에서 빼고 마우스를 올리면 보임). 모델은 관리자 화면에서 고른다 (17 문서) */}
           {health === null ? null : health.error ? (
             <span className="ai-status off">● 서버 연결 안 됨</span>
-          ) : health.modelReachable ? (
-            <span className="ai-status on" title={`AI 모델에 연결됨 (${health.model})`}>
-              ● 연결됨
-              {health.db?.enabled && (
-                <span className={health.db.ok ? 'db-status on' : 'db-status off'} title={health.db.ok ? `기사 ${health.db.articles} · 요약 ${health.db.summaries} · 보고서 ${health.db.reports}` : health.db.error}>
-                  {health.db.ok ? ' · DB' : ' · DB 오류'}
-                </span>
-              )}
-            </span>
           ) : (
-            <span className="ai-status off" title={`${llmLabel}(AI 서버)에 닿지 않아요. 요약·보고서를 만들 수 없어요`}>
-              ● AI 연결 안 됨
+            <span className="conn-status">
+              <span
+                className={health.modelReachable ? 'ai-status on' : 'ai-status off'}
+                title={
+                  health.modelReachable
+                    ? `AI 연결됨 · ${llmLabel} · ${health.llm?.providers.find((p) => p.id === health.llm.current)?.model.split('/').pop() || health.model || ''}`
+                    : `${llmLabel}(AI 서버)에 닿지 않아요. 요약·보고서를 만들 수 없어요`
+                }
+              >
+                ● AI {health.modelReachable ? '연결' : '끊김'}
+              </span>
+              <span
+                className={health.db?.enabled && health.db.ok ? 'db-status on' : 'db-status off'}
+                title={!health.db?.enabled ? 'DB 없이 실행 중 (서버를 끄면 자료가 사라져요)' : health.db.ok ? `DB 연결됨 · 기사 ${health.db.articles} · 요약 ${health.db.summaries} · 보고서 ${health.db.reports}` : health.db.error}
+              >
+                ● DB {!health.db?.enabled ? '없음' : health.db.ok ? '연결' : '오류'}
+              </span>
             </span>
           )}
-          <button type="button" className="topbar-link" onClick={() => setShowMove(true)} title="선별 · 폴더 등 이 브라우저의 자료를 파일로 내보내거나 불러와요 (자리 이동 · 다른 PC)">
-            내 자료
-          </button>
-          <a className="admin-link" href="/admin" title="키워드·회사·관심 기술·자동 최신화·AI 모델 설정">
-            {admin ? `관리자 (${admin.name})` : '관리자'}
-          </a>
+          {/* 「내 자료」 · 「관리자」는 「설정」 하나로 모음 (11/09 조장) */}
+          <SettingsMenu admin={admin} reportCount={reports.filter((r) => r.mine).length} selectedCount={selectedIds.length} onBundle={downloadBundle} onMove={() => setShowMove(true)} />
         </span>
       </nav>
       {ops.mode !== 'normal' && (isTest || ops.mode !== 'maintenance') && (
@@ -903,6 +968,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             collectedLabel: refreshRunning ? '최신화 중…' : collectedAt ? `마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 수집 전',
           }}
           keywords={keywords}
+          recommended={recommended}
           favorites={favorites}
           recent={recent}
           periods={PERIODS}
@@ -932,6 +998,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           selectedIds={selectedIds}
           onCleanup={handleCleanup}
           initialId={archiveTarget}
+          onOpened={markReportSeen}
           key={archiveTarget ?? 'archive'}
         />
       ) : screen === 'select' ? (
@@ -1002,6 +1069,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           {/* 오늘 수집 숫자 · 키워드 추이는 대시보드로 옮김 (11/07 팀 회의) */}
           <div className={features.has('collectPanel') ? 'content with-favs' : 'content with-favs no-settings'}>
             <FavoritesRail
+              recommended={recommended}
               favorites={favorites}
               recent={recent}
               active={search?.query}
@@ -1023,7 +1091,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 <form className="search-form" onSubmit={handleSearch}>
                   <input
                     type="search"
-                    placeholder="기사 찾기 (키워드·제목)"
+                    placeholder="자료 찾기 (제목·키워드)"
                     aria-label="기사 찾기"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
@@ -1148,11 +1216,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   </colgroup>
                   <thead>
                     <tr>
+                      {/* 정렬 (11/09 조장): 머리글은 그 칸 내용과 같은 쪽. 제목(여러 줄 글)만 왼쪽, 출처 · 발행 · 키워드 · 작업은 가운데 */}
                       <th>제목</th>
-                      <th>출처</th>
-                      <th>발행</th>
-                      <th>키워드</th>
-                      <th>작업</th>
+                      <th className="center">출처</th>
+                      <th className="center">발행</th>
+                      <th className="center" title="기사 제목 · 내용에 나온 우리 용어(수집 키워드 · 회사 · 관심 기술 · 뜨는 기술)와 요약 핵심어. 누르면 그 말로 걸러요">키워드</th>
+                      <th className="center">작업</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1248,57 +1317,71 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                               )}
                             </div>
                           </td>
-                          <td className="source" title={`${a.source} · ${TIER_TITLE[a.tier ?? 3]}`}>
+                          <td className="source center" title={`${a.source} · ${TIER_TITLE[a.tier ?? 3]}`}>
                             {a.tier && a.tier <= 2 && <span className={`tier tier-${a.tier}`}>{a.tier}차</span>}
                             {a.source}
                           </td>
-                          <td className="time">{formatPublished(a.hoursAgo)}</td>
-                          <td>
-                            <span className="chip">{a.keyword}</span>
+                          <td className="time center">{formatPublished(a.hoursAgo)}</td>
+                          <td className="center tags-cell">
+                            {(() => {
+                              const tags = tagsFor(a)
+                              const all = tagsOpen.has(a.id)
+                              const toggle = () =>
+                                setTagsOpen((prev) => {
+                                  const next = new Set(prev)
+                                  if (all) next.delete(a.id)
+                                  else next.add(a.id)
+                                  return next
+                                })
+                              return (
+                                <span className="tags">
+                                  {(all ? tags : tags.slice(0, 3)).map((t) => (
+                                    <button key={t} type="button" className="tag" onClick={() => setQuery(t)} title={`「${t}」 들어간 자료만 보기`}>
+                                      #{t}
+                                    </button>
+                                  ))}
+                                  {tags.length > 3 && (
+                                    <button type="button" className="tag-more" onClick={toggle} aria-expanded={all} title={all ? '접기' : `키워드 ${tags.length - 3}개 더 보기`}>
+                                      {all ? '접기' : `+${tags.length - 3}`}
+                                    </button>
+                                  )}
+                                </span>
+                              )
+                            })()}
                           </td>
                           <td className="actions">
-                            {ai ? (
-                              <button
-                                type="button"
-                                className={open ? 'btn-text summary-link open' : 'btn-text summary-link'}
-                                aria-expanded={Boolean(open)}
-                                onClick={() => setOpenSummaryId(open ? null : a.id)}
-                              >
-                                {open ? '요약 접기' : '요약 보기'}
-                              </button>
-                            ) : job?.status === 'queued' || job?.status === 'running' ? (
-                              <button type="button" className="btn summary-btn" disabled>
-                                {job.status === 'running' ? '요약 중…' : '요약 대기'}
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="btn outline summary-btn"
-                                title={a.aiAllowed === false ? 'AI 요약을 허용하지 않은 자료예요' : opsValue.aiBlocked ? AI_BLOCKED_TITLE : job?.status === 'error' ? `요약 오류: ${job.error}` : 'AI로 6항목 요약 (선별하지 않아도 됨)'}
-                                disabled={opsValue.aiBlocked || a.aiAllowed === false}
-                                onClick={() => queue.enqueue(a)}
-                              >
-                                {job?.status === 'error' ? '요약 재시도' : '요약 추가'}
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              className={selected ? 'btn primary' : 'btn outline'}
-                              onClick={() => toggleSelected(a)}
-                            >
-                              {selected ? '선별됨 ✓' : '선별 추가'}
-                            </button>
-                            {selected ? (
-                              <select className="folder-select" value={folderIdOf(a.id)} onChange={(e) => putInFolder(a.id, e.target.value)} aria-label="폴더 옮기기" title="담긴 폴더 (바꾸면 옮겨요)">
-                                {folders.map((f) => (
-                                  <option key={f.id} value={f.id}>
-                                    ▤ {f.name}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              folders.length > 1 && <span className="folder-target-note">→ {folders.find((f) => f.id === targetFolder)?.name ?? '미분류'}</span>
-                            )}
+                            {/* 작업 (11/09 조장: 같은 모양 버튼 두 개): 요약 · 선별 버튼을 같은 폭 · 같은 높이로.
+                                내용을 여는 버튼(요약 보기)은 옅은 테두리, 하는 버튼(요약하기 · + 선별)은 진한 테두리 · 굵게, 선별됨은 옅은 바탕.
+                                폴더 옮기기 · 빼기는 「✓ 선별됨 ▾」 메뉴 안 (SelectToggle) */}
+                            <div className="row-actions">
+                              {ai ? (
+                                <button type="button" className={open ? 'act-btn view open' : 'act-btn view'} aria-expanded={Boolean(open)} onClick={() => setOpenSummaryId(open ? null : a.id)}>
+                                  {open ? '요약 접기' : '요약 보기'}
+                                </button>
+                              ) : job?.status === 'queued' || job?.status === 'running' ? (
+                                <button type="button" className="act-btn wait" disabled>
+                                  {job.status === 'running' ? '요약 중…' : '요약 대기'}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className={job?.status === 'error' ? 'act-btn do error' : 'act-btn do'}
+                                  title={a.aiAllowed === false ? 'AI 요약을 허용하지 않은 자료예요' : opsValue.aiBlocked ? AI_BLOCKED_TITLE : job?.status === 'error' ? `요약 오류: ${job.error}` : 'AI로 6항목 요약 (선별하지 않아도 됨)'}
+                                  disabled={opsValue.aiBlocked || a.aiAllowed === false}
+                                  onClick={() => queue.enqueue(a)}
+                                >
+                                  {job?.status === 'error' ? '다시 요약' : '요약하기'}
+                                </button>
+                              )}
+                              <SelectToggle
+                                selected={selected}
+                                folders={folders}
+                                folderId={folderIdOf(a.id)}
+                                targetName={folders.find((f) => f.id === targetFolder)?.name ?? '미분류'}
+                                onToggle={() => toggleSelected(a)}
+                                onMove={(id) => putInFolder(a.id, id)}
+                              />
+                            </div>
                           </td>
                         </tr>
                         {groupOpen && (
@@ -1365,19 +1448,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           </div>
         </main>
       )}
-      {showMove && (
-        <DataMove
-          rows={candidates.map((a) => ({
-            folder: folders.find((f) => f.id === folderIdOf(a.id))?.name ?? '미분류',
-            title: a.title,
-            source: a.source,
-            publishedAt: a.publishedAt,
-            url: a.url,
-            included: included.includes(a.id),
-          }))}
-          onClose={() => setShowMove(false)}
-        />
-      )}
+      {showMove && <DataMove favorites={favorites} recent={recent} onClose={() => setShowMove(false)} />}
       <ProgressPanel
         queue={queue}
         reportJobs={reportJobs}

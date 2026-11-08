@@ -25,6 +25,13 @@ function From({ from }) {
   ))
 }
 
+// 출처를 성격(관심 · 현장 반응 · 연구 · 개발·투자)별로 묶는다. 서버가 준 순서를 지킨다
+function groupByAxis(sources) {
+  const groups = new Map()
+  for (const s of sources) groups.set(s.axis, [...(groups.get(s.axis) ?? []), s])
+  return [...groups]
+}
+
 const fmtAt = (iso) => (iso ? new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '')
 const fmtDay = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`
 const fmtNum = (v) => (v >= 10000 ? `${Math.round(v / 1000)}천` : v >= 1000 ? `${(v / 1000).toFixed(1)}천` : String(Math.round(v * 10) / 10))
@@ -277,14 +284,22 @@ function TechTrends({ onPick }) {
       )}
 
       <div className="tt-tabs" role="tablist" aria-label="출처">
-        <button type="button" role="tab" aria-selected={tab === 'composite'} className={tab === 'composite' ? 'tt-tab on' : 'tt-tab'} onClick={() => setTab('composite')}>
-          종합
-        </button>
-        {(data?.sources ?? []).map((s) => (
-          <button key={s.id} type="button" role="tab" aria-selected={tab === s.id} className={tab === s.id ? 'tt-tab on' : 'tt-tab'} onClick={() => setTab(s.id)} title={s.note}>
-            {s.label}
-            <small>{s.axis}</small>
+        <span className="tt-tab-group" role="presentation">
+          <button type="button" role="tab" aria-selected={tab === 'composite'} className={tab === 'composite' ? 'tt-tab on' : 'tt-tab'} onClick={() => setTab('composite')}>
+            종합
           </button>
+        </span>
+        {groupByAxis(data?.sources ?? []).map(([axis, list]) => (
+          <span key={axis} className="tt-tab-group" role="presentation">
+            <span className="tt-tab-axis" aria-hidden="true">
+              {axis}
+            </span>
+            {list.map((s) => (
+              <button key={s.id} type="button" role="tab" aria-selected={tab === s.id} aria-label={`${s.label} (${axis})`} className={tab === s.id ? 'tt-tab on' : 'tt-tab'} onClick={() => setTab(s.id)} title={s.note}>
+                {s.label}
+              </button>
+            ))}
+          </span>
         ))}
       </div>
 

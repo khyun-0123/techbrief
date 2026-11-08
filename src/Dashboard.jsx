@@ -5,10 +5,11 @@ import { useState } from 'react'
 import KeywordTrends from './KeywordTrends.jsx'
 import TechTrends from './TechTrends.jsx'
 
-function Dashboard({ stats, keywords, favorites, recent, periods, period, onPeriod, onSearch, onKeyword, onGoCollect }) {
+function Dashboard({ stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onKeyword, onGoCollect }) {
   const [text, setText] = useState('')
-  const recentOnly = recent.filter((q) => !favorites.includes(q)).slice(0, 8)
-  const chipCount = keywords.length + favorites.length + recentOnly.length
+  const recentOnly = recent.filter((q) => !favorites.includes(q) && !recommended.includes(q)).slice(0, 8)
+  const recommendedOnly = recommended.filter((q) => !favorites.includes(q))
+  const chipCount = keywords.length + recommendedOnly.length + favorites.length + recentOnly.length
 
   function submit(e) {
     e.preventDefault()
@@ -52,12 +53,12 @@ function Dashboard({ stats, keywords, favorites, recent, periods, period, onPeri
             자료 검색
           </button>
         </form>
-        <p className="dash-note">네이버 뉴스와 논문에서 찾아 자료 현황 탭에 보여 줘요. 결과가 적으면 기간을 「최근 7일」이나 「전체」로 넓혀 보세요.</p>
+        <p className="dash-note">네이버 뉴스와 논문에서 찾아 자료 현황 탭에 보여 줘요. 기본은 「전체」(정확도 높은 100건)예요. 최신 기사만 보려면 「오늘」이나 「최근 7일」로 좁혀 보세요.</p>
 
         {chipCount > 0 && (
           <details className="dash-more">
             <summary>
-              자동 수집 키워드 · 즐겨찾기 · 최근 검색어 <span className="dash-more-count">{chipCount}개</span>
+              자동 수집 키워드 · 추천 · 즐겨찾기 · 최근 검색어 <span className="dash-more-count">{chipCount}개</span>
             </summary>
             {keywords.length > 0 && (
               <div className="dash-chips">
@@ -68,6 +69,21 @@ function Dashboard({ stats, keywords, favorites, recent, periods, period, onPeri
                 <div className="dash-chips-list">
                   {keywords.map((k) => (
                     <button key={k} type="button" className="chip dash-chip" onClick={() => onKeyword(k)} title={`모은 기사 중 「${k}」만 보기`}>
+                      {k}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {recommendedOnly.length > 0 && (
+              <div className="dash-chips">
+                <span className="dash-chips-label">
+                  추천 검색어
+                  <small>뉴스·논문에서 찾기</small>
+                </span>
+                <div className="dash-chips-list">
+                  {recommendedOnly.map((k) => (
+                    <button key={k} type="button" className="chip dash-chip" onClick={() => onSearch(k)} title={`「${k}」 찾기 (관리자가 고른 추천 검색어)`}>
                       {k}
                     </button>
                   ))}

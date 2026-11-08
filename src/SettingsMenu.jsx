@@ -1,0 +1,79 @@
+// 메뉴 막대 오른쪽 「설정」 (11/09 조장): 예전 「내 자료」 · 「관리자」 링크를 하나로 모은 작은 창
+// - 내 보고서 · 선별 정리본 받기 (.html, 인쇄하면 PDF)
+// - 새 자리로 옮기기 (선별 · 폴더 · 즐겨찾기를 파일로 내보내고 불러오기 → DataMove)
+// - 관리자 페이지
+import { useEffect, useRef, useState } from 'react'
+
+function SettingsMenu({ admin, reportCount, selectedCount, onBundle, onMove }) {
+  const [open, setOpen] = useState(null) // { top, right } — 메뉴 막대(가로 스크롤)에 잘리지 않게 화면 기준으로 띄움
+  const btnRef = useRef(null)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onDown = (e) => {
+      if (!menuRef.current?.contains(e.target) && !btnRef.current?.contains(e.target)) setOpen(null)
+    }
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        setOpen(null)
+        btnRef.current?.focus()
+      }
+    }
+    const close = () => setOpen(null)
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('resize', close)
+    menuRef.current?.querySelector('button, a')?.focus()
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', close)
+    }
+  }, [open])
+
+  const pick = (fn) => () => {
+    setOpen(null)
+    fn()
+  }
+
+  return (
+    <span className="settings">
+      <button
+        ref={btnRef}
+        type="button"
+        className="topbar-link settings-btn"
+        aria-haspopup="menu"
+        aria-expanded={Boolean(open)}
+        onClick={() => {
+          if (open) return setOpen(null)
+          const r = btnRef.current.getBoundingClientRect()
+          setOpen({ top: r.bottom + 12, right: Math.max(8, window.innerWidth - r.right) })
+        }}
+      >
+        <span aria-hidden="true">⚙</span> 설정
+      </button>
+      {open && (
+        <div ref={menuRef} className="settings-menu" role="menu" aria-label="설정" style={{ top: open.top, right: open.right }}>
+          <button type="button" role="menuitem" onClick={pick(onBundle)}>
+            <b>내 보고서 · 선별 정리본 받기</b>
+            <small>
+              보고서 {reportCount}개 · 선별 {selectedCount}건을 한 파일로 (.html, 인쇄하면 PDF)
+            </small>
+          </button>
+          <button type="button" role="menuitem" onClick={pick(onMove)}>
+            <b>새 자리로 옮기기</b>
+            <small>선별 · 폴더 · 즐겨찾기를 파일로 내보내고, 새 PC에서 불러와요</small>
+          </button>
+          <hr />
+          <a role="menuitem" href="/admin">
+            <b>관리자 페이지{admin ? ` (${admin.name})` : ''}</b>
+            <small>수집 키워드 · 추천 검색어 · AI 모델 · 보고서 관리</small>
+          </a>
+        </div>
+      )}
+    </span>
+  )
+}
+
+export default SettingsMenu

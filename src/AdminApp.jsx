@@ -19,6 +19,8 @@ import {
   runRefresh,
   saveFeaturesApi,
   saveKeywordsApi,
+  fetchRecommendedQueries,
+  saveRecommendedQueriesApi,
   saveListsApi,
   saveRefreshSettings,
   selectLlmProvider,
@@ -284,6 +286,7 @@ function Tile({ label, value, sub, state }) {
 function AdminApp() {
   const [me, setMe] = useState(null) // { configured, admin }
   const [section, setSection] = useState(sectionFromHash)
+  const [recommended, setRecommended] = useState(null) // 추천 검색어 (11/09)
   const [keywords, setKeywords] = useState(null) // { stored, keywords }
   const [lists, setLists] = useState(null)
   const [refresh, setRefresh] = useState(null)
@@ -336,8 +339,10 @@ function AdminApp() {
       fetchAdminLog(),
       fetchFeatures(),
       fetchOps().catch(() => null),
+      fetchRecommendedQueries().catch(() => []),
     ])
-      .then(([k, l, r, h, g, f, o]) => {
+      .then(([k, l, r, h, g, f, o, rq]) => {
+        setRecommended(rq)
         setOps(o)
         setFeatures(f)
         setKeywords(k)
@@ -376,6 +381,7 @@ function AdminApp() {
     refresh: refresh?.settings,
     llm: health?.llm?.current,
     features: features?.features,
+    recommended,
   }
   function change(key, value) {
     setDraft((d) => {
@@ -391,9 +397,10 @@ function AdminApp() {
     refresh: draft.refresh ?? refresh?.settings,
     llm: draft.llm ?? health?.llm?.current,
     features: draft.features ?? features?.features,
+    recommended: draft.recommended ?? recommended ?? [],
   }
-  const DRAFT_LABEL = { keywords: '자동 수집 키워드', lists: '회사 · 관심 기술', refresh: '자동 최신화', llm: 'AI 모델', features: '실험 기능' }
-  const DRAFT_SECTION = { keywords: 'targets', lists: 'targets', refresh: 'refresh', llm: 'llm', features: 'features' }
+  const DRAFT_LABEL = { keywords: '자동 수집 키워드', recommended: '추천 검색어', lists: '회사 · 관심 기술', refresh: '자동 최신화', llm: 'AI 모델', features: '실험 기능' }
+  const DRAFT_SECTION = { keywords: 'targets', recommended: 'targets', lists: 'targets', refresh: 'refresh', llm: 'llm', features: 'features' }
   const dirty = Object.keys(draft)
   const dirtySections = new Set(dirty.map((k) => DRAFT_SECTION[k]))
 
@@ -416,6 +423,7 @@ function AdminApp() {
     setToast(null)
     try {
       if (draft.keywords) await saveKeywordsApi(draft.keywords)
+      if (draft.recommended) await saveRecommendedQueriesApi(draft.recommended)
       if (draft.lists) await saveListsApi(draft.lists)
       if (draft.refresh) await saveRefreshSettings(draft.refresh)
       if (draft.llm) await selectLlmProvider(draft.llm)
@@ -686,6 +694,20 @@ function AdminApp() {
                   placeholder="예: 마이크로LED"
                   words={view.keywords}
                   onChange={keywords.stored ? (next) => change('keywords', next) : undefined}
+                />
+              )}
+            </section>
+            <section className="adm-card">
+              <h2>추천 검색어</h2>
+              <p className="adm-desc">일반 화면 자료 현황 왼쪽과 대시보드에 모두에게 보여요. 누르면 뉴스·논문에서 찾아요. 각자의 ☆ 즐겨찾기 · 최근 검색어는 사람(IP)마다 따로예요.</p>
+              {recommended && (
+                <ChipList
+                  id="recommended"
+                  label="추천 검색어 추가"
+                  hint="자동 수집 키워드와 별개예요 (수집은 하지 않고, 누를 때 찾아요). 최대 20개"
+                  placeholder="예: QD-OLED"
+                  words={view.recommended}
+                  onChange={(next) => change('recommended', next)}
                 />
               )}
             </section>

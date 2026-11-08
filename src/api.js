@@ -26,22 +26,42 @@ export function searchNewsApi(query, period = 'all') {
   return postJson('/api/search', { query, period })
 }
 
-// 즐겨찾는 검색어 (팀 공용, 자동 수집과 별개)
+// 검색어 (11/09): 추천 검색어(공용, 관리자가 고름) · 즐겨찾기 ☆ · 최근 검색어(IP별). 자동 수집과 별개
+// 결과: { recommended, favorites, recent } (recent가 null이면 서버에 아직 없음)
 export async function fetchFavorites() {
   const res = await fetch('/api/favorites')
   if (!res.ok) throw new Error('즐겨찾기를 불러오지 못했어요')
-  return (await res.json()).favorites
+  return res.json()
 }
 
-export async function saveFavoritesApi(favorites) {
+// data: { favorites?, recent? } 바꾼 것만
+export async function saveFavoritesApi(data) {
   const res = await fetch('/api/favorites', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ favorites }),
+    body: JSON.stringify(data),
+  })
+  const out = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(out.error ?? `서버 오류 (${res.status})`)
+  return out
+}
+
+export async function fetchRecommendedQueries() {
+  const res = await fetch('/api/admin/recommended-queries')
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data.recommended
+}
+
+export async function saveRecommendedQueriesApi(recommended) {
+  const res = await fetch('/api/admin/recommended-queries', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recommended }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
-  return data.favorites
+  return data.recommended
 }
 
 // 자사·자회사, 경쟁사, 관심 기술 목록 (팀 공용)
