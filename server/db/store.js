@@ -130,18 +130,25 @@ export async function updateReportSection(id, key, bullets) {
 }
 
 // 보고서 고치기 (줄 빼기 · AI 보충 근거 찾기): 본문(report)과 근거 목록(articles)을 통째로 바꾼다
+// 만든 브라우저 번호(createdBy)는 보낸 값을 무시하고 원래 값을 지킨다. 누구나 고칠 수는 있지만,
+// 번호를 바꿔 삭제 권한(만든 브라우저 · 관리자)을 가져가지 못하게 (11/08)
 export async function updateReport(id, report, articles) {
+  const { createdBy: _ignored, ...body } = report
   if (!dbEnabled()) {
     const r = memoryReports.find((x) => x.id === id)
-    if (r) Object.assign(r, { report, articles })
+    if (r) {
+      const owner = r.report?.createdBy
+      Object.assign(r, { report: owner ? { ...body, createdBy: owner } : body, articles })
+    }
     return
   }
-  await query('UPDATE reports SET report = $2, articles = $3, title = $4, updated_at = now() WHERE id = $1', [
-    id,
-    report,
-    JSON.stringify(articles),
-    report.title,
-  ])
+  await query(
+    `UPDATE reports
+        SET report = CASE WHEN report ? 'createdBy' THEN $2::jsonb || jsonb_build_object('createdBy', report->'createdBy') ELSE $2::jsonb END,
+            articles = $3, title = $4, updated_at = now()
+      WHERE id = $1`,
+    [id, body, JSON.stringify(articles), body.title],
+  )
 }
 
 // 보고서를 만든 브라우저 번호 (11/08부터 기록, 그 전 보고서는 null)

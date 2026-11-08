@@ -549,6 +549,7 @@ export async function handleApi(req, res) {
       return await handleReport(req, res)
     }
     // 보고서 고치기: 줄 빼기 · 되살리기, AI 보충 근거 반영 (11/08). 보고서함은 팀 공용이라 누구나 고칠 수 있다
+    // 단 만든 브라우저 번호(createdBy)는 서버가 원래 값으로 지킨다 (updateReport)
     if (req.method === 'PUT' && req.url.startsWith('/api/reports/')) {
       const id = decodeURIComponent(req.url.slice('/api/reports/'.length))
       const { report, articles } = await readJson(req)
