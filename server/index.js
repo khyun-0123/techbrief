@@ -8,6 +8,7 @@ import { feedList } from './collector/feeds.js'
 import { getTrends } from './trends.js'
 import { paperProviderStatus } from './papers/index.js'
 import { corpusStatus, startCorpus } from './papers/corpus.js'
+import { buildTimeline, timelineStory } from './timeline.js'
 import { popularPapers } from './papers/journals.js'
 import { getTechTrends, startTechTrends } from './techtrends.js'
 import { similarity } from './collector/dedupe.js'
@@ -509,6 +510,15 @@ export async function handleApi(req, res) {
         paperPending: Boolean(papers.pending),
         paperProvider: papers.provider ?? null,
       })
+    }
+    // 기술 시계열 (11/10): 숫자 · 단계는 규칙으로(buildTimeline), 글은 AI가 따로(timelineStory, 1분 안팎)
+    if (req.method === 'POST' && req.url === '/api/timeline') {
+      const { query, refresh = false } = await readJson(req)
+      return send(res, 200, await buildTimeline(query, { refresh: Boolean(refresh) }))
+    }
+    if (req.method === 'POST' && req.url === '/api/timeline/story') {
+      const { query, refresh = false } = await readJson(req)
+      return send(res, 200, await timelineStory(query, { refresh: Boolean(refresh) }))
     }
     // 영문 검색어가 늦게 만들어질 때 (paperPending) 화면이 뒤에서 다시 부른다: 논문 + 영문 표기로 찾은 1·2차 출처만 (11/10)
     if (req.method === 'POST' && req.url === '/api/search/papers') {

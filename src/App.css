@@ -5018,3 +5018,118 @@ a.brand:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* 기술 시계열 (11/10, TechTimeline.jsx): 그래프 넷은 단위가 달라 따로 (한 축에 겹치지 않음) */
+.tech-timeline {
+  width: min(1040px, 100%);
+}
+.tl-stage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  margin: 12px 0 16px;
+  font-size: var(--fs-md);
+}
+.tl-stage-badge {
+  padding: 2px 12px;
+  border: 1px solid var(--tb-color-text);
+  border-radius: var(--tb-radius-full);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.tl-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px 20px;
+  margin-bottom: 16px;
+}
+.tl-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+.tl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.tl-table caption {
+  margin-bottom: 6px;
+  color: var(--tb-color-text-sub);
+  text-align: left;
+}
+.tl-table th,
+.tl-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--tb-color-line-soft);
+  text-align: left;
+  vertical-align: top;
+}
+.tl-table thead th {
+  color: var(--tb-color-text-sub);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tl-table tbody th {
+  white-space: nowrap;
+}
+.tl-rising {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+}
+.tl-rising .chip {
+  padding: 0 10px;
+}
+.tl-origins,
+.tl-story details {
+  margin: 8px 0;
+  font-size: var(--fs-sm);
+}
+.tl-origins summary,
+.tl-story summary {
+  cursor: pointer;
+  color: var(--tb-color-text-sub);
+}
+.tl-story {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--tb-color-line);
+}
+.tl-story-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.tl-story-head h3 {
+  margin: 0;
+}
+.tl-story-sec h4 {
+  margin: 14px 0 4px;
+}
+.tl-story-sec ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.tl-story-sec li {
+  margin: 4px 0;
+}
+.tl-kind {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: var(--fs-xs, 12px);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tl-kind.fact {
+  background: var(--tb-color-bg-strong);
+  color: var(--tb-color-text);
+}
+.tl-kind.ai {
+  background: var(--tb-color-warning-soft);
+  color: var(--tb-color-text);
+}

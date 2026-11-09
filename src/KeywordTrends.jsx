@@ -11,12 +11,14 @@ const PAD = { t: 6, r: 6, b: 4, l: 2 }
 
 const fmtDay = (t, monthly) => {
   const [y, m, d] = t.split('-')
+  if (monthly === 'year') return `${y}년`
   return monthly ? `${y.slice(2)}년 ${Number(m)}월` : `${Number(m)}월 ${Number(d)}일`
 }
 const fmtAt = (iso) => new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
 const fmtNum = (v) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}천` : String(Math.round(v * 10) / 10))
 
-function Spark({ title, unit, series, note, source, asOf, monthly = false }) {
+// monthly: false(일별) · true(월별) · 'year'(해마다, 기술 시계열 11/10). 기술 시계열(TechTimeline.jsx)도 같이 쓴다
+export function Spark({ title, unit, series, note, source, asOf, monthly = false }) {
   const [hover, setHover] = useState(null)
   const pts = useMemo(() => {
     if (!series?.length) return []
