@@ -160,12 +160,14 @@ async function naverMonthly(word) {
 }
 
 // ── 특허 (30일 기억) ──
-async function patents(terms) {
+// cacheOnly: 미리 분석(뒤에서 도는 일)은 BigQuery를 부르지 않는다 (한 번 26GB, 하루 할당량 50GiB) → 사람이 열 때 받는다
+async function patents(terms, { cacheOnly = false } = {}) {
   const pattern = patternFromTerms(terms)
   if (!pattern) return { status: 'no_terms' }
   const key = `timeline-patents:${pattern}`
   const hit = await cacheGet(key).catch(() => null)
   if (hit) return hit
+  if (cacheOnly) return { status: 'later' }
   const r = await patentHistory(pattern)
   if (r.status !== 'ok') return r
   const total = new Map()
@@ -224,13 +226,22 @@ function stageOf(long, corpus, pat) {
 }
 
 // 돌려주는 값: { query, terms, stage, long, corpus, patents, naver, origins, at } (7일 기억)
-export async function buildTimeline(rawQuery, { refresh = false } = {}) {
+// background: 미리 분석 (특허는 기억해 둔 것만). 사람이 열었을 때 특허가 「나중에」였으면 그때 받아 채운다
+export async function buildTimeline(rawQuery, { refresh = false, background = false } = {}) {
   const q = String(rawQuery ?? '').trim().slice(0, 50)
   if (!q) throw Object.assign(new Error('기술 키워드를 입력해 주세요.'), { status: 400 })
   const key = `timeline:${queryKey(q)}`
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
-    if (hit) return { ...hit, cached: true }
+    if (hit && !(hit.patents?.status === 'later' && !background)) return { ...hit, cached: true }
+    if (hit) {
+      // 미리 분석해 둔 값에 특허만 채운다
+      const pat = await patents(hit.terms).catch((err) => ({ status: 'error', error: err.message }))
+      const out = { ...hit, patents: pat }
+      out.stage = stageOf(out.long.length ? out.long : (out.corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n })), out.corpus, pat.status === 'ok' ? pat : null)
+      await cachePut(key, out, pat.status === 'error' ? 10 * 60_000 : TTL).catch(() => {})
+      return { ...out, cached: false }
+    }
   }
   const t = await englishTerms(q, { waitMs: 60_000 })
   if (!t.terms.length) throw Object.assign(new Error(t.pending ? '영문 검색어를 만드는 중이에요. 잠시 뒤 다시 눌러 주세요.' : '영문 검색어를 만들지 못했어요. 영문으로 입력해 보세요.'), { status: 503 })
@@ -238,7 +249,9 @@ export async function buildTimeline(rawQuery, { refresh = false } = {}) {
   const corpus = await corpusFacts(t.terms).catch((err) => ({ error: err.message }))
   const display = (corpus?.total ?? 0) >= 15
   const settle = (p) => p.then((value) => ({ value }), (err) => ({ error: err.message }))
-  const [long, origins, pat, naver] = await Promise.all([settle(longPapers(en, display)), settle(originPapers(t.terms, display)), settle(patents(t.terms)), settle(naverMonthly(q))])
+  let [long, origins, pat, naver] = await Promise.all([settle(longPapers(en, display)), settle(originPapers(t.terms, display)), settle(patents(t.terms, { cacheOnly: background })), settle(naverMonthly(q))])
+  // OpenAlex가 큰 묶음에서 504(시간 초과)를 주기도 한다 (11/10 실측: micro led) → 한 번 더
+  if (long.error) long = await settle(longPapers(en, display))
   const out = {
     query: q,
     terms: t.terms,
@@ -252,11 +265,16 @@ export async function buildTimeline(rawQuery, { refresh = false } = {}) {
     naver: naver.value ?? { status: 'error', error: naver.error },
     at: new Date().toISOString(),
   }
-  out.stage = stageOf(out.long, corpus, out.patents.status === 'ok' ? out.patents : null)
+  // 장기 논문 수를 못 받았으면 단계 판정은 논문 DB(2018년~) 숫자로 (빈 값으로 「신생」이라 하지 않게)
+  const basis = out.long.length ? out.long : (corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n }))
+  out.stage = stageOf(basis, corpus, out.patents.status === 'ok' ? out.patents : null)
+  if (!out.long.length && basis.length) out.stage.why += ' (OpenAlex 응답이 없어 논문 DB 기준)'
   out.makers = (corpus?.periods ?? []).map((p) => ({ label: p.label, makers: p.companies.filter((c) => DISPLAY_MAKERS.test(c.name)).map((c) => c.name) }))
   out.corpusPartial = !(await corpusReady())
   // 논문 DB 처음 받기가 안 끝났으면 일부만 본 결과라 1시간만 기억
-  await cachePut(key, out, out.corpusPartial ? 3600_000 : TTL).catch(() => {})
+  // 일부 출처가 실패했으면 10분만 기억 (다음에 다시 받음)
+  const failed = out.longError || out.patents.status === 'error'
+  await cachePut(key, out, failed ? 10 * 60_000 : out.corpusPartial ? 3600_000 : TTL).catch(() => {})
   return { ...out, cached: false }
 }
 
@@ -300,8 +318,8 @@ function storyInput(tl) {
   return { text: lines.join('\n'), papers }
 }
 
-export async function timelineStory(rawQuery, { refresh = false } = {}) {
-  const tl = await buildTimeline(rawQuery)
+export async function timelineStory(rawQuery, { refresh = false, background = false } = {}) {
+  const tl = await buildTimeline(rawQuery, { background })
   const key = `timeline-story:${queryKey(tl.query)}`
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
@@ -310,7 +328,7 @@ export async function timelineStory(rawQuery, { refresh = false } = {}) {
   const { text, papers } = storyInput(tl)
   const { data, model } = await chatJson({
     kind: 'timeline',
-    priority: PRIORITY.USER,
+    priority: background ? PRIORITY.BACKGROUND : PRIORITY.USER, // 미리 분석은 사람 요청에 자리를 내준다
     timeoutMs: 240_000,
     schema: STORY_SCHEMA,
     schemaName: 'tech_timeline',
@@ -324,7 +342,8 @@ export async function timelineStory(rawQuery, { refresh = false } = {}) {
 - 근거 논문에서 확인되는 사실은 kind "fact"와 refs(번호). 해석 · 전망 · 제안은 kind "ai", refs는 빈 배열.
 - 주어진 숫자(논문 수, 기업 비율, 특허 수)로 쓴 글머리는 kind "fact", refs는 빈 배열이어도 된다.
 - 우리 회사(고객사)는 WOLED가 주력인 디스플레이 제조사다. QD-OLED는 경쟁사 기술이므로 우리 회사 연구 제안으로 'QD-OLED 도입'을 쓰지 않는다.
-- 한국어로만. 문장 안에 [1] 같은 번호를 쓰지 않는다.`,
+- 한국어로만. 영문 핵심어는 한국어로 옮기고 처음 한 번만 괄호에 영문 (예: 누화 감소(crosstalk reduction)). 문장 안에 [1] 같은 번호를 쓰지 않는다.
+- outlook 첫 글머리에 단계 이름만 되풀이하지 말고, 그 단계로 본 이유를 숫자로 쓴다.`,
       },
       { role: 'user', content: text },
     ],
@@ -349,4 +368,11 @@ export async function timelineStory(rawQuery, { refresh = false } = {}) {
   const out = { query: tl.query, story, papers: papers.map((p) => ({ title: p.title, year: p.year, journal: p.journal, doi: p.doi, cited: p.cited, companies: p.companies ?? [] })), model, at: new Date().toISOString() }
   await cachePut(key, out, TTL).catch(() => {})
   return { ...out, cached: false }
+}
+
+// 미리 분석해 둔 값만 꺼낸다 (부르지 않음): 대시보드 「미리 분석된 키워드」 · 미리 분석 일이 건너뛸지 볼 때
+export async function cachedTimeline(rawQuery) {
+  const k = queryKey(rawQuery)
+  const [tl, story] = await Promise.all([cacheGet(`timeline:${k}`).catch(() => null), cacheGet(`timeline-story:${k}`).catch(() => null)])
+  return { timeline: tl, story }
 }

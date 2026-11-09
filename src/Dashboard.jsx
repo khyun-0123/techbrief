@@ -1,12 +1,40 @@
-// 대시보드 (11/07 팀 회의): 첫 화면. (오늘 수집 · 선별 숫자는 11/08부터 위 메뉴 막대에 작게) · 자료 검색(키워드·즐겨찾기·최근 검색어 칩은 접어 둠) · 요즘 뜨는 기술 · 추적 중인 키워드 추이
-// - 「자료 검색」은 네이버에서 찾고 자료 현황 탭으로 넘어가 결과를 보여 준다
-// - 자동 수집 키워드를 누르면 자료 현황에서 모은 기사를 그 키워드로 걸러 보여 준다
-import { useState } from 'react'
-import KeywordTrends from './KeywordTrends.jsx'
+// 대시보드 (11/07 팀 회의, 11/10 다시 배치): 첫 화면
+// - 처음: 「키워드 분석」 검색창 + 바로 아래 「요즘 뜨는 기술」(참고해서 고르도록). 분석 칸은 비어 있어 작다
+// - 찾거나 기술을 누르면: 같은 패널 안에서 분석이 펼쳐진다 (연관 키워드 맵 + 기술 시계열, KeywordAnalysis.jsx). 검색창과 분석을 한 카드로 묶어 겹치지 않게
+//   「자료 찾기 →」(기간과 함께)를 눌러야 자료 현황에서 뉴스 · 논문을 찾는다. 「닫기」로 처음 모양으로
+// - 자동 수집 키워드 칩은 지금처럼 자료 현황에서 모은 기사를 그 키워드로 걸러 보여 준다
+// - 예전 「추적 중인 키워드 추이」는 11/10 조장 결정으로 뺐다 (KeywordTrends.jsx는 그래프 부품 Spark만 씀)
+import { useEffect, useRef, useState } from 'react'
+import { fetchReadyTimelines } from './api.js'
+import KeywordAnalysis, { AnalysisPreview } from './KeywordAnalysis.jsx'
 import TechTrends from './TechTrends.jsx'
 
-function Dashboard({ stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onKeyword, onGoCollect }) {
+function Dashboard({ stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onKeyword, onGoCollect, onRemember }) {
   const [text, setText] = useState('')
+  const [focus, setFocus] = useState(null) // 분석 중인 말 (없으면 검색창 + 미리 분석된 키워드 + 요즘 뜨는 기술)
+  const [ready, setReady] = useState([]) // 미리 분석해 둔 말 (11/10): 검색 전에도 분석이 어떤 모양인지 보이게
+  useEffect(() => {
+    let alive = true
+    fetchReadyTimelines()
+      .then((d) => alive && setReady(d.items ?? []))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+  const panelRef = useRef(null)
+
+  // 분석할 말을 바꾸고 그 자리로 (찾은 말은 최근 검색어에 남긴다)
+  function analyze(q) {
+    setFocus(q)
+    setText(q)
+    onRemember?.(q)
+    requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
+  function close() {
+    setFocus(null)
+    setText('')
+  }
   const recentOnly = recent.filter((q) => !favorites.includes(q) && !recommended.includes(q)).slice(0, 8)
   const recommendedOnly = recommended.filter((q) => !favorites.includes(q))
   const chipCount = keywords.length + recommendedOnly.length + favorites.length + recentOnly.length
@@ -14,7 +42,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
   function submit(e) {
     e.preventDefault()
     const q = text.trim()
-    if (q) onSearch(q)
+    if (q) analyze(q)
   }
 
   return (
@@ -22,7 +50,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
       <header className="page-header with-actions">
         <div>
           <h1>대시보드</h1>
-          <p>오늘 모인 자료와 키워드 흐름을 한눈에 봐요. 찾고 싶은 말이 있으면 아래에서 바로 찾으세요.</p>
+          <p>기술 키워드를 분석하고, 볼 범위를 정한 뒤 자료 현황에서 선별하세요.</p>
         </div>
         <div className="header-actions">
           <span className="header-count">{stats.collectedLabel}</span>
@@ -32,28 +60,49 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
         </div>
       </header>
 
-      <section className="panel dash-search">
-        <h2 className="dash-title">자료 검색</h2>
+      <section ref={panelRef} className={focus ? 'panel dash-search is-open' : 'panel dash-search'} aria-labelledby="dash-search-title">
+        <div className="dash-search-head">
+          <h2 id="dash-search-title" className="dash-title">
+            키워드 분석
+          </h2>
+          {focus && (
+            <button type="button" className="btn" onClick={close}>
+              닫기
+            </button>
+          )}
+        </div>
         <form className="search-form" onSubmit={submit}>
           <input
             type="search"
             placeholder="찾을 키워드·제목 (예: 마이크로LED, 투명 OLED)"
-            aria-label="자료 검색"
+            aria-label="분석할 키워드"
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
-          <select value={period} onChange={(e) => onPeriod(e.target.value)} aria-label="찾을 기간">
-            {periods.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-          <button type="submit" className="btn primary" disabled={!text.trim()}>
-            자료 검색
+          <button type="submit" className="btn primary" disabled={!text.trim() || text.trim() === focus}>
+            분석
           </button>
         </form>
-        <p className="dash-note">네이버 뉴스와 논문에서 찾아 자료 현황 탭에 보여 줘요. 기본은 「전체」(정확도 높은 100건)예요. 최신 기사만 보려면 「오늘」이나 「최근 7일」로 좁혀 보세요.</p>
+        {!focus && (
+          <>
+            <p className="dash-note">무엇을 찾을지 모르겠으면 아래 「요즘 뜨는 기술」이나 바로 볼 수 있는 분석에서 골라 보세요.</p>
+            {/* 예시: AI 정리까지 있는 미리 분석 중 흐름이 잘 보이는 것(「연구 지속」이 아닌 단계)을 먼저 */}
+            <AnalysisPreview example={(ready.find((r) => r.story && r.stage && r.stage !== '연구 지속') ?? ready.find((r) => r.story))?.query ?? null} onOpen={analyze} />
+            {ready.length > 0 && (
+              <div className="dash-ready" aria-label="미리 분석된 키워드">
+                <span className="dash-chips-label">바로 볼 수 있는 분석</span>
+                <div className="dash-ready-list">
+                  {ready.map((r) => (
+                    <button key={r.query} type="button" className="dash-ready-item" onClick={() => analyze(r.query)} title={`${r.from.join(' · ')}${r.growth ? ` · 논문 ${r.growth}배` : ''}${r.story ? ' · AI 정리 있음' : ''}`}>
+                      <b>{r.query}</b>
+                      {r.stage && <span className="dash-ready-stage">{r.stage}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
         {chipCount > 0 && (
           <details className="dash-more">
@@ -83,7 +132,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
                 </span>
                 <div className="dash-chips-list">
                   {recommendedOnly.map((k) => (
-                    <button key={k} type="button" className="chip dash-chip" onClick={() => onSearch(k)} title={`「${k}」 찾기 (관리자가 고른 추천 검색어)`}>
+                    <button key={k} type="button" className="chip dash-chip" onClick={() => analyze(k)} title={`「${k}」 분석 (관리자가 고른 추천 검색어)`}>
                       {k}
                     </button>
                   ))}
@@ -98,7 +147,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
                 </span>
                 <div className="dash-chips-list">
                   {favorites.map((k) => (
-                    <button key={k} type="button" className="chip dash-chip" onClick={() => onSearch(k)} title={`네이버에서 「${k}」 찾기`}>
+                    <button key={k} type="button" className="chip dash-chip" onClick={() => analyze(k)} title={`「${k}」 분석`}>
                       {k}
                     </button>
                   ))}
@@ -113,7 +162,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
                 </span>
                 <div className="dash-chips-list">
                   {recentOnly.map((k) => (
-                    <button key={k} type="button" className="chip dash-chip" onClick={() => onSearch(k)} title={`네이버에서 「${k}」 찾기`}>
+                    <button key={k} type="button" className="chip dash-chip" onClick={() => analyze(k)} title={`「${k}」 분석`}>
                       {k}
                     </button>
                   ))}
@@ -122,11 +171,11 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
             )}
           </details>
         )}
+        {/* key: 키워드가 바뀌면 새로 그린다 (고른 범위 · 받은 값 초기화) */}
+        {focus && <KeywordAnalysis key={focus} keyword={focus} onSearch={onSearch} periods={periods} period={period} onPeriod={onPeriod} />}
       </section>
 
-      <TechTrends onPick={onSearch} />
-
-      <KeywordTrends />
+      <TechTrends onPick={analyze} />
     </main>
   )
 }

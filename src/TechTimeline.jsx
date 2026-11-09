@@ -14,17 +14,20 @@ const STAGE_HINT = {
   '성숙 · 상용화': '논문 수는 비슷하고 기업 저자 비율이 높아요',
   '정체 · 감소': '논문이 줄고 있어요',
 }
+const THIS_YEAR = new Date().getFullYear()
 const pct = (v) => (v == null ? '-' : `${Math.round(v * 100)}%`)
 const doiUrl = (p) => (p.doi ? `https://doi.org/${p.doi}` : null)
 
-function TechTimeline({ query, onClose }) {
-  const [data, setData] = useState(null)
+// initialData: 대시보드 「키워드 분석」이 이미 받은 값이 있으면 다시 받지 않는다
+function TechTimeline({ query, onClose, initialData = null, initialStory = null }) {
+  const [data, setData] = useState(initialData)
   const [error, setError] = useState('')
-  const [story, setStory] = useState(null)
+  const [story, setStory] = useState(initialStory)
   const [storyState, setStoryState] = useState('idle') // idle · loading · error
   const [storyError, setStoryError] = useState('')
 
   useEffect(() => {
+    if (initialData) return undefined
     let alive = true
     fetchTimeline(query)
       .then((d) => alive && setData(d))
@@ -32,7 +35,7 @@ function TechTimeline({ query, onClose }) {
     return () => {
       alive = false
     }
-  }, [query])
+  }, [query, initialData])
 
   async function makeStory(refresh = false) {
     setStoryState('loading')
@@ -48,9 +51,8 @@ function TechTimeline({ query, onClose }) {
 
   const c = data?.corpus
   const yearly = (list) => (list ?? []).map((x) => ({ t: `${x.y}-01-01`, v: x.n }))
-  const now = new Date().getFullYear()
   // 올해는 아직 안 끝나 줄어 보이므로 그래프에서 뺀다
-  const full = (list) => (list ?? []).filter((x) => x.y < now)
+  const full = (list) => (list ?? []).filter((x) => x.y < THIS_YEAR)
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

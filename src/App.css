@@ -5133,3 +5133,349 @@ a.brand:focus-visible {
   background: var(--tb-color-warning-soft);
   color: var(--tb-color-text);
 }
+
+/* 대시보드 「키워드 분석」 (11/10, KeywordAnalysis.jsx): 왼쪽 연관 키워드 맵(임시) · 오른쪽 기술 시계열 요약 */
+.dash-search {
+  scroll-margin-top: 72px;
+}
+.dash-search-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+/* 분석이 펼쳐지면 검색창 아래로 결과가 이어진다 (같은 카드) */
+.ka {
+  display: grid;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--tb-color-line-soft);
+}
+.ka-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.ka-for {
+  margin: 0;
+  color: var(--tb-color-text-sub);
+}
+.ka-for b {
+  color: var(--tb-color-text);
+  font-size: var(--fs-md);
+}
+.ka-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ka-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+@media (max-width: 1100px) {
+  .ka-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ka-pane {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: var(--tb-radius-input, 8px);
+}
+.ka-pane-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+.ka-pane-head h3 {
+  margin: 0;
+  font-size: var(--fs-md);
+}
+.ka-temp {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+}
+.ka-map {
+  width: 100%;
+  height: auto;
+  max-height: 380px;
+}
+.ka-edge {
+  stroke: var(--tb-color-line);
+  stroke-width: 1;
+}
+.ka-center rect {
+  fill: var(--tb-color-text);
+}
+.ka-center text {
+  fill: var(--tb-color-text-inverse);
+  font-size: 15px;
+  font-weight: 700;
+}
+.ka-node {
+  cursor: pointer;
+}
+.ka-node text {
+  fill: var(--tb-color-text);
+  font-size: 12px;
+  pointer-events: none;
+}
+.ka-node.ka-tech rect {
+  fill: var(--tb-color-bg-strong);
+  stroke: var(--tb-color-bg-strong);
+  stroke-width: 2;
+}
+.ka-node.ka-firm rect {
+  fill: var(--tb-color-surface);
+  stroke: var(--tb-color-text-sub);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+.ka-node:hover rect,
+.ka-node:focus-visible rect {
+  stroke: var(--tb-color-text);
+}
+.ka-node:focus-visible {
+  outline: none;
+}
+.ka-node.on rect {
+  stroke: var(--tb-color-primary);
+  stroke-width: 2.5;
+  stroke-dasharray: none;
+}
+.ka-node.on text {
+  font-weight: 700;
+}
+.ka-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  font-size: var(--fs-sm);
+}
+.ka-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ka-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tb-color-text-sub);
+}
+.ka-key {
+  display: inline-block;
+  width: 18px;
+  height: 10px;
+  border-radius: 5px;
+}
+.ka-key-tech {
+  background: var(--tb-color-bg-strong);
+}
+.ka-key-firm {
+  margin-left: 8px;
+  border: 1.5px dashed var(--tb-color-text-sub);
+}
+.ka-sparks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 16px;
+}
+
+/* 대시보드 검색 전 「바로 볼 수 있는 분석」 (11/10): 미리 분석된 키워드 + 단계, 한 줄로 작게 */
+.dash-ready {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.dash-ready-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dash-ready-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.dash-ready-item:hover,
+.dash-ready-item:focus-visible {
+  border-color: var(--tb-color-text);
+}
+.dash-ready-stage {
+  color: var(--tb-color-text-sub);
+  white-space: nowrap;
+}
+/* 키워드 분석 오른쪽: 시계열 칸을 조금 넓게, 한눈에 · 사실 칸 */
+.ka-grid {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+}
+@media (max-width: 1100px) {
+  .ka-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ka-glance {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px 20px;
+  padding: 10px 12px;
+  border-radius: var(--tb-radius-input, 8px);
+  background: var(--tb-color-bg);
+}
+.ka-glance h4 {
+  margin: 0 0 4px;
+  font-size: var(--fs-sm);
+  color: var(--tb-color-text-sub);
+}
+.ka-glance ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: var(--fs-sm);
+}
+.ka-glance li {
+  margin: 3px 0;
+}
+.ka-facts {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.ka-facts div {
+  display: grid;
+  grid-template-columns: 9.5em minmax(0, 1fr);
+  gap: 8px;
+}
+.ka-facts dt {
+  color: var(--tb-color-text-sub);
+}
+.ka-facts dd {
+  margin: 0;
+}
+@media (max-width: 560px) {
+  .ka-facts div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
+
+/* 검색 전 「분석하면 이렇게 보여요」 (11/10): 실제 예시 하나로 4칸 축소판, 한 줄 (좁으면 2×2) */
+.kp {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: var(--tb-radius-input, 8px);
+  background: var(--tb-color-bg);
+  color: var(--tb-color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kp:hover,
+.kp:focus-visible {
+  border-color: var(--tb-color-text-sub);
+}
+.kp-title {
+  font-size: var(--fs-sm);
+  color: var(--tb-color-text-sub);
+}
+.kp-title b {
+  color: var(--tb-color-text);
+}
+.kp-open {
+  margin-left: 6px;
+  color: var(--tb-color-text);
+  font-weight: 600;
+}
+.kp-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 900px) {
+  .kp-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.kp-step {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--tb-color-surface);
+}
+.kp-label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.kp-text {
+  overflow: hidden;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kp-ai {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  color: var(--tb-color-text);
+}
+.kp-badge {
+  justify-self: start;
+  font-size: var(--fs-sm);
+}
+.kp-map,
+.kp-line {
+  width: 120px;
+  height: 36px;
+}
+.kp-map line {
+  stroke: var(--tb-color-line);
+}
+.kp-map circle {
+  fill: var(--tb-color-bg-strong);
+  stroke: var(--tb-color-text-sub);
+}
+.kp-map circle.firm {
+  fill: var(--tb-color-surface);
+  stroke-dasharray: 2 2;
+}
+.kp-map circle.center {
+  fill: var(--tb-color-text);
+  stroke: none;
+}
+.kp-line path {
+  fill: none;
+  stroke: var(--tb-color-text);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}

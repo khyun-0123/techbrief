@@ -83,7 +83,7 @@ function TopThree({ rows, cols, onPick }) {
         return (
           <li key={r.key} className="tt-top3-card">
             <span className="tt-top3-rank">{i + 1}위</span>
-            <button type="button" className="tt-top3-name" onClick={() => onPick(r.name)} title={`「${r.name}」 자료 찾기`}>
+            <button type="button" className="tt-top3-name" onClick={() => onPick(r.name)} title={`「${r.name}」 키워드 분석`}>
               {r.name}
             </button>
             <span className="tt-top3-meta">
@@ -129,7 +129,7 @@ function Composite({ data, onPick }) {
             <tr key={r.key} className={i < 3 ? 'tt-row-top' : undefined}>
               <td className="tt-rank">{i + 1}</td>
               <td>
-                <button type="button" className="tt-term" onClick={() => onPick(r.name)} title={`「${r.name}」 자료 찾기`}>
+                <button type="button" className="tt-term" onClick={() => onPick(r.name)} title={`「${r.name}」 키워드 분석`}>
                   {r.name}
                 </button>
                 <span className="tt-cat">{r.category}</span>
@@ -182,7 +182,7 @@ function SourceList({ src, win, onPick }) {
         {rows.map((r) => (
           <li key={r.key}>
             <span className="tt-namecell">
-              <button type="button" className="tt-term" onClick={() => onPick(r.name)} title={`「${r.name}」 자료 찾기`}>
+              <button type="button" className="tt-term" onClick={() => onPick(r.name)} title={`「${r.name}」 키워드 분석`}>
                 {r.name}
               </button>
               <From from={r.from} />
