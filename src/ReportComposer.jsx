@@ -11,6 +11,9 @@ import { AI_BLOCKED_TITLE, useOps } from './ops.js'
 import { load } from './utils.js'
 
 const DRAFT_INPUT_KEY = 'techbrief-report-input' // 제목 · 방향 · 조사 수준 (쓰던 것 남기기)
+const LAST_SCOPE_KEY = 'techbrief.lastScope' // 대시보드에서 마지막으로 고른 범위 (App.jsx runScopeSearch, 11/10)
+// 범위 → 보고서 방향 한 줄 (예: 게이밍 모니터 — QD-OLED · 주사율 · LG디스플레이 중심)
+const scopeLine = (sc) => (sc?.query && sc.terms?.length ? `${sc.query} — ${sc.terms.join(' · ')} 중심` : null)
 const REPORT_LIMIT = 10 // 서버 MAX_REPORT_ARTICLES
 const REPORT_MAX_ALL = 40
 const ACTIVE = ['queued', 'running', 'need_confirm']
@@ -111,6 +114,8 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
   const [saved0] = useState(() => load(DRAFT_INPUT_KEY, {}))
   const [title, setTitle] = useState(saved0.title ?? '테크 동향 브리핑')
   const [direction, setDirection] = useState(saved0.direction ?? '')
+  const [lastScope] = useState(() => load(LAST_SCOPE_KEY, null))
+  const scopeText = scopeLine(lastScope)
   const [level, setLevel] = useState(saved0.level ?? 'owned')
   const [mode, setMode] = useState('top')
   const [sending, setSending] = useState(false)
@@ -222,6 +227,20 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
                 placeholder="예: WOLED 관점에서 마이크로LED가 위협이 되는 시점과 대응 방향 위주로"
                 maxLength={300}
               />
+              {scopeText && !direction.includes(scopeText) && (
+                <button
+                  type="button"
+                  className="link-btn scope-fill"
+                  onClick={() => {
+                    const next = direction.trim() ? `${direction.trim()} / ${scopeText}` : scopeText
+                    setDirection(next)
+                    remember({ direction: next })
+                  }}
+                  title="대시보드 「키워드 분석」에서 마지막으로 고른 범위"
+                >
+                  고른 범위로 채우기: {scopeText}
+                </button>
+              )}
             </label>
             <fieldset className="composer-levels">
               <legend>자료 조사 수준</legend>

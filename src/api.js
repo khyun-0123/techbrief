@@ -480,3 +480,14 @@ export async function fetchReadyTimelines() {
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
   return data
 }
+
+// 연관 키워드 (대시보드 맵 재료) · 범위 찾기 (11/10)
+export async function fetchRelated(q) {
+  const res = await fetch(`/api/related?q=${encodeURIComponent(q)}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}
+export function searchScopeApi(scope, period = 'all') {
+  return postJson('/api/search/scope', { ...scope, period })
+}

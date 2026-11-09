@@ -403,7 +403,7 @@ export async function searchCollected(searchText, terms = [], { period = 'all' }
   )
   // 관련도 · 중요도는 검색어 기준으로 다시 본다: 글에 실제로 들어 있는 말(한글 검색어 또는 영문 표기)을 그 글의 키워드로
   const raw = [String(searchText).trim(), ...terms]
-  const stored = rows.map(({ published_at, group_id, full_title, ...r }) => {
+  const stored = rows.map(({ published_at, group_id: _groupId, full_title, ...r }) => {
     const text = `${full_title ?? r.title} ${r.description ?? ''}`.toLowerCase().replace(/\s+/g, '')
     const hit = raw.find((w) => text.includes(w.toLowerCase().replace(/\s+/g, ''))) ?? raw[0]
     return { ...r, keyword: hit, publishedAt: published_at.toISOString(), groupId: null, collected: true, ...(full_title ? { fullTitle: full_title } : {}) }
