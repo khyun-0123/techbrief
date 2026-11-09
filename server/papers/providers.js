@@ -130,6 +130,7 @@ function oaWork(w) {
     cited: w.cited_by_count ?? 0,
     fwci: w.fwci ?? null,
     topic: w.primary_topic ? { id: w.primary_topic.id.split('/').pop(), name: w.primary_topic.display_name } : null,
+    oaUrl: w.open_access?.oa_url ?? null, // 무료로 볼 수 있는 원문 주소 (나중에 전문 분석에 씀)
     provider: 'openalex',
   }
 }
@@ -143,10 +144,13 @@ const openalex = {
     if (req.sources?.length) f.push(`primary_location.source.id:${req.sources.map((s) => s.openalex).join('|')}`)
     if (req.topics?.length) f.push(`primary_topic.id:${req.topics.map((t) => t.id).join('|')}`)
     f.push(`type:${(req.types ?? ['article']).join('|')}`)
-    if (req.query) f.push(`title_and_abstract.search:${encodeURIComponent(req.query)}`)
-    const sort = req.sort === 'cited' ? 'cited_by_count:desc' : 'publication_date:desc'
-    const select = 'id,doi,title,publication_date,primary_location,cited_by_count,fwci,primary_topic,abstract_inverted_index'
-    const data = await openAlexGet(`/works?filter=${f.join(',')}&sort=${sort}&per-page=${Math.min(req.limit ?? 50, 200)}&select=${select}`)
+    // 검색어는 search.title_and_abstract 매개변수로 (11/09: 예전 filter 방식보다 관련도순 정렬이 됨, 검색 1회 $0.001)
+    const search = req.query ? `&search.title_and_abstract=${encodeURIComponent(req.query)}` : ''
+    // sort: 'relevance'(검색어가 있을 때만, 관련도순) · 'cited' · 'date'
+    const sort = req.sort === 'relevance' && req.query ? '' : `&sort=${req.sort === 'cited' ? 'cited_by_count:desc' : 'publication_date:desc'}`
+    const select = 'id,doi,title,publication_date,primary_location,cited_by_count,fwci,primary_topic,abstract_inverted_index,open_access'
+    // 한 쪽 최대 100편 (OpenAlex 공식, 200은 없앨 예정 · 2026-11-09 확인)
+    const data = await openAlexGet(`/works?filter=${f.join(',')}${search}${sort}&per-page=${Math.min(req.limit ?? 50, 100)}&select=${select}`)
     return Object.assign((data.results ?? []).map(oaWork), { exhausted: data.__exhausted })
   },
   // 기간 안 논문 수 (제목·초록에 그 말이 그대로 있는 것). 검색이라 1회 $0.001
@@ -176,7 +180,7 @@ const crossref = {
     const q = req.query || words.join(' ')
     const params = new URLSearchParams({
       filter: filters.join(','),
-      sort: req.sort === 'cited' ? 'is-referenced-by-count' : 'published',
+      sort: req.sort === 'cited' ? 'is-referenced-by-count' : req.sort === 'relevance' && q ? 'score' : 'published',
       order: 'desc',
       rows: String(Math.min(req.limit ?? 50, 100)),
       select: 'DOI,title,abstract,container-title,published,URL,is-referenced-by-count',
@@ -224,7 +228,7 @@ const semanticscholar = {
       query: q,
       publicationDateOrYear: `${req.from}:${req.to}`,
       fields: 'title,abstract,venue,publicationDate,externalIds,citationCount,url',
-      sort: req.sort === 'cited' ? 'citationCount:desc' : 'publicationDate:desc',
+      sort: req.sort === 'date' ? 'publicationDate:desc' : 'citationCount:desc', // bulk 검색에는 관련도순이 없어 인용순으로
     })
     const venues = (req.sources ?? []).map((s) => s.name).filter(Boolean)
     if (venues.length) params.set('venue', venues.join(','))
@@ -244,6 +248,34 @@ const semanticscholar = {
     const data = await s2Get(new URLSearchParams({ query: `"${term}"`, publicationDateOrYear: `${from}:${to}`, fields: 'paperId' }))
     return { value: data.total ?? 0 }
   },
+}
+
+// 초록이 빈 논문을 DOI로 Semantic Scholar에서 한 번에 채운다 (11/09 조장: 찾을 때마다 초록을 보여 주고 싶음)
+// OpenAlex는 일부 출판사(엘스비어 등) 초록을 주지 않는다 (11/09 실측: WOLED 100편 중 9편 빔)
+// 요청 1번(최대 500편). 키가 없으면 공용 풀이라 막힐 수 있음 → 실패하면 그냥 비워 둔다. 약관상 「Semantic Scholar」 출처 표시
+export async function s2Abstracts(dois) {
+  const ids = [...new Set(dois.filter(Boolean))].slice(0, 500)
+  if (!ids.length) return new Map()
+  const key = process.env.SEMANTIC_SCHOLAR_API_KEY
+  try {
+    const res = await paced('semanticscholar', 1100, () =>
+      fetch('https://api.semanticscholar.org/graph/v1/paper/batch?fields=abstract,externalIds', {
+        method: 'POST',
+        headers: { 'User-Agent': UA, 'Content-Type': 'application/json', ...(key ? { 'x-api-key': key } : {}) },
+        body: JSON.stringify({ ids: ids.map((d) => `DOI:${d}`) }),
+        signal: AbortSignal.timeout(8_000),
+      }),
+    )
+    if (!res.ok) return new Map()
+    const out = new Map()
+    for (const p of await res.json()) {
+      const doi = bareDoi(p?.externalIds?.DOI)
+      if (doi && p.abstract) out.set(doi, clean(p.abstract))
+    }
+    return out
+  } catch {
+    return new Map()
+  }
 }
 
 // ── 4. arXiv (키 없음. 3초에 1번 · 연결 1개, 메타데이터 CC0. 학술지 논문이 아니라 프리프린트) ──

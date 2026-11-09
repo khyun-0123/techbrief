@@ -116,6 +116,11 @@ function TitleWithIcon({ title, terms }) {
 // 왜 중요한지 (13 문서 F7). 보도량(같은 이슈 N건)과 최신성(발행 칸)은 이미 줄에 보이므로
 // 선별에 도움이 되는 전문 매체·경쟁사·관심 기술·기술 소식만 글로 보여 준다. 점수 전체는 마우스를 올리면
 function importanceReasons(a) {
+  // 논문 (찾기 결과, server/papers/journals.js paperScore): 인용 · 분야 보정 인용
+  if (a.paperParts) {
+    const pp = a.paperParts
+    return [pp.cited > 0 && `인용 ${pp.cited}회`, pp.fwciValue >= 1 && `분야 평균의 ${pp.fwciValue.toFixed(1)}배 인용`, pp.journal && '디스플레이 전문지'].filter(Boolean)
+  }
   const p = a.scoreParts ?? {}
   const out = []
   if (p.competitorName) out.push(`경쟁사 ${p.competitorName} 언급`)
@@ -126,6 +131,10 @@ function importanceReasons(a) {
 }
 
 function scoreTitle(a) {
+  if (a.paperParts) {
+    const pp = a.paperParts
+    return `중요도 ${a.importance ?? 0}점 = 검색 관련도 ${pp.relevance} + 월평균 인용 ${pp.citations} (월 ${pp.perMonth}회) + 분야 보정 인용 ${pp.fwci}${pp.fwciValue != null ? ` (FWCI ${pp.fwciValue})` : ''} + 전문지 ${pp.journal} + 최신성 ${pp.recency} · 60점 이상이면 중요`
+  }
   const p = a.scoreParts ?? {}
   const parts = [
     `보도량 ${p.coverage ?? 0}`,
@@ -139,6 +148,12 @@ function scoreTitle(a) {
   const weight = p.weight ?? 1
   const relevance = weight < 1 ? ` × 관련도 ${weight} (${weight >= 0.5 ? '관련도 중간' : '관련도 낮음'})` : ''
   return `중요도 ${a.importance ?? 0}점 = (${parts.join(' + ')})${relevance} · 60점 이상이면 중요`
+}
+
+// 논문 초록 (11/09 조장: 찾을 때마다 요약문 옆에 초록을). 찾기 결과는 abstract, 모은 논문은 description(앞의 [학술지] 떼고)
+function paperAbstract(a) {
+  if (!a.paper) return ''
+  return String(a.abstract ?? a.description ?? '').replace(/^(\[[^\]]*\]\s*)+/, '').trim()
 }
 
 const NEW_REPORTS_KEY = 'techbrief.newReports' // 아직 안 연 새 보고서 id
@@ -167,6 +182,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const features = useMemo(() => enabledFeatures(featureStates, mode), [featureStates, mode])
   const [techTerms, setTechTerms] = useState([]) // 핵심어 사전용 기술 용어
   const [tagsOpen, setTagsOpen] = useState(() => new Set()) // 「+N」을 눌러 키워드를 모두 펼친 기사
+  const [abstractOpen, setAbstractOpen] = useState(() => new Set()) // 「초록 전체 보기」를 누른 논문
   const [lists, setLists] = useState(null) // 자사·경쟁사·관심 기술 (「수집 설정」 칸 실험 기능에서 보기만)
   const [refreshError, setRefreshError] = useState('')
   const [starting, setStarting] = useState(false)
@@ -1276,6 +1292,37 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                                 <Highlight text={ai.summary.headline} terms={hlTerms} />
                               </p>
                             )}
+                            {(() => {
+                              const abs = paperAbstract(a)
+                              if (!abs) return a.paper ? <p className="row-sub muted">초록 없음 · 출판사가 공개하지 않았어요. 원문 링크에서 확인해 주세요</p> : null
+                              const absOpen = abstractOpen.has(a.id)
+                              return (
+                                <div className={`row-abstract${absOpen ? ' open' : ''}`}>
+                                  <p>
+                                    <span className="row-sub-label">초록</span>
+                                    <Highlight text={abs} terms={hlTerms} />
+                                    {a.abstractFrom && <span className="abstract-from"> (초록 출처: {a.abstractFrom})</span>}
+                                  </p>
+                                  {abs.length > 160 && (
+                                    <button
+                                      type="button"
+                                      className="link-btn"
+                                      aria-expanded={absOpen}
+                                      onClick={() =>
+                                        setAbstractOpen((prev) => {
+                                          const next = new Set(prev)
+                                          if (next.has(a.id)) next.delete(a.id)
+                                          else next.add(a.id)
+                                          return next
+                                        })
+                                      }
+                                    >
+                                      {absOpen ? '초록 접기' : '초록 전체 보기'}
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            })()}
                             {a.focus && (a.roundup || !ai?.summary?.headline) && (
                               <p className="row-sub" title="발췌에서 키워드 이야기 문장만 골랐어요">
                                 <span className="row-sub-label">{a.keyword} 내용</span>

@@ -6,9 +6,9 @@
 // 조사: 2026-11-06 (RSS 주소는 서버에서 직접 열어 확인). 쓸 수 없는 곳: 삼성디스플레이·BOE 뉴스룸(RSS 없음),
 //   Display Daily·Counterpoint·GlobeNewswire(접속 차단), Google 뉴스 RSS(개인 피드 리더 전용 약관)
 import { JSDOM } from 'jsdom'
-import { hasKeyword } from './aliases.js'
+import { englishOf, hasKeyword } from './aliases.js'
 import { articleId, cleanText } from './normalize.js'
-import { recentPapers } from '../papers/journals.js'
+import { keywordPapers, recentPapers } from '../papers/journals.js'
 
 export const TIER_LABEL = { 1: '1차', 2: '2차', 3: '3차' }
 
@@ -34,12 +34,26 @@ export const FEEDS = [
   { id: 'etnews', name: '전자신문', tier: 2, url: 'https://rss.etnews.com/06.xml' },
   { id: 'zdnet', name: 'ZDNet Korea', tier: 2, url: 'https://feeds.feedburner.com/zdkorea' },
   { id: 'digitimes', name: 'DIGITIMES', tier: 2, url: 'https://www.digitimes.com/rss/daily.xml', lang: 'en' },
+  // 11/09 추가 (서버에서 직접 열어 확인, 이용 조건은 미확인 → 제목 · 요약 · 링크만 저장): 기업 1차 발표 · 표준 단체 · 반도체 · AI 전문매체
+  { id: 'samsung-ko', name: '삼성전자 뉴스룸', tier: 1, url: 'https://news.samsung.com/kr/feed' },
+  { id: 'samsung-en', name: 'Samsung Newsroom', tier: 1, url: 'https://news.samsung.com/global/feed', lang: 'en' },
+  { id: 'skhynix-en', name: 'SK hynix Newsroom', tier: 1, url: 'https://news.skhynix.com/en/feed/', lang: 'en' }, // 한국어판 피드는 403
+  { id: 'vesa', name: 'VESA', tier: 1, url: 'https://vesa.org/feed/', lang: 'en' },
+  { id: 'semi-digest', name: 'Semiconductor Digest', tier: 2, url: 'https://www.semiconductor-digest.com/feed/', lang: 'en' },
+  { id: 'semi-eng', name: 'Semiconductor Engineering', tier: 2, url: 'https://semiengineering.com/feed/', lang: 'en' },
+  { id: 'eetimes', name: 'EE Times', tier: 2, url: 'https://www.eetimes.com/feed/', lang: 'en' },
+  { id: 'ieee-spectrum', name: 'IEEE Spectrum', tier: 2, url: 'https://spectrum.ieee.org/feeds/feed.rss', lang: 'en' },
 ]
 const BY_ID = new Map(FEEDS.map((f) => [f.id, f]))
 
 const FEED_DAYS = 14 // 이보다 오래된 글은 넣지 않는다 (화면 목록은 7일)
-const PAPER_DAYS = 7 // 논문은 최근 7일 (OpenAlex에 새 논문이 보이기까지 보통 하루, SID Digest는 몇 주)
+const PAPER_DAYS = 7 // 학술지 14곳 최근 7일 (OpenAlex에 새 논문이 보이기까지 보통 하루, SID Digest는 몇 주)
+// 키워드 논문 (11/09 조장: 저장 키워드는 주기적으로 모은다): 키워드마다 최근 PAPER_KEYWORD_DAYS일 관련도순 PAPER_PER_KEYWORD편
+// OpenAlex 검색 키워드당 1회 ($0.001), 6시간 캐시 → 키워드 10개면 하루 많아야 $0.04
+export const PAPER_KEYWORD_DAYS = 30
+const PAPER_PER_KEYWORD = 50
 const DESC_MAX = 400
+const PAPER_DESC_MAX = 2_000 // 논문은 초록 전체를 저장한다 (초록이 첫 요약 역할, 11/09 조장). OpenAlex 초록 CC0
 const TIMEOUT_MS = 15_000
 const UA = 'Mozilla/5.0 (techbrief news collector)'
 
@@ -53,8 +67,9 @@ export function tierOf(article, expertSources) {
 const text = (el, sel) => el.querySelector(sel)?.textContent?.trim() ?? ''
 
 // RSS 2.0과 Atom 둘 다
+// VESA 피드는 XML 선언 앞에 빈 줄이 있어 그대로 읽으면 오류 (11/09) → 앞 공백을 떼고 읽는다
 function parseFeed(xml) {
-  const doc = new JSDOM(xml, { contentType: 'text/xml' }).window.document
+  const doc = new JSDOM(xml.trimStart(), { contentType: 'text/xml' }).window.document
   const items = [...doc.querySelectorAll('item, entry')]
   return items.map((el) => {
     const linkEl = el.querySelector('link')
@@ -78,17 +93,35 @@ async function getText(url) {
 // 논문 (server/papers): 디스플레이 학술지 최근 7일 + 큰 학술지의 디스플레이 주제 논문
 // OpenAlex(키) → Crossref → Semantic Scholar 순서로, 막힌 곳은 건너뛴다. 같은 요청은 6시간 캐시
 // QD-OLED 논문은 경쟁사 기술이라 요약 앞에 표시한다 (고객사 기술은 WOLED)
-async function searchPapers() {
+const paperItem = (w, keyword) => ({
+  title: w.title,
+  link: w.doi ? `https://doi.org/${w.doi}` : w.url,
+  doi: w.doi,
+  // 학술지 이름을 요약 앞에 붙인다 (매체 칸은 '학술 논문' 하나로 두어 출처 목록이 길어지지 않게)
+  description: `${w.competitorTech ? '[경쟁사 기술 · QD-OLED] ' : ''}${w.journal ? `[${w.journal}] ` : ''}${w.abstract}`.slice(0, PAPER_DESC_MAX),
+  date: w.date ? `${w.date}T00:00:00Z` : '',
+  ...(keyword ? { keyword } : {}),
+})
+
+async function searchPapers(words) {
   const { works, providers } = await recentPapers(PAPER_DAYS)
-  const items = works.map((w) => ({
-    title: w.title,
-    link: w.doi ? `https://doi.org/${w.doi}` : w.url,
-    doi: w.doi,
-    // 학술지 이름을 요약 앞에 붙인다 (매체 칸은 '학술 논문' 하나로 두어 출처 목록이 길어지지 않게)
-    description: `${w.competitorTech ? '[경쟁사 기술 · QD-OLED] ' : ''}${w.journal ? `[${w.journal}] ` : ''}${w.abstract}`.slice(0, DESC_MAX),
-    date: w.date ? `${w.date}T00:00:00Z` : '',
-  }))
-  return Object.assign(items, { via: providers })
+  const items = works.map((w) => paperItem(w))
+  // 키워드마다 OpenAlex 검색 (한글 키워드는 영문 표기가 있을 때만). 한 키워드가 막혀도 나머지는 계속
+  const to = new Date().toISOString().slice(0, 10)
+  const from = new Date(Date.now() - PAPER_KEYWORD_DAYS * 86_400_000).toISOString().slice(0, 10)
+  const via = new Set(providers)
+  for (const word of words) {
+    const en = englishOf(word)
+    if (!en) continue
+    try {
+      const r = await keywordPapers(en, { from, to, limit: PAPER_PER_KEYWORD })
+      via.add(r.provider)
+      items.push(...r.works.map((w) => paperItem(w, word)))
+    } catch (err) {
+      console.warn(`[feeds] 키워드 논문 「${word}」 실패: ${err.message}`)
+    }
+  }
+  return Object.assign(items, { via: [...via] })
 }
 
 function toFeedArticle(item, feed, keyword) {
@@ -113,19 +146,21 @@ function toFeedArticle(item, feed, keyword) {
 // 결과: articles(넣을 기사), results(출처마다 받은 글 수 · 맞은 글 수 · 오류)
 export async function collectFeeds(words, { disabled = [] } = {}) {
   const since = Date.now() - FEED_DAYS * 86_400_000
+  const paperSince = Date.now() - PAPER_KEYWORD_DAYS * 86_400_000
   const feeds = FEEDS.filter((f) => !disabled.includes(f.id))
   const articles = []
   const results = []
   await Promise.all(
     feeds.map(async (feed) => {
       try {
-        const items = feed.paper ? await searchPapers() : parseFeed(await getText(feed.url))
+        const items = feed.paper ? await searchPapers(words) : parseFeed(await getText(feed.url))
         let matched = 0
         for (const item of items) {
           if (!item.title || !item.link) continue
           const at = Date.parse(item.date)
-          if (!Number.isNaN(at) && at < since) continue
-          const keyword = words.find((w) => hasKeyword(`${item.title} ${item.description}`, w))
+          if (!Number.isNaN(at) && at < (feed.paper ? paperSince : since)) continue
+          // 키워드로 찾은 논문은 그 키워드 (초록에만 영문 다른 표기로 있을 수 있음)
+          const keyword = item.keyword ?? words.find((w) => hasKeyword(`${item.title} ${item.description}`, w))
           if (!keyword) continue
           matched += 1
           articles.push(toFeedArticle(item, feed, keyword))
