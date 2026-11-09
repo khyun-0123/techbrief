@@ -125,7 +125,7 @@ function AdminSources({ onToast }) {
       <PaperProviders list={data.papers} />
       <div className="adm-sources-actions">
         <span className="adm-desc">
-          쓸 수 없는 곳: 삼성디스플레이 · BOE 뉴스룸(RSS 없음), Display Daily · Counterpoint(접속 차단), Google 뉴스 RSS(개인 피드 리더 전용 약관). 공시(OpenDART) · 논문 키가 필요한 곳은 키 발급 뒤 연결.
+          쓸 수 없는 곳: 삼성디스플레이 · BOE 뉴스룸(RSS 없음), Display Daily · Counterpoint(접속 차단), Google 뉴스 RSS(개인 피드 리더 전용 약관). 공시(OpenDART)는 기술 내용이 적어 붙이지 않음(11/09).
         </span>
         <button type="button" className="adm-btn primary" onClick={apply} disabled={!changed || saving}>
           {saving ? '적용 중…' : '적용'}
