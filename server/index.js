@@ -2,7 +2,8 @@
 // API만 따로 시험할 때: npm run server. 키는 .env.local에서 읽고 브라우저로 보내지 않는다
 import { createServer } from 'node:http'
 import { pathToFileURL } from 'node:url'
-import { collect, getSources, listArticles, saveSources, searchArticles } from './collector/index.js'
+import { collect, getSources, listArticles, saveSources, searchArticles, searchCollected } from './collector/index.js'
+import { englishTerms, frequentSearches, listQueryTerms, pruneSearchCounts, recordSearch, setQueryTerms } from './queryTerms.js'
 import { feedList } from './collector/feeds.js'
 import { getTrends } from './trends.js'
 import { paperProviderStatus } from './papers/index.js'
@@ -263,6 +264,7 @@ export function startScheduler() {
   const prune = () => {
     pruneUsage().catch((err) => console.warn(`[usage] 오래된 기록 정리 실패: ${err.message}`))
     pruneArticleTexts().catch((err) => console.warn(`[texts] 오래된 원문 정리 실패: ${err.message}`)) // 원문은 90일만
+    pruneSearchCounts().catch((err) => console.warn(`[search] 오래된 검색어 횟수 정리 실패: ${err.message}`)) // 검색어 횟수는 90일만
     // 보고서 자동 삭제: 관리자가 정한 기간(기본 꺼짐)이 지난 보고서
     getSetting(REPORT_RETENTION_SETTING, 0)
       .then((days) => deleteReportsOlderThan(Number(days) || 0))
@@ -477,13 +479,44 @@ export async function handleApi(req, res) {
     if (req.method === 'POST' && req.url === '/api/search') {
       // 뉴스(네이버) + 논문을 같이 찾는다 (11/08). 논문이 막혀도 뉴스 결과는 그대로
       const { query, period } = await readJson(req)
-      const [news, papers] = await Promise.all([
+      // 11/10: 한글 검색어는 영문 검색어를 먼저 만든다(queryTerms.js). 네이버는 기다리지 않고 같이 찾는다
+      //   논문(OpenAlex)과 이미 모은 1·2차 출처(DB)는 영문 검색어로도 찾는다
+      const terms = englishTerms(query).catch((err) => ({ terms: [], source: null, error: err.message }))
+      const [news, papers, collected] = await Promise.all([
         searchArticles(query, { period }),
-        searchPaperArticles(query, period).catch((err) => ({ articles: [], note: `논문을 찾지 못했어요 (${err.message})` })),
+        terms.then((t) => searchPaperArticles(query, period, t)).catch((err) => ({ articles: [], note: `논문을 찾지 못했어요 (${err.message})` })),
+        terms.then((t) => searchCollected(query, t.terms, { period })).catch((err) => {
+          console.warn(`[search] 1·2차 출처 찾기 실패: ${err.message}`)
+          return { articles: [] }
+        }),
       ])
+      recordSearch(query, clientIp(req)).catch((err) => console.warn(`[search] 검색어 횟수 기록 실패: ${err.message}`))
       // 찾기 결과 중 「중요」 뉴스는 자동 요약 대기열에 (11/09 조장, refresh.js). 응답은 기다리지 않는다
       queueSearchSummaries(news.articles).catch((err) => console.warn(`[search] 자동 요약 넣기 실패: ${err.message}`))
-      return send(res, 200, { ...news, articles: [...news.articles, ...papers.articles], newsCount: news.articles.length, paperCount: papers.articles.length, paperNote: papers.note, paperProvider: papers.provider ?? null })
+      // 네이버 결과와 같은 글(주소)은 1·2차 쪽을 뺀다
+      const seen = new Set(news.articles.map((a) => a.url))
+      const feedHits = collected.articles.filter((a) => !seen.has(a.url))
+      return send(res, 200, {
+        ...news,
+        articles: [...news.articles, ...feedHits, ...papers.articles],
+        newsCount: news.articles.length,
+        collectedCount: feedHits.length,
+        paperCount: papers.articles.length,
+        paperNote: papers.note,
+        paperTerms: papers.terms ?? [],
+        paperPending: Boolean(papers.pending),
+        paperProvider: papers.provider ?? null,
+      })
+    }
+    // 영문 검색어가 늦게 만들어질 때 (paperPending) 화면이 뒤에서 다시 부른다: 논문 + 영문 표기로 찾은 1·2차 출처만 (11/10)
+    if (req.method === 'POST' && req.url === '/api/search/papers') {
+      const { query, period } = await readJson(req)
+      const t = await englishTerms(query, { waitMs: 90_000 })
+      const [papers, collected] = await Promise.all([
+        searchPaperArticles(query, period, t).catch((err) => ({ articles: [], note: `논문을 찾지 못했어요 (${err.message})` })),
+        searchCollected(query, t.terms, { period }).catch(() => ({ articles: [] })),
+      ])
+      return send(res, 200, { query, collected: collected.articles, papers: papers.articles, paperNote: papers.note, paperTerms: papers.terms ?? [], paperPending: Boolean(papers.pending) })
     }
     // 검색어 (11/09 조장 결정): 「추천 검색어」는 관리자가 관리 페이지에서 고르는 공용 목록,
     // 즐겨찾기 ☆ · 최근 검색어는 IP별 (선별 폴더와 같은 방식). 예전 공용 즐겨찾기(favorite_queries)는 추천 검색어의 처음 값으로 쓴다
@@ -508,6 +541,20 @@ export async function handleApi(req, res) {
         await setSetting(`recent_queries:ip:${ip}`, out.recent)
       }
       return send(res, 200, out)
+    }
+    // 자주 찾은 새 키워드 · 검색어 영문 표기 (11/10): 자동 수집 키워드는 회의를 거쳐 관리자가 넣는다 → 그 판단 자료
+    if (req.method === 'GET' && req.url.startsWith('/api/admin/search-terms')) {
+      requireAdmin(req)
+      const days = Math.min(90, Math.max(1, Number(new URL(req.url, 'http://x').searchParams.get('days')) || 14))
+      const exclude = [...(await getKeywords().catch(() => [])), ...(await recommendedQueries())]
+      return send(res, 200, { days, frequent: await frequentSearches({ days, exclude }), translations: await listQueryTerms() })
+    }
+    if (req.method === 'PUT' && req.url === '/api/admin/query-terms') {
+      const admin = requireAdmin(req)
+      const { query, terms = [] } = await readJson(req)
+      const saved = await setQueryTerms(query, terms)
+      await logChange(admin, '검색어 영문 표기', saved.terms.length ? `${saved.query} → ${saved.terms.join(' · ')}` : `${saved.query} 지움 (다음 찾기 때 AI가 다시 만듦)`)
+      return send(res, 200, saved)
     }
     if (req.method === 'GET' && req.url === '/api/admin/recommended-queries') {
       requireAdmin(req)

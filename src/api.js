@@ -26,6 +26,11 @@ export function searchNewsApi(query, period = 'all') {
   return postJson('/api/search', { query, period })
 }
 
+// 논문 검색어(영문)가 늦게 만들어졌을 때 논문 · 1·2차 출처만 다시 받는다 (11/10)
+export function searchPapersApi(query, period = 'all') {
+  return postJson('/api/search/papers', { query, period })
+}
+
 // 검색어 (11/09): 추천 검색어(공용, 관리자가 고름) · 즐겨찾기 ☆ · 최근 검색어(IP별). 자동 수집과 별개
 // 결과: { recommended, favorites, recent } (recent가 null이면 서버에 아직 없음)
 export async function fetchFavorites() {
@@ -439,4 +444,23 @@ export async function answerReportJob(id, use, clientId) {
 
 export async function cancelReportJob(id, clientId) {
   return (await postJson(`/api/report-jobs/${encodeURIComponent(id)}/cancel`, { clientId })).job
+}
+
+// 관리 페이지: 자주 찾은 새 키워드 · 검색어 영문 표기 (11/10)
+export async function fetchSearchTerms(days = 14) {
+  const res = await fetch(`/api/admin/search-terms?days=${days}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}
+
+export async function saveQueryTermsApi(query, terms) {
+  const res = await fetch('/api/admin/query-terms', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, terms }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
 }

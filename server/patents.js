@@ -24,7 +24,7 @@ const PATTERNS = {
 }
 export const patentPatternOf = (k) => PATTERNS[String(k).trim().toLowerCase()] ?? null
 
-function readKey() {
+export function readKey() {
   const file = path.resolve(process.env.GCP_KEY_FILE || 'gcp-key.json')
   if (!fs.existsSync(file)) return null
   try {
@@ -34,10 +34,11 @@ function readKey() {
   }
 }
 
-async function accessToken(key) {
+// scope: 기본은 BigQuery. 검색어 번역(queryTerms.js)은 Cloud Translation 범위로 같은 서비스 계정 키를 쓴다 (11/10)
+export async function accessToken(key, scope = 'https://www.googleapis.com/auth/bigquery') {
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url')
   const now = Math.floor(Date.now() / 1000)
-  const claim = { iss: key.client_email, scope: 'https://www.googleapis.com/auth/bigquery', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 }
+  const claim = { iss: key.client_email, scope, aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 }
   const unsigned = `${b64({ alg: 'RS256', typ: 'JWT' })}.${b64(claim)}`
   const jwt = `${unsigned}.${crypto.sign('RSA-SHA256', Buffer.from(unsigned), key.private_key).toString('base64url')}`
   const res = await fetch('https://oauth2.googleapis.com/token', {

@@ -7,7 +7,8 @@
 // 조사: 2026-11-06 (RSS 주소는 서버에서 직접 열어 확인). 쓸 수 없는 곳: 삼성디스플레이·BOE 뉴스룸(RSS 없음),
 //   Display Daily·Counterpoint·GlobeNewswire(접속 차단), Google 뉴스 RSS(개인 피드 리더 전용 약관)
 import { JSDOM } from 'jsdom'
-import { englishOf, hasKeyword } from './aliases.js'
+import { hasKeyword } from './aliases.js'
+import { knownTerms, openAlexQuery } from '../queryTerms.js'
 import { BROAD_KEYWORD } from './relevance.js'
 import { articleId, cleanText } from './normalize.js'
 import { keywordPapers, recentPapers } from '../papers/journals.js'
@@ -113,8 +114,10 @@ async function searchPapers(words) {
   const from = new Date(Date.now() - PAPER_KEYWORD_DAYS * 86_400_000).toISOString().slice(0, 10)
   const via = new Set(providers)
   for (const word of words) {
-    const en = englishOf(word)
-    if (!en) continue
+    // 별칭표 · 저장된 영문 표기만 쓴다 (자동 수집은 AI를 부르지 않음, 11/10). 없으면 이 키워드 논문은 건너뜀
+    const known = await knownTerms(word)
+    if (!known.length) continue
+    const en = openAlexQuery(known)
     try {
       const r = await keywordPapers(en, { from, to, limit: PAPER_PER_KEYWORD })
       via.add(r.provider)

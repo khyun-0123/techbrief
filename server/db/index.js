@@ -142,6 +142,25 @@ CREATE TABLE IF NOT EXISTS tech_trend_values (
 );
 CREATE INDEX IF NOT EXISTS tech_trend_values_recent_idx ON tech_trend_values (source, term, kind, fetched_at DESC);
 
+-- 검색어의 영문 표기 (11/10, server/queryTerms.js): 한글 검색어로 논문 · 영문 출처를 찾을 때 쓴다
+-- source: 'llm'(AI가 만든 것) · 'admin'(관리자가 고친 것). 관리 페이지 「검색어 영문 표기」에서 고치거나 지운다
+CREATE TABLE IF NOT EXISTS query_terms (
+  query       text PRIMARY KEY,
+  terms       jsonb NOT NULL,
+  source      text NOT NULL,
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- 「뉴스·논문에서 찾기」 검색어별 하루 횟수 (11/10): 관리 페이지 「자주 찾은 새 키워드」 → 회의에서 자동 수집 키워드로 정할 때 참고
+-- 사람 수는 IP를 그대로 두지 않고 하루 단위 해시 앞 12자리만 둔다. 90일 지나면 지움
+CREATE TABLE IF NOT EXISTS search_counts (
+  query     text NOT NULL,
+  day       date NOT NULL,
+  searches  integer NOT NULL DEFAULT 0,
+  people    text[] NOT NULL DEFAULT '{}',
+  PRIMARY KEY (query, day)
+);
+
 CREATE TABLE IF NOT EXISTS app_settings (
   key        text PRIMARY KEY,
   value      jsonb NOT NULL,
