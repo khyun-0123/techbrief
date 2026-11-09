@@ -1,6 +1,7 @@
 // 기사 한 건(+ 같은 이슈 기사)의 6항목 요약을 만든다. 화면 요청(/api/summaries)과 자동 최신화가 같이 쓴다
 import { articleId } from './collector/normalize.js'
 import { fetchBody } from './collector/fulltext.js'
+import { PAPER_BODY_MAX, paperFullText } from './papers/fulltext.js'
 import { articleUrlOf, getArticleText, getSummary, saveArticleText, saveSummary } from './db/store.js'
 import { chatJson, PRIORITY } from './llm/client.js'
 import { isSupported, stripInlineRefs } from './llm/evidence.js'
@@ -45,11 +46,17 @@ export async function summarizeArticle(article, related = [], { refresh = false,
   if (saved && !(select && saved.summary?.basisSource !== 'fulltext')) return { ...saved, cached: true }
   const url = article.url || (await articleUrlOf(id))
   const stored = await getArticleText(id)
-  const body = stored ?? (await fetchBody(url))
+  // 논문 (11/10): DOI 페이지는 대개 유료벽이라 열린 원문(오픈 액세스 · arXiv · Semantic Scholar PDF)에서 서론 · 결론 · 그림 설명까지
+  //   못 받으면 초록 전체로 요약하고 「초록 기준」으로 표시 (papers/fulltext.js)
+  const paper = article.paper || /doi\.org\//.test(url ?? '')
+  const paperText = paper && !stored ? await paperFullText({ doi: article.doi ?? url?.match(/doi\.org\/(.+)$/)?.[1], oaUrl: article.oaUrl, url }) : null
+  const body = stored ?? (paper ? paperText?.body ?? null : await fetchBody(url))
   if (select && body && !stored) await saveArticleText(id, url, body)
   // 선별했지만 원문을 못 가져왔고 예전 요약이 있으면 그대로 쓴다 (다시 해도 같은 발췌문 요약)
   if (saved && !body) return { ...saved, cached: true }
-  const articles = [{ ...article, body: body ? body.slice(0, BODY_MAX) : null }, ...related]
+  const abstract = paper && !body ? String(article.abstract ?? '').trim() : ''
+  const max = paper ? PAPER_BODY_MAX : BODY_MAX
+  const articles = [{ ...article, body: body ? body.slice(0, max) : abstract ? `[초록]\n${abstract}` : null }, ...related]
   const { data, model } = await chatJson({
     messages: buildSummaryMessages(articles),
     schema: SUMMARY_SCHEMA,
@@ -57,7 +64,8 @@ export async function summarizeArticle(article, related = [], { refresh = false,
     priority,
   })
   const summary = checkBasis(data, articles)
-  summary.basisSource = body ? 'fulltext' : 'excerpt'
+  summary.basisSource = body ? 'fulltext' : abstract ? 'abstract' : 'excerpt'
+  if (paperText) Object.assign(summary, { basisFrom: paperText.from, basisUrl: paperText.url })
   const result = { summary, model, createdAt: new Date().toISOString() }
   await saveSummary(id, result, related.map((r) => (r.id || r.url ? idOf(r) : null)))
   return result

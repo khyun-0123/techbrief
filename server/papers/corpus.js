@@ -161,6 +161,16 @@ export function startCorpus() {
 }
 
 // ── 찾기 ──
+// 처음 받기가 끝난 뒤에만 찾기에 쓴다 (받는 중에는 일부만 있어 OpenAlex 검색보다 적게 나옴, 11/10 실측). 5분 기억
+let readyCache = { at: 0, value: false }
+export async function corpusReady() {
+  if (!dbEnabled()) return false
+  if (Date.now() - readyCache.at < 5 * 60_000) return readyCache.value
+  const state = await getSetting(STATE_KEY, {}).catch(() => ({}))
+  readyCache = { at: Date.now(), value: Boolean(state.backfillDone) }
+  return readyCache.value
+}
+
 // terms: 영문 검색어 (queryTerms.js). 표현 그대로 맞는 것(phrase) 또는 낱말이 모두 든 것(plain)
 // 돌려주는 값: 관련도 순서(rank)가 붙은 논문 행 (최대 limit)
 export async function searchCorpus(terms, { from, to, limit = 400 } = {}) {
