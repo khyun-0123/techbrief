@@ -7,11 +7,11 @@
 import { createHash } from 'node:crypto'
 import { englishOf } from './collector/aliases.js'
 import { keywordPapers, paperScore } from './papers/journals.js'
-import { HIGH_THRESHOLD } from './collector/score.js'
 
 const DAYS = { today: 90, week: 365, all: 365 * 3 } // 논문은 하루 · 일주일 안에 거의 없어 넓게
 const LIMIT = 100
 const ABSTRACT_MAX = 2_000
+const PAPER_HIGH = 60 // 논문 점수(paperScore)는 기사 점수와 따로라 「중요」 기준도 따로
 
 export async function searchPaperArticles(query, period = 'all') {
   const en = englishOf(query)
@@ -40,7 +40,7 @@ export async function searchPaperArticles(query, period = 'all') {
       cited: w.cited ?? 0,
       relevance: 'high',
       importance: score,
-      importanceLevel: score >= HIGH_THRESHOLD ? 'high' : 'normal',
+      importanceLevel: score >= PAPER_HIGH ? 'high' : 'normal',
       paperParts: parts,
       sameIssue: 0,
     }
