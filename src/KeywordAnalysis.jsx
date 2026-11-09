@@ -66,7 +66,8 @@ function MapPlaceholder({ keyword, data, count, selected, onToggle }) {
   )
 }
 
-function KeywordAnalysis({ keyword, onSearch }) {
+// 대시보드 「키워드 분석」 패널 안(검색창 아래)에 펼쳐진다. 기간은 「자료 찾기 →」로 자료 현황에서 찾을 때만 쓴다
+function KeywordAnalysis({ keyword, onSearch, periods = [], period, onPeriod }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [count, setCount] = useState(8)
@@ -89,17 +90,25 @@ function KeywordAnalysis({ keyword, onSearch }) {
   const toggle = (name) => setSelected((s) => (s.includes(name) ? s.filter((x) => x !== name) : [...s, name]))
 
   return (
-    <section className="panel ka" aria-labelledby="ka-title">
+    <div className="ka" aria-label={`「${keyword}」 분석`}>
       <div className="ka-head">
-        <div>
-          <h2 id="ka-title" className="dash-title">
-            키워드 분석 · {keyword}
-          </h2>
-          <p className="dash-note">연관 키워드에서 볼 범위를 고르고, 기술의 흐름을 확인한 뒤 자료 현황에서 선별해요.</p>
+        <p className="ka-for">
+          <b>{keyword}</b> — 연관 키워드에서 볼 범위를 고르고 기술의 흐름을 확인한 뒤 자료를 찾아요
+        </p>
+        <div className="ka-actions">
+          {periods.length > 0 && (
+            <select value={period} onChange={(e) => onPeriod?.(e.target.value)} aria-label="자료 찾을 기간">
+              {periods.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          )}
+          <button type="button" className="btn primary" onClick={() => onSearch(keyword)}>
+            「{keyword}」 자료 찾기 →
+          </button>
         </div>
-        <button type="button" className="btn primary" onClick={() => onSearch(keyword)}>
-          「{keyword}」 자료 찾기 →
-        </button>
       </div>
 
       <div className="ka-grid">
@@ -184,7 +193,7 @@ function KeywordAnalysis({ keyword, onSearch }) {
         </div>
       </div>
       {open && <TechTimeline query={keyword} initialData={data} onClose={() => setOpen(false)} />}
-    </section>
+    </div>
   )
 }
 

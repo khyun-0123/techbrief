@@ -1,8 +1,7 @@
-// 대시보드 (11/07 팀 회의, 11/10 다시 배치): 첫 화면. 위에서 아래로 「찾기 → 분석 → 발견」
-// 1. 자료 검색 — 찾으면 바로 자료 현황으로 가지 않고, 아래 「키워드 분석」(연관 키워드 맵 + 기술 시계열)을 그 키워드로 채운다 (11/10 조장 흐름:
-//    키워드로 검색 → 맵 → 범위 선정 → 자료 현황에서 선별). 「자료 찾기 →」를 누르면 자료 현황에서 찾는다
-// 2. 키워드 분석 (KeywordAnalysis.jsx) — 처음엔 자동 수집 키워드 첫 번째
-// 3. 요즘 뜨는 기술 — 기술을 누르면 위 키워드 분석이 그 기술로 바뀐다
+// 대시보드 (11/07 팀 회의, 11/10 다시 배치): 첫 화면
+// - 처음: 「키워드 분석」 검색창 + 바로 아래 「요즘 뜨는 기술」(참고해서 고르도록). 분석 칸은 비어 있어 작다
+// - 찾거나 기술을 누르면: 같은 패널 안에서 분석이 펼쳐진다 (연관 키워드 맵 + 기술 시계열, KeywordAnalysis.jsx). 검색창과 분석을 한 카드로 묶어 겹치지 않게
+//   「자료 찾기 →」(기간과 함께)를 눌러야 자료 현황에서 뉴스 · 논문을 찾는다. 「닫기」로 처음 모양으로
 // - 자동 수집 키워드 칩은 지금처럼 자료 현황에서 모은 기사를 그 키워드로 걸러 보여 준다
 // - 예전 「추적 중인 키워드 추이」는 11/10 조장 결정으로 뺐다 (KeywordTrends.jsx는 그래프 부품 Spark만 씀)
 import { useRef, useState } from 'react'
@@ -11,15 +10,19 @@ import TechTrends from './TechTrends.jsx'
 
 function Dashboard({ stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onKeyword, onGoCollect, onRemember }) {
   const [text, setText] = useState('')
-  const [focus, setFocus] = useState(null) // 키워드 분석에 보일 말 (고르기 전엔 자동 수집 키워드 첫 번째)
-  const shown = focus ?? keywords[0] ?? null
-  const analysisRef = useRef(null)
+  const [focus, setFocus] = useState(null) // 분석 중인 말 (없으면 검색창 + 요즘 뜨는 기술만)
+  const panelRef = useRef(null)
 
   // 분석할 말을 바꾸고 그 자리로 (찾은 말은 최근 검색어에 남긴다)
   function analyze(q) {
     setFocus(q)
+    setText(q)
     onRemember?.(q)
-    requestAnimationFrame(() => analysisRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
+  function close() {
+    setFocus(null)
+    setText('')
   }
   const recentOnly = recent.filter((q) => !favorites.includes(q) && !recommended.includes(q)).slice(0, 8)
   const recommendedOnly = recommended.filter((q) => !favorites.includes(q))
@@ -36,7 +39,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
       <header className="page-header with-actions">
         <div>
           <h1>대시보드</h1>
-          <p>키워드를 찾으면 연관 키워드와 기술의 흐름을 먼저 보여 줘요. 볼 범위를 정한 뒤 자료 현황에서 선별하세요.</p>
+          <p>기술 키워드를 분석하고, 볼 범위를 정한 뒤 자료 현황에서 선별하세요.</p>
         </div>
         <div className="header-actions">
           <span className="header-count">{stats.collectedLabel}</span>
@@ -46,8 +49,17 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
         </div>
       </header>
 
-      <section className="panel dash-search">
-        <h2 className="dash-title">키워드 검색</h2>
+      <section ref={panelRef} className={focus ? 'panel dash-search is-open' : 'panel dash-search'} aria-labelledby="dash-search-title">
+        <div className="dash-search-head">
+          <h2 id="dash-search-title" className="dash-title">
+            키워드 분석
+          </h2>
+          {focus && (
+            <button type="button" className="btn" onClick={close}>
+              닫기
+            </button>
+          )}
+        </div>
         <form className="search-form" onSubmit={submit}>
           <input
             type="search"
@@ -56,18 +68,11 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
-          <select value={period} onChange={(e) => onPeriod(e.target.value)} aria-label="찾을 기간">
-            {periods.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-          <button type="submit" className="btn primary" disabled={!text.trim()}>
+          <button type="submit" className="btn primary" disabled={!text.trim() || text.trim() === focus}>
             분석
           </button>
         </form>
-        <p className="dash-note">아래 「키워드 분석」에 연관 키워드와 기술 시계열을 보여 줘요. 뉴스 · 논문 목록은 「자료 찾기 →」로 자료 현황에서 봐요 (기간은 그때 이 값으로).</p>
+        {!focus && <p className="dash-note">연관 키워드와 기술의 흐름(논문 · 특허 · 기업 참여)을 보여 줘요. 무엇을 찾을지 모르겠으면 아래 「요즘 뜨는 기술」에서 골라 보세요.</p>}
 
         {chipCount > 0 && (
           <details className="dash-more">
@@ -136,12 +141,9 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
             )}
           </details>
         )}
-      </section>
-
-      <div ref={analysisRef} className="ka-anchor">
         {/* key: 키워드가 바뀌면 새로 그린다 (고른 범위 · 받은 값 초기화) */}
-        <KeywordAnalysis key={shown ?? ''} keyword={shown} onSearch={onSearch} />
-      </div>
+        {focus && <KeywordAnalysis key={focus} keyword={focus} onSearch={onSearch} periods={periods} period={period} onPeriod={onPeriod} />}
+      </section>
 
       <TechTrends onPick={analyze} />
     </main>
