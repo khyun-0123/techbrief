@@ -117,10 +117,15 @@ function TitleWithIcon({ title, terms }) {
 // 왜 중요한지 (13 문서 F7). 보도량(같은 이슈 N건)과 최신성(발행 칸)은 이미 줄에 보이므로
 // 선별에 도움이 되는 전문 매체·경쟁사·관심 기술·기술 소식만 글로 보여 준다. 점수 전체는 마우스를 올리면
 function importanceReasons(a) {
-  // 논문 (찾기 결과, server/papers/journals.js paperScore): 인용 · 분야 보정 인용
+  // 논문 (찾기 결과, server/papers/corpus.js paperScore2, 11/10): 기업 저자 · 인용 상위 · 전문지
   if (a.paperParts) {
     const pp = a.paperParts
-    return [pp.cited > 0 && `인용 ${pp.cited}회`, pp.fwciValue >= 1 && `분야 평균의 ${pp.fwciValue.toFixed(1)}배 인용`, pp.journal && '디스플레이 전문지'].filter(Boolean)
+    return [
+      pp.maker ? `기업 논문 · ${pp.maker}` : pp.companies?.length ? `기업 저자 · ${pp.companies[0]}` : null,
+      pp.top10 && '인용 상위 10%',
+      !pp.top10 && pp.fwciValue >= 1 && `분야 평균의 ${pp.fwciValue.toFixed(1)}배 인용`,
+      pp.journal >= 10 && '디스플레이 전문지',
+    ].filter(Boolean)
   }
   // 11/09 재설계: 신규성(첫 소식 · 새 기술 낱말 · 요즘 뜨는 기술) · 사업 연관성 · 출처 신뢰도 순으로 이유를 보인다
   const p = a.scoreParts ?? {}
@@ -139,7 +144,8 @@ function importanceReasons(a) {
 function scoreTitle(a) {
   if (a.paperParts) {
     const pp = a.paperParts
-    return `중요도 ${a.importance ?? 0}점 = 검색 관련도 ${pp.relevance} + 월평균 인용 ${pp.citations} (월 ${pp.perMonth}회) + 분야 보정 인용 ${pp.fwci}${pp.fwciValue != null ? ` (FWCI ${pp.fwciValue})` : ''} + 전문지 ${pp.journal} + 최신성 ${pp.recency} · 60점 이상이면 중요`
+    if (pp.company == null) return `중요도 ${a.importance ?? 0}점 · 60점 이상이면 중요` // 11/10 전 점수
+    return `중요도 ${a.importance ?? 0}점 = 검색 관련도 ${pp.relevance}/35 + 기업 저자 ${pp.company}/20${pp.companies?.length ? ` (${pp.companies.join(', ')})` : ''} + 영향력 ${pp.impact}/20 (인용 ${pp.cited}회${pp.pctValue != null ? ` · 백분위 ${Math.round(pp.pctValue * 100)}` : ''}) + 최신성 ${pp.recency}/15 + 전문 학술지 ${pp.journal}/10 · 60점 이상이면 중요`
   }
   const p = a.scoreParts ?? {}
   const parts = [

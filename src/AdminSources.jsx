@@ -16,10 +16,27 @@ function formatAt(iso) {
 const PAPER_NAMES = { openalex: 'OpenAlex', crossref: 'Crossref', semanticscholar: 'Semantic Scholar', arxiv: 'arXiv' }
 
 // 논문 출처 사슬 상태 (server/papers): 순서대로 쓰고, 한도에 걸린 곳은 풀릴 때까지 건너뜀
-function PaperProviders({ list }) {
+// 디스플레이 논문 DB (11/10, server/papers/corpus.js): 찾기는 여기서 먼저 한다
+function CorpusLine({ c }) {
+  if (!c?.enabled) return null
+  const JOB = { backfill: '처음 받기', recent: '최근 60일', citations: '최근 3년 인용 수' }
+  return (
+    <p className="adm-desc">
+      <b>디스플레이 논문 DB</b> {c.papers.toLocaleString()}편 (초록 {c.withAbstract.toLocaleString()}편 · {c.first ?? '-'} ~ {c.last ?? '-'})
+      {c.busy ? ` · ${JOB[c.phase] ?? '받는 중'}…` : c.backfillDone ? ` · 처음 받기 끝 (${c.backfillDone})` : c.backfillTotal ? ` · 처음 받기 중 (전체 약 ${c.backfillTotal.toLocaleString()}편, 남은 예산에 맞춰 이어 받음)` : ' · 아직 안 받음 (서버가 켜지고 3분 뒤 시작)'}
+      {c.lastRun && ` · 마지막 ${JOB[c.lastJob] ?? c.lastJob} ${formatAt(c.lastRun)} ${c.lastSaved ?? 0}편`}
+      {c.stopped && <span className="adm-state bad"> · {c.stopped}</span>}
+      {c.error && <span className="adm-state bad"> · 오류 {c.error}</span>}
+      . 「뉴스·논문에서 찾기」는 이 DB에서 먼저 찾고, 맞는 논문이 적으면 아래 출처로 찾아요.
+    </p>
+  )
+}
+
+function PaperProviders({ list, corpus }) {
   if (!list?.length) return null
   return (
     <div className="adm-sources-group">
+      <CorpusLine c={corpus} />
       <h3>논문 출처 (위에서부터 쓰고, 막히면 다음 곳)</h3>
       <ul className="adm-sources">
         {list.map((p) => (
@@ -122,7 +139,7 @@ function AdminSources({ onToast }) {
           </ul>
         </div>
       ))}
-      <PaperProviders list={data.papers} />
+      <PaperProviders list={data.papers} corpus={data.corpus} />
       <div className="adm-sources-actions">
         <span className="adm-desc">
           쓸 수 없는 곳: 삼성디스플레이 · BOE 뉴스룸(RSS 없음), Display Daily · Counterpoint(접속 차단), Google 뉴스 RSS(개인 피드 리더 전용 약관). 공시(OpenDART) · 논문 키가 필요한 곳은 키 발급 뒤 연결.

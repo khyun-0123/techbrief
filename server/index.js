@@ -7,6 +7,7 @@ import { englishTerms, frequentSearches, listQueryTerms, pruneSearchCounts, reco
 import { feedList } from './collector/feeds.js'
 import { getTrends } from './trends.js'
 import { paperProviderStatus } from './papers/index.js'
+import { corpusStatus, startCorpus } from './papers/corpus.js'
 import { popularPapers } from './papers/journals.js'
 import { getTechTrends, startTechTrends } from './techtrends.js'
 import { similarity } from './collector/dedupe.js'
@@ -260,6 +261,7 @@ export function startScheduler() {
     .catch((err) => console.warn(`[llm] 저장된 AI 서버를 쓸 수 없어 기본값으로: ${err.message}`))
   startRefreshScheduler()
   startTechTrends() // 기술 트렌드: 켜진 뒤 1분, 그 뒤 하루마다 (TECH_TRENDS=off면 안 함)
+  startCorpus() // 디스플레이 논문 DB: 켜진 뒤 3분, 그 뒤 6시간마다 (PAPER_CORPUS=off면 안 함, papers/corpus.js)
   // 사용 현황 원본은 90일만 둔다: 켜질 때 한 번, 그 뒤 하루 한 번
   const prune = () => {
     pruneUsage().catch((err) => console.warn(`[usage] 오래된 기록 정리 실패: ${err.message}`))
@@ -400,7 +402,7 @@ export async function handleApi(req, res) {
     // 수집 출처 (14 문서 4-B): 네이버 밖 출처 목록 · 켜기/끄기 · 지난 수집 결과. 관리자만
     if (req.method === 'GET' && req.url === '/api/admin/sources') {
       requireAdmin(req)
-      return send(res, 200, { list: feedList(), ...(await getSources()), papers: await paperProviderStatus() })
+      return send(res, 200, { list: feedList(), ...(await getSources()), papers: await paperProviderStatus(), corpus: await corpusStatus().catch(() => null) })
     }
     if (req.method === 'PUT' && req.url === '/api/admin/sources') {
       const admin = requireAdmin(req)
