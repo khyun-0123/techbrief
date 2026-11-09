@@ -34,6 +34,15 @@ export const FEEDS = [
   { id: 'etnews', name: '전자신문', tier: 2, url: 'https://rss.etnews.com/06.xml' },
   { id: 'zdnet', name: 'ZDNet Korea', tier: 2, url: 'https://feeds.feedburner.com/zdkorea' },
   { id: 'digitimes', name: 'DIGITIMES', tier: 2, url: 'https://www.digitimes.com/rss/daily.xml', lang: 'en' },
+  // 11/09 추가 (서버에서 직접 열어 확인, 이용 조건은 미확인 → 제목 · 요약 · 링크만 저장): 기업 1차 발표 · 표준 단체 · 반도체 · AI 전문매체
+  { id: 'samsung-ko', name: '삼성전자 뉴스룸', tier: 1, url: 'https://news.samsung.com/kr/feed' },
+  { id: 'samsung-en', name: 'Samsung Newsroom', tier: 1, url: 'https://news.samsung.com/global/feed', lang: 'en' },
+  { id: 'skhynix-en', name: 'SK hynix Newsroom', tier: 1, url: 'https://news.skhynix.com/en/feed/', lang: 'en' }, // 한국어판 피드는 403
+  { id: 'vesa', name: 'VESA', tier: 1, url: 'https://vesa.org/feed/', lang: 'en' },
+  { id: 'semi-digest', name: 'Semiconductor Digest', tier: 2, url: 'https://www.semiconductor-digest.com/feed/', lang: 'en' },
+  { id: 'semi-eng', name: 'Semiconductor Engineering', tier: 2, url: 'https://semiengineering.com/feed/', lang: 'en' },
+  { id: 'eetimes', name: 'EE Times', tier: 2, url: 'https://www.eetimes.com/feed/', lang: 'en' },
+  { id: 'ieee-spectrum', name: 'IEEE Spectrum', tier: 2, url: 'https://spectrum.ieee.org/feeds/feed.rss', lang: 'en' },
 ]
 const BY_ID = new Map(FEEDS.map((f) => [f.id, f]))
 
@@ -58,8 +67,9 @@ export function tierOf(article, expertSources) {
 const text = (el, sel) => el.querySelector(sel)?.textContent?.trim() ?? ''
 
 // RSS 2.0과 Atom 둘 다
+// VESA 피드는 XML 선언 앞에 빈 줄이 있어 그대로 읽으면 오류 (11/09) → 앞 공백을 떼고 읽는다
 function parseFeed(xml) {
-  const doc = new JSDOM(xml, { contentType: 'text/xml' }).window.document
+  const doc = new JSDOM(xml.trimStart(), { contentType: 'text/xml' }).window.document
   const items = [...doc.querySelectorAll('item, entry')]
   return items.map((el) => {
     const linkEl = el.querySelector('link')
