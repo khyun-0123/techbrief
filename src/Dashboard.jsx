@@ -4,13 +4,24 @@
 //   「자료 찾기 →」(기간과 함께)를 눌러야 자료 현황에서 뉴스 · 논문을 찾는다. 「닫기」로 처음 모양으로
 // - 자동 수집 키워드 칩은 지금처럼 자료 현황에서 모은 기사를 그 키워드로 걸러 보여 준다
 // - 예전 「추적 중인 키워드 추이」는 11/10 조장 결정으로 뺐다 (KeywordTrends.jsx는 그래프 부품 Spark만 씀)
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { fetchReadyTimelines } from './api.js'
 import KeywordAnalysis from './KeywordAnalysis.jsx'
 import TechTrends from './TechTrends.jsx'
 
 function Dashboard({ stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onKeyword, onGoCollect, onRemember }) {
   const [text, setText] = useState('')
-  const [focus, setFocus] = useState(null) // 분석 중인 말 (없으면 검색창 + 요즘 뜨는 기술만)
+  const [focus, setFocus] = useState(null) // 분석 중인 말 (없으면 검색창 + 미리 분석된 키워드 + 요즘 뜨는 기술)
+  const [ready, setReady] = useState([]) // 미리 분석해 둔 말 (11/10): 검색 전에도 분석이 어떤 모양인지 보이게
+  useEffect(() => {
+    let alive = true
+    fetchReadyTimelines()
+      .then((d) => alive && setReady(d.items ?? []))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
   const panelRef = useRef(null)
 
   // 분석할 말을 바꾸고 그 자리로 (찾은 말은 최근 검색어에 남긴다)
@@ -72,7 +83,24 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
             분석
           </button>
         </form>
-        {!focus && <p className="dash-note">연관 키워드와 기술의 흐름(논문 · 특허 · 기업 참여)을 보여 줘요. 무엇을 찾을지 모르겠으면 아래 「요즘 뜨는 기술」에서 골라 보세요.</p>}
+        {!focus && (
+          <>
+            <p className="dash-note">기술 키워드를 넣으면 연관 키워드 · 기술 단계 · 논문과 특허 흐름 · AI 전망을 보여 줘요. 무엇을 찾을지 모르겠으면 아래 「요즘 뜨는 기술」에서 골라 보세요.</p>
+            {ready.length > 0 && (
+              <div className="dash-ready" aria-label="미리 분석된 키워드">
+                <span className="dash-chips-label">바로 볼 수 있는 분석</span>
+                <div className="dash-ready-list">
+                  {ready.map((r) => (
+                    <button key={r.query} type="button" className="dash-ready-item" onClick={() => analyze(r.query)} title={`${r.from.join(' · ')}${r.growth ? ` · 논문 ${r.growth}배` : ''}${r.story ? ' · AI 정리 있음' : ''}`}>
+                      <b>{r.query}</b>
+                      {r.stage && <span className="dash-ready-stage">{r.stage}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
         {chipCount > 0 && (
           <details className="dash-more">

@@ -5294,3 +5294,90 @@ a.brand:focus-visible {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px 16px;
 }
+
+/* 대시보드 검색 전 「바로 볼 수 있는 분석」 (11/10): 미리 분석된 키워드 + 단계, 한 줄로 작게 */
+.dash-ready {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.dash-ready-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dash-ready-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.dash-ready-item:hover,
+.dash-ready-item:focus-visible {
+  border-color: var(--tb-color-text);
+}
+.dash-ready-stage {
+  color: var(--tb-color-text-sub);
+  white-space: nowrap;
+}
+/* 키워드 분석 오른쪽: 시계열 칸을 조금 넓게, 한눈에 · 사실 칸 */
+.ka-grid {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+}
+@media (max-width: 1100px) {
+  .ka-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ka-glance {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px 20px;
+  padding: 10px 12px;
+  border-radius: var(--tb-radius-input, 8px);
+  background: var(--tb-color-bg);
+}
+.ka-glance h4 {
+  margin: 0 0 4px;
+  font-size: var(--fs-sm);
+  color: var(--tb-color-text-sub);
+}
+.ka-glance ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: var(--fs-sm);
+}
+.ka-glance li {
+  margin: 3px 0;
+}
+.ka-facts {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.ka-facts div {
+  display: grid;
+  grid-template-columns: 9.5em minmax(0, 1fr);
+  gap: 8px;
+}
+.ka-facts dt {
+  color: var(--tb-color-text-sub);
+}
+.ka-facts dd {
+  margin: 0;
+}
+@media (max-width: 560px) {
+  .ka-facts div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}

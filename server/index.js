@@ -9,6 +9,7 @@ import { getTrends } from './trends.js'
 import { paperProviderStatus } from './papers/index.js'
 import { corpusStatus, startCorpus } from './papers/corpus.js'
 import { buildTimeline, timelineStory } from './timeline.js'
+import { readyTimelines, runPrecompute, startPrecompute } from './timelineJobs.js'
 import { popularPapers } from './papers/journals.js'
 import { getTechTrends, startTechTrends } from './techtrends.js'
 import { similarity } from './collector/dedupe.js'
@@ -263,6 +264,7 @@ export function startScheduler() {
   startRefreshScheduler()
   startTechTrends() // 기술 트렌드: 켜진 뒤 1분, 그 뒤 하루마다 (TECH_TRENDS=off면 안 함)
   startCorpus() // 디스플레이 논문 DB: 켜진 뒤 3분, 그 뒤 6시간마다 (PAPER_CORPUS=off면 안 함, papers/corpus.js)
+  startPrecompute() // 기술 시계열 미리 분석: 켜진 뒤 10분, 그 뒤 6시간마다 (TIMELINE_PRECOMPUTE=off면 안 함, timelineJobs.js)
   // 사용 현황 원본은 90일만 둔다: 켜질 때 한 번, 그 뒤 하루 한 번
   const prune = () => {
     pruneUsage().catch((err) => console.warn(`[usage] 오래된 기록 정리 실패: ${err.message}`))
@@ -515,6 +517,15 @@ export async function handleApi(req, res) {
     if (req.method === 'POST' && req.url === '/api/timeline') {
       const { query, refresh = false } = await readJson(req)
       return send(res, 200, await buildTimeline(query, { refresh: Boolean(refresh) }))
+    }
+    if (req.method === 'GET' && req.url === '/api/timeline/ready') {
+      return send(res, 200, await readyTimelines())
+    }
+    // 관리 페이지에서 미리 분석을 바로 돌릴 때 (뒤에서 돌고 바로 돌려줌)
+    if (req.method === 'POST' && req.url === '/api/admin/timeline/precompute') {
+      requireAdmin(req)
+      runPrecompute().catch((err) => console.warn(`[timeline-jobs] ${err.message}`))
+      return send(res, 202, { started: true })
     }
     if (req.method === 'POST' && req.url === '/api/timeline/story') {
       const { query, refresh = false } = await readJson(req)

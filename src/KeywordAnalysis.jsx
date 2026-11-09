@@ -3,7 +3,7 @@
 // - 오른쪽은 기술 시계열 요약(단계 · 논문 수 · 기업 저자 비율 · 특허 · 새로 늘어난 핵심어). 「자세히 · AI 흐름 정리」는 TechTimeline 창
 // 예전 「추적 중인 키워드 추이」(뉴스 수 · 검색량 · 위키 · GDELT)는 11/10 조장 결정으로 대시보드에서 뺐다 — 키워드 하나를 제대로 분석하는 쪽으로
 import { useEffect, useMemo, useState } from 'react'
-import { fetchTimeline } from './api.js'
+import { fetchTimeline, fetchTimelineStory } from './api.js'
 import { Spark } from './KeywordTrends.jsx'
 import TechTimeline from './TechTimeline.jsx'
 
@@ -66,6 +66,35 @@ function MapPlaceholder({ keyword, data, count, selected, onToggle }) {
   )
 }
 
+// 「한눈에」: AI 흐름 정리 중 전망 · 우리가 볼 것 앞부분 (전체는 「자세히」 창)
+// stage: 단계 배지와 같은 말을 되풀이하는 글머리는 뺀다
+function Glance({ story, error, stage }) {
+  if (error) return <p className="hint">AI 흐름 정리를 받지 못했어요 ({error}). 「자세히」에서 다시 해 보세요.</p>
+  if (!story) return <p className="hint ka-glance-wait">AI가 흐름을 정리하는 중이에요 (미리 분석된 말은 바로, 처음이면 30초 안팎)…</p>
+  const pick = [
+    ['전망', (story.story.outlook ?? []).filter((b) => !(stage && b.text.includes(stage)))],
+    ['우리가 볼 것', story.story.research ?? []],
+  ]
+  return (
+    <div className="ka-glance">
+      {pick.map(([label, list]) =>
+        list.length ? (
+          <div key={label}>
+            <h4>{label}</h4>
+            <ul>
+              {list.slice(0, 2).map((b, i) => (
+                <li key={i}>
+                  <span className={b.kind === 'fact' ? 'tl-kind fact' : 'tl-kind ai'}>{b.kind === 'fact' ? '사실' : b.unverified ? 'AI 해설 · 확인 필요' : 'AI 해설'}</span> {b.text}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null,
+      )}
+    </div>
+  )
+}
+
 // 대시보드 「키워드 분석」 패널 안(검색창 아래)에 펼쳐진다. 기간은 「자료 찾기 →」로 자료 현황에서 찾을 때만 쓴다
 function KeywordAnalysis({ keyword, onSearch, periods = [], period, onPeriod }) {
   const [data, setData] = useState(null)
@@ -73,12 +102,21 @@ function KeywordAnalysis({ keyword, onSearch, periods = [], period, onPeriod }) 
   const [count, setCount] = useState(8)
   const [selected, setSelected] = useState([])
   const [open, setOpen] = useState(false)
+  const [story, setStory] = useState(null)
+  const [storyError, setStoryError] = useState('')
 
+  // 숫자를 받은 뒤 AI 흐름 정리도 바로 (미리 분석해 둔 말은 곧바로 옴, 아니면 30초 안팎)
   useEffect(() => {
     if (!keyword) return undefined
     let alive = true
     fetchTimeline(keyword)
-      .then((d) => alive && setData(d))
+      .then((d) => {
+        if (!alive) return
+        setData(d)
+        fetchTimelineStory(keyword)
+          .then((st) => alive && setStory(st))
+          .catch((err) => alive && setStoryError(err.message))
+      })
       .catch((err) => alive && setError(err.message))
     return () => {
       alive = false
@@ -178,21 +216,51 @@ function KeywordAnalysis({ keyword, onSearch, periods = [], period, onPeriod }) 
                   note="특허가 없거나 받지 못했어요."
                 />
               </div>
-              {data.corpus?.rising?.length > 0 && (
-                <p className="tl-rising">
-                  <b>새로 늘어난 핵심어</b>{' '}
-                  {data.corpus.rising.slice(0, 6).map((r) => (
-                    <span key={r.name} className="chip">
-                      {r.name}
-                    </span>
-                  ))}
-                </p>
-              )}
+              <Glance story={story} error={storyError} stage={data.stage.stage} />
+              <dl className="ka-facts">
+                {(() => {
+                  const last = data.corpus?.periods?.[2]
+                  const firms = (last?.companies ?? []).slice(0, 4).map((c) => c.name)
+                  const owners = data.patents.status === 'ok' ? data.patents.topOwners.slice(0, 3).map((o) => o.name) : []
+                  const origin = data.origins?.[0]
+                  return (
+                    <>
+                      {firms.length > 0 && (
+                        <div>
+                          <dt>논문 낸 회사 (2024~)</dt>
+                          <dd>{firms.join(', ')}</dd>
+                        </div>
+                      )}
+                      {owners.length > 0 && (
+                        <div>
+                          <dt>특허 많은 출원인</dt>
+                          <dd>{owners.join(', ')}</dd>
+                        </div>
+                      )}
+                      {data.corpus?.rising?.length > 0 && (
+                        <div>
+                          <dt>새로 늘어난 핵심어</dt>
+                          <dd>{data.corpus.rising.slice(0, 6).map((r) => r.name).join(', ')}</dd>
+                        </div>
+                      )}
+                      {origin && (
+                        <div>
+                          <dt>출발점 논문</dt>
+                          <dd>
+                            {origin.year} · {origin.title}
+                            {origin.companies?.length ? ` (${origin.companies.join(', ')})` : ''}
+                          </dd>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+              </dl>
             </>
           )}
         </div>
       </div>
-      {open && <TechTimeline query={keyword} initialData={data} onClose={() => setOpen(false)} />}
+      {open && <TechTimeline query={keyword} initialData={data} initialStory={story} onClose={() => setOpen(false)} />}
     </div>
   )
 }

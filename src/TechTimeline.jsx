@@ -19,10 +19,10 @@ const pct = (v) => (v == null ? '-' : `${Math.round(v * 100)}%`)
 const doiUrl = (p) => (p.doi ? `https://doi.org/${p.doi}` : null)
 
 // initialData: 대시보드 「키워드 분석」이 이미 받은 값이 있으면 다시 받지 않는다
-function TechTimeline({ query, onClose, initialData = null }) {
+function TechTimeline({ query, onClose, initialData = null, initialStory = null }) {
   const [data, setData] = useState(initialData)
   const [error, setError] = useState('')
-  const [story, setStory] = useState(null)
+  const [story, setStory] = useState(initialStory)
   const [storyState, setStoryState] = useState('idle') // idle · loading · error
   const [storyError, setStoryError] = useState('')
 

@@ -472,3 +472,11 @@ export function fetchTimeline(query, refresh = false) {
 export function fetchTimelineStory(query, refresh = false) {
   return postJson('/api/timeline/story', { query, refresh })
 }
+
+// 미리 분석된 키워드 (대시보드 검색 전)
+export async function fetchReadyTimelines() {
+  const res = await fetch('/api/timeline/ready')
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}

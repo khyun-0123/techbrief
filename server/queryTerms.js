@@ -168,6 +168,13 @@ export async function knownTerms(rawQuery) {
   return alias ? [alias] : []
 }
 
+// 이미 영문 이름을 아는 말(요즘 뜨는 기술의 en 등)을 저장해 번역을 건너뛴다. 관리자가 고친 값은 덮어쓰지 않음
+export async function rememberTerms(rawQuery, terms, source = 'trend') {
+  const clean = cleanTerms(terms)
+  if (!HANGUL.test(String(rawQuery)) || !clean.length) return
+  await storeTerms(queryKey(rawQuery), clean, source)
+}
+
 // OpenAlex 검색어: 여러 표기를 OR로 (띄어 쓴 말은 괄호로 묶음)
 export const openAlexQuery = (terms) => (terms.length === 1 ? terms[0] : terms.map((t) => (t.includes(' ') ? `(${t})` : t)).join(' OR '))
 
