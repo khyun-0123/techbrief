@@ -6,7 +6,7 @@
 // - 예전 「추적 중인 키워드 추이」는 11/10 조장 결정으로 뺐다 (KeywordTrends.jsx는 그래프 부품 Spark만 씀)
 import { useEffect, useRef, useState } from 'react'
 import { fetchReadyTimelines } from './api.js'
-import KeywordAnalysis from './KeywordAnalysis.jsx'
+import KeywordAnalysis, { AnalysisPreview } from './KeywordAnalysis.jsx'
 import TechTrends from './TechTrends.jsx'
 
 function Dashboard({ stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onKeyword, onGoCollect, onRemember }) {
@@ -85,7 +85,9 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
         </form>
         {!focus && (
           <>
-            <p className="dash-note">기술 키워드를 넣으면 연관 키워드 · 기술 단계 · 논문과 특허 흐름 · AI 전망을 보여 줘요. 무엇을 찾을지 모르겠으면 아래 「요즘 뜨는 기술」에서 골라 보세요.</p>
+            <p className="dash-note">무엇을 찾을지 모르겠으면 아래 「요즘 뜨는 기술」이나 바로 볼 수 있는 분석에서 골라 보세요.</p>
+            {/* 예시: AI 정리까지 있는 미리 분석 중 흐름이 잘 보이는 것(「연구 지속」이 아닌 단계)을 먼저 */}
+            <AnalysisPreview example={(ready.find((r) => r.story && r.stage && r.stage !== '연구 지속') ?? ready.find((r) => r.story))?.query ?? null} onOpen={analyze} />
             {ready.length > 0 && (
               <div className="dash-ready" aria-label="미리 분석된 키워드">
                 <span className="dash-chips-label">바로 볼 수 있는 분석</span>

@@ -266,3 +266,91 @@ function KeywordAnalysis({ keyword, onSearch, periods = [], period, onPeriod }) 
 }
 
 export default KeywordAnalysis
+
+// ── 검색 전 「분석하면 이렇게 보여요」 (11/10 조장: 검색 전엔 무슨 분석을 해 주는지 와닿지 않음, 자리는 적게) ──
+// 미리 분석된 실제 키워드 하나로 4칸 축소판: 연관 키워드 → 기술 단계 → 논문 · 특허 흐름 → AI 전망. 누르면 그 예시가 열린다
+function MiniLine({ series }) {
+  const pts = series.filter((p) => p.v != null)
+  if (pts.length < 2) return null
+  const max = Math.max(...pts.map((p) => p.v), 1)
+  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${((i / (pts.length - 1)) * 116 + 2).toFixed(1)},${(30 - (p.v / max) * 26).toFixed(1)}`).join('')
+  return (
+    <svg className="kp-line" viewBox="0 0 120 32" aria-hidden="true">
+      <path d={d} />
+    </svg>
+  )
+}
+
+function MiniMap({ names }) {
+  const spots = [
+    [20, 10],
+    [100, 10],
+    [12, 34],
+    [108, 34],
+    [60, 44],
+  ]
+  return (
+    <svg className="kp-map" viewBox="0 0 120 48" aria-hidden="true">
+      {spots.slice(0, Math.max(3, names.length)).map(([x, y], i) => (
+        <g key={i}>
+          <line x1={60} y1={24} x2={x} y2={y} />
+          <circle cx={x} cy={y} r={4} className={i % 3 === 2 ? 'firm' : ''} />
+        </g>
+      ))}
+      <circle cx={60} cy={24} r={7} className="center" />
+    </svg>
+  )
+}
+
+export function AnalysisPreview({ example, onOpen }) {
+  const [data, setData] = useState(null)
+  const [story, setStory] = useState(null)
+  useEffect(() => {
+    if (!example) return undefined
+    let alive = true
+    // 미리 분석된 말이라 둘 다 기억해 둔 값이 바로 온다
+    fetchTimeline(example)
+      .then((d) => alive && setData(d))
+      .catch(() => {})
+    fetchTimelineStory(example)
+      .then((st) => alive && setStory(st))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [example])
+  if (!example || !data) return null
+  const p = data.corpus?.periods ?? []
+  const names = [...(data.corpus?.rising ?? []).map((r) => r.name), ...(p[2]?.keywords ?? []).map((k) => k.name)].slice(0, 3)
+  const firms = (p[2]?.companies ?? []).slice(0, 2).map((c) => c.name)
+  const ai = [...(story?.story?.research ?? []), ...(story?.story?.outlook ?? [])].find((b) => !b.text.includes(data.stage.stage))
+  const series = (data.long ?? []).filter((x) => x.y < THIS_YEAR).slice(-12).map((x) => ({ v: x.n }))
+  return (
+    <button type="button" className="kp" onClick={() => onOpen(example)} aria-label={`분석 예시 「${example}」 열기`}>
+      <span className="kp-title">
+        분석하면 이렇게 보여요 · 예: <b>{example}</b> <span className="kp-open">열어 보기 →</span>
+      </span>
+      <span className="kp-steps">
+        <span className="kp-step">
+          <span className="kp-label">① 연관 키워드</span>
+          <MiniMap names={names} />
+          <span className="kp-text">{[...names.slice(0, 2), ...firms.slice(0, 1)].join(' · ') || '기술 · 회사'}</span>
+        </span>
+        <span className="kp-step">
+          <span className="kp-label">② 기술 단계</span>
+          <span className="tl-stage-badge kp-badge">{data.stage.stage}</span>
+          <span className="kp-text">{data.stage.growth ? `논문 앞 3년의 ${data.stage.growth}배` : ''}{data.stage.companyShareNow != null ? ` · 기업 저자 ${Math.round(data.stage.companyShareNow * 100)}%` : ''}</span>
+        </span>
+        <span className="kp-step">
+          <span className="kp-label">③ 논문 · 특허 흐름</span>
+          <MiniLine series={series} />
+          <span className="kp-text">해마다 논문 · 특허 수, 낸 회사</span>
+        </span>
+        <span className="kp-step">
+          <span className="kp-label">④ AI 전망 · 연구 제안</span>
+          <span className="kp-text kp-ai">{ai ? (ai.text.length > 70 ? `${ai.text.slice(0, 69)}…` : ai.text) : '근거 논문으로 배경 · 성장 · 적용 · 전망 정리'}</span>
+        </span>
+      </span>
+    </button>
+  )
+}

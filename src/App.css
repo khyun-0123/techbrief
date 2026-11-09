@@ -5381,3 +5381,101 @@ a.brand:focus-visible {
     gap: 0;
   }
 }
+
+/* 검색 전 「분석하면 이렇게 보여요」 (11/10): 실제 예시 하나로 4칸 축소판, 한 줄 (좁으면 2×2) */
+.kp {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: var(--tb-radius-input, 8px);
+  background: var(--tb-color-bg);
+  color: var(--tb-color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kp:hover,
+.kp:focus-visible {
+  border-color: var(--tb-color-text-sub);
+}
+.kp-title {
+  font-size: var(--fs-sm);
+  color: var(--tb-color-text-sub);
+}
+.kp-title b {
+  color: var(--tb-color-text);
+}
+.kp-open {
+  margin-left: 6px;
+  color: var(--tb-color-text);
+  font-weight: 600;
+}
+.kp-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 900px) {
+  .kp-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.kp-step {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--tb-color-surface);
+}
+.kp-label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.kp-text {
+  overflow: hidden;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kp-ai {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  color: var(--tb-color-text);
+}
+.kp-badge {
+  justify-self: start;
+  font-size: var(--fs-sm);
+}
+.kp-map,
+.kp-line {
+  width: 120px;
+  height: 36px;
+}
+.kp-map line {
+  stroke: var(--tb-color-line);
+}
+.kp-map circle {
+  fill: var(--tb-color-bg-strong);
+  stroke: var(--tb-color-text-sub);
+}
+.kp-map circle.firm {
+  fill: var(--tb-color-surface);
+  stroke-dasharray: 2 2;
+}
+.kp-map circle.center {
+  fill: var(--tb-color-text);
+  stroke: none;
+}
+.kp-line path {
+  fill: none;
+  stroke: var(--tb-color-text);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
