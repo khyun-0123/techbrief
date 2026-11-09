@@ -3614,7 +3614,8 @@ a.brand:focus-visible {
 }
 }
 
-.summary-source-excerpt {
+.summary-source-excerpt,
+.summary-source-abstract {
   color: var(--tb-color-text);
   font-weight: 600;
 }

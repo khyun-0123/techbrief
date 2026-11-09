@@ -10,7 +10,7 @@
 import { createHash } from 'node:crypto'
 import { englishTerms, openAlexQuery } from './queryTerms.js'
 import { isCompetitorTech, keywordPapers } from './papers/journals.js'
-import { paperScore2, searchCorpus } from './papers/corpus.js'
+import { corpusReady, paperScore2, searchCorpus } from './papers/corpus.js'
 
 const DAYS = { today: 90, week: 365, all: 365 * 3 } // 논문은 하루 · 일주일 안에 거의 없어 넓게
 const LIMIT = 100
@@ -65,7 +65,7 @@ export async function searchPaperArticles(query, period = 'all', terms = null) {
   const from = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10)
   let works
   let provider
-  const rows = await searchCorpus(t.terms, { from, to }).catch((err) => {
+  const rows = !(await corpusReady()) ? [] : await searchCorpus(t.terms, { from, to }).catch((err) => {
     console.warn(`[papers] 논문 DB 찾기 실패: ${err.message}`)
     return []
   })
