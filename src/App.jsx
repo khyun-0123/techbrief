@@ -121,12 +121,17 @@ function importanceReasons(a) {
     const pp = a.paperParts
     return [pp.cited > 0 && `인용 ${pp.cited}회`, pp.fwciValue >= 1 && `분야 평균의 ${pp.fwciValue.toFixed(1)}배 인용`, pp.journal && '디스플레이 전문지'].filter(Boolean)
   }
+  // 11/09 재설계: 신규성(첫 소식 · 새 기술 낱말 · 요즘 뜨는 기술) · 사업 연관성 · 출처 신뢰도 순으로 이유를 보인다
   const p = a.scoreParts ?? {}
   const out = []
+  if (p.risingName) out.push(`요즘 뜨는 기술 ${p.risingName}`)
+  if (p.newWords?.length) out.push(`${p.newWords.map((w) => w.trim()).join('·')} 소식`)
+  if (p.rerun) out.push('예전에 나온 소식')
   if (p.competitorName) out.push(`경쟁사 ${p.competitorName} 언급`)
   if (p.interestName) out.push(`관심 기술 ${p.interestName}`)
-  if (p.eventWords?.length) out.push(`${p.eventWords.join('·')} 소식`)
-  if (p.expert) out.push('전문 매체')
+  if (p.bizWords?.length) out.push(`${p.bizWords.join('·')}`)
+  if (p.tier === 1) out.push('1차 출처')
+  else if (p.tier === 2) out.push('전문 매체')
   return out
 }
 
@@ -137,17 +142,16 @@ function scoreTitle(a) {
   }
   const p = a.scoreParts ?? {}
   const parts = [
-    `보도량 ${p.coverage ?? 0}`,
-    `전문 매체 ${p.expert ?? 0}`,
-    `경쟁사 ${p.competitor ?? 0}`,
-    `관심 기술 ${p.interest ?? 0}`,
-    `기술·사업 소식 ${p.event ?? 0}`,
-    `최신성 ${p.recency ?? 0}`,
+    `신규성 ${p.novelty ?? 0}/30`,
+    `사업 연관성 ${p.business ?? 0}/25`,
+    `출처 신뢰도 ${p.source ?? 0}/20`,
+    `최신성 ${p.recency ?? 0}/15`,
+    `보도량 ${p.coverage ?? 0}/10`,
   ]
   if (p.noise) parts.push(`시황·홍보성 ${p.noise}`)
   const weight = p.weight ?? 1
   const relevance = weight < 1 ? ` × 관련도 ${weight} (${weight >= 0.5 ? '관련도 중간' : '관련도 낮음'})` : ''
-  return `중요도 ${a.importance ?? 0}점 = (${parts.join(' + ')})${relevance} · 60점 이상이면 중요`
+  return `중요도 ${a.importance ?? 0}점 = (${parts.join(' + ')})${relevance} · 45점 이상이면 중요`
 }
 
 // 논문 초록 (11/09 조장: 찾을 때마다 요약문 옆에 초록을). 찾기 결과는 abstract, 모은 논문은 description(앞의 [학술지] 떼고)
@@ -601,8 +605,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     source === 'all' || (source === 'material' ? Boolean(a.material) : source.startsWith('tier:') ? String(a.tier ?? 3) === source.slice(5) : a.source === source)
 
   // 수집 대상: 등록한 키워드에 해당하는 기사. 샘플은 키워드와 상관없이 모두 보여 준다 (샘플 키워드가 기본 키워드와 다름)
-  const gathered = isSample ? SAMPLE_ARTICLES : fetched.map(toView).filter((a) => keywords.includes(a.keyword))
-  const todayIssues = gathered.filter((a) => a.hoursAgo < 24)
+  // 「1·2차 출처」: 키워드에 안 맞은 RSS 글도 모두 모은다 (11/09 조장, 관련도 · 중요도로 판단)
+  const gathered = isSample ? SAMPLE_ARTICLES : fetched.map(toView).filter((a) => keywords.includes(a.keyword) || a.keyword === '1·2차 출처')
+  // 오늘 이슈 수: 키워드에 안 맞은 1·2차 출처 글 중 관련 낮음(기본 숨김)은 세지 않는다
+  const todayIssues = gathered.filter((a) => a.hoursAgo < 24 && !(a.keyword === '1·2차 출처' && a.relevance === 'low'))
   // 자료 현황 목록: 모은 기사 + 직접 추가한 자료
   const collected = [...gathered, ...materials.map(materialView)]
   const countArticles = (list) => list.reduce((n, a) => n + 1 + (a.sameIssue ?? 0), 0)

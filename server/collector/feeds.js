@@ -1,12 +1,14 @@
 // 네이버 밖 출처 (14 문서 4-B 출처 4단계 · 15 문서 F16). 키 없이 받을 수 있는 RSS와 논문 검색만 붙인다
 // - 1차: 기업 발표 · 학회 · 논문 / 2차: 국내외 전문매체 / 3차: 일반 뉴스(네이버)
-// - 피드에는 키워드 검색이 없으므로 받은 글 중 자동 수집 키워드(또는 다른 표기, aliases.js)가 제목·요약에 있는 것만 넣는다
+// - 피드에는 키워드 검색이 없다. 자동 수집 키워드(또는 다른 표기, aliases.js)가 제목·요약에 있으면 그 키워드로,
+//   없으면 「1·2차 출처」로 모두 넣는다 (11/09 조장: 모두 모으고 중요도 · 관련도로 판단, relevance.js broadRelevance)
 // - 저장은 네이버 기사와 같은 articles 표. section 칸에 'feed:<출처 id>'를 적어 출처 단계를 알아본다 (표는 그대로)
 // - 제목 · 요약 · 링크만 저장하고 원문 본문은 저장하지 않는다 (보고서 만들 때만 원문을 읽는 지금 방식과 같음)
 // 조사: 2026-11-06 (RSS 주소는 서버에서 직접 열어 확인). 쓸 수 없는 곳: 삼성디스플레이·BOE 뉴스룸(RSS 없음),
 //   Display Daily·Counterpoint·GlobeNewswire(접속 차단), Google 뉴스 RSS(개인 피드 리더 전용 약관)
 import { JSDOM } from 'jsdom'
 import { englishOf, hasKeyword } from './aliases.js'
+import { BROAD_KEYWORD } from './relevance.js'
 import { articleId, cleanText } from './normalize.js'
 import { keywordPapers, recentPapers } from '../papers/journals.js'
 
@@ -160,10 +162,10 @@ export async function collectFeeds(words, { disabled = [] } = {}) {
           const at = Date.parse(item.date)
           if (!Number.isNaN(at) && at < (feed.paper ? paperSince : since)) continue
           // 키워드로 찾은 논문은 그 키워드 (초록에만 영문 다른 표기로 있을 수 있음)
+          // 키워드에 안 맞아도 버리지 않는다 (11/09 조장: 1·2차 출처는 모두 모으고 중요도 · 관련도로 판단) → BROAD_KEYWORD
           const keyword = item.keyword ?? words.find((w) => hasKeyword(`${item.title} ${item.description}`, w))
-          if (!keyword) continue
-          matched += 1
-          articles.push(toFeedArticle(item, feed, keyword))
+          if (keyword) matched += 1
+          articles.push(toFeedArticle(item, feed, keyword ?? BROAD_KEYWORD))
         }
         results.push({ id: feed.id, ok: true, items: items.length, matched, ...(items.via ? { via: items.via } : {}) })
       } catch (err) {

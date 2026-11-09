@@ -2,12 +2,12 @@
 // 저장: DATABASE_URL이 있으면 PostgreSQL, 없으면 서버 메모리 (서버를 끄면 비워짐)
 import { dbEnabled, query } from '../db/index.js'
 import { getSetting, setSetting } from '../db/store.js'
-import { groupArticles, sameIssue, titleGrams } from './dedupe.js'
+import { groupArticles, isRerun, sameIssue, titleGrams } from './dedupe.js'
 import { collectFeeds, FEEDS, PAPER_KEYWORD_DAYS, tierOf } from './feeds.js'
 import { searchNews } from './naver.js'
 import { findMention, getLists } from './lists.js'
 import { EXPERT_SOURCES, toArticle } from './normalize.js'
-import { relevanceInfo } from './relevance.js'
+import { BROAD_KEYWORD, relevanceInfo } from './relevance.js'
 import { scoreArticle } from './score.js'
 import { titleSentiment } from './sentiment.js'
 import { restoreTitles } from './titles.js'
@@ -223,7 +223,8 @@ export async function collect(keywords) {
   const list = await listArticles({ regroup: true })
   // 추이 집계는 최근 LIST_DAYS일만 (목록에 같이 오는 30일치 논문이 지난 날짜 집계를 덮어쓰지 않게)
   const listCutoff = Date.now() - LIST_DAYS * 24 * 3600_000
-  if (dbEnabled()) await updateDaily(list.articles.filter((a) => Date.parse(a.publishedAt) >= listCutoff))
+  // 「1·2차 출처」(키워드에 안 맞은 RSS 글)는 키워드 추이에 넣지 않는다
+  if (dbEnabled()) await updateDaily(list.articles.filter((a) => Date.parse(a.publishedAt) >= listCutoff && a.keyword !== BROAD_KEYWORD))
   // 잘린 제목은 원문 제목으로 채운다 (뒤에서 조금씩, 다음 목록부터 보임). 같은 이슈 기사까지 본다
   restoreTitles(dbEnabled() ? await loadRecentFromDb(LIST_DAYS) : [...memory.values()], { memory })
   return { fetched, added, failed, sources, ...list }
@@ -235,7 +236,45 @@ const RANK = { low: 0, mid: 1, high: 2 }
 
 // lists: 자사·경쟁사 목록 → 중요도의 경쟁사 언급, 자사 기사 표시(own)
 // stored에 groupId가 모두 있으면(DB에 저장된 묶음) 그대로 쓰고, 아니면 여기서 묶는다
-function toIssues(stored, lists) {
+// ── 신규성 재료 (11/09 중요도 재설계) ──
+// rising: 「요즘 뜨는 기술」 종합 순위 상위 RISING_TOP개 용어 (techtrends.js, 최근 7일)
+// older: 목록 기간(7일)보다 앞선 RERUN_DAYS일까지의 기사 제목 조각 → 재탕(이미 나왔던 소식) 찾기
+// 10분 캐시 (목록을 열 때마다 다시 읽지 않게)
+const RISING_TOP = 20
+const RERUN_DAYS = 21
+const CTX_TTL = 10 * 60_000
+let ctxCache = (globalThis.__scoreCtx ??= { at: 0, value: null })
+export async function scoreContext() {
+  ctxCache = globalThis.__scoreCtx
+  if (ctxCache.value && Date.now() - ctxCache.at < CTX_TTL) return ctxCache.value
+  let rising = []
+  try {
+    const { getTechTrends } = await import('../techtrends.js')
+    const t = await getTechTrends({ period: 'week' })
+    rising = (t.composite ?? []).slice(0, RISING_TOP).map((e) => ({ name: e.name, en: e.en }))
+  } catch (err) {
+    console.warn(`[score] 요즘 뜨는 기술 용어를 못 읽음: ${err.message}`)
+  }
+  let older = []
+  if (dbEnabled()) {
+    try {
+      const { rows } = await query(
+        `SELECT title, published_at FROM articles
+          WHERE published_at <= now() - make_interval(days => $1) AND published_at > now() - make_interval(days => $2)
+            AND (group_id IS NULL OR group_id = id)`,
+        [LIST_DAYS, RERUN_DAYS],
+      )
+      older = rows.map((r) => ({ time: r.published_at.getTime(), grams: titleGrams(r.title) }))
+    } catch (err) {
+      console.warn(`[score] 지난 기사 제목을 못 읽음: ${err.message}`)
+    }
+  }
+  const value = { rising, older }
+  globalThis.__scoreCtx = { at: Date.now(), value }
+  return value
+}
+
+function toIssues(stored, lists, ctx = { rising: [], older: [] }) {
   const grouped = stored.every((a) => a.groupId) ? stored : groupArticles(stored)
   const members = new Map()
   for (const a of grouped) {
@@ -244,8 +283,12 @@ function toIssues(stored, lists) {
   }
   // 대표 기사가 목록 기간(7일)을 지나 빠졌으면 남은 기사 중 가장 먼저 나온 기사가 대표
   const earliest = (group) => group.reduce((x, y) => (y.publishedAt < x.publishedAt ? y : x))
-  return [...members.entries()]
-    .map(([groupId, group]) => [group.find((a) => a.id === groupId) ?? earliest(group), group])
+  const pairs = [...members.entries()].map(([groupId, group]) => [group.find((a) => a.id === groupId) ?? earliest(group), group])
+  // 재탕: 이 이슈보다 48시간 넘게 앞서 나온 비슷한 제목(목록 안 다른 이슈 + 그 전 21일) (dedupe.js isRerun)
+  const keyed = pairs.map(([rep]) => ({ id: rep.id, time: Date.parse(rep.publishedAt), grams: titleGrams(rep.fullTitle ?? rep.title) }))
+  const earlierPool = [...ctx.older, ...keyed]
+  const reruns = new Set(keyed.filter((k) => isRerun(k, earlierPool)).map((k) => k.id))
+  return pairs
     .map(([groupRep, group]) => {
       // 출처 단계 (14 문서 4-B): 1차 기업·학회·논문 / 2차 전문매체 / 3차 일반 뉴스
       const rep = { ...groupRep, tier: tierOf(groupRep, EXPERT_SOURCES) }
@@ -253,7 +296,13 @@ function toIssues(stored, lists) {
       const infos = group.map((a) => relevanceInfo(a, lists))
       const relevance = infos.map((i) => i.level).reduce((a, b) => (RANK[b] > RANK[a] ? b : a), 'low')
       const info = infos[group.indexOf(groupRep)]
-      const { score, level, parts } = scoreArticle(rep, group.length, lists.competitors, { relevance, interests: lists.interests })
+      const { score, level, parts } = scoreArticle(rep, group.length, lists.competitors, {
+        relevance,
+        interests: lists.interests,
+        own: lists.own,
+        rising: ctx.rising,
+        rerun: reruns.has(groupRep.id),
+      })
       const own = findMention(`${rep.title} ${rep.description ?? ''}`, lists.own)
       const related = group
         .filter((a) => a.id !== rep.id)
@@ -290,7 +339,7 @@ function toIssues(stored, lists) {
 export async function listArticles({ regroup = false, days = LIST_DAYS } = {}) {
   let stored = dbEnabled() ? await loadRecentFromDb(days) : [...memory.values()]
   if (dbEnabled() && (regroup || stored.some((a) => !a.groupId))) stored = await regroupDb(stored)
-  const articles = toIssues(stored, await getLists())
+  const articles = toIssues(stored, await getLists(), await scoreContext())
   const lastCollectedAt = dbEnabled() ? await lastCollectedFromDb() : memoryCollectedAt
   return { articles, total: stored.length, lastCollectedAt, storage: dbEnabled() ? 'db' : 'memory' }
 }
@@ -325,7 +374,7 @@ export async function searchArticles(query, { period = 'all' } = {}) {
   }
   const articles = items.map((item, i) => ({ ...toArticle(item, q), rank: i + 1 })).filter((a) => a.url && a.title)
   const unique = [...new Map(articles.map((a) => [a.url, a])).values()]
-  const issues = toIssues(unique, await getLists())
+  const issues = toIssues(unique, await getLists(), await scoreContext())
   if (dbEnabled()) await linkToCollected(issues)
   // truncated일 때 실제로 어디까지 가져왔는지 (예: '반도체' 7일 → 최신 500건이 약 7시간치)
   const oldestAt = truncated ? items.map((i) => new Date(i.pubDate).toISOString()).sort()[0] : null

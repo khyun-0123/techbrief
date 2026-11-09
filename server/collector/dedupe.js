@@ -35,6 +35,13 @@ export function sameIssue(a, b) {
   return Math.abs(a.time - b.time) <= WINDOW_HOURS * 3600_000 && jaccard(a.grams, b.grams) >= SIMILARITY
 }
 
+// 재탕 (11/09 중요도 재설계 · 신규성): 이 이슈보다 MIN_GAP_HOURS 이상 앞서 나온 비슷한 제목이 있으면 「처음 나온 소식」이 아니다
+// (48시간 안이면 같은 이슈로 이미 묶였으므로, 그보다 오래된 것만 본다). earlier: [{ time, grams }]
+const MIN_GAP_HOURS = WINDOW_HOURS
+export function isRerun(item, earlier) {
+  return earlier.some((e) => item.time - e.time > MIN_GAP_HOURS * 3600_000 && jaccard(item.grams, e.grams) >= SIMILARITY)
+}
+
 export function similarity(a, b) {
   return jaccard(bigrams(normalizeTitle(a)), bigrams(normalizeTitle(b)))
 }

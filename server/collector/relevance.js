@@ -128,7 +128,30 @@ const FOCUS_MAX = 160
 // 돌려주는 값: { level, weight, roundup, topic, focus }
 //   topic: 제목이 주제 밖인데 기술 정보가 있어 남긴 기사의 주제 (예: '주식' → 화면에 「주식 기사 속 기술 정보」)
 //   focus: 키워드 이야기 문장 (모음 기사·주제 밖 기사에서 발췌 대신 보여 줌)
+// ── 1·2차 출처 전체 수집 (11/09 조장: 키워드에 맞는 글만이 아니라 모두 모으고 중요도는 우리가 판단) ──
+// 키워드에 안 맞은 RSS 글은 keyword = BROAD_KEYWORD로 저장하고, 관련도는 분야 용어로 정한다
+// - 제목에 디스플레이 용어 → 높음 / 제목에 반도체 · AI · 분야 용어나 경쟁사 · 관심 기술 → 중간 / 발췌에만 → 중간 / 없음 → 낮음(기본 숨김)
+export const BROAD_KEYWORD = '1·2차 출처'
+const SEMI_AI = /반도체|파운드리|메모리|\bhbm|\bdram|\bnand|낸드|패키징|본딩|노광|\beuv|칩렛|chiplet|semiconductor|foundry|wafer|lithograph|packaging|bonding|\bchips?\b|\bgpu|\bnpu|인공지능|\bai\b|생성형|llm|데이터센터|data ?center|로봇|robot|센서|sensor|배터리|battery|xr\b|\bar\b|\bvr\b|스마트 ?글라스|smart ?glass|웨어러블|wearable/i
+function broadRelevance(article, lists) {
+  const title = String(article.title ?? '')
+  const text = `${article.description ?? ''}`
+  const names = [...(lists.interests ?? []), ...(lists.competitors ?? [])]
+  const named = (s) => names.some((w) => w && s.toLowerCase().includes(w.toLowerCase()))
+  const off = offTopicOf(title)
+  // 회사 · 단체 이름 속 「디스플레이」는 기술 내용이 아니다 (예: 「LG디스플레이, 생물다양성 업무협약」)
+  const techTitle = title.replace(/(LG|삼성|BOE|티씨엘|TCL|샤프|재팬)\s*디스플레이|디스플레이\s*(협회|산업협회)|삼성디|LGD/gi, ' ')
+  let level
+  if (TITLE_TECH.test(techTitle) && (!off || !STRONG_TOPICS.has(off))) level = 'high'
+  else if (off && STRONG_TOPICS.has(off)) level = 'low'
+  else if (SEMI_AI.test(techTitle) || DOMAIN.test(techTitle) || named(title)) level = 'mid'
+  else if (TITLE_TECH.test(text) || SEMI_AI.test(text) || named(text)) level = 'mid'
+  else level = 'low'
+  return { level, weight: 0, roundup: false, topic: null, focus: null }
+}
+
 export function relevanceInfo(article, lists = {}) {
+  if (article.keyword === BROAD_KEYWORD) return broadRelevance(article, lists)
   const keyword = article.keyword
   const title = String(article.title ?? '')
   const text = article.body || article.description || ''

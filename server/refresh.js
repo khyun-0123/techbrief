@@ -4,6 +4,7 @@
 // - 팀원마다 자기 포트로 앱을 켜도 DB는 같이 쓴다 → DB 잠금으로 한 곳에서만 실행한다
 // - 앱(npm run dev)이 켜져 있을 때만 돈다. 꺼져 있던 동안 지난 예정은 켜진 뒤 한 번 따라잡는다
 import { collect, listArticles } from './collector/index.js'
+import { HIGH_THRESHOLD } from './collector/score.js'
 import { db, dbEnabled } from './db/index.js'
 import { getKeywords, getSetting, getSummaries, setSetting } from './db/store.js'
 import { pingModel, PRIORITY, queueStatus } from './llm/client.js'
@@ -107,11 +108,10 @@ function autoSummaryTarget(article) {
 }
 
 // ── 찾기 결과 자동 요약 (11/09 조장: 등록 키워드가 아니어도 기술 분야에서 중요하다고 판단된 기사는 자동 요약) ──
-// 「뉴스·논문에서 찾기」 결과 중 중요도 SEARCH_MIN점 이상(경쟁사 · 관심 기술 · 전문 매체 · 기술 소식 점수) 뉴스를
+// 「뉴스·논문에서 찾기」 결과 중 「중요」(HIGH_THRESHOLD점 이상, 11/09 재설계 점수: 신규성 · 사업 연관성 · 출처 신뢰도 위주) 뉴스를
 // 중요도 순으로 SEARCH_PICK건까지 자동 요약 대기열에 넣는다. 사람이 누른 요약이 늘 먼저다 (BACKGROUND). 자동 요약이 꺼져 있으면 넣지 않는다
-// 「중요」 배지 기준(60점)은 지금 점수(보도량 위주, 찾기 결과는 보도량이 거의 0)로는 거의 안 걸려서 40점으로 둔다 (11/09 실측: 모은 기사 425건 중 60점 이상 7건)
 // 찾기 결과는 DB에 쌓지 않으므로 대기열을 다시 짤 때 사라지지 않게 따로 들고 있다가, 요약되면 뺀다
-const SEARCH_MIN = 40
+const SEARCH_MIN = HIGH_THRESHOLD
 const SEARCH_PICK = 15 // 한 번 찾기에서 넣는 최대 건수
 const SEARCH_QUEUE_MAX = 30 // 들고 있는 최대 건수
 const searchExtras = (globalThis.__searchSummaryExtras ??= new Map()) // id → { article, important: true }
@@ -371,10 +371,14 @@ async function tick() {
 }
 
 // 앱이 켜질 때 한 번 부른다 (Vite 개발 서버·단독 서버)
+// 타이머는 프로세스에 하나만 두고, 부를 때마다 가장 최근에 읽은 코드의 tick을 쓴다 (11/09)
+// 예전: 처음 켤 때 만든 타이머가 그때의 tick을 계속 불러서, 서버 코드를 고쳐도(Vite가 모듈만 다시 읽음)
+// 정기 수집은 서버를 켤 때의 옛 코드로 돌았다 (키워드 논문 · RSS 8곳 · 1·2차 출처 전체 수집이 정기 수집에서 빠짐)
+globalThis.__techbriefTick = tick
 export function startScheduler() {
   if (globalThis.__techbriefScheduler) return
-  globalThis.__techbriefScheduler = setInterval(tick, TICK_MS)
+  globalThis.__techbriefScheduler = setInterval(() => globalThis.__techbriefTick(), TICK_MS)
   globalThis.__techbriefScheduler.unref?.()
-  setTimeout(tick, 5_000).unref?.()
+  setTimeout(() => globalThis.__techbriefTick(), 5_000).unref?.()
   setTimeout(resumeBacklog, 15_000).unref?.()
 }

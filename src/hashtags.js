@@ -41,6 +41,7 @@ export function tagsOf(article, summary, dict) {
   }
   for (const d of dict) if (d.re ? d.re.test(raw) : text.includes(d.key)) take(d.term)
   for (const k of summary?.keywords ?? []) take(k)
-  if (picked.length === 0 && article.keyword) take(article.keyword) // 아무것도 없으면 모아 온 키워드
+  // 아무것도 없으면 모아 온 키워드 (키워드에 안 맞아 모은 「1·2차 출처」 글은 빼고)
+  if (picked.length === 0 && article.keyword && article.keyword !== '1·2차 출처') take(article.keyword)
   return picked.map((p) => p.term)
 }
