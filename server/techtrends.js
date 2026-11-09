@@ -48,8 +48,10 @@ async function setPhase(phase) {
 // (머지·코드 수정으로 Vite가 서버를 같은 프로세스 안에서 다시 올리면 모듈 사본이 여러 개 생김 — 11/07 실제로 화면이 옛 값을 보여 줌)
 let state = null
 async function load({ fresh = false } = {}) {
-  if (fresh && !status.running) state = null
-  state ??= (await getSetting(KEY, null)) ?? {}
+  // 새로 읽을 때 state를 먼저 비우지 않는다: 동시에 부른 다른 요청이 비어 있는 state를 읽어 멈췄음
+  // (11/09: 기사 중요도 계산 scoreContext가 함께 부르면서 /api/tech-trends 502 「reading 'terms'」)
+  if (fresh && !status.running) state = (await getSetting(KEY, null)) ?? {}
+  else state ??= (await getSetting(KEY, null)) ?? {}
   state.terms ??= {} // key → { name, en, category, aliases[], articles{id: day} }
   state.series ??= {} // source → key → { series[{t,v}], at, error?, errorAt? }
   state.reddit ??= {} // key → { posts{id: day}, since }

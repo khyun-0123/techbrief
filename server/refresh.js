@@ -371,10 +371,14 @@ async function tick() {
 }
 
 // 앱이 켜질 때 한 번 부른다 (Vite 개발 서버·단독 서버)
+// 타이머는 프로세스에 하나만 두고, 부를 때마다 가장 최근에 읽은 코드의 tick을 쓴다 (11/09)
+// 예전: 처음 켤 때 만든 타이머가 그때의 tick을 계속 불러서, 서버 코드를 고쳐도(Vite가 모듈만 다시 읽음)
+// 정기 수집은 서버를 켤 때의 옛 코드로 돌았다 (키워드 논문 · RSS 8곳 · 1·2차 출처 전체 수집이 정기 수집에서 빠짐)
+globalThis.__techbriefTick = tick
 export function startScheduler() {
   if (globalThis.__techbriefScheduler) return
-  globalThis.__techbriefScheduler = setInterval(tick, TICK_MS)
+  globalThis.__techbriefScheduler = setInterval(() => globalThis.__techbriefTick(), TICK_MS)
   globalThis.__techbriefScheduler.unref?.()
-  setTimeout(tick, 5_000).unref?.()
+  setTimeout(() => globalThis.__techbriefTick(), 5_000).unref?.()
   setTimeout(resumeBacklog, 15_000).unref?.()
 }
