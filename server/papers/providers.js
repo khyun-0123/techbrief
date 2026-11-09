@@ -62,7 +62,7 @@ async function httpGet(url, { headers = {}, backoffMs = 15 * 60_000 } = {}) {
   return res
 }
 
-const clean = (s) =>
+export const clean = (s) =>
   String(s ?? '')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&lt;/g, '<')
@@ -73,7 +73,7 @@ const clean = (s) =>
     .replace(/\s+/g, ' ')
     .trim()
 const ymd = (ms) => new Date(ms).toISOString().slice(0, 10)
-const bareDoi = (d) => (d ? String(d).replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').toLowerCase() : '')
+export const bareDoi = (d) => (d ? String(d).replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').toLowerCase() : '')
 const topicRegex = (topics) => {
   const words = (topics ?? []).flatMap((t) => t.words ?? [])
   // 낱말 경계를 지킨다 ("OLED"가 "cooled"에 맞지 않게, 실측 11/08)
@@ -114,6 +114,7 @@ export async function openAlexGet(pathAndQuery) {
     const left = Number(res.headers.get('x-ratelimit-remaining-usd'))
     // 남은 예산이 검색 2번 값보다 적으면 다음부터는 쉬게 한다 (이번 응답은 쓴다)
     if (Number.isFinite(left) && left < 0.002) data.__exhausted = nextUtcMidnight()
+    if (Number.isFinite(left)) Object.defineProperty(data, '__left', { value: left }) // 남은 하루 예산 (논문 DB 받기가 사용자 몫을 남기려고 봄)
     return data
   })
 }
@@ -131,6 +132,14 @@ function oaWork(w) {
     fwci: w.fwci ?? null,
     topic: w.primary_topic ? { id: w.primary_topic.id.split('/').pop(), name: w.primary_topic.display_name } : null,
     oaUrl: w.open_access?.oa_url ?? null, // 무료로 볼 수 있는 원문 주소 (나중에 전문 분석에 씀)
+    // 11/10 논문 점수(corpus.js paperScore2)용: 인용 백분위 · 기업 저자 · 학술지 (같은 비용으로 받음)
+    pct: w.citation_normalized_percentile?.value ?? null,
+    top10: Boolean(w.citation_normalized_percentile?.is_in_top_10_percent),
+    source_id: loc.source?.id ? String(loc.source.id).split('/').pop() : null,
+    is_core: Boolean(loc.source?.is_core),
+    retracted: Boolean(w.is_retracted),
+    keywords: (w.keywords ?? []).map((k) => ({ name: k.display_name, score: k.score })),
+    companies: [...new Map((w.authorships ?? []).flatMap((a) => a.institutions ?? []).filter((i) => i.type === 'company').map((i) => [String(i.display_name).replace(/\s*\([^)]*\)\s*$/, ''), { name: String(i.display_name).replace(/\s*\([^)]*\)\s*$/, ''), country: i.country_code ?? null }])).values()],
     provider: 'openalex',
   }
 }
@@ -148,7 +157,7 @@ const openalex = {
     const search = req.query ? `&search.title_and_abstract=${encodeURIComponent(req.query)}` : ''
     // sort: 'relevance'(검색어가 있을 때만, 관련도순) · 'cited' · 'date'
     const sort = req.sort === 'relevance' && req.query ? '' : `&sort=${req.sort === 'cited' ? 'cited_by_count:desc' : 'publication_date:desc'}`
-    const select = 'id,doi,title,publication_date,primary_location,cited_by_count,fwci,primary_topic,abstract_inverted_index,open_access'
+    const select = 'id,doi,title,publication_date,primary_location,cited_by_count,fwci,primary_topic,abstract_inverted_index,open_access,citation_normalized_percentile,authorships,keywords,is_retracted'
     // 한 쪽 최대 100편 (OpenAlex 공식, 200은 없앨 예정 · 2026-11-09 확인)
     const data = await openAlexGet(`/works?filter=${f.join(',')}${search}${sort}&per-page=${Math.min(req.limit ?? 50, 100)}&select=${select}`)
     return Object.assign((data.results ?? []).map(oaWork), { exhausted: data.__exhausted })

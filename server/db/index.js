@@ -161,6 +161,41 @@ CREATE TABLE IF NOT EXISTS search_counts (
   PRIMARY KEY (query, day)
 );
 
+-- 디스플레이 논문 DB (11/10, server/papers/corpus.js): OpenAlex 디스플레이 주제 6개 논문을 미리 받아 두고 찾기는 여기서 한다
+-- 목록 받기는 100편에 $0.0001이라 (검색 1번 $0.001의 1/10) 2018년부터 다 받아도 약 $0.1. 찾기마다 API를 부르지 않는다
+-- 초록은 OpenAlex CC0. 원문은 저장하지 않는다
+CREATE TABLE IF NOT EXISTS papers (
+  id            text PRIMARY KEY,            -- OpenAlex W 번호
+  doi           text,
+  title         text NOT NULL,
+  abstract      text,
+  journal       text,
+  source_id     text,
+  is_core       boolean NOT NULL DEFAULT false,
+  type          text,
+  published     date,
+  year          integer,
+  cited         integer NOT NULL DEFAULT 0,
+  fwci          real,
+  pct           real,                        -- 분야 · 연도 보정 인용 백분위 (0~1)
+  top10         boolean NOT NULL DEFAULT false,
+  topic_id      text,
+  topics        jsonb,                       -- [{ id, name, score }]
+  keywords      jsonb,                       -- [{ name, score }] OpenAlex 핵심어
+  keyword_text  text,                        -- 핵심어를 이은 글 (찾기에 씀)
+  companies     jsonb,                       -- 저자 소속 중 기업 [{ name, country }]
+  oa_url        text,
+  oa_license    text,
+  retracted     boolean NOT NULL DEFAULT false,
+  fetched_at    timestamptz NOT NULL DEFAULT now(),
+  doc           tsvector GENERATED ALWAYS AS (
+                  setweight(to_tsvector('english', coalesce(title, '') || ' ' || coalesce(keyword_text, '')), 'A') ||
+                  setweight(to_tsvector('english', coalesce(abstract, '')), 'B')) STORED
+);
+CREATE INDEX IF NOT EXISTS papers_doc_idx ON papers USING gin (doc);
+CREATE INDEX IF NOT EXISTS papers_published_idx ON papers (published DESC);
+CREATE INDEX IF NOT EXISTS papers_doi_idx ON papers (doi);
+
 CREATE TABLE IF NOT EXISTS app_settings (
   key        text PRIMARY KEY,
   value      jsonb NOT NULL,
