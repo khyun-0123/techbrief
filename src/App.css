@@ -143,6 +143,12 @@
   min-width: 0;
 }
 
+/* 출처 목록에 긴 학술지 이름이 들어와도 화면 밖으로 넓어지지 않게 (11/09: 논문 100편 찾기 뒤 휴대폰에서 901px) */
+.filters select {
+  min-width: 0;
+  max-width: 100%;
+}
+
 /* 기사 찾기: 입력칸 + 「네이버에서 찾기」 */
 .search-form {
   display: flex;
@@ -291,6 +297,40 @@ select {
   margin-right: 6px;
   color: var(--tb-color-text);
   font-weight: 600;
+}
+
+/* 논문 초록 (11/09): 기본 세 줄, 「초록 전체 보기」로 펼침 */
+.row-abstract {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--tb-color-text-sub);
+}
+
+.row-abstract p {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+  line-height: 1.55;
+}
+
+.row-abstract.open p {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+
+.row-abstract .link-btn {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.abstract-from {
+  font-size: 12px;
+}
+
+.row-sub.muted {
+  font-size: 12px;
 }
 
 /* 검색어 강조 (Highlight.jsx): 연한 주황 바탕 + 검정 굵은 글자 (대비 약 18:1) */

@@ -41,7 +41,7 @@ import {
   SECTION_SCHEMA,
 } from './llm/reportPrompts.js'
 import { adminConfigured, adminHere, adminOf, changeLog, clientIp, diffWords, login, logChange, logout, requireAdmin } from './admin.js'
-import { refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
+import { queueSearchSummaries, refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
 import { featureList, FEATURES, getFeatures, saveFeatures } from './features.js'
 import { summarizeArticle, summarizeOnly } from './summarize.js'
 import { pruneUsage, recordClientEvent, usageStats } from './usage.js'
@@ -481,7 +481,9 @@ export async function handleApi(req, res) {
         searchArticles(query, { period }),
         searchPaperArticles(query, period).catch((err) => ({ articles: [], note: `논문을 찾지 못했어요 (${err.message})` })),
       ])
-      return send(res, 200, { ...news, articles: [...news.articles, ...papers.articles], newsCount: news.articles.length, paperCount: papers.articles.length, paperNote: papers.note })
+      // 찾기 결과 중 「중요」 뉴스는 자동 요약 대기열에 (11/09 조장, refresh.js). 응답은 기다리지 않는다
+      queueSearchSummaries(news.articles).catch((err) => console.warn(`[search] 자동 요약 넣기 실패: ${err.message}`))
+      return send(res, 200, { ...news, articles: [...news.articles, ...papers.articles], newsCount: news.articles.length, paperCount: papers.articles.length, paperNote: papers.note, paperProvider: papers.provider ?? null })
     }
     // 검색어 (11/09 조장 결정): 「추천 검색어」는 관리자가 관리 페이지에서 고르는 공용 목록,
     // 즐겨찾기 ☆ · 최근 검색어는 IP별 (선별 폴더와 같은 방식). 예전 공용 즐겨찾기(favorite_queries)는 추천 검색어의 처음 값으로 쓴다

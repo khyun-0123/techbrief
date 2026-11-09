@@ -83,3 +83,50 @@ export async function popularPapers(limit = 10) {
       .slice(0, limit),
   }
 }
+
+// ── 키워드로 논문 찾기 (11/09 조장: 저장 키워드는 주기적으로 모으고, 검색하면 그 키워드로 논문 목록 + 초록) ──
+// - OpenAlex search.title_and_abstract (관련도순), 한 번에 최대 100편 (검색 1회 $0.001)
+// - 디스플레이 용어로 찾을 때만 디스플레이 주제로 좁힌다 (「microLED」만으로는 광유전학 · 생체 논문이 절반, 11/08 시험).
+//   반도체 · AI 같은 다른 키워드는 좁히지 않는다 (예전에는 늘 좁혀서 0건이었음)
+// - 초록이 빈 논문은 Semantic Scholar에서 DOI로 채운다
+const DISPLAY_QUERY = /\b(?:displays?|pixels?|micro[\s-]?LEDs?|mini[\s-]?LEDs?|[AQW]?OLEDs?|QD[\s-]?OLEDs?|QLEDs?|OLEDoS|LCDs?|TFTs?|quantum[\s-]dots?|near[\s-]eye|holograph\w*|backplane|liquid crystal|electroluminesc\w*)\b/i
+export const isDisplayQuery = (en) => DISPLAY_QUERY.test(en)
+
+export async function keywordPapers(en, { from, to, limit = 100, sort = 'relevance' } = {}) {
+  const display = isDisplayQuery(en)
+  const { works, provider } = await searchPapers({
+    query: en,
+    from,
+    to,
+    sort,
+    limit,
+    types: ['article', 'review', 'conference-paper'],
+    ...(display ? { topics: DISPLAY_TOPICS } : {}),
+    fillAbstracts: true,
+  })
+  const seen = new Set()
+  const out = []
+  for (const w of works) {
+    const id = w.doi || w.url
+    if (!w.title || NOT_PAPER.test(w.title) || seen.has(id) || (display && !isDisplayPaper(w))) continue
+    seen.add(id)
+    out.push({ ...w, competitorTech: isCompetitorTech(w), displayJournal: DISPLAY_JOURNALS.some((j) => j.name === w.journal) })
+  }
+  return { works: out, provider, display }
+}
+
+// 논문 중요도 0~100 (30 문서 3장 제안을 단순하게, 가중치는 결정 3에서 바꿈)
+// 검색 관련도 35 · 월평균 인용 25 · 분야 보정 인용(FWCI) 20 · 디스플레이 전문지 10 · 최근성 10
+export function paperScore(w, rank, total) {
+  const months = w.date ? Math.max(1, (Date.now() - Date.parse(w.date)) / (30.4 * 86_400_000)) : 12
+  const perMonth = (w.cited ?? 0) / months
+  const parts = {
+    relevance: Math.round(35 * (1 - rank / Math.max(1, total))),
+    citations: Math.round(25 * Math.min(1, perMonth / 3)),
+    fwci: Math.round(20 * Math.min(1, (w.fwci ?? 0) / 3)),
+    journal: w.displayJournal ? 10 : 0,
+    recency: Math.round(10 * Math.max(0, 1 - months / 12)),
+  }
+  const score = Math.min(100, Object.values(parts).reduce((a, b) => a + b, 0))
+  return { score, parts: { ...parts, cited: w.cited ?? 0, fwciValue: w.fwci ?? null, perMonth: Math.round(perMonth * 10) / 10 } }
+}

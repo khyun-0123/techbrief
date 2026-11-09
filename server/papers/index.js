@@ -6,7 +6,7 @@
 // - 받은 결과는 paper_cache 표(DB 없으면 서버 메모리)에 둔다. 검색 6시간, 논문 수 24시간(지난 달 값은 30일)
 import { dbEnabled, query } from '../db/index.js'
 import { getSetting, setSetting } from '../db/store.js'
-import { LimitedError, PROVIDERS, UnsupportedError } from './providers.js'
+import { LimitedError, PROVIDERS, s2Abstracts, UnsupportedError } from './providers.js'
 
 export { abstractFromIndex, openAlexGet, LimitedError } from './providers.js'
 
@@ -134,7 +134,7 @@ async function viaChain(ids, fn) {
   throw new LimitedError('논문 출처가 모두 한도에 걸렸거나 쓸 수 없어요', Number.isFinite(soonest) ? soonest : Date.now() + HOUR)
 }
 
-const reqKey = (req) => JSON.stringify([req.sources?.map((s) => s.openalex), req.topics?.map((t) => t.id), req.query ?? '', req.from, req.to, req.sort ?? 'date', req.limit ?? 50, req.allowPreprints ?? false])
+const reqKey = (req) => JSON.stringify([req.sources?.map((s) => s.openalex), req.topics?.map((t) => t.id), req.query ?? '', req.from, req.to, req.sort ?? 'date', req.limit ?? 50, req.allowPreprints ?? false, req.fillAbstracts ?? false])
 
 // 논문 검색 (같은 요청은 6시간 캐시). 결과: { works, provider, cached }
 export async function searchPapers(req, { ttlMs = TTL.search, providers = PROVIDERS.map((p) => p.id) } = {}) {
@@ -142,7 +142,14 @@ export async function searchPapers(req, { ttlMs = TTL.search, providers = PROVID
   const hit = await cacheGet(key).catch(() => null)
   if (hit) return { ...hit, cached: true }
   const { value, provider } = await viaChain(providers, (p) => p.search(req))
-  const out = { works: [...value], provider }
+  let works = [...value]
+  // 초록이 빈 논문은 Semantic Scholar에서 DOI로 한 번에 채운다 (fillAbstracts, 11/09). 못 채우면 빈 채로
+  if (req.fillAbstracts) {
+    const empty = works.filter((w) => !w.abstract && w.doi)
+    const found = empty.length ? await s2Abstracts(empty.map((w) => w.doi)) : new Map()
+    works = works.map((w) => (!w.abstract && found.has(w.doi) ? { ...w, abstract: found.get(w.doi), abstractFrom: 'Semantic Scholar' } : w))
+  }
+  const out = { works, provider }
   await cachePut(key, out, ttlMs).catch((err) => console.warn(`[papers] 캐시 저장 실패: ${err.message}`))
   return { ...out, cached: false }
 }

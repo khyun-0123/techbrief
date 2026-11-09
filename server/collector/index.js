@@ -3,7 +3,7 @@
 import { dbEnabled, query } from '../db/index.js'
 import { getSetting, setSetting } from '../db/store.js'
 import { groupArticles, sameIssue, titleGrams } from './dedupe.js'
-import { collectFeeds, FEEDS, tierOf } from './feeds.js'
+import { collectFeeds, FEEDS, PAPER_KEYWORD_DAYS, tierOf } from './feeds.js'
 import { searchNews } from './naver.js'
 import { findMention, getLists } from './lists.js'
 import { EXPERT_SOURCES, toArticle } from './normalize.js'
@@ -55,8 +55,10 @@ async function loadRecentFromDb(days) {
     `SELECT a.id, a.url, a.title, a.description, a.source, a.keyword, a.published_at, a.section, a.group_id, a.full_title,
             left(t.body, $2) AS body
        FROM articles a LEFT JOIN article_texts t ON t.article_id = a.id
-      WHERE a.published_at > now() - make_interval(days => $1) ORDER BY a.published_at, a.id`,
-    [days, BODY_FOR_RELEVANCE],
+      WHERE a.published_at > now() - make_interval(days => $1)
+         OR (a.section = 'feed:crossref' AND a.published_at > now() - make_interval(days => $3))
+      ORDER BY a.published_at, a.id`,
+    [days, BODY_FOR_RELEVANCE, PAPER_KEYWORD_DAYS], // 논문은 키워드 논문 기간(30일)까지 목록에 (11/09)
   )
   return rows.map(({ published_at, group_id, full_title, body, ...r }) => ({
     ...r,
@@ -214,11 +216,14 @@ export async function collect(keywords) {
   } else {
     memoryCollectedAt = new Date().toISOString()
     const cutoff = Date.now() - LIST_DAYS * 24 * 3600_000
-    for (const [id, a] of memory) if (Date.parse(a.publishedAt) < cutoff) memory.delete(id)
+    const paperCutoff = Date.now() - PAPER_KEYWORD_DAYS * 24 * 3600_000
+    for (const [id, a] of memory) if (Date.parse(a.publishedAt) < (a.section === 'feed:crossref' ? paperCutoff : cutoff)) memory.delete(id)
   }
 
   const list = await listArticles({ regroup: true })
-  if (dbEnabled()) await updateDaily(list.articles)
+  // 추이 집계는 최근 LIST_DAYS일만 (목록에 같이 오는 30일치 논문이 지난 날짜 집계를 덮어쓰지 않게)
+  const listCutoff = Date.now() - LIST_DAYS * 24 * 3600_000
+  if (dbEnabled()) await updateDaily(list.articles.filter((a) => Date.parse(a.publishedAt) >= listCutoff))
   // 잘린 제목은 원문 제목으로 채운다 (뒤에서 조금씩, 다음 목록부터 보임). 같은 이슈 기사까지 본다
   restoreTitles(dbEnabled() ? await loadRecentFromDb(LIST_DAYS) : [...memory.values()], { memory })
   return { fetched, added, failed, sources, ...list }
@@ -265,6 +270,7 @@ function toIssues(stored, lists) {
         ...(info.topic ? { topicTag: info.topic } : {}),
         ...(info.focus ? { focus: info.focus } : {}),
         mentionWeight: info.weight,
+        ...(rep.section === 'feed:crossref' ? { paper: true } : {}),
         sameIssue: group.length - 1,
         importance: score,
         importanceLevel: level,

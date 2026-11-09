@@ -101,9 +101,41 @@ export async function saveRefreshSettings(input) {
 // 자동 요약 대상 (11/08 조장: 「중요도 높은 것만」이 아니라 「중요도 높은 순으로 전부」)
 // 관련도 「낮음」(주식 · 판촉 등 주제 밖, 화면에서 기본으로 숨김)만 빼고 나머지 전부를 중요도 순으로 요약한다
 // 예전: 제목에 키워드가 있는 이슈(관련도 high)만 → 101건을 다 하면 멈췄음
+// 11/09 조장: 논문은 초록이 첫 요약 역할을 하므로 자동 요약하지 않는다 (쓸 논문만 사람이 눌러 원문 기반으로 요약 · 분석)
 function autoSummaryTarget(article) {
-  return article.relevance !== 'low'
+  return article.relevance !== 'low' && !isPaper(article)
 }
+
+// ── 찾기 결과 자동 요약 (11/09 조장: 등록 키워드가 아니어도 기술 분야에서 중요하다고 판단된 기사는 자동 요약) ──
+// 「뉴스·논문에서 찾기」 결과 중 중요도 SEARCH_MIN점 이상(경쟁사 · 관심 기술 · 전문 매체 · 기술 소식 점수) 뉴스를
+// 중요도 순으로 SEARCH_PICK건까지 자동 요약 대기열에 넣는다. 사람이 누른 요약이 늘 먼저다 (BACKGROUND). 자동 요약이 꺼져 있으면 넣지 않는다
+// 「중요」 배지 기준(60점)은 지금 점수(보도량 위주, 찾기 결과는 보도량이 거의 0)로는 거의 안 걸려서 40점으로 둔다 (11/09 실측: 모은 기사 425건 중 60점 이상 7건)
+// 찾기 결과는 DB에 쌓지 않으므로 대기열을 다시 짤 때 사라지지 않게 따로 들고 있다가, 요약되면 뺀다
+const SEARCH_MIN = 40
+const SEARCH_PICK = 15 // 한 번 찾기에서 넣는 최대 건수
+const SEARCH_QUEUE_MAX = 30 // 들고 있는 최대 건수
+const searchExtras = (globalThis.__searchSummaryExtras ??= new Map()) // id → { article, important: true }
+export async function queueSearchSummaries(articles) {
+  const { autoSummary } = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
+  if (autoSummary === 'off') return 0
+  const picked = articles
+    .filter((a) => !a.paper && !a.summaryId && (a.importance ?? 0) >= SEARCH_MIN && a.relevance !== 'low')
+    .sort((x, y) => (y.importance ?? 0) - (x.importance ?? 0))
+    .slice(0, SEARCH_PICK)
+  const done = await getSummaries(picked.map((a) => a.id))
+  const fresh = picked.filter((a) => !done[a.id] && !searchExtras.has(a.id) && !backlog.some((b) => b.article.id === a.id))
+  for (const a of fresh) searchExtras.set(a.id, { article: a, important: true, fromSearch: true })
+  while (searchExtras.size > SEARCH_QUEUE_MAX) searchExtras.delete(searchExtras.keys().next().value)
+  if (!fresh.length) return 0
+  // 대기열에서 중요도 자리를 찾아 끼워 넣는다
+  await setBacklog(sortBacklog([...backlog, ...fresh.map((a) => searchExtras.get(a.id))]))
+  return fresh.length
+}
+const sortBacklog = (list) =>
+  list.sort(
+    (x, y) =>
+      (y.article.importance ?? 0) - (x.article.importance ?? 0) || y.article.publishedAt.localeCompare(x.article.publishedAt),
+  )
 
 // ── 자동 요약 대기열 ──
 // 최신화가 끝나면 아직 요약 안 된 기사(관련도 낮음을 뺀 이슈, 최근 7일)를 전부 대기열에 넣고
@@ -125,16 +157,16 @@ async function buildBacklog() {
   const candidates = articles.filter(
     (a) => autoSummaryTarget(a) && Date.parse(a.publishedAt) >= since(isPaper(a) ? PAPER_SUMMARY_DAYS : summaryDays),
   )
-  const done = await getSummaries(candidates.map((a) => a.id))
+  const done = await getSummaries([...candidates.map((a) => a.id), ...searchExtras.keys()])
   const scores = candidates.map((a) => a.importance ?? 0).sort((x, y) => y - x)
   const cut = Math.max(1, scores[Math.floor(scores.length * IMPORTANT_SHARE)] ?? Infinity)
-  return candidates
-    .filter((a) => !done[a.id])
-    .map((a) => ({ article: a, important: (a.importance ?? 0) >= cut }))
-    .sort(
-      (x, y) =>
-        (y.article.importance ?? 0) - (x.article.importance ?? 0) || y.article.publishedAt.localeCompare(x.article.publishedAt),
-    )
+  // 찾기 결과에서 넣어 둔 기사: 이미 요약됐으면 빼고 나머지는 같이 줄 세운다
+  for (const id of [...searchExtras.keys()]) if (done[id]) searchExtras.delete(id)
+  const ids = new Set(candidates.map((a) => a.id))
+  return sortBacklog([
+    ...candidates.filter((a) => !done[a.id]).map((a) => ({ article: a, important: (a.importance ?? 0) >= cut })),
+    ...[...searchExtras.values()].filter((e) => !ids.has(e.article.id)),
+  ])
 }
 
 let backlog = [] // [{ article, important }] 중요도 점수 순
@@ -195,6 +227,7 @@ async function runWorker() {
           summarizedInPass = true
         }
         failedInRow = 0
+        searchExtras.delete(article.id)
       } catch (err) {
         if (err.preempted) {
           // 끊긴 요약은 저장되지 않았다 → 「요약 안 됨」 그대로. 원래 자리(맨 앞)에 다시 넣어 사람 요청 뒤에 바로 이어서 한다
@@ -205,6 +238,7 @@ async function runWorker() {
         }
         stats.failed += 1
         failedInRow += 1
+        searchExtras.delete(article.id) // 찾기 결과는 다시 시도하지 않는다
         console.error(`[summary] 자동 요약 실패: ${err.message}`)
         if (failedInRow >= 3) {
           stats.note = `요약이 연달아 실패해 멈춤 (${err.message}) · 다음 최신화 때 다시 시도`
