@@ -36,7 +36,8 @@ export function hasKeyword(text, keyword) {
 // 표에 없는 한글 말은 null → 논문은 찾지 않는다 (OpenAlex 등은 영문 제목 · 초록)
 export function englishOf(query) {
   const q = String(query ?? '').trim()
-  if (/[A-Za-z]/.test(q)) return q
+  // 한글이 섞인 말(예: 「잉크젯 OLED」)은 그대로 보내면 논문이 0편이라 (11/10 실측) 표에 있을 때만. 나머지는 queryTerms.js가 AI로 옮김
+  if (!/[가-힣]/.test(q)) return q || null
   const key = q.toLowerCase()
   const alias = ALIASES[key] ?? ALIASES[key.replace(/\s+/g, '')]
   return alias?.find((a) => /^[a-z][a-z0-9 -]+$/.test(a) && a.includes(' ')) ?? alias?.find((a) => /^[a-z]/.test(a)) ?? null

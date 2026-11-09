@@ -25,6 +25,7 @@ import {
   saveFavoritesApi,
   saveSelectionApi,
   searchNewsApi,
+  searchPapersApi,
 } from './api.js'
 import { buildTagDict, tagsOf } from './hashtags.js'
 import SettingsMenu from './SettingsMenu.jsx'
@@ -701,7 +702,21 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     try {
       const result = await searchNewsApi(q, p)
       if (seq !== searchSeq.current) return
-      setSearch({ query: result.query, period: result.period, articles: result.articles, truncated: result.truncated, oldestAt: result.oldestAt, newsCount: result.newsCount, paperCount: result.paperCount, paperNote: result.paperNote })
+      setSearch({ query: result.query, period: result.period, articles: result.articles, truncated: result.truncated, oldestAt: result.oldestAt, newsCount: result.newsCount, collectedCount: result.collectedCount, paperCount: result.paperCount, paperNote: result.paperNote })
+      // 영문 검색어를 아직 만드는 중이면 (새 한글 키워드, 11/10) 뒤에서 논문 · 1·2차 출처만 다시 받아 채운다
+      if (result.paperPending) {
+        searchPapersApi(q, p)
+          .then((more) => {
+            if (seq !== searchSeq.current) return
+            setSearch((now) => {
+              const news = (now.articles ?? []).filter((a) => !a.paper && !a.collected)
+              const urls = new Set(news.map((a) => a.url))
+              const collected = (more.collected ?? []).filter((a) => !urls.has(a.url))
+              return { ...now, articles: [...news, ...collected, ...more.papers], collectedCount: collected.length, paperCount: more.papers.length, paperNote: more.paperNote }
+            })
+          })
+          .catch(() => {})
+      }
     } catch (err) {
       if (seq !== searchSeq.current) return
       setSearch({ query: q, period: p, error: err.message })
@@ -1159,7 +1174,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 <div className="search-banner">
                   <span aria-live="polite">
                     <strong>‘{search.query}’</strong> 찾기 결과 · 뉴스 {searchScope(search.period)}
-                    {search.articles && ` · 뉴스 ${search.newsCount ?? 0}건 · 논문 ${search.paperCount ?? 0}건`}
+                    {search.articles && ` · 뉴스 ${search.newsCount ?? 0}건${search.collectedCount ? ` · 모아 둔 1·2차 출처 ${search.collectedCount}건` : ''} · 논문 ${search.paperCount ?? 0}건`}
                     {search.paperNote && <span className="search-note"> · {search.paperNote}</span>}
                     {search.articles && ` · 이슈 ${visible.length}개 · 기사 ${countArticles(visible)}건`}
                     {search.loading && ' · 찾는 중…'}

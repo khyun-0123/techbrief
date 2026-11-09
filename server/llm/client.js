@@ -230,12 +230,13 @@ async function callChat(cfg, { messages, schema, schemaName, report = false, tim
 // 질문 하나를 보내고 JSON으로 받는다
 // report·timeoutMs는 선택 (보고서는 *_REPORT_MODEL과 더 긴 시간), priority는 PRIORITY 중 하나 (기본: 사람 요청)
 // AI 서버는 요청한 순간에 고른 곳을 쓴다 (기다리는 동안 상단에서 바꿔도 그대로)
-export async function chatJson({ messages, schema, schemaName = 'result', report, timeoutMs, priority = PRIORITY.USER, provider }) {
+export async function chatJson({ messages, schema, schemaName = 'result', report, timeoutMs, priority = PRIORITY.USER, provider, kind: callKind }) {
   const cfg = config(provider)
   return enqueue(async (signal) => {
     // 사용 현황(17 문서 4장)에 AI 호출 수·실패·걸린 시간을 남긴다. 대기열에서 기다린 시간은 빼고 잰다
     const startedAt = Date.now()
-    const kind = provider ? 'test' : report ? 'report' : 'summary'
+    // callKind: 요약 · 보고서가 아닌 짧은 호출의 이름 (예: 'translate' 검색어 영문 표기, 11/10)
+    const kind = provider ? 'test' : callKind ?? (report ? 'report' : 'summary')
     try {
       const { content, model: used, usage } = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs, signal })
       let data

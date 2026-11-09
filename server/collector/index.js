@@ -381,6 +381,36 @@ export async function searchArticles(query, { period = 'all' } = {}) {
   return { query: q, period, fetched: items.length, truncated, oldestAt, articles: issues }
 }
 
+// 「뉴스·논문에서 찾기」에서 이미 모아 둔 1·2차 출처 RSS 글도 같이 찾는다 (11/10)
+// 1·2차 출처는 키워드와 상관없이 모두 모으므로(11/09) 새 검색어에 맞는 글이 DB에 이미 있을 수 있다. 네이버 · OpenAlex를 부르지 않아 비용 없음
+// - 제목 · 요약에서 공백을 뺀 채 검색어(한글)와 영문 검색어(terms)를 찾는다 (예: 「게이밍 모니터」 = 「게이밍모니터」, gaming monitor)
+// - 논문(feed:crossref)은 논문 찾기 쪽에서 따로 보여 주므로 뺀다
+// - 기간: 오늘 · 일주일은 뉴스와 같이, 전체는 1년
+const COLLECTED_DAYS = { today: 1, week: 7, all: 365 }
+const COLLECTED_MAX = 200
+export async function searchCollected(searchText, terms = [], { period = 'all' } = {}) {
+  if (!dbEnabled()) return { articles: [] }
+  const words = [String(searchText ?? '').trim(), ...terms].map((w) => w.toLowerCase().replace(/\s+/g, '')).filter((w) => w.length >= 2)
+  if (!words.length) return { articles: [] }
+  const { rows } = await query(
+    `SELECT id, url, title, description, source, keyword, published_at, section, group_id, full_title
+       FROM articles
+      WHERE section LIKE 'feed:%' AND section <> 'feed:crossref'
+        AND published_at > now() - make_interval(days => $1)
+        AND lower(regexp_replace(coalesce(full_title, title) || ' ' || coalesce(description, ''), '\\s+', '', 'g')) LIKE ANY($2)
+      ORDER BY published_at DESC LIMIT $3`,
+    [COLLECTED_DAYS[period] ?? 365, words.map((w) => `%${w.replace(/[%_\\]/g, '\\$&')}%`), COLLECTED_MAX],
+  )
+  // 관련도 · 중요도는 검색어 기준으로 다시 본다: 글에 실제로 들어 있는 말(한글 검색어 또는 영문 표기)을 그 글의 키워드로
+  const raw = [String(searchText).trim(), ...terms]
+  const stored = rows.map(({ published_at, group_id, full_title, ...r }) => {
+    const text = `${full_title ?? r.title} ${r.description ?? ''}`.toLowerCase().replace(/\s+/g, '')
+    const hit = raw.find((w) => text.includes(w.toLowerCase().replace(/\s+/g, ''))) ?? raw[0]
+    return { ...r, keyword: hit, publishedAt: published_at.toISOString(), groupId: null, collected: true, ...(full_title ? { fullTitle: full_title } : {}) }
+  })
+  return { articles: toIssues(stored, await getLists(), await scoreContext()) }
+}
+
 // 찾기 결과 중 이미 모은 기사와 같은 이슈인 것은 그 이슈의 요약(summaryId)과 점수를 함께 쓴다
 // (같은 소식이라도 다른 언론사 기사면 주소가 달라 요약이 연결되지 않고, 점수도 찾기 결과 100건 안에서만 계산된다)
 async function linkToCollected(issues) {
