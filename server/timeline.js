@@ -238,7 +238,9 @@ export async function buildTimeline(rawQuery, { refresh = false } = {}) {
   const corpus = await corpusFacts(t.terms).catch((err) => ({ error: err.message }))
   const display = (corpus?.total ?? 0) >= 15
   const settle = (p) => p.then((value) => ({ value }), (err) => ({ error: err.message }))
-  const [long, origins, pat, naver] = await Promise.all([settle(longPapers(en, display)), settle(originPapers(t.terms, display)), settle(patents(t.terms)), settle(naverMonthly(q))])
+  let [long, origins, pat, naver] = await Promise.all([settle(longPapers(en, display)), settle(originPapers(t.terms, display)), settle(patents(t.terms)), settle(naverMonthly(q))])
+  // OpenAlex가 큰 묶음에서 504(시간 초과)를 주기도 한다 (11/10 실측: micro led) → 한 번 더
+  if (long.error) long = await settle(longPapers(en, display))
   const out = {
     query: q,
     terms: t.terms,
@@ -252,11 +254,16 @@ export async function buildTimeline(rawQuery, { refresh = false } = {}) {
     naver: naver.value ?? { status: 'error', error: naver.error },
     at: new Date().toISOString(),
   }
-  out.stage = stageOf(out.long, corpus, out.patents.status === 'ok' ? out.patents : null)
+  // 장기 논문 수를 못 받았으면 단계 판정은 논문 DB(2018년~) 숫자로 (빈 값으로 「신생」이라 하지 않게)
+  const basis = out.long.length ? out.long : (corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n }))
+  out.stage = stageOf(basis, corpus, out.patents.status === 'ok' ? out.patents : null)
+  if (!out.long.length && basis.length) out.stage.why += ' (OpenAlex 응답이 없어 논문 DB 기준)'
   out.makers = (corpus?.periods ?? []).map((p) => ({ label: p.label, makers: p.companies.filter((c) => DISPLAY_MAKERS.test(c.name)).map((c) => c.name) }))
   out.corpusPartial = !(await corpusReady())
   // 논문 DB 처음 받기가 안 끝났으면 일부만 본 결과라 1시간만 기억
-  await cachePut(key, out, out.corpusPartial ? 3600_000 : TTL).catch(() => {})
+  // 일부 출처가 실패했으면 10분만 기억 (다음에 다시 받음)
+  const failed = out.longError || out.patents.status === 'error'
+  await cachePut(key, out, failed ? 10 * 60_000 : out.corpusPartial ? 3600_000 : TTL).catch(() => {})
   return { ...out, cached: false }
 }
 

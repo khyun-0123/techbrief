@@ -5133,3 +5133,146 @@ a.brand:focus-visible {
   background: var(--tb-color-warning-soft);
   color: var(--tb-color-text);
 }
+
+/* 대시보드 「키워드 분석」 (11/10, KeywordAnalysis.jsx): 왼쪽 연관 키워드 맵(임시) · 오른쪽 기술 시계열 요약 */
+.ka-anchor {
+  scroll-margin-top: 72px;
+}
+.ka {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 16px 20px 20px;
+}
+.ka-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.ka-head .dash-note {
+  margin: 4px 0 0;
+}
+.ka-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+@media (max-width: 1100px) {
+  .ka-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ka-pane {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: var(--tb-radius-input, 8px);
+}
+.ka-pane-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+.ka-pane-head h3 {
+  margin: 0;
+  font-size: var(--fs-md);
+}
+.ka-temp {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+}
+.ka-map {
+  width: 100%;
+  height: auto;
+  max-height: 380px;
+}
+.ka-edge {
+  stroke: var(--tb-color-line);
+  stroke-width: 1;
+}
+.ka-center rect {
+  fill: var(--tb-color-text);
+}
+.ka-center text {
+  fill: var(--tb-color-text-inverse);
+  font-size: 15px;
+  font-weight: 700;
+}
+.ka-node {
+  cursor: pointer;
+}
+.ka-node text {
+  fill: var(--tb-color-text);
+  font-size: 12px;
+  pointer-events: none;
+}
+.ka-node.ka-tech rect {
+  fill: var(--tb-color-bg-strong);
+  stroke: var(--tb-color-bg-strong);
+  stroke-width: 2;
+}
+.ka-node.ka-firm rect {
+  fill: var(--tb-color-surface);
+  stroke: var(--tb-color-text-sub);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+.ka-node:hover rect,
+.ka-node:focus-visible rect {
+  stroke: var(--tb-color-text);
+}
+.ka-node:focus-visible {
+  outline: none;
+}
+.ka-node.on rect {
+  stroke: var(--tb-color-primary);
+  stroke-width: 2.5;
+  stroke-dasharray: none;
+}
+.ka-node.on text {
+  font-weight: 700;
+}
+.ka-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  font-size: var(--fs-sm);
+}
+.ka-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ka-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tb-color-text-sub);
+}
+.ka-key {
+  display: inline-block;
+  width: 18px;
+  height: 10px;
+  border-radius: 5px;
+}
+.ka-key-tech {
+  background: var(--tb-color-bg-strong);
+}
+.ka-key-firm {
+  margin-left: 8px;
+  border: 1.5px dashed var(--tb-color-text-sub);
+}
+.ka-sparks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 16px;
+}

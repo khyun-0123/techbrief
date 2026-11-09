@@ -1019,6 +1019,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           periods={PERIODS}
           period={period}
           onPeriod={setPeriod}
+          onRemember={(q) => saveRecent([q, ...recent.filter((r) => r !== q)].slice(0, RECENT_MAX))}
           onSearch={(q) => {
             runSearch(q)
             setScreen('collect')

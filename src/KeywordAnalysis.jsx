@@ -1,0 +1,191 @@
+// 대시보드 「키워드 분석」 (11/10 조장): 키워드로 찾으면 → 연관 키워드 맵 + 기술 시계열 요약 → 범위를 골라 자료 현황에서 선별
+// - 왼쪽 맵은 **임시 모양**이다. 워드클라우드팀 키워드 맵이 오면 이 자리를 바꾼다 (지금은 논문 DB의 핵심어 · 회사로 노드만 그림)
+// - 오른쪽은 기술 시계열 요약(단계 · 논문 수 · 기업 저자 비율 · 특허 · 새로 늘어난 핵심어). 「자세히 · AI 흐름 정리」는 TechTimeline 창
+// 예전 「추적 중인 키워드 추이」(뉴스 수 · 검색량 · 위키 · GDELT)는 11/10 조장 결정으로 대시보드에서 뺐다 — 키워드 하나를 제대로 분석하는 쪽으로
+import { useEffect, useMemo, useState } from 'react'
+import { fetchTimeline } from './api.js'
+import { Spark } from './KeywordTrends.jsx'
+import TechTimeline from './TechTimeline.jsx'
+
+const THIS_YEAR = new Date().getFullYear() // 올해는 안 끝나 줄어 보이므로 그래프에서 뺀다
+const W = 520
+const H = 360
+
+// 임시 맵: 가운데 키워드, 둘레에 기술(핵심어) · 회사 노드. 종류는 색이 아니라 모양(채움 / 테두리)으로 구분
+function MapPlaceholder({ keyword, data, count, selected, onToggle }) {
+  const nodes = useMemo(() => {
+    const p = data?.corpus?.periods ?? []
+    const tech = [...new Map([...(data?.corpus?.rising ?? []).map((r) => r.name), ...(p[2]?.keywords ?? []).map((k) => k.name), ...(p[1]?.keywords ?? []).map((k) => k.name)].map((n) => [n.toLowerCase(), n])).values()]
+    const firms = [...new Map([...(p[2]?.companies ?? []), ...(p[1]?.companies ?? [])].map((c) => [c.name, c.name])).values()]
+    const pickTech = tech.slice(0, Math.ceil(count * 0.7))
+    const pickFirm = firms.slice(0, count - pickTech.length)
+    return [...pickTech.map((name) => ({ name, kind: 'tech' })), ...pickFirm.map((name) => ({ name, kind: 'firm' }))]
+  }, [data, count])
+  const cx = W / 2
+  const cy = H / 2
+  const placed = nodes.map((n, i) => {
+    const a = (i / Math.max(1, nodes.length)) * Math.PI * 2 - Math.PI / 2
+    const r = i % 2 ? 150 : 118
+    return { ...n, x: cx + Math.cos(a) * r * 1.35, y: cy + Math.sin(a) * r }
+  })
+  const label = (t) => (t.length > 22 ? `${t.slice(0, 21)}…` : t)
+  return (
+    <svg className="ka-map" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`「${keyword}」 연관 키워드 임시 맵: ${nodes.map((n) => n.name).join(', ') || '없음'}`}>
+      {placed.map((n) => (
+        <line key={`l-${n.name}`} x1={cx} y1={cy} x2={n.x} y2={n.y} className="ka-edge" />
+      ))}
+      <g className="ka-center">
+        <rect x={cx - 70} y={cy - 18} width={140} height={36} rx={18} />
+        <text x={cx} y={cy + 5} textAnchor="middle">
+          {label(keyword)}
+        </text>
+      </g>
+      {placed.map((n) => {
+        const on = selected.includes(n.name)
+        const w = Math.min(170, 18 + label(n.name).length * 6.6)
+        return (
+          <g
+            key={n.name}
+            className={`ka-node ka-${n.kind}${on ? ' on' : ''}`}
+            role="button"
+            tabIndex={0}
+            aria-pressed={on}
+            aria-label={`${n.kind === 'firm' ? '회사' : '기술'} ${n.name}${on ? ' (고름)' : ''}`}
+            onClick={() => onToggle(n.name)}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onToggle(n.name))}
+          >
+            <rect x={n.x - w / 2} y={n.y - 14} width={w} height={28} rx={14} />
+            <text x={n.x} y={n.y + 4} textAnchor="middle">
+              {label(n.name)}
+            </text>
+            <title>{n.name}</title>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+function KeywordAnalysis({ keyword, onSearch }) {
+  const [data, setData] = useState(null)
+  const [error, setError] = useState('')
+  const [count, setCount] = useState(8)
+  const [selected, setSelected] = useState([])
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!keyword) return undefined
+    let alive = true
+    fetchTimeline(keyword)
+      .then((d) => alive && setData(d))
+      .catch((err) => alive && setError(err.message))
+    return () => {
+      alive = false
+    }
+  }, [keyword])
+
+  if (!keyword) return null
+  const full = (list) => (list ?? []).filter((x) => x.y < THIS_YEAR)
+  const toggle = (name) => setSelected((s) => (s.includes(name) ? s.filter((x) => x !== name) : [...s, name]))
+
+  return (
+    <section className="panel ka" aria-labelledby="ka-title">
+      <div className="ka-head">
+        <div>
+          <h2 id="ka-title" className="dash-title">
+            키워드 분석 · {keyword}
+          </h2>
+          <p className="dash-note">연관 키워드에서 볼 범위를 고르고, 기술의 흐름을 확인한 뒤 자료 현황에서 선별해요.</p>
+        </div>
+        <button type="button" className="btn primary" onClick={() => onSearch(keyword)}>
+          「{keyword}」 자료 찾기 →
+        </button>
+      </div>
+
+      <div className="ka-grid">
+        <div className="ka-pane">
+          <div className="ka-pane-head">
+            <h3>연관 키워드 맵</h3>
+            <span className="ka-temp">임시 모양 · 워드클라우드팀 맵이 들어올 자리</span>
+          </div>
+          {data ? (
+            <>
+              <MapPlaceholder keyword={keyword} data={data} count={count} selected={selected} onToggle={toggle} />
+              <div className="ka-controls">
+                <label>
+                  연관 키워드 <b>{count}</b>개
+                  <input type="range" min={4} max={14} value={count} onChange={(e) => setCount(Number(e.target.value))} />
+                </label>
+                <span className="ka-legend">
+                  <span className="ka-key ka-key-tech" aria-hidden="true" /> 기술 <span className="ka-key ka-key-firm" aria-hidden="true" /> 회사
+                </span>
+              </div>
+              <p className="hint">
+                {selected.length ? `고른 범위: ${selected.join(', ')}` : '노드를 눌러 볼 범위를 골라요.'} 지금은 모양만 있고, 고른 범위로 자료를 거르는 것은 맵이 들어온 뒤 붙여요.
+              </p>
+            </>
+          ) : (
+            <p className="hint">{error || '연관 키워드를 모으는 중…'}</p>
+          )}
+        </div>
+
+        <div className="ka-pane">
+          <div className="ka-pane-head">
+            <h3>기술 시계열</h3>
+            {data && (
+              <button type="button" className="btn" onClick={() => setOpen(true)}>
+                자세히 · AI 흐름 정리
+              </button>
+            )}
+          </div>
+          {error && (
+            <p className="ai-error" role="alert">
+              {error}
+            </p>
+          )}
+          {!data && !error && <p className="hint">논문 · 특허를 모으는 중이에요 (처음엔 10초 안팎)…</p>}
+          {data && (
+            <>
+              <div className="tl-stage">
+                <span className="tl-stage-badge">{data.stage.stage}</span>
+                <span>{data.stage.why}</span>
+              </div>
+              <div className="ka-sparks">
+                <Spark title="논문 수" unit="편" monthly="year" series={full(data.long).map((x) => ({ t: `${x.y}-01-01`, v: x.n }))} source="OpenAlex" note={data.longError ?? '논문이 없어요.'} />
+                <Spark
+                  title="기업 저자 비율"
+                  unit="%"
+                  monthly="year"
+                  series={full(data.corpus?.years).map((x) => ({ t: `${x.y}-01-01`, v: Math.round(x.companyShare * 100) }))}
+                  source="논문 DB · 2018년~"
+                  note="맞는 논문이 없어요."
+                />
+                <Spark
+                  title="특허 공개 수"
+                  unit="건"
+                  monthly="year"
+                  series={data.patents.status === 'ok' ? full(data.patents.years).map((x) => ({ t: `${x.y}-01-01`, v: x.n })) : []}
+                  source="Google Patents · 제목"
+                  note="특허가 없거나 받지 못했어요."
+                />
+              </div>
+              {data.corpus?.rising?.length > 0 && (
+                <p className="tl-rising">
+                  <b>새로 늘어난 핵심어</b>{' '}
+                  {data.corpus.rising.slice(0, 6).map((r) => (
+                    <span key={r.name} className="chip">
+                      {r.name}
+                    </span>
+                  ))}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      {open && <TechTimeline query={keyword} initialData={data} onClose={() => setOpen(false)} />}
+    </section>
+  )
+}
+
+export default KeywordAnalysis
