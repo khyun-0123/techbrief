@@ -116,3 +116,64 @@ export async function getPatentTrends(keywords) {
   const series = Object.fromEntries(Object.entries(saved.series).map(([k, s]) => [k, s.slice(0, -1)]))
   return { status: 'ok', series, at: saved.at }
 }
+
+// ── 기술 시계열(timeline.js, 11/10): 용어 하나의 해마다 특허 공개 수 + 출원인(회사) ──
+// 2010년부터. 한 번에 약 20GB를 읽어서(제목 · 공개일 · 출원인 칸) 부르는 쪽이 30일 기억한다
+// 같은 발명이 나라마다 따로 공개되면 따로 센다 (추세 비교용, 절대 건수가 아님)
+// 특허 제목은 약어보다 풀어 쓴 말을 쓴다 (예: OLED → organic light emitting, 11/10 실측: 「tandem oled」 제목은 해마다 몇 건뿐)
+const SPELLED = {
+  oled: '(?:oled|organic light[\\s-]?emitting)',
+  oleds: '(?:oleds?|organic light[\\s-]?emitting)',
+  led: '(?:led|light[\\s-]?emitting diode)',
+  leds: '(?:leds?|light[\\s-]?emitting diode)',
+  microled: '(?:micro[\\s-]?led|micro light[\\s-]?emitting diode)',
+  qd: '(?:qd|quantum[\\s-]?dot)',
+  tft: '(?:tft|thin[\\s-]?film transistor)',
+  lcd: '(?:lcd|liquid crystal display)',
+}
+export function patternFromTerms(terms) {
+  const parts = terms
+    .map((t) => String(t).toLowerCase().trim())
+    .filter((t) => t.length >= 3)
+    .map((t) =>
+      t
+        .split(/[\s-]+/)
+        .map((w) => SPELLED[w] ?? SPELLED[w.replace(/-/g, '')] ?? w.replace(/[.*+?^${}()|[\]\\']/g, '\\$&'))
+        .join('[\\s-]?'),
+    )
+  return parts.length ? [...new Set(parts)].join('|') : null
+}
+
+export async function patentHistory(pattern, since = 20100101) {
+  const key = readKey()
+  if (!key) return { status: 'no_key' }
+  const sql = `WITH m AS (
+      SELECT DISTINCT p.publication_number, CAST(FLOOR(p.publication_date / 10000) AS INT64) AS y, p.assignee_harmonized AS who
+        FROM \`patents-public-data.patents.publications\` p, UNNEST(p.title_localized) t
+       WHERE p.publication_date >= ${Number(since)} AND t.language = 'en' AND REGEXP_CONTAINS(LOWER(t.text), r'${pattern.replace(/'/g, '')}'))
+    SELECT y, a.name AS name, COUNT(DISTINCT publication_number) AS n, GROUPING(a.name) AS total
+      FROM m LEFT JOIN UNNEST(m.who) a
+     GROUP BY GROUPING SETS ((y), (y, a.name))
+    HAVING GROUPING(a.name) = 1 OR (a.name IS NOT NULL AND COUNT(DISTINCT publication_number) >= 2)`
+  const token = await accessToken(key)
+  const res = await fetch(`https://bigquery.googleapis.com/bigquery/v2/projects/${key.project_id}/queries`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: sql, useLegacySql: false, timeoutMs: 120_000, maxResults: 5000 }),
+    signal: AbortSignal.timeout(150_000),
+  })
+  const data = await res.json()
+  if (data.error) throw new Error(data.error.message)
+  if (!data.jobComplete) throw new Error('BigQuery 집계가 시간 안에 끝나지 않았어요')
+  const years = []
+  const owners = []
+  for (const r of data.rows ?? []) {
+    const y = Number(r.f[0].v)
+    const name = r.f[1].v
+    const n = Number(r.f[2].v)
+    if (Number(r.f[3].v) === 1) years.push({ y, n })
+    else owners.push({ y, name, n })
+  }
+  years.sort((a, b) => a.y - b.y)
+  return { status: 'ok', years, owners, bytes: Number(data.totalBytesProcessed ?? 0) }
+}

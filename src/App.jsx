@@ -54,6 +54,7 @@ import { formatPublished, load } from './utils.js'
 import { clientId, enableUsage, track, trackVisit } from './usage.js'
 import AddMaterial from './AddMaterial.jsx'
 import DataMove from './DataMove.jsx'
+import TechTimeline from './TechTimeline.jsx'
 import FolderBar from './FolderBar.jsx'
 import { INBOX, INBOX_FOLDER } from './folders.js'
 
@@ -697,6 +698,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   // 기간(p)도 함께 보낸다: 오늘·7일은 최신순으로 그 기간만, 전체는 정확도순 100건 (18 문서)
   // 찾는 중에 기간을 바꾸면 새 요청을 보내고, 늦게 온 이전 응답은 버린다
   const searchSeq = useRef(0)
+  const [timelineQuery, setTimelineQuery] = useState(null) // 기술 시계열 창 (11/10)
   async function runSearch(q, p = period) {
     if (!q) return
     const seq = ++searchSeq.current
@@ -1191,6 +1193,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                     )}
                     <span className="search-note"> · 수집 목록에는 쌓이지 않아요. 선별·요약하면 그 기사만 남아요</span>
                   </span>
+                  <button type="button" className="btn" onClick={() => setTimelineQuery(search.query)} title="이 기술의 배경 · 성장 · 적용 · 전망을 논문 · 특허 · 검색 관심도로 봐요">
+                    기술 시계열
+                  </button>
                   <button type="button" className="btn" onClick={closeSearch}>
                     모은 기사로 돌아가기
                   </button>
@@ -1523,6 +1528,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         </main>
       )}
       {showMove && <DataMove favorites={favorites} recent={recent} onClose={() => setShowMove(false)} />}
+      {timelineQuery && <TechTimeline query={timelineQuery} onClose={() => setTimelineQuery(null)} />}
       <ProgressPanel
         queue={queue}
         reportJobs={reportJobs}

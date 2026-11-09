@@ -464,3 +464,11 @@ export async function saveQueryTermsApi(query, terms) {
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
   return data
 }
+
+// 기술 시계열 (11/10): 숫자 · 단계(규칙) / AI 흐름 정리
+export function fetchTimeline(query, refresh = false) {
+  return postJson('/api/timeline', { query, refresh })
+}
+export function fetchTimelineStory(query, refresh = false) {
+  return postJson('/api/timeline/story', { query, refresh })
+}
