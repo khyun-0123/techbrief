@@ -253,7 +253,7 @@ export async function chatJson({ messages, schema, schemaName = 'result', report
   return enqueue(async (signal) => {
     // 사용 현황(17 문서 4장)에 AI 호출 수·실패·걸린 시간을 남긴다. 대기열에서 기다린 시간은 빼고 잰다
     const startedAt = Date.now()
-    // callKind: 요약 · 보고서가 아닌 짧은 호출의 이름 (예: 'translate' 검색어 영문 표기, 11/10)
+    // callKind: 요약 · 보고서가 아닌 호출의 이름 (translate 검색어 영문 표기 · timeline 흐름 정리 · reinforce 근거 보충 · section 섹션 다시 쓰기 · terms 뜨는 기술, 11/11)
     const kind = provider ? 'test' : callKind ?? (report ? 'report' : 'summary')
     try {
       const { content, model: used, usage } = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs, signal })
@@ -264,11 +264,11 @@ export async function chatJson({ messages, schema, schemaName = 'result', report
       } catch {
         throw new Error('AI 응답이 JSON 형식이 아니에요.')
       }
-      recordAiCall(kind, true, Date.now() - startedAt)
+      recordAiCall(kind, true, Date.now() - startedAt, { provider: cfg.id, model: used, ...usage })
       return { data, model: used, usage }
     } catch (err) {
       // 사람 요청에 자리를 내준 것은 실패로 세지 않는다 (다시 요약됨)
-      if (!signal.aborted) recordAiCall(kind, false, Date.now() - startedAt)
+      if (!signal.aborted) recordAiCall(kind, false, Date.now() - startedAt, { provider: cfg.id, model: (report && cfg.reportModel) || cfg.model })
       throw err
     }
   }, priority)

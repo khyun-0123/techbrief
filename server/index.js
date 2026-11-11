@@ -249,6 +249,7 @@ async function handleReportSection(req, res) {
     messages: buildSectionMessages(articles, { key: body.key, report: body.report, direction: body.report?.direction }),
     schema: SECTION_SCHEMA,
     schemaName: 'report_section',
+    kind: 'section',
     report: true,
     timeoutMs: REPORT_TIMEOUT_MS,
   })

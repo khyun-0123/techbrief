@@ -199,6 +199,7 @@ export async function rewriteWithPassages(bulletText, passages, existing = []) {
     schema: SCHEMA,
     schemaName: 'reinforce_bullet',
     priority: PRIORITY.USER,
+    kind: 'reinforce',
   })
   const used = [...new Set((data.refs ?? []).filter((n) => Number.isInteger(n) && n >= 1 && n <= passages.length))]
   const newText = stripInlineRefs(data.text ?? '').trim()

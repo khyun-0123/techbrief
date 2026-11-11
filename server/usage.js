@@ -77,12 +77,14 @@ async function visitedToday(clientId) {
   return rows.length > 0
 }
 
-// AI 호출 한 번 (kind: summary · report · section · test, ok, 걸린 ms). 실패해도 호출 쪽에 영향 없게
-export function recordAiCall(kind, ok, ms) {
-  insert('ai', `${clean(kind, 20)}:${ok ? 'ok' : 'fail'}`, null, Math.round(ms)).catch((err) =>
-    console.warn(`[usage] AI 호출 기록 실패: ${err.message}`),
-  )
+// AI 호출 한 번 (kind: summary · report · section · timeline · reinforce · translate · terms · test, ok, 걸린 ms). 실패해도 호출 쪽에 영향 없게
+// detail = 「이름:ok|AI 서버|모델|입력 토큰|출력 토큰」 (11/11: 모델 비교 · 비용 가늠용. 예전 기록은 「이름:ok」만)
+// 출력 토큰에는 상용 모델의 보이지 않는 추론 글도 들어간다 (요금도 그만큼 나감)
+export function recordAiCall(kind, ok, ms, { provider = '', model = '', input = 0, output = 0 } = {}) {
+  const detail = [`${clean(kind, 20)}:${ok ? 'ok' : 'fail'}`, clean(provider, 20), clean(model, 60), input || 0, output || 0].join('|')
+  insert('ai', detail, null, Math.round(ms)).catch((err) => console.warn(`[usage] AI 호출 기록 실패: ${err.message}`))
 }
+const aiOkOf = (e) => (e.detail ?? '').split('|')[0].endsWith(':ok')
 
 // 90일 지난 원본 기록 지우기 (서버가 켜질 때와 하루 한 번)
 export async function pruneUsage() {
@@ -171,7 +173,7 @@ export async function usageStats(days, keywords = []) {
 
   // 시스템: AI 호출
   const ai = ofType(events, 'ai')
-  const aiOk = ai.filter((e) => e.detail?.endsWith(':ok'))
+  const aiOk = ai.filter(aiOkOf)
   const today = startOf(1)
 
   return {
