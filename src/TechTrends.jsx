@@ -12,6 +12,7 @@ const PERIODS = [
   { id: 'custom', label: '직접 설정' },
 ]
 const SHOW = 10
+const COMPOSITE_SOURCES = ['naver', 'wiki', 'reddit', 'openalex']
 const FROM_LABEL = { search: '검색', paper: '논문 신규', article: '기사' }
 
 // 이 용어를 어디서 찾았는지 (검색어 · 논문 신규 키워드 · 기사). 기사만이면 표시 안 함
@@ -87,7 +88,8 @@ function TopThree({ rows, cols, onPick }) {
               {r.name}
             </button>
             <span className="tt-top3-meta">
-              {r.category} · 종합 <b>{r.score}</b>
+              {r.category} · 종합 <b>{r.score}</b> · {r.grade}
+              {r.stage ? ` · ${r.stage}` : ''}
             </span>
             {best && (
               <span className="tt-top3-why">
@@ -103,11 +105,17 @@ function TopThree({ rows, cols, onPick }) {
 
 function Composite({ data, onPick }) {
   const [more, setMore] = useState(false)
-  const cols = data.sources.filter((s) => s.ranking.length >= 2)
-  if (data.composite.length === 0) return <p className="tt-empty">출처 2곳 이상에 값이 있는 용어가 아직 없어요. 하루 한 번 받는 값이 쌓이면 보여요.</p>
+  // 종합에 들어가는 출처만 (특허는 공개가 약 18개월 늦어 종합에서 뺐다, 11/11)
+  const cols = data.sources.filter((s) => COMPOSITE_SOURCES.includes(s.id) && s.ranking.length >= 2)
+  if (data.composite.length === 0) return <p className="tt-empty">논문과 관심 신호(검색량 · 위키 · Reddit)가 모두 있는 용어가 아직 없어요. 하루 한 번 받는 값이 쌓이면 보여요.</p>
   const rows = more ? data.composite : data.composite.slice(0, SHOW)
+  const notable = data.composite.filter((r) => r.score >= 60).length
   return (
     <>
+    <p className="tt-scale">
+      점수는 <b>평소 대비</b>예요: 50 = 평소와 같음 · 60 = 약 1.3배 · 75 = 2배 (논문 절반 + 검색량 · 위키 · Reddit 절반, 평소 = 바로 앞 같은 길이 구간들의 평균).{' '}
+      {notable ? `평소보다 뚜렷하게 오른 기술 ${notable}개.` : '이번 기간에는 평소보다 뚜렷하게(60점 이상) 오른 기술이 없어요. 아래는 그중 많이 오른 순서예요.'}
+    </p>
     <TopThree rows={data.composite} cols={cols} onPick={onPick} />
     <div className="tt-table-wrap">
       <table className="tt-table">
@@ -116,6 +124,7 @@ function Composite({ data, onPick }) {
             <th scope="col">순위</th>
             <th scope="col">기술</th>
             <th scope="col">종합 점수</th>
+            <th scope="col">등급 · 단계</th>
             {cols.map((s) => (
               <th scope="col" key={s.id} title={`${s.axis} · ${s.note}${s.basis ? ` · ${s.basis.note}` : ''}`}>
                 {s.label}
@@ -136,14 +145,22 @@ function Composite({ data, onPick }) {
                 <From from={r.from} />
               </td>
               <td>
-                <span className="tt-score" title="출처마다 순위를 0~100으로 바꿔 평균">
+                <span className="tt-score" title={`평소 대비 신호 점수 (50 = 평소, 75 = 2배). 지금 · 앞 구간 · 그 앞: ${(r.history ?? []).map((x) => x ?? '-').join(' · ')}`}>
                   <span className="tt-score-bar" style={{ width: `${r.score}%` }} />
                   <b>{r.score}</b>
                 </span>
               </td>
+              <td className="tt-grade">
+                {r.grade}
+                {r.stage && <small> · {r.stage}</small>}
+              </td>
               {cols.map((s) => {
                 const p = r.parts[s.id]
-                return <td key={s.id}>{p ? <Change change={p.change} growth={p.growth} cur={1} /> : <span className="tt-na">—</span>}</td>
+                return (
+                  <td key={s.id} title={p ? `신호 ${p.signal} · 이번 ${p.cur} / 평소 ${p.base}` : undefined}>
+                    {p ? <Change change={p.change} growth={p.growth} cur={p.cur} /> : <span className="tt-na">—</span>}
+                  </td>
+                )
               })}
             </tr>
           ))}
@@ -156,6 +173,20 @@ function Composite({ data, onPick }) {
       )}
       {/* 짧은 기간이면 논문 · 특허는 다른 기간으로 비교한 값이 들어간다 (탭과 같은 값). 아래 「기준 · 출처」에 접어 둠 */}
     </div>
+    {/* 논문만 있는 용어(소재 · 공정처럼 일반인이 찾지 않는 기술)는 종합에 못 들어가므로, 논문이 오르면 따로 (11/11) */}
+    {data.early?.length > 0 && (
+      <p className="tt-early">
+        <b>연구 초기 신호</b> (논문만 평소보다 오름, 검색 · 위키 신호 없음):{' '}
+        {data.early.slice(0, 8).map((r, i) => (
+          <span key={r.key}>
+            {i > 0 && ' · '}
+            <button type="button" className="tt-term" onClick={() => onPick(r.name)} title={`논문 신호 ${r.score} · 이번 3달 ${r.parts.openalex.cur}편 / 평소 ${r.parts.openalex.base}편`}>
+              {r.name}
+            </button>
+          </span>
+        ))}
+      </p>
+    )}
     </>
   )
 }

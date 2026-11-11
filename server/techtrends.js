@@ -817,6 +817,102 @@ function shortMonthly(src, out, keys) {
   return out
 }
 
+// ── 종합 점수: 평소 대비 신호 (11/11 교체, 25 문서 · 08 문서) ──
+// 예전 방식(출처마다 증가율 순위를 0~100 백분위로 바꿔 평균)은 아무것도 오르지 않은 주에도 1등이 100에 가깝고,
+// 작은 숫자의 흔들림(논문 4주 6편 대 2편 = +200%, 특허 5건 대 1건)과 몇 달 늦은 특허 값이 상위를 차지했다 (11/11 검수: 상위 20 중 3개는 모든 출처 ±15% 안)
+// 신호 점수 = 50 + 25 × log₂((지금 + 보정) ÷ (평소 + 보정)), 0~100. 50 = 평소, 75 = 평소의 2배, 25 = 절반
+// - 평소: 바로 앞 같은 길이 구간들의 평균 (7일이면 4구간, 30일이면 3구간)
+// - 보정값: 작은 숫자가 몇 배로 튀지 않게 (네이버 하루 5 · 위키 하루 20 · Reddit 3건 · 논문 3편)
+// - 논문은 월별이라 기간과 상관없이 최근 3달 vs 그 전 9달(3달씩 3구간) 평균. 특허는 공개가 약 18개월 늦어 종합에서 뺀다 (탭에서만)
+// 종합 = 논문 신호 절반 + 관심 신호(네이버 · 위키 · Reddit) 평균 절반. 둘 다 있는 용어만 (26 문서 팀 규칙)
+// 등급: 주목 = 70 이상 + 지금 · 앞 2구간 중 2구간 이상 60 이상 / 관심 · 반짝 = 70 이상인데 한 구간만 / 관심 = 60~69 / 보통
+const SIGNAL_SMOOTH = { naver: (days) => 5 * days, wiki: (days) => 20 * days, reddit: () => 3, openalex: () => 3 }
+const INTEREST = ['naver', 'wiki', 'reddit']
+export const signalScore = (cur, base, smooth) => Math.max(0, Math.min(100, 50 + 25 * Math.log2((cur + smooth) / (base + smooth))))
+const shiftWin = ([a, b], days) => [ymd(Date.parse(a) - days * DAY), ymd(Date.parse(b) - days * DAY)]
+
+function dailySignal(srcId, slot, cur, days) {
+  const series = slot?.series
+  if (!series?.length) return null
+  // 평소: 앞 구간 최대 4개(7일) · 3개(30일). 자료가 모자라면 있는 만큼, 2구간보다 적으면 빼기
+  let back = days <= 7 ? 4 : 3
+  while (back >= 2 && series[0].t > shiftWin(cur, days * back)[0]) back -= 1
+  if (back < 2) return null
+  const now = sumIn(series, cur)
+  let base = 0
+  for (let i = 1; i <= back; i += 1) base += sumIn(series, shiftWin(cur, days * i))
+  base /= back
+  const min = SOURCES.find((x) => x.id === srcId)?.min ?? 0
+  if (now + base < min) return null
+  const smooth = SIGNAL_SMOOTH[srcId](days)
+  return { signal: signalScore(now, base, smooth), cur: Math.round(now * 10) / 10, base: Math.round(base * 10) / 10 }
+}
+
+function paperSignal(slot, shiftMonths = 0) {
+  const lastFull = ymd(Date.now()).slice(0, 7) + '-01'
+  let months = (slot?.series ?? []).filter((p) => p.t < lastFull)
+  if (shiftMonths) months = months.slice(0, -shiftMonths)
+  if (months.length < 9) return null // 최근 3달 + 평소 최소 6달
+  const now = months.slice(-3).reduce((a, p) => a + p.v, 0)
+  const prev = months.slice(-12, -3)
+  const base = prev.reduce((a, p) => a + p.v, 0) / (prev.length / 3)
+  if (now + base < 3) return null
+  return { signal: signalScore(now, base, SIGNAL_SMOOTH.openalex()), cur: now, base: Math.round(base * 10) / 10 }
+}
+
+// 한 용어 · 한 구간의 신호들과 종합
+function termSignals(k, cur, days, shiftMonths) {
+  const parts = {}
+  for (const id of INTEREST) {
+    const v = dailySignal(id, state.series[id]?.[k], cur, days)
+    if (v) parts[id] = v
+  }
+  const paper = paperSignal(state.series.openalex?.[k], shiftMonths)
+  if (paper) parts.openalex = paper
+  const interest = INTEREST.filter((id) => parts[id]).map((id) => parts[id].signal)
+  const score = paper && interest.length ? 0.5 * paper.signal + 0.5 * (interest.reduce((a, b) => a + b, 0) / interest.length) : null
+  return { parts, score }
+}
+
+// 단계: 신호 65 이상 = 상승, 35 이하 = 하락
+function stageOfSignals(parts) {
+  const up = Object.entries(parts).filter(([, p]) => p.signal >= 65).map(([id]) => id)
+  const all = Object.values(parts)
+  if (up.length >= 3) return '본격 확산'
+  if (up.includes('reddit')) return '사용자 반응'
+  if (up.includes('naver') || up.includes('wiki')) return '관심 확산'
+  if (up.length === 1 && up[0] === 'openalex') return '연구 초기 신호'
+  if (all.length && all.every((p) => p.signal <= 35)) return '관심 감소'
+  return null
+}
+
+function signalComposite(keys, win) {
+  const composite = []
+  const early = []
+  for (const k of keys) {
+    const t = state.terms[k]
+    const now = termSignals(k, win.cur, win.days, 0)
+    const pct = (p) => (p.base > 0 ? Math.round(((p.cur - p.base) / p.base) * 100) : null)
+    const parts = Object.fromEntries(Object.entries(now.parts).map(([id, p]) => [id, { ...p, signal: Math.round(p.signal), change: pct(p), growth: (p.cur + 1) / (p.base + 1) }]))
+    const info = { key: k, name: t.name, en: t.en, category: t.category, from: t.from ?? ['article'], firstSeen: t.firstSeen ?? null, parts, stage: stageOfSignals(now.parts) }
+    if (now.score == null) {
+      // 논문만 있는 용어(소재 · 공정처럼 일반인이 찾지 않는 기술): 논문이 오르면 「연구 초기 신호」로 따로 (B2B 예외)
+      if (now.parts.openalex && now.parts.openalex.signal >= 65) early.push({ ...info, score: Math.round(now.parts.openalex.signal) })
+      continue
+    }
+    // 앞 2구간 (지속성). 논문은 월별이라 기간이 한 달 이상일 때만 함께 옮긴다
+    const monthsBack = (i) => (win.days >= 28 ? Math.round((win.days * i) / 30) : 0)
+    const history = [now.score, termSignals(k, shiftWin(win.cur, win.days), win.days, monthsBack(1)).score, termSignals(k, shiftWin(win.cur, win.days * 2), win.days, monthsBack(2)).score]
+    const lasting = history.filter((x) => x != null && x >= 60).length >= 2
+    const score = Math.round(now.score)
+    const grade = score >= 70 ? (lasting ? '주목' : '관심 · 반짝') : score >= 60 ? '관심' : '보통'
+    composite.push({ ...info, score, grade, history: history.map((x) => (x == null ? null : Math.round(x))) })
+  }
+  composite.sort((a, b) => b.score - a.score)
+  early.sort((a, b) => b.score - a.score)
+  return { composite, early }
+}
+
 export async function getTechTrends({ period, from, to } = {}) {
   await load({ fresh: true })
   await fillFromHistory() // API가 막혀 비어 있는 값은 기록에서 가장 최근 값으로 (11/08)
@@ -874,25 +970,13 @@ export async function getTechTrends({ period, from, to } = {}) {
     return out
   })
 
-  // 종합: 출처마다 순위를 0~100 백분위로 바꿔 평균. 출처 2곳 이상에 값이 있는 용어만
-  const byKey = {}
-  for (const s of sources) {
-    const n = s.ranking.length
-    if (n < 2) continue
-    s.ranking.forEach((r, i) => {
-      const e = (byKey[r.key] ??= { key: r.key, name: r.name, en: r.en, category: r.category, from: r.from, parts: {} })
-      e.parts[s.id] = { pct: Math.round((1 - i / (n - 1)) * 100), change: r.change, growth: r.growth, rank: i + 1, of: n }
-    })
-  }
-  const composite = Object.values(byKey)
-    .filter((e) => Object.keys(e.parts).length >= 2)
-    .map((e) => ({ ...e, score: Math.round(Object.values(e.parts).reduce((s, p) => s + p.pct, 0) / Object.keys(e.parts).length) }))
-    .sort((a, b) => b.score - a.score)
+  const { composite, early } = signalComposite(keys, win)
 
   return {
     window: win,
     sources: sources.map((s) => ({ ...s, ranking: s.ranking })),
     composite,
+    early,
     terms: Object.keys(state.terms).length,
     hidden: Object.values(state.terms).filter((t) => t.hidden).length,
     from: Object.fromEntries(['search', 'paper', 'article'].map((f) => [f, keys.filter((k) => (state.terms[k].from ?? ['article']).includes(f)).length])),

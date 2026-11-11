@@ -158,10 +158,11 @@ function scoreTitle(a) {
     `최신성 ${p.recency ?? 0}/15`,
     `보도량 ${p.coverage ?? 0}/10`,
   ]
-  if (p.noise) parts.push(`시황·홍보성 ${p.noise}`)
+  if (p.noise < 0) parts.push(`시황·홍보성 ${p.noise}`) // 11/11 전 점수
   const weight = p.weight ?? 1
   const relevance = weight < 1 ? ` × 관련도 ${weight} (${weight >= 0.5 ? '관련도 중간' : '관련도 낮음'})` : ''
-  return `중요도 ${a.importance ?? 0}점 = (${parts.join(' + ')})${relevance} · 45점 이상이면 중요`
+  const noisy = p.noise > 0 && p.noise < 1 ? ` × ${p.noise} (시황·홍보성)` : ''
+  return `중요도 ${a.importance ?? 0}점 = (${parts.join(' + ')})${relevance}${noisy} · 45점 이상이면 중요`
 }
 
 // 논문 초록 (11/09 조장: 찾을 때마다 요약문 옆에 초록을). 찾기 결과는 abstract, 모은 논문은 description(앞의 [학술지] 떼고)

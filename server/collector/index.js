@@ -8,7 +8,7 @@ import { searchNews } from './naver.js'
 import { findMention, getLists } from './lists.js'
 import { EXPERT_SOURCES, toArticle } from './normalize.js'
 import { BROAD_KEYWORD, relevanceInfo } from './relevance.js'
-import { scoreArticle } from './score.js'
+import { mentions, scoreArticle } from './score.js'
 import { titleSentiment } from './sentiment.js'
 import { restoreTitles } from './titles.js'
 
@@ -251,7 +251,8 @@ export async function scoreContext() {
   try {
     const { getTechTrends } = await import('../techtrends.js')
     const t = await getTechTrends({ period: 'week' })
-    rising = (t.composite ?? []).slice(0, RISING_TOP).map((e) => ({ name: e.name, en: e.en }))
+    // 평소보다 뚜렷하게 오른 용어(「관심」 60점 이상)만 (11/11 종합 점수 교체: 그대로인 주에는 아무도 +10을 받지 않는다)
+    rising = (t.composite ?? []).filter((e) => e.score >= 60).slice(0, RISING_TOP).map((e) => ({ name: e.name, en: e.en, firstSeen: e.firstSeen }))
   } catch (err) {
     console.warn(`[score] 요즘 뜨는 기술 용어를 못 읽음: ${err.message}`)
   }
@@ -302,6 +303,7 @@ function toIssues(stored, lists, ctx = { rising: [], older: [] }) {
         own: lists.own,
         rising: ctx.rising,
         rerun: reruns.has(groupRep.id),
+        outlets: new Set(group.map((a) => a.source)).size,
       })
       const own = findMention(`${rep.title} ${rep.description ?? ''}`, lists.own)
       const related = group
@@ -403,7 +405,14 @@ export async function searchCollected(searchText, terms = [], { period = 'all' }
   )
   // 관련도 · 중요도는 검색어 기준으로 다시 본다: 글에 실제로 들어 있는 말(한글 검색어 또는 영문 표기)을 그 글의 키워드로
   const raw = [String(searchText).trim(), ...terms]
-  const stored = rows.map(({ published_at, group_id: _groupId, full_title, ...r }) => {
+  // 짧은 영문 · 숫자 말(SEM · TFT 등)은 다른 영어 낱말 속에서 찾지 않는다 (11/11: 「SEM」이 semiconductor에 걸려 29건)
+  const shortAscii = (w) => /^[a-z0-9\s-]{2,5}$/i.test(w.trim())
+  const hits = (r) => {
+    const original = `${r.full_title ?? r.title} ${r.description ?? ''}`
+    const squashed = original.toLowerCase().replace(/\s+/g, '')
+    return raw.some((w) => (shortAscii(w) ? mentions(original, w) : squashed.includes(w.toLowerCase().replace(/\s+/g, ''))))
+  }
+  const stored = rows.filter(hits).map(({ published_at, group_id: _groupId, full_title, ...r }) => {
     const text = `${full_title ?? r.title} ${r.description ?? ''}`.toLowerCase().replace(/\s+/g, '')
     const hit = raw.find((w) => text.includes(w.toLowerCase().replace(/\s+/g, ''))) ?? raw[0]
     return { ...r, keyword: hit, publishedAt: published_at.toISOString(), groupId: null, collected: true, ...(full_title ? { fullTitle: full_title } : {}) }

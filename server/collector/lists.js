@@ -6,7 +6,8 @@ const MAX = 40
 
 // 고객사는 LG디스플레이. 자사 기사 제외는 LG 계열 전체로 본다
 export const DEFAULT_LISTS = {
-  own: ['LG', '엘지', 'LGD', 'LG디스플레이', 'LG전자', 'LG이노텍', 'LG화학', 'LG에너지솔루션', 'LG유플러스'],
+  // 자사 = 고객사(LG디스플레이)만 (11/11: 「LG」 전체로 보면 LG전자 사이니지 앱 · 정수기 기사까지 자사 점수를 받았다)
+  own: ['LG디스플레이', 'LGD', '엘지디스플레이', 'LG Display'],
   competitors: (process.env.COMPETITORS ?? '삼성디스플레이,BOE,CSOT,티엔마,샤프,JDI').split(','),
   interests: [],
 }
