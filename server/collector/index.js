@@ -251,7 +251,8 @@ export async function scoreContext() {
   try {
     const { getTechTrends } = await import('../techtrends.js')
     const t = await getTechTrends({ period: 'week' })
-    rising = (t.composite ?? []).slice(0, RISING_TOP).map((e) => ({ name: e.name, en: e.en, firstSeen: e.firstSeen }))
+    // 평소보다 뚜렷하게 오른 용어(「관심」 60점 이상)만 (11/11 종합 점수 교체: 그대로인 주에는 아무도 +10을 받지 않는다)
+    rising = (t.composite ?? []).filter((e) => e.score >= 60).slice(0, RISING_TOP).map((e) => ({ name: e.name, en: e.en, firstSeen: e.firstSeen }))
   } catch (err) {
     console.warn(`[score] 요즘 뜨는 기술 용어를 못 읽음: ${err.message}`)
   }
