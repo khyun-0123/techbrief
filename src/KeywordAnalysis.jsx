@@ -191,7 +191,6 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
   const now = useNow(!data && !error)
   // AI 흐름 정리는 숫자를 받은 뒤 시작 (앱 전체에서 기다림: 이 칸을 닫아도 끝나면 진행 창이 알림, storyJobs.js)
   const job = useStory(keyword, Boolean(data))
-  const story = job?.status === 'done' ? job.story : null
 
   useEffect(() => {
     if (!keyword) return undefined
@@ -414,7 +413,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
           )}
         </div>
       </div>
-      {open && <TechTimeline query={keyword} initialData={data} initialStory={story} onClose={() => setOpen(false)} />}
+      {open && <TechTimeline query={keyword} initialData={data} job={job} onClose={() => setOpen(false)} />}
     </div>
   )
 }
