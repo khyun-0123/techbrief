@@ -6,6 +6,7 @@
 // 예전 「추적 중인 키워드 추이」(뉴스 수 · 검색량 · 위키 · GDELT)는 11/10 조장 결정으로 대시보드에서 뺐다 — 키워드 하나를 제대로 분석하는 쪽으로
 import { useEffect, useState } from 'react'
 import { fetchRelated, fetchTimeline, fetchTimelineStory } from './api.js'
+import { retryStory, useStory } from './storyJobs.js'
 import { Spark } from './KeywordTrends.jsx'
 import TechTimeline from './TechTimeline.jsx'
 
@@ -36,10 +37,20 @@ function ScopeMap({ keyword, nodes, isOn, onToggle }) {
         <line key={`l-${n.word}`} x1={cx} y1={cy} x2={n.x} y2={n.y} className={isOn(n.word) ? 'ka-edge on' : 'ka-edge'} style={{ strokeWidth: 0.6 + 2.4 * (n.score / max) }} />
       ))}
       <g className="ka-center">
-        <rect x={cx - 70} y={cy - 18} width={140} height={36} rx={18} />
-        <text x={cx} y={cy + 5} textAnchor="middle">
-          {label(keyword)}
-        </text>
+        {/* 가운데 말: 길면 칸을 넓히고 그래도 길면 줄임표 (11/11: 「레이저 리프트오프 디스플레이」 양끝이 잘림) */}
+        {(() => {
+          const t = keyword.length > 12 ? `${keyword.slice(0, 11)}…` : keyword
+          const w = Math.min(230, Math.max(140, 36 + [...t].reduce((n, ch) => n + (/[가-힣]/.test(ch) ? 15 : 8.5), 0)))
+          return (
+            <>
+              <rect x={cx - w / 2} y={cy - 18} width={w} height={36} rx={18} />
+              <text x={cx} y={cy + 5} textAnchor="middle">
+                {t}
+              </text>
+              <title>{keyword}</title>
+            </>
+          )
+        })()}
       </g>
       {placed.map((n) => {
         const on = isOn(n.word)
@@ -68,11 +79,80 @@ function ScopeMap({ keyword, nodes, isOn, onToggle }) {
   )
 }
 
+// 기다리는 동안 1초마다 지금 시각을 새로 받는다 (경과 초)
+function useNow(on) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!on) return undefined
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [on])
+  return now
+}
+const secs = (from, now) => (from ? Math.max(0, Math.round((now - from) / 1000)) : 0)
+
+// 기다리는 칸 (11/11): 퍼센트 게이지는 쓰지 않는다 — AI 정리는 한 번 부르고 끝나 서버도 진행률을 모른다 (지어낸 숫자가 됨)
+// 대신 ① 지금 어느 단계인지 ② 몇 초째인지(보통 걸리는 시간과 함께) ③ 무엇이 나올 자리인지(회색 자리)를 보여 주고,
+// 기다리지 않아도 된다고 알린다 (떠나면 오른쪽 아래 진행 창이 이어 받는다, storyJobs.js)
+function WaitSteps({ steps, note }) {
+  return (
+    <div className="ka-wait" role="status">
+      <ol className="ka-wait-steps">
+        {steps.map(([state, text]) => (
+          <li key={text} className={`is-${state}`}>
+            <span className="ka-wait-mark" aria-hidden="true">
+              {state === 'done' ? '✓' : state === 'now' ? '●' : '○'}
+            </span>
+            <span className="sr-only">{state === 'done' ? '끝남: ' : state === 'now' ? '진행 중: ' : '다음: '}</span>
+            {text}
+          </li>
+        ))}
+      </ol>
+      {note && <p className="ka-wait-note">{note}</p>}
+    </div>
+  )
+}
+
+function GlanceWait({ startedAt }) {
+  const s = secs(startedAt, useNow(true))
+  const slow = s >= 60
+  return (
+    <div className="ka-glance is-waiting">
+      <WaitSteps
+        steps={[
+          ['done', '논문 · 특허 숫자 받기'],
+          ['now', `AI가 근거 논문을 읽고 흐름을 정리하는 중 · ${s}초째 ${slow ? '(평소보다 오래 걸려요. AI 서버에 다른 작업이 있을 수 있어요)' : '(보통 30초 안팎)'}`],
+          ['next', '전망 · 우리가 볼 것'],
+        ]}
+        note="기다리지 않아도 돼요. 다른 키워드나 화면을 보고 있으면, 끝났을 때 오른쪽 아래 「AI 작업 진행」 창에서 알려 드려요."
+      />
+      <div className="ka-skeleton" aria-hidden="true">
+        {['전망', '우리가 볼 것'].map((h) => (
+          <div key={h}>
+            <h4>{h}</h4>
+            <span className="ka-bar" style={{ width: '92%' }} />
+            <span className="ka-bar" style={{ width: '74%' }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // 「한눈에」: AI 흐름 정리 중 전망 · 우리가 볼 것 앞부분 (전체는 「자세히」 창)
 // stage: 단계 배지와 같은 말을 되풀이하는 글머리는 뺀다
-function Glance({ story, error, stage }) {
-  if (error) return <p className="hint">AI 흐름 정리를 받지 못했어요 ({error}). 「자세히」에서 다시 해 보세요.</p>
-  if (!story) return <p className="hint ka-glance-wait">AI가 흐름을 정리하는 중이에요 (미리 분석된 말은 바로, 처음이면 30초 안팎)…</p>
+function Glance({ job, stage, keyword }) {
+  if (!job || job.status === 'running') return <GlanceWait startedAt={job?.startedAt} />
+  if (job.status === 'error')
+    return (
+      <p className="hint">
+        AI 흐름 정리를 받지 못했어요 ({job.error}).{' '}
+        <button type="button" className="link-btn" onClick={() => retryStory(keyword)}>
+          다시 정리하기
+        </button>
+      </p>
+    )
+  const story = job.story
   const pick = [
     ['전망', (story.story.outlook ?? []).filter((b) => !(stage && b.text.includes(stage)))],
     ['우리가 볼 것', story.story.research ?? []],
@@ -107,8 +187,11 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
   const [manual, setManual] = useState({}) // 노드 클릭 예외: { 말: true(켬) | false(끔) }
   const [mode, setMode] = useState('wide')
   const [open, setOpen] = useState(false)
-  const [story, setStory] = useState(null)
-  const [storyError, setStoryError] = useState('')
+  const [dataStartedAt] = useState(() => Date.now())
+  const now = useNow(!data && !error)
+  // AI 흐름 정리는 숫자를 받은 뒤 시작 (앱 전체에서 기다림: 이 칸을 닫아도 끝나면 진행 창이 알림, storyJobs.js)
+  const job = useStory(keyword, Boolean(data))
+  const story = job?.status === 'done' ? job.story : null
 
   useEffect(() => {
     if (!keyword) return undefined
@@ -121,18 +204,12 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
     }
   }, [keyword])
 
-  // 숫자를 받은 뒤 AI 흐름 정리도 바로 (미리 분석해 둔 말은 곧바로 옴, 아니면 30초 안팎)
+  // 숫자 (미리 분석해 둔 말은 곧바로 옴). 받으면 위 useStory가 AI 흐름 정리를 시작한다
   useEffect(() => {
     if (!keyword) return undefined
     let alive = true
     fetchTimeline(keyword)
-      .then((d) => {
-        if (!alive) return
-        setData(d)
-        fetchTimelineStory(keyword)
-          .then((st) => alive && setStory(st))
-          .catch((err) => alive && setStoryError(err.message))
-      })
+      .then((d) => alive && setData(d))
       .catch((err) => alive && setError(err.message))
     return () => {
       alive = false
@@ -250,7 +327,24 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
               {error}
             </p>
           )}
-          {!data && !error && <p className="hint">논문 · 특허를 모으는 중이에요 (처음엔 10초 안팎)…</p>}
+          {!data && !error && (
+            <>
+              <WaitSteps
+                steps={[
+                  ['now', `논문 · 특허 숫자 받기 · ${secs(dataStartedAt, now)}초째 (처음 보는 말은 10초 안팎)`],
+                  ['next', 'AI가 흐름 정리 (보통 30초 안팎)'],
+                ]}
+              />
+              <div className="ka-sparks ka-skeleton" aria-hidden="true">
+                {['논문 수', '기업 저자 비율', '특허 공개 수'].map((t) => (
+                  <div key={t} className="ka-spark-wait">
+                    <h4>{t}</h4>
+                    <span className="ka-bar ka-bar-chart" />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
           {data && (
             <>
               <div className="tl-stage">
@@ -276,7 +370,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
                   note="특허가 없거나 받지 못했어요."
                 />
               </div>
-              <Glance story={story} error={storyError} stage={data.stage.stage} />
+              <Glance job={job} stage={data.stage.stage} keyword={keyword} />
               <dl className="ka-facts">
                 {(() => {
                   const last = data.corpus?.periods?.[2]

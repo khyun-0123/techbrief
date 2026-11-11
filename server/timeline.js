@@ -318,7 +318,18 @@ function storyInput(tl) {
   return { text: lines.join('\n'), papers }
 }
 
-export async function timelineStory(rawQuery, { refresh = false, background = false } = {}) {
+// 같은 말의 AI 흐름 정리가 이미 도는 중이면 그 결과를 함께 기다린다 (11/11: 정리 중에 화면을 닫았다 다시 열면 AI를 한 번 더 불렀다)
+const storyRuns = new Map()
+export function timelineStory(rawQuery, opts = {}) {
+  const k = `${queryKey(String(rawQuery ?? ''))}|${opts.refresh ? 'r' : ''}${opts.background ? 'b' : ''}` // 미리 분석(낮은 순위)과 사람 요청은 따로: 사람이 뒤로 밀리지 않게
+  const running = storyRuns.get(k)
+  if (running) return running
+  const run = makeTimelineStory(rawQuery, opts).finally(() => storyRuns.delete(k))
+  storyRuns.set(k, run)
+  return run
+}
+
+async function makeTimelineStory(rawQuery, { refresh = false, background = false } = {}) {
   const tl = await buildTimeline(rawQuery, { background })
   const key = `timeline-story:${queryKey(tl.query)}`
   if (!refresh) {

@@ -5586,3 +5586,122 @@ a.brand:focus-visible {
   margin-top: 4px;
   text-align: left;
 }
+
+/* 키워드 분석 기다리는 칸 (11/11): 단계 · 경과 초 · 나올 자리(회색 막대). 퍼센트 게이지는 쓰지 않는다 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.ka-wait {
+  display: grid;
+  gap: 6px;
+}
+.ka-wait-steps {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+  color: var(--tb-color-text-sub);
+}
+.ka-wait-steps li {
+  display: flex;
+  gap: 8px;
+}
+.ka-wait-mark {
+  flex: none;
+  width: 1em;
+  text-align: center;
+}
+.ka-wait-steps .is-done {
+  color: var(--tb-color-text-sub);
+}
+.ka-wait-steps .is-now {
+  color: var(--tb-color-text);
+  font-weight: 600;
+}
+.ka-wait-steps .is-now .ka-wait-mark {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.ka-wait-steps .is-next {
+  color: var(--tb-color-text-faint);
+}
+.ka-wait-note {
+  margin: 0;
+  color: var(--tb-color-text-sub);
+  font-size: 12px;
+}
+.ka-glance.is-waiting {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.ka-skeleton {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px 20px;
+}
+.ka-skeleton h4 {
+  margin: 0 0 6px;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-sm);
+}
+.ka-bar {
+  display: block;
+  height: 10px;
+  margin: 6px 0;
+  border-radius: 5px;
+  background: var(--tb-color-bg-strong);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.ka-bar-chart {
+  width: 100%;
+  height: 56px;
+  border-radius: 6px;
+}
+.ka-sparks.ka-skeleton {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 16px;
+}
+
+/* 진행 창: 기술 흐름 정리 (11/11). 진행률을 모르므로 움직이는 막대(값 없음) */
+.gauge-indeterminate {
+  position: relative;
+  overflow: hidden;
+}
+.gauge-indeterminate .gauge-fill {
+  position: absolute;
+  width: 35% !important;
+  animation: gauge-slide 1.6s ease-in-out infinite;
+}
+@keyframes gauge-slide {
+  from {
+    left: -35%;
+  }
+  to {
+    left: 100%;
+  }
+}
+.story-job.is-unseen {
+  margin: 0 -8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--tb-color-bg-strong);
+}
+.story-job.is-unseen .progress-status {
+  color: var(--tb-color-text);
+  font-weight: 700;
+}
+.dash-done-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: var(--tb-color-text);
+  vertical-align: middle;
+}

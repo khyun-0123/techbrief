@@ -29,6 +29,12 @@ const STOP = new Set(
 )
 const VERB_END = /(했다|한다|하는|했던|된다|됐다|되는|됐던|하며|하고|해야|하기|해서|했고|했으며|이다|였다|입니다|합니다|겠다|않는|않다|라며|이라며|이라고|라고|에서의|으로써|로써|이었다|있으며|있어|있고|없이)$/
 const TECH_WORD = /(디스플레이|패널|모니터|기판|소자|공정|소재|반도체|발광|주사율|해상도|화질|밝기|명암|번인|광원|픽셀|화소|렌즈|칩|메모리|배터리|센서|증착|잉크젯|탠덤|양자점|올레드|마이크로|미니|폴더블|롤러블|투명|플렉서블|게이밍|노트북|스마트폰|태블릿|TV|헤르츠|인치|광학|전력|효율|수명|구동|백라이트|컬러|색재현|편광|유리|레이저|웨이퍼|파운드리|패키징|AI)/i
+// 영어 기능어 (11/11 실측: 「SEM」 맵에 THE · AND · with가 「기술」로 잡혀 자동으로 골라짐). 대소문자 상관없이 뺀다
+const EN_STOP = new Set(
+  `a an the and or but nor so yet of in on at to for from by with without into onto over under about above below after before between among through during via per vs versus as is are was were be been being am do does did done have has had having will would shall should can could may might must not no yes it its this that these those there here than then also just only very more most less least such same other any each every all both few many much some own new our we you your they their them he she his her i me my us what which who whom whose when where why how if else up down out off again once`
+    .split(/\s+/)
+    .filter(Boolean),
+)
 const COMPANY = /^(삼성|삼성전자|삼성디스플레이|LG|LG전자|LG디스플레이|SK|SK하이닉스|BOE|CSOT|TCL|HKC|AOC|티엔마|비전옥스|샤프|JDI|소니|애플|구글|메타|마이크로소프트|엔비디아|인텔|AMD|퀄컴|TSMC|샤오미|화웨이|레노버|에이수스|ASUS|MSI|델|HP|기가바이트|에이서|알파스캔|한성컴퓨터|벤큐|뷰소닉|필립스|파나소닉|하이센스|스카이워스|UDC|머크|이데미쓰|덕산네오룩스|솔루스첨단소재|주성엔지니어링|AP시스템|선익시스템|원익IPS|PI첨단소재|코닝|니치아|오스람|플레이나이트라이드)$/i
 
 // 외래어 끝의 「이」는 조사가 아니다 (디스플레이 · 플레이 · 스카이 · 바이 …, 11/10 실측: 「디스플레」로 잘림)
@@ -49,7 +55,7 @@ export function wordsOf(text) {
   // 영문 · 숫자 용어: QD-OLED, OLED, 240Hz, 4K, HKC
   for (const m of t.matchAll(/\b(?:\d{2,4}\s?(?:Hz|hz|인치)|[A-Za-z][A-Za-z0-9]*(?:[-+][A-Za-z0-9]+)*)\b/g)) {
     const w = m[0].replace(/\s+/g, '')
-    if (w.length < 2 || /^\d+$/.test(w)) continue
+    if (w.length < 2 || /^\d+$/.test(w) || EN_STOP.has(w.toLowerCase())) continue
     out.add(/^[a-z]+$/.test(w) && w.length <= 3 ? w.toUpperCase() : w)
   }
   // 한글 (영문이 붙은 말 포함: LG디스플레이, OLED패널)
@@ -95,7 +101,7 @@ async function collectedDocs(center) {
 export async function relatedWords(rawCenter, { refresh = false } = {}) {
   const center = String(rawCenter ?? '').trim().slice(0, 50)
   if (!center) throw Object.assign(new Error('키워드를 입력해 주세요.'), { status: 400 })
-  const key = `related:${queryKey(center)}`
+  const key = `related:v2:${queryKey(center)}` // v2: 영어 기능어를 빼기 전(11/11) 기억한 값은 쓰지 않는다
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return { ...hit, cached: true }

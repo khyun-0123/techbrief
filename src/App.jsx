@@ -37,6 +37,7 @@ import Highlight from './Highlight.jsx'
 import { highlightPattern, matchesTerms } from './highlightTerms.js'
 import Pager from './Pager.jsx'
 import ProgressPanel from './ProgressPanel.jsx'
+import { requestOpenStory, useStoryJobs } from './storyJobs.js'
 import ReportArchive from './ReportArchive.jsx'
 import { loadReports, saveReports } from './reportStore.js'
 import { useSummaryQueue } from './summaryQueue.js'
@@ -210,6 +211,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [showMove, setShowMove] = useState(false) // 내 자료 옮기기 (11/08)
   const [includedIds, setIncludedIds] = useState(() => load(INCLUDED_KEY, []))
   const [screen, setScreen] = useState('dashboard')
+  const storyJobs = useStoryJobs() // 기술 흐름 정리 (키워드 분석을 떠나도 끝나면 진행 창이 알림, 11/11)
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState('all') // 기본 「전체」 (11/09 조장). 모은 기사 목록은 서버가 7일치만 보냄 (30 문서 1장)
   const [source, setSource] = useState('all')
@@ -1597,6 +1599,11 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       <ProgressPanel
         queue={queue}
         reportJobs={reportJobs}
+        storyJobs={storyJobs}
+        onOpenStory={(q) => {
+          requestOpenStory(q)
+          setScreen('dashboard')
+        }}
         onAnswer={handleJobAnswer}
         onCancel={handleJobCancel}
         quiet={screen === 'select'}
