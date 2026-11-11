@@ -93,7 +93,7 @@ export async function readyTimelines(limit = 12) {
   for (const t of targets.sort((a, b) => order(a) - order(b))) {
     const { timeline, story } = await cachedTimeline(t.query)
     if (!timeline) continue
-    out.push({ query: timeline.query, from: t.from, stage: timeline.stage?.stage ?? null, growth: timeline.stage?.growth ?? null, companyShareNow: timeline.stage?.companyShareNow ?? null, story: Boolean(story) })
+    out.push({ query: timeline.query, from: t.from, stage: timeline.stage?.stage ?? null, growth: timeline.stage?.growth ?? null, companyShareNow: timeline.stage?.companyShareNow ?? null, story: Boolean(story && !story.thin) })
     if (out.length >= limit) break
   }
   const state = await getSetting(STATE_KEY, {})
