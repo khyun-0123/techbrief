@@ -26,6 +26,7 @@ import {
   saveSelectionApi,
   searchNewsApi,
   searchPapersApi,
+  searchScopeApi,
 } from './api.js'
 import { buildTagDict, tagsOf } from './hashtags.js'
 import SettingsMenu from './SettingsMenu.jsx'
@@ -168,6 +169,7 @@ function paperAbstract(a) {
   return String(a.abstract ?? a.description ?? '').replace(/^(\[[^\]]*\]\s*)+/, '').trim()
 }
 
+export const LAST_SCOPE_KEY = 'techbrief.lastScope' // 마지막 범위 찾기 (보고서 방향 채우기, 11/10)
 const NEW_REPORTS_KEY = 'techbrief.newReports' // 아직 안 연 새 보고서 id
 const SEEN_REPORTS_KEY = 'techbrief.seenReports' // 한 번이라도 연 보고서 id (새로 고침 뒤 다시 「새」로 뜨지 않게)
 
@@ -224,6 +226,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   }, [isTest])
   const [openGroupId, setOpenGroupId] = useState(null) // 같은 이슈 기사를 펼친 기사
   const [search, setSearch] = useState(null) // 뉴스 · 논문 찾기 { query, articles?, loading?, error? } (11/08: 네이버 + 논문)
+  const [scopeTerm, setScopeTerm] = useState(null) // 범위 찾기 결과에서 고른 범위 칩 (11/10)
   const [extraArticles, setExtraArticles] = useState(() => load(EXTRA_KEY, []))
   const [page, setPage] = useState(1)
   const [excludeOwn, setExcludeOwn] = useState(() => load(EXCLUDE_OWN_KEY, false))
@@ -632,11 +635,13 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const byId = new Map(pool.map((a) => [a.id, a]))
   // 자사·자회사만 나온 기사 (경쟁사도 함께 나오면 경쟁사 소식이라 남긴다)
   const isOwnOnly = (a) => Boolean(a.own) && !a.scoreParts?.competitorName
+  // 범위 찾기 결과의 「든 말」 (모은 기사와 id가 같으면 모은 쪽 객체가 쓰이므로 찾기 결과에서 따로 꺼냄)
+  const scopeHitsOf = new Map((searchArticles ?? []).map((a) => [a.id, a.scopeHits ?? []]))
   const listed = searchArticles
     ? searchArticles
         .map((a) => byId.get(a.id))
         // 논문은 서버가 기간을 넓게 잡아 찾으므로(하루 · 일주일 안 논문은 거의 없음) 화면 기간으로 다시 거르지 않는다
-        .filter((a) => (a.paper || a.hoursAgo < maxHours) && sourceMatch(a))
+        .filter((a) => (a.paper || a.hoursAgo < maxHours) && sourceMatch(a) && (!scopeTerm || scopeHitsOf.get(a.id)?.includes(scopeTerm)))
         .sort((a, b) =>
           sort === 'importance' ? b.importance - a.importance || a.hoursAgo - b.hoursAgo : a.hoursAgo - b.hoursAgo,
         )
@@ -650,7 +655,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     )
     .sort((a, b) => (sort === 'importance' ? (b.importance ?? 0) - (a.importance ?? 0) : 0) || a.hoursAgo - b.hoursAgo)
   // 강조할 검색어: 네이버 찾기 결과면 찾은 말, 모은 기사에서 거르는 중이면 입력한 말 (Highlight.jsx)
-  const hlTerms = search?.query ? [search.query] : q ? [q] : []
+  const hlTerms = search?.query ? [search.query, ...(search.scope?.terms ?? [])] : q ? [q] : []
   const isLow = (a) => a.relevance === 'low'
   const lowCount = listed.filter(isLow).length
   const ownCount = listed.filter(isOwnOnly).length
@@ -704,6 +709,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     const seq = ++searchSeq.current
     track('search', q)
     setQuery(q)
+    setScopeTerm(null)
     // 찾은 말은 최근 검색어 맨 위로 (같은 말은 하나만)
     saveRecent([q, ...recent.filter((r) => r !== q)].slice(0, RECENT_MAX))
     setSearch({ query: q, period: p, loading: true })
@@ -731,10 +737,35 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     }
   }
 
+  // 범위 찾기 (11/10, 대시보드 키워드 분석): 중심 키워드 + 고른 말. 결과 글마다 scopeHits(든 말) → 자료 현황 범위 칩
+  // 고른 범위는 브라우저에 남겨 보고서 「보고서 방향」 채우기에 쓴다 (ReportComposer)
+  async function runScopeSearch(scope, p = period) {
+    const seq = ++searchSeq.current
+    track('search', scope.query)
+    setQuery(scope.query)
+    setScopeTerm(null)
+    saveRecent([scope.query, ...recent.filter((r) => r !== scope.query)].slice(0, RECENT_MAX))
+    setSearch({ query: scope.query, period: p, loading: true, scope })
+    try {
+      localStorage.setItem(LAST_SCOPE_KEY, JSON.stringify({ ...scope, at: new Date().toISOString() }))
+    } catch {
+      // 저장 공간이 막혀도 찾기는 그대로
+    }
+    try {
+      const result = await searchScopeApi(scope, p)
+      if (seq !== searchSeq.current) return
+      setSearch({ query: result.query, period: result.period, articles: result.articles, truncated: result.truncated, oldestAt: result.oldestAt, newsCount: result.newsCount, collectedCount: result.collectedCount, paperCount: result.paperCount, paperNote: result.paperNote, scope: result.scope })
+    } catch (err) {
+      if (seq !== searchSeq.current) return
+      setSearch({ query: scope.query, period: p, error: err.message, scope })
+    }
+  }
+
   // 기간을 바꾸면: 모은 기사는 화면에서 바로 거르고, 찾기 결과를 보고 있으면 그 기간으로 다시 찾는다
   function changePeriod(p) {
     setPeriod(p)
-    if (search?.query) runSearch(search.query, p)
+    if (search?.scope?.terms?.length) runScopeSearch(search.scope, p)
+    else if (search?.query) runSearch(search.query, p)
   }
 
   async function changeFavorites(next) {
@@ -769,6 +800,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     searchSeq.current++ // 찾는 중에 닫으면 늦게 온 응답이 다시 열지 않게
     setSearch(null)
     setQuery('')
+    setScopeTerm(null)
   }
 
   function toggleSelected(article, folderId = targetFolder) {
@@ -1020,6 +1052,11 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           period={period}
           onPeriod={setPeriod}
           onRemember={(q) => saveRecent([q, ...recent.filter((r) => r !== q)].slice(0, RECENT_MAX))}
+          onScopeSearch={(scope) => {
+            runScopeSearch(scope)
+            setScreen('collect')
+            window.scrollTo({ top: 0 })
+          }}
           onSearch={(q) => {
             runSearch(q)
             setScreen('collect')
@@ -1201,7 +1238,34 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                     모은 기사로 돌아가기
                   </button>
                 </div>
-              ) : (
+              ) : null}
+              {search?.scope?.terms?.length > 0 && search.articles ? (
+                // 범위 칩 (11/10): 고른 말이 든 자료만 보기 · 이 범위로 폴더 만들기
+                <div className="scope-bar" role="group" aria-label="고른 범위로 거르기">
+                  <span className="scope-bar-label">범위 ({search.scope.mode === 'narrow' ? '좁게' : '넓게'})</span>
+                  <button type="button" className={scopeTerm ? 'scope-chip' : 'scope-chip on'} aria-pressed={!scopeTerm} onClick={() => setScopeTerm(null)}>
+                    전체 {search.articles.length}
+                  </button>
+                  {search.scope.terms.map((t) => (
+                    <button key={t} type="button" className={scopeTerm === t ? 'scope-chip on' : 'scope-chip'} aria-pressed={scopeTerm === t} onClick={() => setScopeTerm(scopeTerm === t ? null : t)} title={search.scope.termsEn?.[t]?.length ? `영문 표기도 함께: ${search.scope.termsEn[t].join(', ')}` : undefined}>
+                      {t} {search.scope.counts?.[t] ?? 0}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="btn scope-folder"
+                    onClick={() => {
+                      const name = `${search.scope.query} · ${search.scope.terms[0]}${search.scope.terms.length > 1 ? ` 외 ${search.scope.terms.length - 1}` : ''}`
+                      const existing = folders.find((f) => f.name === name)
+                      setTargetFolder(existing ? existing.id : createFolder(name))
+                    }}
+                    title="「선별 추가」가 이 폴더에 담겨요"
+                  >
+                    이 범위로 폴더 만들기
+                  </button>
+                </div>
+              ) : null}
+              {search ? null : (
                 <p className="list-meta">
                   이슈 {visible.length}개 · 기사 {countArticles(visible)}건
                   {q && <span className="search-note"> · 모은 기사에서 찾는 중. 없으면 「뉴스·논문에서 찾기」</span>}

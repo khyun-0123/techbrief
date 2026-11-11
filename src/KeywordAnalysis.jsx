@@ -1,9 +1,11 @@
 // 대시보드 「키워드 분석」 (11/10 조장): 키워드로 찾으면 → 연관 키워드 맵 + 기술 시계열 요약 → 범위를 골라 자료 현황에서 선별
-// - 왼쪽 맵은 **임시 모양**이다. 워드클라우드팀 키워드 맵이 오면 이 자리를 바꾼다 (지금은 논문 DB의 핵심어 · 회사로 노드만 그림)
+// - 왼쪽 맵은 **임시 맵**이다 (뉴스에서 함께 나온 말, server/related.js). 워드클라우드팀 맵이 오면 그림만 바꾸고 범위 고르기는 그대로 (32 문서)
+//   범위 고르기: 레버 = 연관도 순으로 몇 개까지 자동으로 고를지(「일반」 말은 건너뜀) · 노드 클릭 = 예외(손으로 켜고 끈 것은 레버를 움직여도 유지)
+//   좁게 / 넓게 · 「자료 찾기 →」는 고른 범위로 자료 현황에서 찾는다 (server/scopeSearch.js)
 // - 오른쪽은 기술 시계열 요약(단계 · 논문 수 · 기업 저자 비율 · 특허 · 새로 늘어난 핵심어). 「자세히 · AI 흐름 정리」는 TechTimeline 창
 // 예전 「추적 중인 키워드 추이」(뉴스 수 · 검색량 · 위키 · GDELT)는 11/10 조장 결정으로 대시보드에서 뺐다 — 키워드 하나를 제대로 분석하는 쪽으로
-import { useEffect, useMemo, useState } from 'react'
-import { fetchTimeline, fetchTimelineStory } from './api.js'
+import { useEffect, useState } from 'react'
+import { fetchRelated, fetchTimeline, fetchTimelineStory } from './api.js'
 import { Spark } from './KeywordTrends.jsx'
 import TechTimeline from './TechTimeline.jsx'
 
@@ -11,28 +13,27 @@ const THIS_YEAR = new Date().getFullYear() // 올해는 안 끝나 줄어 보이
 const W = 520
 const H = 360
 
-// 임시 맵: 가운데 키워드, 둘레에 기술(핵심어) · 회사 노드. 종류는 색이 아니라 모양(채움 / 테두리)으로 구분
-function MapPlaceholder({ keyword, data, count, selected, onToggle }) {
-  const nodes = useMemo(() => {
-    const p = data?.corpus?.periods ?? []
-    const tech = [...new Map([...(data?.corpus?.rising ?? []).map((r) => r.name), ...(p[2]?.keywords ?? []).map((k) => k.name), ...(p[1]?.keywords ?? []).map((k) => k.name)].map((n) => [n.toLowerCase(), n])).values()]
-    const firms = [...new Map([...(p[2]?.companies ?? []), ...(p[1]?.companies ?? [])].map((c) => [c.name, c.name])).values()]
-    const pickTech = tech.slice(0, Math.ceil(count * 0.7))
-    const pickFirm = firms.slice(0, count - pickTech.length)
-    return [...pickTech.map((name) => ({ name, kind: 'tech' })), ...pickFirm.map((name) => ({ name, kind: 'firm' }))]
-  }, [data, count])
+// 임시 맵: 가운데 키워드, 안쪽 고리에 연관도 높은 말, 바깥 고리에 나머지. 종류는 색이 아니라 모양(채움 · 점선 · 글자만)으로
+const KIND_LABEL = { tech: '기술', company: '회사', general: '일반' }
+const MAP_MAX = 14
+function ScopeMap({ keyword, nodes, isOn, onToggle }) {
+  const shown = nodes.slice(0, MAP_MAX)
+  const max = Math.max(1, ...shown.map((n) => n.score))
   const cx = W / 2
   const cy = H / 2
-  const placed = nodes.map((n, i) => {
-    const a = (i / Math.max(1, nodes.length)) * Math.PI * 2 - Math.PI / 2
-    const r = i % 2 ? 150 : 118
-    return { ...n, x: cx + Math.cos(a) * r * 1.35, y: cy + Math.sin(a) * r }
-  })
-  const label = (t) => (t.length > 22 ? `${t.slice(0, 21)}…` : t)
+  const inner = shown.slice(0, 6)
+  const outer = shown.slice(6)
+  const ring = (list, rx, ry, off) =>
+    list.map((n, i) => {
+      const a = (i / Math.max(1, list.length)) * Math.PI * 2 - Math.PI / 2 + off
+      return { ...n, x: cx + Math.cos(a) * rx, y: cy + Math.sin(a) * ry }
+    })
+  const placed = [...ring(inner, 150, 105, 0), ...ring(outer, 225, 158, Math.PI / Math.max(2, outer.length))]
+  const label = (t) => (t.length > 14 ? `${t.slice(0, 13)}…` : t)
   return (
-    <svg className="ka-map" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`「${keyword}」 연관 키워드 임시 맵: ${nodes.map((n) => n.name).join(', ') || '없음'}`}>
+    <svg className="ka-map" viewBox={`0 0 ${W} ${H}`} role="group" aria-label={`「${keyword}」 연관 키워드 맵`}>
       {placed.map((n) => (
-        <line key={`l-${n.name}`} x1={cx} y1={cy} x2={n.x} y2={n.y} className="ka-edge" />
+        <line key={`l-${n.word}`} x1={cx} y1={cy} x2={n.x} y2={n.y} className={isOn(n.word) ? 'ka-edge on' : 'ka-edge'} style={{ strokeWidth: 0.6 + 2.4 * (n.score / max) }} />
       ))}
       <g className="ka-center">
         <rect x={cx - 70} y={cy - 18} width={140} height={36} rx={18} />
@@ -41,24 +42,25 @@ function MapPlaceholder({ keyword, data, count, selected, onToggle }) {
         </text>
       </g>
       {placed.map((n) => {
-        const on = selected.includes(n.name)
-        const w = Math.min(170, 18 + label(n.name).length * 6.6)
+        const on = isOn(n.word)
+        const w = Math.min(150, 26 + label(n.word).length * (/[가-힣]/.test(n.word) ? 12 : 7.4))
         return (
           <g
-            key={n.name}
+            key={n.word}
             className={`ka-node ka-${n.kind}${on ? ' on' : ''}`}
-            role="button"
+            role="checkbox"
             tabIndex={0}
-            aria-pressed={on}
-            aria-label={`${n.kind === 'firm' ? '회사' : '기술'} ${n.name}${on ? ' (고름)' : ''}`}
-            onClick={() => onToggle(n.name)}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onToggle(n.name))}
+            aria-checked={on}
+            aria-label={`${KIND_LABEL[n.kind]} ${n.word} · 함께 나온 이슈 ${n.score}개`}
+            onClick={() => onToggle(n.word)}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onToggle(n.word))}
           >
             <rect x={n.x - w / 2} y={n.y - 14} width={w} height={28} rx={14} />
             <text x={n.x} y={n.y + 4} textAnchor="middle">
-              {label(n.name)}
+              {on ? '✓ ' : ''}
+              {label(n.word)}
             </text>
-            <title>{n.name}</title>
+            <title>{`${n.word} · ${KIND_LABEL[n.kind]} · 함께 나온 이슈 ${n.score}개`}</title>
           </g>
         )
       })}
@@ -96,14 +98,28 @@ function Glance({ story, error, stage }) {
 }
 
 // 대시보드 「키워드 분석」 패널 안(검색창 아래)에 펼쳐진다. 기간은 「자료 찾기 →」로 자료 현황에서 찾을 때만 쓴다
-function KeywordAnalysis({ keyword, onSearch, periods = [], period, onPeriod }) {
+function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], period, onPeriod }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
-  const [count, setCount] = useState(8)
-  const [selected, setSelected] = useState([])
+  const [related, setRelated] = useState(null)
+  const [relatedError, setRelatedError] = useState('')
+  const [auto, setAuto] = useState(3) // 레버: 연관도 순으로 자동으로 고를 개수 (「일반」 말은 건너뜀)
+  const [manual, setManual] = useState({}) // 노드 클릭 예외: { 말: true(켬) | false(끔) }
+  const [mode, setMode] = useState('wide')
   const [open, setOpen] = useState(false)
   const [story, setStory] = useState(null)
   const [storyError, setStoryError] = useState('')
+
+  useEffect(() => {
+    if (!keyword) return undefined
+    let alive = true
+    fetchRelated(keyword)
+      .then((r) => alive && setRelated(r))
+      .catch((err) => alive && setRelatedError(err.message))
+    return () => {
+      alive = false
+    }
+  }, [keyword])
 
   // 숫자를 받은 뒤 AI 흐름 정리도 바로 (미리 분석해 둔 말은 곧바로 옴, 아니면 30초 안팎)
   useEffect(() => {
@@ -125,7 +141,18 @@ function KeywordAnalysis({ keyword, onSearch, periods = [], period, onPeriod }) 
 
   if (!keyword) return null
   const full = (list) => (list ?? []).filter((x) => x.y < THIS_YEAR)
-  const toggle = (name) => setSelected((s) => (s.includes(name) ? s.filter((x) => x !== name) : [...s, name]))
+  const nodes = related?.nodes ?? []
+  // 자동으로 고를 수 있는 말: 기술 · 회사이고 너무 넓지 않은 말 (PC · TV · LG 같은 두 글자 영문은 직접 눌러야)
+  const autoable = nodes.filter((n) => n.kind !== 'general' && !n.broad)
+  const autoSet = new Set(autoable.slice(0, auto).map((n) => n.word))
+  const isOn = (w) => manual[w] ?? autoSet.has(w)
+  const picked = nodes.filter((n) => isOn(n.word)).map((n) => n.word)
+  const toggle = (w) => setManual((m) => ({ ...m, [w]: !isOn(w) }))
+  const autoMax = autoable.length
+  function findScope() {
+    if (picked.length && onScopeSearch) onScopeSearch({ query: keyword, terms: picked, mode })
+    else onSearch(keyword)
+  }
 
   return (
     <div className="ka" aria-label={`「${keyword}」 분석`}>
@@ -143,8 +170,8 @@ function KeywordAnalysis({ keyword, onSearch, periods = [], period, onPeriod }) 
               ))}
             </select>
           )}
-          <button type="button" className="btn primary" onClick={() => onSearch(keyword)}>
-            「{keyword}」 자료 찾기 →
+          <button type="button" className="btn primary" onClick={findScope} title={picked.length ? `「${keyword}」 + ${picked.join(' · ')} (${mode === 'narrow' ? '좁게' : '넓게'})` : `「${keyword}」만`}>
+            {picked.length ? `「${keyword}」 + ${picked.length}개로 자료 찾기 →` : `「${keyword}」 자료 찾기 →`}
           </button>
         </div>
       </div>
@@ -152,27 +179,60 @@ function KeywordAnalysis({ keyword, onSearch, periods = [], period, onPeriod }) 
       <div className="ka-grid">
         <div className="ka-pane">
           <div className="ka-pane-head">
-            <h3>연관 키워드 맵</h3>
-            <span className="ka-temp">임시 모양 · 워드클라우드팀 맵이 들어올 자리</span>
+            <h3>연관 키워드 · 볼 범위</h3>
+            <span className="ka-temp">임시 맵 · 워드클라우드팀 맵이 들어올 자리</span>
           </div>
-          {data ? (
-            <>
-              <MapPlaceholder keyword={keyword} data={data} count={count} selected={selected} onToggle={toggle} />
-              <div className="ka-controls">
-                <label>
-                  연관 키워드 <b>{count}</b>개
-                  <input type="range" min={4} max={14} value={count} onChange={(e) => setCount(Number(e.target.value))} />
-                </label>
+          {related ? (
+            nodes.length ? (
+              <>
+                <ScopeMap keyword={keyword} nodes={nodes} isOn={isOn} onToggle={toggle} />
+                <div className="ka-controls">
+                  <label>
+                    자동으로 고를 범위 <b>{Math.min(auto, autoMax)}</b>개
+                    <input type="range" min={0} max={Math.max(1, Math.min(8, autoMax))} value={Math.min(auto, autoMax)} onChange={(e) => setAuto(Number(e.target.value))} aria-describedby="ka-auto-help" />
+                  </label>
+                  <div className="ka-mode" role="radiogroup" aria-label="범위로 찾는 방식">
+                    {[
+                      ['wide', '넓게', `「${keyword}」 자료 전부 + 고른 말 자료`],
+                      ['narrow', '좁게', '고른 말이 하나 이상 함께 나온 자료만'],
+                    ].map(([v, l, tip]) => (
+                      <button key={v} type="button" role="radio" aria-checked={mode === v} title={tip} onClick={() => setMode(v)}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p id="ka-auto-help" className="hint">
+                  레버는 연관도(함께 나온 이슈 수) 순으로 기술 · 회사 말을 골라요 (PC · TV처럼 너무 넓은 말은 빼고). 노드를 눌러 더하거나 빼면 그건 레버를 움직여도 그대로예요.
+                </p>
+                <div className="ka-picked" aria-live="polite">
+                  {picked.length ? (
+                    <>
+                      <span className="ka-picked-label">고른 범위 ({mode === 'narrow' ? '좁게' : '넓게'})</span>
+                      {picked.map((w) => (
+                        <button key={w} type="button" className="chip" onClick={() => toggle(w)} aria-label={`${w} 빼기`}>
+                          {w} ×
+                        </button>
+                      ))}
+                      {Object.keys(manual).length > 0 && (
+                        <button type="button" className="link-btn ka-reset" onClick={() => setManual({})}>
+                          손으로 고른 것 되돌리기
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <span className="hint">고른 말이 없어요. 「{keyword}」만으로 찾아요.</span>
+                  )}
+                </div>
                 <span className="ka-legend">
-                  <span className="ka-key ka-key-tech" aria-hidden="true" /> 기술 <span className="ka-key ka-key-firm" aria-hidden="true" /> 회사
+                  <span className="ka-key ka-key-tech" aria-hidden="true" /> 기술 <span className="ka-key ka-key-firm" aria-hidden="true" /> 회사 <span className="ka-key ka-key-general" aria-hidden="true" /> 일반 · 선 굵기 = 함께 나온 이슈 수 (뉴스 {related.issues}개 이슈 기준)
                 </span>
-              </div>
-              <p className="hint">
-                {selected.length ? `고른 범위: ${selected.join(', ')}` : '노드를 눌러 볼 범위를 골라요.'} 지금은 모양만 있고, 고른 범위로 자료를 거르는 것은 맵이 들어온 뒤 붙여요.
-              </p>
-            </>
+              </>
+            ) : (
+              <p className="hint">함께 나온 말이 충분하지 않아요 (이슈 {related.issues}개). 「{keyword}」만으로 찾아요.</p>
+            )
           ) : (
-            <p className="hint">{error || '연관 키워드를 모으는 중…'}</p>
+            <p className="hint">{relatedError || '함께 나온 말을 세는 중…'}</p>
           )}
         </div>
 

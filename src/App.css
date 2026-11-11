@@ -5479,3 +5479,110 @@ a.brand:focus-visible {
   stroke-width: 2;
   stroke-linejoin: round;
 }
+
+/* 범위 고르기 (11/10, KeywordAnalysis.jsx): 일반 노드 · 고른 노드 · 좁게/넓게 · 고른 범위 칩 */
+.ka-node.ka-company rect {
+  fill: var(--tb-color-surface);
+  stroke: var(--tb-color-text-sub);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+.ka-node.ka-general rect {
+  fill: transparent;
+  stroke: transparent;
+}
+.ka-node.ka-general text {
+  fill: var(--tb-color-text-sub);
+}
+.ka-node.on rect {
+  fill: var(--tb-color-surface);
+  stroke: var(--tb-color-text);
+  stroke-width: 2.5;
+  stroke-dasharray: none;
+}
+.ka-node.on text {
+  fill: var(--tb-color-text);
+}
+.ka-edge.on {
+  stroke: var(--tb-color-text);
+}
+.ka-key-general {
+  margin-left: 8px;
+  border: 1px solid transparent;
+  background: none;
+  box-shadow: inset 0 -2px 0 var(--tb-color-line);
+}
+.ka-mode {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--tb-radius-input, 8px);
+  background: var(--tb-color-bg-strong);
+}
+.ka-mode button {
+  height: 30px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--tb-color-text-sub);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.ka-mode button[aria-checked='true'] {
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font-weight: 600;
+}
+.ka-picked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ka-picked-label {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+}
+.ka-picked .chip {
+  padding: 0 10px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+/* 자료 현황 범위 칩 (11/10) */
+.scope-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 8px 0;
+}
+.scope-bar-label {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+}
+.scope-chip {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.scope-chip.on {
+  border-color: var(--tb-color-text);
+  background: var(--tb-color-text);
+  color: var(--tb-color-text-inverse);
+}
+.scope-folder {
+  margin-left: auto;
+}
+.scope-fill {
+  justify-self: start;
+  margin-top: 4px;
+  text-align: left;
+}

@@ -10,6 +10,8 @@ import { paperProviderStatus } from './papers/index.js'
 import { corpusStatus, startCorpus } from './papers/corpus.js'
 import { buildTimeline, timelineStory } from './timeline.js'
 import { readyTimelines, runPrecompute, startPrecompute } from './timelineJobs.js'
+import { relatedWords } from './related.js'
+import { scopeSearch } from './scopeSearch.js'
 import { popularPapers } from './papers/journals.js'
 import { getTechTrends, startTechTrends } from './techtrends.js'
 import { similarity } from './collector/dedupe.js'
@@ -530,6 +532,20 @@ export async function handleApi(req, res) {
     if (req.method === 'POST' && req.url === '/api/timeline/story') {
       const { query, refresh = false } = await readJson(req)
       return send(res, 200, await timelineStory(query, { refresh: Boolean(refresh) }))
+    }
+    // 연관 키워드 (11/10, 대시보드 맵 재료 · related.js)
+    if (req.method === 'GET' && req.url.startsWith('/api/related?')) {
+      const q = new URL(req.url, 'http://x').searchParams.get('q')
+      return send(res, 200, await relatedWords(q))
+    }
+    // 범위 찾기 (11/10): 중심 키워드 + 고른 말 (scopeSearch.js)
+    if (req.method === 'POST' && req.url === '/api/search/scope') {
+      const { query, terms = [], mode = 'wide', period } = await readJson(req)
+      const out = await scopeSearch({ query, terms: Array.isArray(terms) ? terms.map(String) : [], mode: mode === 'narrow' ? 'narrow' : 'wide', period })
+      recordSearch(query, clientIp(req)).catch(() => {})
+      queueSearchSummaries(out.newsArticles).catch((err) => console.warn(`[search] 자동 요약 넣기 실패: ${err.message}`))
+      const { newsArticles, ...body } = out
+      return send(res, 200, { ...body, newsCount: newsArticles.length })
     }
     // 영문 검색어가 늦게 만들어질 때 (paperPending) 화면이 뒤에서 다시 부른다: 논문 + 영문 표기로 찾은 1·2차 출처만 (11/10)
     if (req.method === 'POST' && req.url === '/api/search/papers') {
