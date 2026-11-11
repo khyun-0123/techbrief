@@ -7,12 +7,15 @@ import { offTopicOf } from './relevance.js'
 // 이 점수 이상이면 "중요도 높음". 11/09 재설계 뒤 실제 데이터(모은 이슈 421개)로 다시 맞춤:
 // 새 점수는 보도량이 10점으로 줄어 최고점이 60 근처 → 예전(60점 이상 8건, 약 2%)과 비슷한 비율이 되도록 45점 (약 4%)
 export const HIGH_THRESHOLD = 45
+const RECENCY_HOURS = 168
 
 // 관련도 배수: 키워드가 본문에 스치기만 한 큰 뉴스(증시 마감, 행사 등)가 보도량만으로 위에 오지 않게
 const RELEVANCE_WEIGHT = { high: 1, mid: 0.5, low: 0.2 }
 
 // ── 11/09 재설계 (14 문서 4-A 배점안 · 24 문서 ⑤ · 26 문서: 「보도량보다 신규성」) ──
 // 신규성 30 · 사업 연관성 25 · 출처 신뢰도 20 · 최신성 15 · 보도량 10 (합 100) − 잡음, × 관련도 배수
+// 11/11 조정 (31 · 08 문서, LGD 입장 키워드 30개 검수): 경쟁사 제목 20 · 발췌 10, 자사는 단독 5 · 경쟁사와 함께(비교 기사) 10,
+//   최신성은 7일(주간 브리핑 주기)에 걸쳐 0으로. 예전 72시간이면 4~7일 된 경쟁사 기사(HKC 투자 지연 등)가 최신성 0점이라 「중요」에서 빠졌다
 // 예전: 보도량 40 · 경쟁사 25 · 최신성 20 · 전문 매체 15 · 관심 기술 15 · 사건 낱말 10
 
 // 신규성 ① 새 기술 · 처음 나온 소식 낱말 (제목). 1개 6점, 2개 이상 10점
@@ -50,7 +53,8 @@ export function scoreArticle(article, groupSize, competitors = [], { relevance =
   const firstNews = rerun ? 0 : 10
   const novelty = firstNews + (newWords.length >= 2 ? 10 : newWords.length * 6) + (risingName ? 10 : 0)
 
-  // 2. 사업 연관성 (최대 25): 경쟁사(제목 15 · 발췌 6) + 관심 기술(제목 10 · 발췌 4) + 사업 사건 5 + 자사 5
+  // 2. 사업 연관성 (최대 25): 경쟁사(제목 20 · 발췌 10) + 관심 기술(제목 10 · 발췌 4) + 사업 사건 5 + 자사(단독 5 · 경쟁사와 함께 10)
+  //    자사 단독 소식은 담당자가 사내에서 이미 아는 내용이라 낮게, 경쟁사와 견주는 기사는 비교 보고서 재료라 높게 (11/11)
   const competitorInTitle = findMention(title, competitors)
   const competitorName = competitorInTitle ?? findMention(text, competitors)
   const interestInTitle = findMention(title, interests)
@@ -59,16 +63,16 @@ export function scoreArticle(article, groupSize, competitors = [], { relevance =
   const ownName = findMention(text, own)
   const business = Math.min(
     25,
-    (competitorInTitle ? 15 : competitorName ? 6 : 0) + (interestInTitle ? 10 : interestName ? 4 : 0) + (bizWords.length ? 5 : 0) + (ownName ? 5 : 0),
+    (competitorInTitle ? 20 : competitorName ? 10 : 0) + (interestInTitle ? 10 : interestName ? 4 : 0) + (bizWords.length ? 5 : 0) + (ownName ? (competitorName ? 10 : 5) : 0),
   )
 
   // 3. 출처 신뢰도 (최대 20): 1차(기업 발표 · 학회 · 논문) 20 · 2차(전문매체) 12 · 일반 뉴스 0
   const tier = article.tier ?? (EXPERT_SOURCES.has(article.source) ? 2 : 3)
   const source = tier === 1 ? 20 : tier === 2 ? 12 : 0
 
-  // 4. 최신성 (최대 15): 72시간에 걸쳐 0으로
+  // 4. 최신성 (최대 15): 7일(168시간)에 걸쳐 0으로 (11/11, 예전 72시간)
   const hours = (Date.now() - Date.parse(article.publishedAt)) / 3600_000
-  const recency = Math.round(15 * Math.max(0, 1 - hours / 72))
+  const recency = Math.round(15 * Math.max(0, 1 - hours / RECENCY_HOURS))
 
   // 5. 보도량 (최대 10): 같은 이슈 기사 1건당 2점
   const coverage = Math.min(10, (groupSize - 1) * 2)
