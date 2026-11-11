@@ -18,6 +18,9 @@ import { patentHistory, patternFromTerms } from './patents.js'
 import { englishTerms, openAlexQuery, queryKey } from './queryTerms.js'
 
 const DAY = 86_400_000
+// 기억 열쇠. 단계 기준(11/11 C)이 바뀌어 v2: 예전 단계 · 그 단계로 쓴 AI 정리는 다시 만든다 (열 때 또는 미리 분석 때)
+const TL_KEY = 'timeline:v2:'
+const STORY_KEY = 'timeline-story:v2:'
 const TTL = 7 * DAY
 const PATENT_TTL = 30 * DAY
 const PERIODS = [
@@ -40,6 +43,20 @@ async function longPapers(en, display, terms = []) {
     .map((g) => ({ y: Number(g.key), n: g.count }))
     .filter((x) => x.y >= 2000 && x.y <= now)
     .sort((a, b) => a.y - b.y)
+}
+
+// 기준선: 같은 조건(디스플레이 주제 또는 전체 분야)의 해마다 논문 수 (30일 기억, 한 번 $0.001)
+// 논문은 분야 전체가 해마다 늘고, 최근 해는 OpenAlex에 덜 올라와 있다 → 그 기술만의 증가인지 보려면 분야 전체 증가로 나눈다 (11/11 C)
+async function baselinePapers(display) {
+  const key = `timeline-baseline:${display ? 'display' : 'all'}`
+  const hit = await cacheGet(key).catch(() => null)
+  if (hit) return hit
+  const filter = ['type:article|review|conference-paper', ...(display ? [topicFilter] : [])].join(',')
+  const data = await openAlexGet(`/works?filter=${filter}&group_by=publication_year`)
+  const now = new Date().getFullYear()
+  const out = (data.group_by ?? []).map((g) => ({ y: Number(g.key), n: g.count })).filter((x) => x.y >= 2000 && x.y <= now).sort((a, b) => a.y - b.y)
+  if (out.length) await cachePut(key, out, 30 * DAY).catch(() => {})
+  return out
 }
 
 // 논문은 약어보다 풀어 쓴 말을 많이 쓴다 (예: tandem OLED → tandem organic light-emitting, 11/10 실측: 약어로만 찾으면 일반 OLED 총설이 나옴)
@@ -187,12 +204,23 @@ async function patents(terms, { cacheOnly = false } = {}) {
 
 // ── 단계 판정 (규칙) ──
 // 끝난 해만 비교: 최근 3년(작년까지) 대 그 앞 3년. 기업 저자 비율 변화로 상용화 쪽인지 본다
+// 분야 전체 대비 증가 기준 (rel = 그 기술 증가 ÷ 분야 전체 증가). 출발값, 여러 기술로 돌려 보고 조정
+const REL_FAST = 1.4
+const REL_MILD = 1.15
+const REL_FLAT = 0.85
 const sumYears = (list, from, to) => list.filter((x) => x.y >= from && x.y <= to).reduce((a, x) => a + x.n, 0)
-function stageOf(long, corpus, pat) {
+// base: 분야 전체 해마다 논문 수 (없으면 예전처럼 그 기술의 증가만 본다)
+// 11/11 C: 검수에서 37개 중 26개가 「연구 지속」 — 분야 전체가 3년에 1.2배쯤 늘어 1.5배 미만을 모두 「비슷」으로 봤기 때문.
+//   이제 「분야 전체보다 몇 배 빠른가」(rel)로 보고, 조금 빠른 것은 「완만한 성장」으로 따로 둔다
+function stageOf(long, corpus, pat, base = []) {
   const last = new Date().getFullYear() - 1
   const recent = sumYears(long, last - 2, last)
   const before = sumYears(long, last - 5, last - 3)
   const growth = (recent + 1) / (before + 1)
+  const baseBefore = sumYears(base, last - 5, last - 3)
+  const baseGrowth = baseBefore > 0 ? sumYears(base, last - 2, last) / baseBefore : null
+  const rel = baseGrowth ? growth / baseGrowth : growth
+  const vsBase = baseGrowth ? ` · 분야 전체 ${baseGrowth.toFixed(1)}배보다 ${rel >= 1 ? `${rel.toFixed(2)}배 빠름` : `느림 (${rel.toFixed(2)}배)`}` : ''
   const shares = corpus?.periods?.map((p) => p.companyShare).filter((x) => x != null) ?? []
   const shareNow = corpus?.periods?.[2]?.companyShare ?? null
   const shareThen = corpus?.periods?.[0]?.companyShare ?? null
@@ -204,20 +232,25 @@ function stageOf(long, corpus, pat) {
   if (recent < 15) {
     stage = '신생 · 탐색'
     why = `최근 3년 논문 ${recent}편으로 아직 적음`
-  } else if (growth >= 1.5) {
+  } else if (rel >= REL_FAST) {
     stage = shareNow != null && shareNow >= 0.2 ? '성장 · 상용화 진입' : '연구 성장'
-    why = `논문이 앞 3년보다 ${growth.toFixed(1)}배${shareNow != null ? ` · 기업 저자 비율 ${Math.round(shareNow * 100)}%` : ''}`
-  } else if (growth >= 0.9) {
+    why = `논문이 앞 3년보다 ${growth.toFixed(1)}배${vsBase}${shareNow != null ? ` · 기업 저자 비율 ${Math.round(shareNow * 100)}%` : ''}`
+  } else if (rel >= REL_MILD) {
+    stage = '완만한 성장'
+    why = `논문이 앞 3년보다 ${growth.toFixed(1)}배${vsBase}${shareNow != null ? ` · 기업 저자 비율 ${Math.round(shareNow * 100)}%` : ''}`
+  } else if (rel >= REL_FLAT) {
     stage = shareNow != null && shareNow >= 0.25 ? '성숙 · 상용화' : '연구 지속'
-    why = `논문 수가 앞 3년과 비슷 (${growth.toFixed(1)}배)${shareNow != null ? ` · 기업 저자 비율 ${Math.round(shareNow * 100)}%` : ''}`
+    why = `논문이 앞 3년보다 ${growth.toFixed(1)}배로 분야 전체와 비슷${vsBase}${shareNow != null ? ` · 기업 저자 비율 ${Math.round(shareNow * 100)}%` : ''}`
   } else {
     stage = '정체 · 감소'
-    why = `논문이 앞 3년의 ${growth.toFixed(1)}배로 줄어듦`
+    why = `논문이 앞 3년의 ${growth.toFixed(1)}배${vsBase}`
   }
   return {
     stage,
     why,
     growth: Math.round(growth * 100) / 100,
+    baseGrowth: baseGrowth != null ? Math.round(baseGrowth * 100) / 100 : null,
+    relGrowth: Math.round(rel * 100) / 100,
     recentPapers: recent,
     beforePapers: before,
     companyShareNow: shareNow,
@@ -233,7 +266,7 @@ function stageOf(long, corpus, pat) {
 export async function buildTimeline(rawQuery, { refresh = false, background = false } = {}) {
   const q = String(rawQuery ?? '').trim().slice(0, 50)
   if (!q) throw Object.assign(new Error('기술 키워드를 입력해 주세요.'), { status: 400 })
-  const key = `timeline:${queryKey(q)}`
+  const key = `${TL_KEY}${queryKey(q)}`
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
     if (hit && !(hit.patents?.status === 'later' && !background)) return { ...withThin(hit), cached: true }
@@ -241,7 +274,7 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
       // 미리 분석해 둔 값에 특허만 채운다
       const pat = await patents(hit.terms).catch((err) => ({ status: 'error', error: err.message }))
       const out = { ...hit, patents: pat }
-      out.stage = stageOf(out.long.length ? out.long : (out.corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n })), out.corpus, pat.status === 'ok' ? pat : null)
+      out.stage = stageOf(out.long.length ? out.long : (out.corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n })), out.corpus, pat.status === 'ok' ? pat : null, out.base ?? [])
       await cachePut(key, out, pat.status === 'error' ? 10 * 60_000 : TTL).catch(() => {})
       return { ...withThin(out), cached: false }
     }
@@ -252,7 +285,7 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
   const corpus = await corpusFacts(t.terms).catch((err) => ({ error: err.message }))
   const display = (corpus?.total ?? 0) >= THIN_MIN
   const settle = (p) => p.then((value) => ({ value }), (err) => ({ error: err.message }))
-  let [long, origins, pat, naver] = await Promise.all([settle(longPapers(en, display, t.terms)), settle(originPapers(t.terms, display)), settle(patents(t.terms, { cacheOnly: background })), settle(naverMonthly(q))])
+  let [long, origins, pat, naver, base] = await Promise.all([settle(longPapers(en, display, t.terms)), settle(originPapers(t.terms, display)), settle(patents(t.terms, { cacheOnly: background })), settle(naverMonthly(q)), settle(baselinePapers(display))])
   // OpenAlex가 큰 묶음에서 504(시간 초과)를 주기도 한다 (11/10 실측: micro led) → 한 번 더
   if (long.error) long = await settle(longPapers(en, display, t.terms))
   const out = {
@@ -270,7 +303,9 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
   }
   // 장기 논문 수를 못 받았으면 단계 판정은 논문 DB(2018년~) 숫자로 (빈 값으로 「신생」이라 하지 않게)
   const basis = out.long.length ? out.long : (corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n }))
-  out.stage = stageOf(basis, corpus, out.patents.status === 'ok' ? out.patents : null)
+  // 기준선: OpenAlex 숫자로 판정할 때만 (논문 DB 숫자로 판정할 때는 기준선 단위가 달라 쓰지 않음)
+  out.base = out.long.length ? base.value ?? [] : []
+  out.stage = stageOf(basis, corpus, out.patents.status === 'ok' ? out.patents : null, out.base)
   if (!out.long.length && basis.length) out.stage.why += ' (OpenAlex 응답이 없어 논문 DB 기준)'
   // 디스플레이 근거가 적은 말: 다른 분야 논문이 섞일 수 있어 숫자 · 단계는 참고만, AI 흐름 정리는 하지 않는다 (11/11 검수: DDI → 유전체 · 전력 소자 논문)
   out.thin = display ? null : thinReason(corpus)
@@ -350,7 +385,7 @@ export function timelineStory(rawQuery, opts = {}) {
 
 async function makeTimelineStory(rawQuery, { refresh = false, background = false } = {}) {
   const tl = await buildTimeline(rawQuery, { background })
-  const key = `timeline-story:${queryKey(tl.query)}`
+  const key = `${STORY_KEY}${queryKey(tl.query)}`
   const thin = withThin(tl).thin
   if (thin) return { query: tl.query, story: Object.fromEntries(SECTIONS.map((k) => [k, []])), papers: [], thin, at: new Date().toISOString(), cached: false }
   if (!refresh) {
@@ -374,8 +409,9 @@ async function makeTimelineStory(rawQuery, { refresh = false, background = false
 - 근거 논문에서 확인되는 사실은 kind "fact"와 refs(번호). 해석 · 전망 · 제안은 kind "ai", refs는 빈 배열.
 - 주어진 숫자(논문 수, 기업 비율, 특허 수)로 쓴 글머리는 kind "fact", refs는 빈 배열이어도 된다. 근거 번호도 주어진 숫자도 없는 글머리는 kind "ai".
 - 우리 회사(고객사)는 WOLED가 주력인 디스플레이 제조사다. QD-OLED는 경쟁사 기술이므로 우리 회사 연구 제안으로 'QD-OLED 도입'을 쓰지 않는다.
+- 분석하는 기술이 경쟁사 주력 기술(QD-OLED, 양자점 색변환 등)이면 research는 그 기술을 우리가 개발하자는 제안이 아니라, 우리 WOLED와의 비교 · 대응 방안 · 계속 지켜볼 지표(경쟁사 양산 · 효율 · 수명 · 원가 등)로 쓴다.
 - 한국어로만. 영문 핵심어는 한국어로 옮기고 처음 한 번만 괄호에 영문 (예: 누화 감소(crosstalk reduction)). 문장 안에 [1] 같은 번호를 쓰지 않는다.
-- outlook 첫 글머리에 단계 이름만 되풀이하지 말고, 그 단계로 본 이유를 숫자로 쓴다.`,
+- outlook 첫 글머리에 단계 이름만 되풀이하지 말고, 그 단계로 본 이유를 숫자로 쓴다. 분야 전체 증가와 견준 값이 있으면 그것을 쓴다.`,
       },
       { role: 'user', content: text },
     ],
@@ -406,6 +442,6 @@ async function makeTimelineStory(rawQuery, { refresh = false, background = false
 // 미리 분석해 둔 값만 꺼낸다 (부르지 않음): 대시보드 「미리 분석된 키워드」 · 미리 분석 일이 건너뛸지 볼 때
 export async function cachedTimeline(rawQuery) {
   const k = queryKey(rawQuery)
-  const [tl, story] = await Promise.all([cacheGet(`timeline:${k}`).catch(() => null), cacheGet(`timeline-story:${k}`).catch(() => null)])
+  const [tl, story] = await Promise.all([cacheGet(`${TL_KEY}${k}`).catch(() => null), cacheGet(`${STORY_KEY}${k}`).catch(() => null)])
   return { timeline: tl, story }
 }
