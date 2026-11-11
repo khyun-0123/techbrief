@@ -1,14 +1,32 @@
 // AI 모델 호출은 이 파일에서만 한다. 모델을 바꿀 때는 .env.local 값만 바꾼다.
 // OpenAI 호환 /chat/completions 주소를 쓰므로 Ollama(맥미니)와 상용 API 모두 같은 코드로 부른다.
-// AI 서버는 두 곳(맥미니·OpenRouter)이고 화면 상단에서 고른다. 고른 값은 이 서버 메모리에만 둔다 (팀원 서버와 별개)
+// AI 서버는 세 곳(맥미니·OpenRouter·EXAONE API)이고 관리 화면에서 고른다. 고른 값은 이 서버 메모리에만 둔다 (팀원 서버와 별개)
+// EXAONE API(11/11, K-EXAONE 2.5 무료 API)는 외부 서버 + 비상업 약관 → 공개 기사로 시험할 때만 (23 문서 3-2)
 
 import { recordAiCall } from '../usage.js'
 
 const TIMEOUT_MS = 120_000 // 요약 기본값. 보고서처럼 긴 출력은 호출할 때 늘린다
 
-const PROVIDER_IDS = ['local', 'openrouter']
+const PROVIDER_IDS = ['local', 'openrouter', 'exaone']
 
 function providerConfig(id) {
+  // K-EXAONE 2.5 (docs.exaone.ai): OpenAI 호환 /v1/chat/completions, 모델 k-exaone_v2.5. 늘 먼저 추론하고(끌 수 없음)
+  // 추론은 message.reasoning_content로 따로 오므로 content만 쓰면 된다. reasoning_effort 기본값 max는 느려 low로
+  // API 키는 30일마다 만료 (약관 3조 4항) → 401이 나면 Showroom에서 새로 받아 .env.local을 바꾸고 「서버 다시 켜기」
+  if (id === 'exaone') {
+    return {
+      id,
+      label: 'EXAONE API',
+      baseUrl: process.env.EXAONE_BASE_URL || 'https://api.exaone.ai/v1',
+      apiKey: process.env.EXAONE_API_KEY,
+      model: process.env.EXAONE_MODEL || 'k-exaone_v2.5',
+      reportModel: process.env.EXAONE_REPORT_MODEL,
+      numCtx: 0,
+      reasoningEffort: process.env.EXAONE_REASONING_EFFORT || 'low',
+      pingPath: '/models',
+      envHint: 'EXAONE_API_KEY',
+    }
+  }
   if (id === 'openrouter') {
     return {
       id,
@@ -39,7 +57,7 @@ function providerConfig(id) {
 
 const isReady = (c) => Boolean(c.baseUrl && c.apiKey && c.model)
 
-// 처음 값: LLM_PROVIDER(local|openrouter) → 없으면 설정이 채워진 첫 번째
+// 처음 값: LLM_PROVIDER(local|openrouter|exaone) → 없으면 설정이 채워진 첫 번째
 let selected = null
 function currentId() {
   if (selected) return selected
