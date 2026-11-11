@@ -1,6 +1,8 @@
 // AI 작업 진행 창 — 화면 오른쪽 아래, 모든 탭에서 보인다
 // 11/08: 요약 대기열 + 보고서 작업 대기열(서버). 보고서 작업이 「요약 안 된 기사도 쓸까요?」를 물으면 여기서 답한다
-import { useState } from 'react'
+// 11/11: 기술 시계열 「AI 흐름 정리」 — 키워드 분석을 보다가 떠난 말만 올린다 (보고 있는 말은 그 화면에서 보임, storyJobs.js)
+import { useEffect, useState } from 'react'
+import { dismissStory, retryStory } from './storyJobs.js'
 
 const STATUS_LABEL = { queued: '대기', running: '요약 중', done: '완료', error: '오류' }
 
@@ -15,6 +17,66 @@ function Gauge({ value, status, label }) {
     <div className={`gauge gauge-${status}`} role="progressbar" aria-label={label} aria-valuenow={value} aria-valuemin={0} aria-valuemax={100}>
       <div className="gauge-fill" style={{ width: `${value}%` }} />
     </div>
+  )
+}
+
+// 진행률을 모르는 작업(AI 한 번 부르기)용: 값 없이 움직이는 막대
+function BusyBar({ label }) {
+  return (
+    <div className="gauge gauge-running gauge-indeterminate" role="progressbar" aria-label={label}>
+      <div className="gauge-fill" />
+    </div>
+  )
+}
+
+function StoryJobs({ jobs, onOpen }) {
+  const [now, setNow] = useState(() => Date.now())
+  const running = jobs.some((j) => j.status === 'running')
+  useEffect(() => {
+    if (!running) return undefined
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [running])
+  return (
+    <ul className="progress-list story-jobs">
+      {jobs.map((j) => (
+        <li key={j.query} className={`progress-item story-job status-${j.status}${j.unseen ? ' is-unseen' : ''}`}>
+          <div className="progress-row">
+            <span className="progress-title" title={j.query}>
+              「{j.query}」 기술 흐름 정리
+            </span>
+            <span className="progress-status">
+              {j.status === 'running' ? `정리 중 ${seconds(now - j.startedAt)}` : j.status === 'done' ? '정리 끝' : '오류'}
+            </span>
+            <button type="button" className="icon-btn" onClick={() => dismissStory(j.query)} title={j.status === 'running' ? '알림 받지 않기 (정리는 계속돼요)' : '목록에서 지우기'} aria-label={j.status === 'running' ? `「${j.query}」 알림 받지 않기` : `「${j.query}」 목록에서 지우기`}>
+              ×
+            </button>
+          </div>
+          {j.status === 'running' && (
+            <>
+              <BusyBar label={`「${j.query}」 기술 흐름 정리 중`} />
+              <p className="progress-sub">보통 30초 안팎 · 끝나면 여기서 알려 드려요</p>
+            </>
+          )}
+          {j.status === 'done' && (
+            <p className="progress-sub">
+              전망 · 우리가 볼 것까지 정리됐어요 ·{' '}
+              <button type="button" className="link-btn" onClick={() => onOpen(j.query)}>
+                분석 보기
+              </button>
+            </p>
+          )}
+          {j.status === 'error' && (
+            <p className="progress-error" role="alert">
+              {j.error}{' '}
+              <button type="button" className="link-btn" onClick={() => retryStory(j.query)}>
+                다시 정리하기
+              </button>
+            </p>
+          )}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -89,26 +151,35 @@ function ReportJobs({ jobs, onAnswer, onCancel, onOpenReport, onHide }) {
 }
 
 // quiet: 선별·요약 화면처럼 오른쪽 아래를 가리면 안 될 때 기본으로 접어 둔다 (확인 질문이 있으면 펼침)
-function ProgressPanel({ queue, reportJobs = [], onAnswer, onCancel, onOpenReport, quiet = false }) {
+function ProgressPanel({ queue, reportJobs = [], storyJobs = [], onOpenStory, onAnswer, onCancel, onOpenReport, quiet = false }) {
   // 펼침 상태: 직접 누르기 전에는 '진행 중이면 펼치고, 다 끝나면 접는다'
-  const [expanded, setExpanded] = useState(null)
+  // 누른 값은 그때의 「안 본 흐름 정리」 목록과 함께 기억 → 새로 끝난 정리가 생기면 접어 둔 창도 다시 펼친다 (알림, 11/11)
+  const [pressed, setPressed] = useState({ value: null, unseen: '' })
   const [hidden, setHidden] = useState([]) // 이 화면에서 지운 끝난 보고서 작업
   const { jobs, remove, clearFinished, retry, progressOf, overall, remainingMs } = queue
   const reports = reportJobs.filter((j) => !hidden.includes(j.id))
-  if (jobs.length === 0 && reports.length === 0) return null
+  const stories = storyJobs.filter((j) => j.listed || j.unseen)
+  const storyActive = stories.some((j) => j.status === 'running')
+  const storyUnseen = stories.some((j) => j.unseen)
+  const unseenKey = stories.filter((j) => j.unseen).map((j) => j.query).join('|')
+  const expanded = pressed.unseen === unseenKey || !unseenKey ? pressed.value : null
+  const setExpanded = (value) => setPressed({ value, unseen: unseenKey })
+  if (jobs.length === 0 && reports.length === 0 && stories.length === 0) return null
   const reportActive = reports.some((j) => ['queued', 'running', 'need_confirm'].includes(j.status))
   const asking = reports.some((j) => j.status === 'need_confirm')
   // 「완료 지우기」: 끝난 요약과 끝난 보고서 작업(완성 · 오류 · 취소)을 함께 닫는다 (11/08: 보고서는 안 닫히던 문제)
   const finishedReports = reports.filter((j) => ['done', 'error', 'cancelled'].includes(j.status))
   const clearAll = () => {
     clearFinished()
+    stories.filter((j) => j.status !== 'running').forEach((j) => dismissStory(j.query))
     if (finishedReports.length) setHidden((h) => [...h, ...finishedReports.map((j) => j.id)])
   }
 
   const done = jobs.filter((j) => j.status === 'done').length
   const errors = jobs.filter((j) => j.status === 'error').length
   const active = jobs.some((j) => j.status === 'queued' || j.status === 'running')
-  const open = asking || (expanded ?? ((active || reportActive) && !quiet))
+  const finishedStories = stories.filter((j) => j.status !== 'running').length
+  const open = asking || (expanded ?? ((active || reportActive || storyActive || storyUnseen) && !quiet))
 
   return (
     <aside className="progress-panel" aria-label="AI 요약 진행">
@@ -118,8 +189,10 @@ function ProgressPanel({ queue, reportJobs = [], onAnswer, onCancel, onOpenRepor
           {jobs.length > 0 && `요약 ${done}/${jobs.length}`}
           {errors > 0 && ` · 오류 ${errors}`}
           {reports.length > 0 && `${jobs.length > 0 ? ' · ' : ''}보고서 ${reports.filter((j) => j.status === 'done').length}/${reports.length}`}
+          {stories.length > 0 && `${jobs.length + reports.length > 0 ? ' · ' : ''}흐름 정리 ${stories.filter((j) => j.status === 'done').length}/${stories.length}`}
+          {storyUnseen && ' · 새로 끝남'}
         </span>
-        {!open && done + errors + finishedReports.length > 0 && (
+        {!open && done + errors + finishedReports.length + finishedStories > 0 && (
           <button type="button" className="icon-btn" onClick={clearAll} title="완료 지우기">
             지우기
           </button>
@@ -137,6 +210,8 @@ function ProgressPanel({ queue, reportJobs = [], onAnswer, onCancel, onOpenRepor
           </p>
         </>
       )}
+
+      {open && stories.length > 0 && <StoryJobs jobs={stories} onOpen={onOpenStory} />}
 
       {open && reports.length > 0 && (
         <ReportJobs jobs={reports} onAnswer={onAnswer} onCancel={onCancel} onOpenReport={onOpenReport} onHide={(id) => setHidden((h) => [...h, id])} />
@@ -185,7 +260,7 @@ function ProgressPanel({ queue, reportJobs = [], onAnswer, onCancel, onOpenRepor
       {open && (
         <div className="progress-foot">
           <span className="hint">{jobs.length > 0 ? '게이지는 평균 요약 시간으로 계산한 예상치예요' : ''}</span>
-          <button type="button" className="btn" onClick={clearAll} disabled={done + errors + finishedReports.length === 0}>
+          <button type="button" className="btn" onClick={clearAll} disabled={done + errors + finishedReports.length + finishedStories === 0}>
             완료된 작업 모두 닫기
           </button>
         </div>

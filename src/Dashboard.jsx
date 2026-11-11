@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchReadyTimelines } from './api.js'
 import KeywordAnalysis, { AnalysisPreview } from './KeywordAnalysis.jsx'
+import { consumeOpenRequest, useOpenRequest, useStoryJobs } from './storyJobs.js'
 import TechTrends from './TechTrends.jsx'
 
 function Dashboard({ stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onScopeSearch, onKeyword, onGoCollect, onRemember }) {
@@ -23,6 +24,21 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
     }
   }, [])
   const panelRef = useRef(null)
+  // 진행 창 「분석 보기」(11/11): 다른 화면에서 눌러도 대시보드로 와서 그 말을 연다
+  const openRequest = useOpenRequest()
+  useEffect(() => {
+    const r = openRequest && consumeOpenRequest()
+    if (r) analyze(r.query)
+  }, [openRequest]) // eslint-disable-line react-hooks/exhaustive-deps
+  // 흐름 정리가 끝났는데 아직 안 본 말 · 정리 중인 말: 칩에 표시
+  const storyJobs = useStoryJobs()
+  const unseen = new Set(storyJobs.filter((j) => j.unseen).map((j) => j.query))
+  const mark = (q) =>
+    unseen.has(q) ? (
+      <span className="dash-done-dot" title="AI 흐름 정리 끝 · 아직 안 봄">
+        <span className="sr-only">(AI 흐름 정리 끝)</span>
+      </span>
+    ) : null
 
   // 분석할 말을 바꾸고 그 자리로 (찾은 말은 최근 검색어에 남긴다)
   function analyze(q) {
@@ -96,6 +112,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
                     <button key={r.query} type="button" className="dash-ready-item" onClick={() => analyze(r.query)} title={`${r.from.join(' · ')}${r.growth ? ` · 논문 ${r.growth}배` : ''}${r.story ? ' · AI 정리 있음' : ''}`}>
                       <b>{r.query}</b>
                       {r.stage && <span className="dash-ready-stage">{r.stage}</span>}
+                      {mark(r.query)}
                     </button>
                   ))}
                 </div>
@@ -108,6 +125,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
           <details className="dash-more">
             <summary>
               자동 수집 키워드 · 추천 · 즐겨찾기 · 최근 검색어 <span className="dash-more-count">{chipCount}개</span>
+              {[...recommendedOnly, ...favorites, ...recentOnly].some((k) => unseen.has(k)) && mark([...unseen][0])}
             </summary>
             {keywords.length > 0 && (
               <div className="dash-chips">
@@ -134,6 +152,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
                   {recommendedOnly.map((k) => (
                     <button key={k} type="button" className="chip dash-chip" onClick={() => analyze(k)} title={`「${k}」 분석 (관리자가 고른 추천 검색어)`}>
                       {k}
+                      {mark(k)}
                     </button>
                   ))}
                 </div>
@@ -149,6 +168,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
                   {favorites.map((k) => (
                     <button key={k} type="button" className="chip dash-chip" onClick={() => analyze(k)} title={`「${k}」 분석`}>
                       {k}
+                      {mark(k)}
                     </button>
                   ))}
                 </div>
@@ -164,6 +184,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
                   {recentOnly.map((k) => (
                     <button key={k} type="button" className="chip dash-chip" onClick={() => analyze(k)} title={`「${k}」 분석`}>
                       {k}
+                      {mark(k)}
                     </button>
                   ))}
                 </div>
