@@ -1,8 +1,10 @@
 // 기술 시계열 (11/10 조장): 키워드 하나로 그 기술의 배경 → 성장 → 적용 → 전망을 본다. 「무엇이 트렌드가 될지 · 무엇을 연구할지」의 기준
 // 숫자 · 단계는 서버가 규칙으로 계산(server/timeline.js), 글은 「AI로 흐름 정리」를 눌렀을 때만 (1분 안팎, 근거 번호 · 사실 / AI 해설)
+// 대시보드 「키워드 분석」에서 열면 이미 돌고 있는 정리(job, storyJobs.js)를 이어서 보여 준다 (11/11: 정리 중인데 버튼이 안 누른 상태로 보였음)
 // 그래프는 단위가 서로 달라 따로 그린다 (한 축에 겹치지 않음). 네이버 검색 관심도는 약관상 그래프로만 (AI에 넣지 않음)
 import { useEffect, useState } from 'react'
 import { fetchTimeline, fetchTimelineStory } from './api.js'
+import { retryStory } from './storyJobs.js'
 import { Spark } from './KeywordTrends.jsx'
 
 const SECTION_LABEL = { background: '배경 · 왜 나왔나', growth: '성장 · 어떻게 커졌나', application: '적용 · 어디에 쓰이나', outlook: '전망', research: '우리가 볼 것 · 연구 제안' }
@@ -19,10 +21,11 @@ const pct = (v) => (v == null ? '-' : `${Math.round(v * 100)}%`)
 const doiUrl = (p) => (p.doi ? `https://doi.org/${p.doi}` : null)
 
 // initialData: 대시보드 「키워드 분석」이 이미 받은 값이 있으면 다시 받지 않는다
-function TechTimeline({ query, onClose, initialData = null, initialStory = null }) {
+// job: 대시보드에서 이미 시작한 AI 흐름 정리 ({ status: running · done · error, story, error }). 없으면 이 창에서 버튼으로 시작
+function TechTimeline({ query, onClose, initialData = null, job = null }) {
   const [data, setData] = useState(initialData)
   const [error, setError] = useState('')
-  const [story, setStory] = useState(initialStory)
+  const [own, setOwn] = useState(null) // 이 창에서 「다시 정리」로 새로 받은 값 (있으면 job보다 먼저)
   const [storyState, setStoryState] = useState('idle') // idle · loading · error
   const [storyError, setStoryError] = useState('')
 
@@ -41,13 +44,19 @@ function TechTimeline({ query, onClose, initialData = null, initialStory = null 
     setStoryState('loading')
     setStoryError('')
     try {
-      setStory(await fetchTimelineStory(query, refresh))
+      setOwn(await fetchTimelineStory(query, refresh))
       setStoryState('idle')
     } catch (err) {
       setStoryError(err.message)
       setStoryState('error')
     }
   }
+
+  const story = own ?? (job?.status === 'done' ? job.story : null)
+  const loading = storyState === 'loading' || (!own && job?.status === 'running')
+  const shownError = storyError || (!own && storyState !== 'loading' && job?.status === 'error' ? job.error : '')
+  // 처음 정리(실패 뒤 다시 포함)는 대시보드 작업으로 → 「한눈에」 · 진행 창도 같이 바뀐다. 「다시 정리」는 새로 만들기
+  const onStory = () => (!story && job ? retryStory(query) : makeStory(Boolean(story)))
 
   const c = data?.corpus
   const yearly = (list) => (list ?? []).map((x) => ({ t: `${x.y}-01-01`, v: x.n }))
@@ -180,16 +189,20 @@ function TechTimeline({ query, onClose, initialData = null, initialStory = null 
             <div className="tl-story">
               <div className="tl-story-head">
                 <h3>흐름 정리</h3>
-                {storyState !== 'loading' && (
-                  <button type="button" className="btn primary" onClick={() => makeStory(Boolean(story))}>
-                    {story ? '다시 정리' : 'AI로 흐름 정리 (1분 안팎)'}
+                {!loading && (
+                  <button type="button" className="btn primary" onClick={onStory}>
+                    {story ? '다시 정리' : shownError ? '다시 정리하기' : 'AI로 흐름 정리 (1분 안팎)'}
                   </button>
                 )}
-                {storyState === 'loading' && <span className="hint">맥미니 AI가 정리하는 중… (위 숫자와 근거 논문만 보고 써요)</span>}
+                {loading && (
+                  <span className="hint" role="status">
+                    AI가 정리하는 중… (위 숫자와 근거 논문만 보고 써요{storyState === 'loading' ? '' : ' · 검색할 때 시작한 정리를 이어서 기다려요'})
+                  </span>
+                )}
               </div>
-              {storyError && (
+              {shownError && (
                 <p className="ai-error" role="alert">
-                  {storyError}
+                  {shownError}
                 </p>
               )}
               {story && (
