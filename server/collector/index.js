@@ -251,7 +251,7 @@ export async function scoreContext() {
   try {
     const { getTechTrends } = await import('../techtrends.js')
     const t = await getTechTrends({ period: 'week' })
-    rising = (t.composite ?? []).slice(0, RISING_TOP).map((e) => ({ name: e.name, en: e.en }))
+    rising = (t.composite ?? []).slice(0, RISING_TOP).map((e) => ({ name: e.name, en: e.en, firstSeen: e.firstSeen }))
   } catch (err) {
     console.warn(`[score] 요즘 뜨는 기술 용어를 못 읽음: ${err.message}`)
   }
@@ -302,6 +302,7 @@ function toIssues(stored, lists, ctx = { rising: [], older: [] }) {
         own: lists.own,
         rising: ctx.rising,
         rerun: reruns.has(groupRep.id),
+        outlets: new Set(group.map((a) => a.source)).size,
       })
       const own = findMention(`${rep.title} ${rep.description ?? ''}`, lists.own)
       const related = group

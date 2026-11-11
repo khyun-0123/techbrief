@@ -8,6 +8,8 @@ import { offTopicOf } from './relevance.js'
 // 새 점수는 보도량이 10점으로 줄어 최고점이 60 근처 → 예전(60점 이상 8건, 약 2%)과 비슷한 비율이 되도록 45점 (약 4%)
 export const HIGH_THRESHOLD = 45
 const RECENCY_HOURS = 168
+const RISING_FRESH_DAYS = 30
+const NOISE_WEIGHT = 0.3
 
 // 관련도 배수: 키워드가 본문에 스치기만 한 큰 뉴스(증시 마감, 행사 등)가 보도량만으로 위에 오지 않게
 const RELEVANCE_WEIGHT = { high: 1, mid: 0.5, low: 0.2 }
@@ -38,18 +40,20 @@ function mentions(text, term) {
   return new RegExp(`(^|[^a-z0-9])${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[\s-]+/g, '[\\s-]?')}($|[^a-z0-9])`).test(low)
 }
 
-// groupSize: 같은 이슈로 묶인 기사 수(대표 포함)
+// groupSize: 같은 이슈로 묶인 기사 수(대표 포함). outlets: 그중 서로 다른 매체 수 (없으면 groupSize)
 // competitors · interests · own: 경쟁사 · 관심 기술 · 자사 목록 (collector/lists.js)
 // relevance: 이슈의 관련도 high / mid / low
-// rising: 「요즘 뜨는 기술」 상위 용어 [{ name, en }] (techtrends.js 종합 순위) → 신규성
+// rising: 「요즘 뜨는 기술」 상위 용어 [{ name, en, firstSeen }] (techtrends.js 종합 순위) → 신규성. 처음 잡힌 지 30일 안의 용어만
 // rerun: 3~21일 전에 비슷한 제목의 이슈가 이미 있었음(재탕) → 신규성의 「첫 소식」 점수 없음
-export function scoreArticle(article, groupSize, competitors = [], { relevance = 'high', interests = [], own = [], rising = [], rerun = false } = {}) {
+export function scoreArticle(article, groupSize, competitors = [], { relevance = 'high', interests = [], own = [], rising = [], rerun = false, outlets } = {}) {
   const title = article.title
   const text = `${title} ${article.description ?? ''}`
 
   // 1. 신규성 (최대 30): 첫 소식 10 + 새 기술 · 처음 낱말 최대 10 + 요즘 뜨는 기술 용어 10
   const newWords = [...has(title, NEW_WORDS), ...(RECORD.test(title) ? ['성능 기록'] : [])].slice(0, 2)
-  const risingName = rising.find((t) => mentions(text, t.name) || mentions(text, t.en))?.name ?? null
+  // 11/11: 뜨는 기술 용어는 처음 잡힌 지 30일 안일 때만 (오래 뜬 용어는 더는 새 소식이 아님. 검수: 찾기 결과 1,754개 중 684개가 이 10점)
+  const fresh = (t) => !t.firstSeen || Date.now() - Date.parse(t.firstSeen) <= RISING_FRESH_DAYS * 86_400_000
+  const risingName = rising.find((t) => fresh(t) && (mentions(text, t.name) || mentions(text, t.en)))?.name ?? null
   const firstNews = rerun ? 0 : 10
   const novelty = firstNews + (newWords.length >= 2 ? 10 : newWords.length * 6) + (risingName ? 10 : 0)
 
@@ -66,23 +70,25 @@ export function scoreArticle(article, groupSize, competitors = [], { relevance =
     (competitorInTitle ? 20 : competitorName ? 10 : 0) + (interestInTitle ? 10 : interestName ? 4 : 0) + (bizWords.length ? 5 : 0) + (ownName ? (competitorName ? 10 : 5) : 0),
   )
 
-  // 3. 출처 신뢰도 (최대 20): 1차(기업 발표 · 학회 · 논문) 20 · 2차(전문매체) 12 · 일반 뉴스 0
+  // 3. 출처 신뢰도 (최대 20): 1차(기업 발표 · 학회 · 논문) 20 · 2차(전문매체) 12 · 일반 뉴스 5 (11/11, 예전 0)
   const tier = article.tier ?? (EXPERT_SOURCES.has(article.source) ? 2 : 3)
-  const source = tier === 1 ? 20 : tier === 2 ? 12 : 0
+  const source = tier === 1 ? 20 : tier === 2 ? 12 : 5
 
   // 4. 최신성 (최대 15): 7일(168시간)에 걸쳐 0으로 (11/11, 예전 72시간)
   const hours = (Date.now() - Date.parse(article.publishedAt)) / 3600_000
   const recency = Math.round(15 * Math.max(0, 1 - hours / RECENCY_HOURS))
 
-  // 5. 보도량 (최대 10): 같은 이슈 기사 1건당 2점
-  const coverage = Math.min(10, (groupSize - 1) * 2)
+  // 5. 보도량 (최대 10): 2.5 × log₂(서로 다른 매체 수) — 2곳 2.5 · 4곳 5 · 16곳 10 (11/11, 예전 기사 1건당 2점)
+  //    같은 매체의 중복 기사는 세지 않고, 받아쓰는 매체가 늘수록 더해지는 점수가 줄어든다 (「보도량보다 신규성」)
+  const coverage = Math.min(10, Math.round(2.5 * Math.log2(Math.max(1, outlets ?? groupSize ?? 1)) * 10) / 10)
 
   // 잡음: 사진 · 인사 · 증시 시황, 그리고 제목 주제가 생활 · 행사 · 쇼핑 · 정치(예: 시의회 방문)인 기사 (relevance.js 주제 목록)
   const offTopic = ['생활·행사', '쇼핑', '정책·정치'].includes(offTopicOf(title))
-  const noise = NOISE_WORDS.some((w) => title.includes(w)) || STOCK_PATTERN.test(title) || offTopic ? -15 : 0
+  // 11/11: −15점 대신 ×0.3 (점수가 높은 시황 · 홍보 기사도 확실히 내려가게)
+  const noise = NOISE_WORDS.some((w) => title.includes(w)) || STOCK_PATTERN.test(title) || offTopic ? NOISE_WEIGHT : 1
   const weight = RELEVANCE_WEIGHT[relevance] ?? 1
-  const raw = novelty + business + source + recency + coverage + noise
-  const score = Math.max(0, Math.min(100, Math.round(raw * weight)))
+  const raw = novelty + business + source + recency + coverage
+  const score = Math.max(0, Math.min(100, Math.round(raw * weight * noise)))
   return {
     score,
     level: score >= HIGH_THRESHOLD ? 'high' : 'normal',

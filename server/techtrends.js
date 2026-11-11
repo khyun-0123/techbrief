@@ -880,7 +880,7 @@ export async function getTechTrends({ period, from, to } = {}) {
     const n = s.ranking.length
     if (n < 2) continue
     s.ranking.forEach((r, i) => {
-      const e = (byKey[r.key] ??= { key: r.key, name: r.name, en: r.en, category: r.category, from: r.from, parts: {} })
+      const e = (byKey[r.key] ??= { key: r.key, name: r.name, en: r.en, category: r.category, from: r.from, firstSeen: state.terms[r.key]?.firstSeen ?? null, parts: {} })
       e.parts[s.id] = { pct: Math.round((1 - i / (n - 1)) * 100), change: r.change, growth: r.growth, rank: i + 1, of: n }
     })
   }
