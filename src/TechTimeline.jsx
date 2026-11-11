@@ -93,6 +93,11 @@ function TechTimeline({ query, onClose, initialData = null, job = null }) {
                 <span className="muted"> · {STAGE_HINT[data.stage.stage] ?? ''} (비교: {data.stage.years}, 규칙으로 판정)</span>
               </span>
             </div>
+            {data.thin && (
+              <p className="hint" role="note">
+                참고: {data.thin}
+              </p>
+            )}
 
             <div className="tl-charts">
               <Spark title="논문 수" unit="편" monthly="year" series={yearly(full(data.long))} source="OpenAlex · 해마다" note={data.longError ?? '논문이 없어요.'} />
@@ -186,6 +191,8 @@ function TechTimeline({ query, onClose, initialData = null, job = null }) {
               </details>
             )}
 
+            {/* 디스플레이 근거가 적은 말은 AI 흐름 정리를 하지 않는다 (server/timeline.js thinReason, 11/11) */}
+            {!data.thin && (
             <div className="tl-story">
               <div className="tl-story-head">
                 <h3>흐름 정리</h3>
@@ -246,6 +253,7 @@ function TechTimeline({ query, onClose, initialData = null, job = null }) {
                 </>
               )}
             </div>
+            )}
           </>
         )}
       </section>

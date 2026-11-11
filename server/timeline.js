@@ -29,9 +29,12 @@ const periodOf = (y) => PERIODS.find((p) => y >= p.from && y <= p.to)?.id ?? nul
 const topicFilter = `primary_topic.id:${DISPLAY_TOPICS.map((t) => t.id).join('|')}`
 
 // ── 논문 (장기 · OpenAlex) ──
-async function longPapers(en, display) {
+// display가 아니면(우리 논문 DB에 맞는 논문이 적음) 전체 분야에서 찾으므로 표현 그대로("…")만 센다
+// (11/11 검수: 따옴표 없이 찾으면 「media facade」가 media 또는 facade만 들어간 논문까지 해마다 수천 편으로 잡힘)
+async function longPapers(en, display, terms = []) {
   const filter = ['type:article|review|conference-paper', ...(display ? [topicFilter] : [])].join(',')
-  const data = await openAlexGet(`/works?search=${encodeURIComponent(en)}&filter=${filter}&group_by=publication_year`)
+  const search = display || !terms.length ? en : phraseVariants(terms).map((v) => `"${v}"`).join(' OR ')
+  const data = await openAlexGet(`/works?search=${encodeURIComponent(search)}&filter=${filter}&group_by=publication_year`)
   const now = new Date().getFullYear()
   return (data.group_by ?? [])
     .map((g) => ({ y: Number(g.key), n: g.count }))
@@ -233,25 +236,25 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
   const key = `timeline:${queryKey(q)}`
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
-    if (hit && !(hit.patents?.status === 'later' && !background)) return { ...hit, cached: true }
+    if (hit && !(hit.patents?.status === 'later' && !background)) return { ...withThin(hit), cached: true }
     if (hit) {
       // 미리 분석해 둔 값에 특허만 채운다
       const pat = await patents(hit.terms).catch((err) => ({ status: 'error', error: err.message }))
       const out = { ...hit, patents: pat }
       out.stage = stageOf(out.long.length ? out.long : (out.corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n })), out.corpus, pat.status === 'ok' ? pat : null)
       await cachePut(key, out, pat.status === 'error' ? 10 * 60_000 : TTL).catch(() => {})
-      return { ...out, cached: false }
+      return { ...withThin(out), cached: false }
     }
   }
   const t = await englishTerms(q, { waitMs: 60_000 })
   if (!t.terms.length) throw Object.assign(new Error(t.pending ? '영문 검색어를 만드는 중이에요. 잠시 뒤 다시 눌러 주세요.' : '영문 검색어를 만들지 못했어요. 영문으로 입력해 보세요.'), { status: 503 })
   const en = openAlexQuery(t.terms)
   const corpus = await corpusFacts(t.terms).catch((err) => ({ error: err.message }))
-  const display = (corpus?.total ?? 0) >= 15
+  const display = (corpus?.total ?? 0) >= THIN_MIN
   const settle = (p) => p.then((value) => ({ value }), (err) => ({ error: err.message }))
-  let [long, origins, pat, naver] = await Promise.all([settle(longPapers(en, display)), settle(originPapers(t.terms, display)), settle(patents(t.terms, { cacheOnly: background })), settle(naverMonthly(q))])
+  let [long, origins, pat, naver] = await Promise.all([settle(longPapers(en, display, t.terms)), settle(originPapers(t.terms, display)), settle(patents(t.terms, { cacheOnly: background })), settle(naverMonthly(q))])
   // OpenAlex가 큰 묶음에서 504(시간 초과)를 주기도 한다 (11/10 실측: micro led) → 한 번 더
-  if (long.error) long = await settle(longPapers(en, display))
+  if (long.error) long = await settle(longPapers(en, display, t.terms))
   const out = {
     query: q,
     terms: t.terms,
@@ -269,6 +272,8 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
   const basis = out.long.length ? out.long : (corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n }))
   out.stage = stageOf(basis, corpus, out.patents.status === 'ok' ? out.patents : null)
   if (!out.long.length && basis.length) out.stage.why += ' (OpenAlex 응답이 없어 논문 DB 기준)'
+  // 디스플레이 근거가 적은 말: 다른 분야 논문이 섞일 수 있어 숫자 · 단계는 참고만, AI 흐름 정리는 하지 않는다 (11/11 검수: DDI → 유전체 · 전력 소자 논문)
+  out.thin = display ? null : thinReason(corpus)
   out.makers = (corpus?.periods ?? []).map((p) => ({ label: p.label, makers: p.companies.filter((c) => DISPLAY_MAKERS.test(c.name)).map((c) => c.name) }))
   out.corpusPartial = !(await corpusReady())
   // 논문 DB 처음 받기가 안 끝났으면 일부만 본 결과라 1시간만 기억
@@ -318,6 +323,20 @@ function storyInput(tl) {
   return { text: lines.join('\n'), papers }
 }
 
+// 디스플레이 근거가 적은 이유 (화면 · AI 흐름 정리 공통)
+const THIN_MIN = 15
+// 11/11 이전에 기억해 둔 값에는 thin이 없다 → 꺼낼 때 채운다
+const withThin = (tl) => (tl.thin !== undefined ? tl : { ...tl, thin: tl.display ? null : thinReason(tl.corpus) })
+function thinReason(corpus) {
+  const n = corpus?.total ?? 0
+  return `우리 디스플레이 논문 DB(2018년~)에 맞는 논문이 ${n}편뿐이에요 (${THIN_MIN}편 미만). 다른 분야 논문이 섞였을 수 있어 숫자 · 단계는 참고만 하고, AI 흐름 정리는 하지 않아요. 영문 검색어를 고치면 나아질 수 있어요 (관리 페이지 「수집 대상 › 검색어 영문 표기」)`
+}
+
+// 근거 번호도 숫자도 없는 「사실」은 확인할 길이 없어 「AI 해설」로 내린다 (CLAUDE.md 2, 11/11 검수: 38개 정리에 54개)
+// 예전에 만들어 둔 정리에도 꺼낼 때 같은 기준을 적용한다
+const demoteBare = (b) => (b.kind === 'fact' && !b.refs?.length && !/\d/.test(b.text) ? { ...b, kind: 'ai' } : b)
+const demoteStory = (out) => ({ ...out, story: Object.fromEntries(Object.entries(out.story ?? {}).map(([k, list]) => [k, (list ?? []).map(demoteBare)])) })
+
 // 같은 말의 AI 흐름 정리가 이미 도는 중이면 그 결과를 함께 기다린다 (11/11: 정리 중에 화면을 닫았다 다시 열면 AI를 한 번 더 불렀다)
 const storyRuns = new Map()
 export function timelineStory(rawQuery, opts = {}) {
@@ -332,9 +351,11 @@ export function timelineStory(rawQuery, opts = {}) {
 async function makeTimelineStory(rawQuery, { refresh = false, background = false } = {}) {
   const tl = await buildTimeline(rawQuery, { background })
   const key = `timeline-story:${queryKey(tl.query)}`
+  const thin = withThin(tl).thin
+  if (thin) return { query: tl.query, story: Object.fromEntries(SECTIONS.map((k) => [k, []])), papers: [], thin, at: new Date().toISOString(), cached: false }
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
-    if (hit) return { ...hit, cached: true }
+    if (hit) return { ...demoteStory(hit), cached: true }
   }
   const { text, papers } = storyInput(tl)
   const { data, model } = await chatJson({
@@ -351,7 +372,7 @@ async function makeTimelineStory(rawQuery, { refresh = false, background = false
 - 섹션마다 글머리 2~4개, 한 글머리 한 문장, 명사형 종결("~함", "~임").
 - 숫자 · 회사 · 연도는 주어진 것만 쓴다. 지어내지 않는다.
 - 근거 논문에서 확인되는 사실은 kind "fact"와 refs(번호). 해석 · 전망 · 제안은 kind "ai", refs는 빈 배열.
-- 주어진 숫자(논문 수, 기업 비율, 특허 수)로 쓴 글머리는 kind "fact", refs는 빈 배열이어도 된다.
+- 주어진 숫자(논문 수, 기업 비율, 특허 수)로 쓴 글머리는 kind "fact", refs는 빈 배열이어도 된다. 근거 번호도 주어진 숫자도 없는 글머리는 kind "ai".
 - 우리 회사(고객사)는 WOLED가 주력인 디스플레이 제조사다. QD-OLED는 경쟁사 기술이므로 우리 회사 연구 제안으로 'QD-OLED 도입'을 쓰지 않는다.
 - 한국어로만. 영문 핵심어는 한국어로 옮기고 처음 한 번만 괄호에 영문 (예: 누화 감소(crosstalk reduction)). 문장 안에 [1] 같은 번호를 쓰지 않는다.
 - outlook 첫 글머리에 단계 이름만 되풀이하지 말고, 그 단계로 본 이유를 숫자로 쓴다.`,
@@ -364,7 +385,8 @@ async function makeTimelineStory(rawQuery, { refresh = false, background = false
   const known = new Set(text.match(/\d+(?:\.\d+)?/g) ?? [])
   const checkNumbers = (b) => {
     const missing = (b.text.match(/\d+(?:\.\d+)?/g) ?? []).filter((n) => !known.has(n))
-    return b.kind === 'fact' && missing.length ? { ...b, kind: 'ai', unverified: missing } : b
+    if (b.kind === 'fact' && missing.length) return { ...b, kind: 'ai', unverified: missing }
+    return demoteBare(b)
   }
   const story = Object.fromEntries(
     SECTIONS.map((k) => [

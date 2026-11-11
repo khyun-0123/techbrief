@@ -143,6 +143,7 @@ function GlanceWait({ startedAt }) {
 // stage: 단계 배지와 같은 말을 되풀이하는 글머리는 뺀다
 function Glance({ job, stage, keyword }) {
   if (!job || job.status === 'running') return <GlanceWait startedAt={job?.startedAt} />
+  if (job.story?.thin) return null // 디스플레이 근거가 적어 AI 정리를 하지 않음 (단계 아래 안내, server/timeline.js thinReason)
   if (job.status === 'error')
     return (
       <p className="hint">
@@ -350,6 +351,11 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
                 <span className="tl-stage-badge">{data.stage.stage}</span>
                 <span>{data.stage.why}</span>
               </div>
+              {data.thin && (
+                <p className="hint" role="note">
+                  참고: {data.thin}
+                </p>
+              )}
               <div className="ka-sparks">
                 <Spark title="논문 수" unit="편" monthly="year" series={full(data.long).map((x) => ({ t: `${x.y}-01-01`, v: x.n }))} source="OpenAlex" note={data.longError ?? '논문이 없어요.'} />
                 <Spark
