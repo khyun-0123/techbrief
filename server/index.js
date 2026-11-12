@@ -12,7 +12,7 @@ import { buildTimeline, timelineStory } from './timeline.js'
 import { readyTimelines, runPrecompute, startPrecompute } from './timelineJobs.js'
 import { relatedWords } from './related.js'
 import { fillMap, mapMaterials } from './mapMaterials.js'
-import { bundleFacts, headlineSeeds, prepareBundle } from './keywordBundle.js'
+import { allCategoryCompetitors, bundleFacts, headlineSeeds, prepareBundle, THREAT_FACTOR } from './keywordBundle.js'
 import { scopeSearch } from './scopeSearch.js'
 import { popularPapers } from './papers/journals.js'
 import { getTechTrends, startTechTrends } from './techtrends.js'
@@ -592,6 +592,15 @@ export async function handleApi(req, res) {
     if (req.method === 'POST' && req.url === '/api/timeline/story') {
       const { query, refresh = false } = await readJson(req)
       return send(res, 200, await timelineStory(query, { refresh: Boolean(refresh) }))
+    }
+    // 키워드 분석 묶음 (11/12, keywordBundle.js): 대시보드 키워드 분석 · 보고서가 같은 것을 본다. 화면용이라 네이버 문장도 aiOk: false로 함께
+    if (req.method === 'GET' && req.url.startsWith('/api/bundle?')) {
+      const q = new URL(req.url, 'http://x').searchParams.get('q')
+      return send(res, 200, (await prepareBundle(q)) ?? {})
+    }
+    // 세부 카테고리 × 경쟁사 특허 (11/12, 대시보드 「이번 주 한눈에」 · keywordBundle.js). 7일 기억, 특허 DB를 다시 받으면 다시 셈
+    if (req.method === 'GET' && req.url === '/api/category-competitors') {
+      return send(res, 200, { categories: await allCategoryCompetitors(), rule: `위협: 경쟁사 중 하나가 분야 증가의 ${THREAT_FACTOR}배 이상 · 자사는 분야보다 느림 / 기회: 자사가 경쟁사 모두보다 빠르고 분야 이상` })
     }
     // 연관 키워드 (11/10, 대시보드 맵 재료 · related.js)
     if (req.method === 'GET' && req.url.startsWith('/api/related?')) {

@@ -7,6 +7,7 @@ import { dbEnabled, query } from './db/index.js'
 import { commercialQuotes } from './commercial.js'
 import { DISPLAY_CATEGORIES } from './displayCategories.js'
 import { mapMaterials } from './mapMaterials.js'
+import { patentDbReady } from './patentDb.js'
 import { cacheGet, cachePut } from './papers/index.js'
 import { queryKey } from './queryTerms.js'
 import { buildTimeline, cachedTimeline } from './timeline.js'
@@ -15,6 +16,17 @@ const TTL = 3 * 86_400_000
 const running = new Map()
 
 // ── 세부 카테고리 × 경쟁사 특허 (디스플레이 특허 DB, 같은 발명 한 번, 최근 3년 대 앞 3년) ──
+// ⚠ 11/12 받은 특허 DB는 CPC를 「/ 뒤 두 자리」까지만 저장해(G06F3/0412 → G06F3/04) 세부 코드로 정한 카테고리(터치 · TFT 일부 · 접는 기기)가 덜 세어진다
+//   → 11/13 다시 받을 때 전체 코드로 저장 (33 문서 W28). 그 전까지 0건인 카테고리는 화면에서 숨긴다
+export async function allCategoryCompetitors() {
+  const out = []
+  for (const c of DISPLAY_CATEGORIES) {
+    const r = await categoryCompetitors(c.id).catch(() => null)
+    if (r) out.push(r)
+  }
+  return out
+}
+
 // 회사는 출원인 이름 글자로 묶는다 (33 문서 W25: CSOT는 이름이 바뀌었을 수 있어 판단에서 뺀다)
 const COMPANIES = [
   { id: 'sdc', name: '삼성디스플레이', like: 'SAMSUNG DISPLAY%' },
@@ -28,7 +40,10 @@ export const THREAT_FACTOR = 1.5
 export async function categoryCompetitors(catId) {
   const cat = DISPLAY_CATEGORIES.find((c) => c.id === catId)
   if (!cat || !dbEnabled()) return null
-  const key = `cat-competitors:v1:${catId}`
+  // 특허 DB를 다시 받으면(분기 · 11/13 CPC 전체 코드) 다시 센다
+  const meta = await patentDbReady().catch(() => null)
+  if (!meta) return null
+  const key = `cat-competitors:v1:${catId}:${meta.at}`
   const hit = await cacheGet(key).catch(() => null)
   if (hit) return hit
   const last = new Date().getFullYear() - 1

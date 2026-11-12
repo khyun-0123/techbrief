@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { fetchReadyTimelines } from './api.js'
 import KeywordAnalysis, { AnalysisPreview } from './KeywordAnalysis.jsx'
 import { consumeOpenRequest, useOpenRequest, useStoryJobs } from './storyJobs.js'
+import CategoryGlance from './CategoryGlance.jsx'
 import TechTrends from './TechTrends.jsx'
 import { LAST_ANALYZED_KEY } from './utils.js'
 
@@ -203,6 +204,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
         {focus && <KeywordAnalysis key={focus} keyword={focus} onSearch={onSearch} onScopeSearch={onScopeSearch} periods={periods} period={period} onPeriod={onPeriod} />}
       </section>
 
+      <CategoryGlance />
       <TechTrends onPick={analyze} />
     </main>
   )

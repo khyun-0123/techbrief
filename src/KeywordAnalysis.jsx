@@ -5,7 +5,7 @@
 // - 오른쪽은 기술 시계열 요약(단계 · 논문 수 · 기업 저자 비율 · 특허 · 새로 늘어난 핵심어). 「자세히 · AI 흐름 정리」는 TechTimeline 창
 // 예전 「추적 중인 키워드 추이」(뉴스 수 · 검색량 · 위키 · GDELT)는 11/10 조장 결정으로 대시보드에서 뺐다 — 키워드 하나를 제대로 분석하는 쪽으로
 import { useEffect, useState } from 'react'
-import { fetchRelated, fetchTimeline, fetchTimelineStory } from './api.js'
+import { fetchBundle, fetchRelated, fetchTimeline, fetchTimelineStory } from './api.js'
 import { retryStory, useStory } from './storyJobs.js'
 import { Spark } from './KeywordTrends.jsx'
 import TechTimeline from './TechTimeline.jsx'
@@ -193,6 +193,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
   const [error, setError] = useState('')
   const [related, setRelated] = useState(null)
   const [relatedError, setRelatedError] = useState('')
+  const [bundle, setBundle] = useState(null) // 11/12 분석 묶음 (상용화 시점 문장 등, 보고서에 자동으로 들어가는 것과 같음)
   const [auto, setAuto] = useState(3) // 레버: 연관도 순으로 자동으로 고를 개수 (「일반」 말은 건너뜀)
   const [manual, setManual] = useState({}) // 노드 클릭 예외: { 말: true(켬) | false(끔) }
   const [mode, setMode] = useState('wide')
@@ -218,7 +219,14 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
     if (!keyword) return undefined
     let alive = true
     fetchTimeline(keyword)
-      .then((d) => alive && setData(d))
+      .then((d) => {
+        if (!alive) return
+        setData(d)
+        // 숫자를 받은 뒤 묶음 (서버가 /api/timeline 때 이미 만들기 시작함)
+        fetchBundle(keyword)
+          .then((b) => alive && setBundle(b))
+          .catch(() => {})
+      })
       .catch((err) => alive && setError(err.message))
     return () => {
       alive = false
@@ -402,6 +410,22 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
                         <div>
                           <dt>논문 낸 회사 (2024~)</dt>
                           <dd>{firms.join(', ')}</dd>
+                        </div>
+                      )}
+                      {data.stage?.patentRecent != null && data.stage.patentRecent >= 10 && data.stage.patentGrowth != null && (
+                        <div>
+                          <dt>특허 (같은 발명 한 번)</dt>
+                          <dd>
+                            최근 3년 {data.stage.patentRecent.toLocaleString()}건 · {data.stage.patentFieldGrowth != null ? `특허 분야 대비 ${data.stage.patentGrowth}배` : `앞 3년의 ${data.stage.patentGrowth}배`}
+                          </dd>
+                        </div>
+                      )}
+                      {bundle?.quotes?.length > 0 && (
+                        <div>
+                          <dt>상용화 시점 언급 {bundle.quotes.length}건</dt>
+                          <dd title={bundle.quotes.map((x) => `「${x.text}」 — ${x.source ?? ''}`).join('\n')}>
+                            「{bundle.quotes[0].text.slice(0, 70)}{bundle.quotes[0].text.length > 70 ? '…' : ''}」 — {bundle.quotes[0].source}
+                          </dd>
                         </div>
                       )}
                       {owners.length > 0 && (
