@@ -2,6 +2,7 @@
 // - 한국어 위키백과에서 찾고, 없으면 영어 위키백과
 // - 문서 제목을 모르므로 검색 API로 가장 맞는 문서 하나를 고른 뒤 REST 요약을 받는다
 // - 라이선스 CC BY-SA: 화면에 출처(위키백과)와 문서 링크를 같이 보여 준다 (23 문서)
+import { guardedFetch } from './sourceGuard.js'
 const UA = 'techbrief/0.1 (student project; term lookup)'
 const CACHE_MS = 24 * 3600_000
 const CACHE_MAX = 300
@@ -23,7 +24,7 @@ function throttled(fn) {
 }
 
 async function getJson(url) {
-  const res = await throttled(() => fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(10_000) }))
+  const res = await throttled(() => guardedFetch('wikipedia', url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(10_000) }))
   if (res.status === 429) throw Object.assign(new Error('위키백과가 잠시 요청을 막았어요. 1분쯤 뒤에 다시 찾아 주세요.'), { status: 429 })
   if (!res.ok) throw Object.assign(new Error(`위키백과 응답 ${res.status}`), { status: 502 })
   return res.json()

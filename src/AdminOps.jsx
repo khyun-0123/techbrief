@@ -31,6 +31,47 @@ function uptime(iso) {
 }
 
 // ops: 지금 운영 상태, onOps: 바뀐 상태 알림, health: 서버 정보, refreshRunning: 수집 중인지, dirtyCount: 저장 안 한 변경 수
+// 외부 출처 상태 (11/12, server/sourceGuard.js): 오늘 호출 수 · 하루 한도 · 쉬는 중 · 마지막 오류. 한도의 80%면 자동 수집이 멈추고 98%면 찾기도 멈춤
+function SourcesCard({ sources, llm }) {
+  if (!sources?.length) return null
+  const time = (iso) => new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+  return (
+    <section className="adm-card">
+      <h2>외부 출처 상태 (오늘)</h2>
+      <p className="adm-desc">
+        한도가 알려진 출처는 한도의 80%에서 자동 수집이, 98%에서 사람이 누른 찾기도 멈춰요. 막히면(한도 · 서버 오류) 잠시 쉬고, 그동안 찾기는 이미 모은 자료 · 논문으로 보여 줘요.
+        {' '}AI 대체 서버: {llm?.fallback ? `${llm.fallback} (사람이 누른 요청만)` : '없음 (.env.local LLM_FALLBACK)'}
+        {llm?.lastFallback && ` · 마지막 전환 ${time(llm.lastFallback.at)} ${llm.lastFallback.from} → ${llm.lastFallback.to}`}
+      </p>
+      <table className="adm-table">
+        <thead>
+          <tr>
+            <th scope="col">출처</th>
+            <th scope="col">오늘 호출</th>
+            <th scope="col">실패</th>
+            <th scope="col">하루 한도</th>
+            <th scope="col">상태</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sources.map((s) => (
+            <tr key={s.id}>
+              <td title={s.note}>{s.label}</td>
+              <td>{s.today.toLocaleString()}</td>
+              <td>{s.fails}</td>
+              <td>{s.daily ? `${s.daily.toLocaleString()} (${s.usedShare}%)` : '—'}</td>
+              <td>
+                {s.restingUntil ? <span className="adm-state bad">쉬는 중 ({time(s.restingUntil)}까지)</span> : s.usedShare >= 80 ? <span className="adm-state bad">한도 가까움</span> : '정상'}
+                {s.lastError && <small title={s.lastError.message}> · 마지막 오류 {time(s.lastError.at)}</small>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  )
+}
+
 function AdminOps({ ops, onOps, onToast, health, refreshRunning, dirtyCount }) {
   const [form, setForm] = useState({ mode: ops.mode, message: ops.message ?? '', until: ops.until ?? '' })
   const [applying, setApplying] = useState(false)
@@ -183,6 +224,8 @@ function AdminOps({ ops, onOps, onToast, health, refreshRunning, dirtyCount }) {
           </button>
         </div>
       </section>
+
+      <SourcesCard sources={health?.sources} llm={health?.llm} />
 
       <section className="adm-card">
         <div className="adm-ops-head">

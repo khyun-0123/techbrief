@@ -168,7 +168,7 @@ export async function collect(keywords) {
       let oldest = null
       let capped = false
       for (let page = 0; page < MAX_PAGES; page += 1) {
-        const items = await searchNews(word, { start: page * 100 + 1 })
+        const items = await searchNews(word, { start: page * 100 + 1, background: true })
         for (const it of items) {
           const t = Date.parse(it.pubDate)
           if (Number.isFinite(t) && (oldest === null || t < oldest)) oldest = t
@@ -361,6 +361,9 @@ export async function searchArticles(query, { period = 'all' } = {}) {
   const hours = SEARCH_PERIODS[period]
   let items = []
   let truncated = false
+  // 네이버가 한도 · 장애로 막히면 뉴스는 비우고 이유를 돌려준다 → 찾기는 이미 모은 1·2차 출처 · 논문으로 계속 (11/12, sourceGuard.js)
+  let newsError = null
+  try {
   if (hours === null) {
     items = await searchNews(q, { sort: 'sim' })
   } else {
@@ -374,13 +377,18 @@ export async function searchArticles(query, { period = 'all' } = {}) {
       if (page === SEARCH_PAGES[period] - 1) truncated = true // 기간 안 기사가 더 있지만 여기까지만
     }
   }
+  } catch (err) {
+    if (/설정이 없어요/.test(err.message)) throw err
+    console.warn(`[search] 네이버 뉴스 없이 찾음: ${err.message}`)
+    newsError = err.unavailable ? err.message : `네이버 뉴스 검색 오류 (${err.message.slice(0, 80)})`
+  }
   const articles = items.map((item, i) => ({ ...toArticle(item, q), rank: i + 1 })).filter((a) => a.url && a.title)
   const unique = [...new Map(articles.map((a) => [a.url, a])).values()]
   const issues = toIssues(unique, await getLists(), await scoreContext())
   if (dbEnabled()) await linkToCollected(issues)
   // truncated일 때 실제로 어디까지 가져왔는지 (예: '반도체' 7일 → 최신 500건이 약 7시간치)
   const oldestAt = truncated ? items.map((i) => new Date(i.pubDate).toISOString()).sort()[0] : null
-  return { query: q, period, fetched: items.length, truncated, oldestAt, articles: issues }
+  return { query: q, period, fetched: items.length, truncated, oldestAt, articles: issues, newsError }
 }
 
 // 「뉴스·논문에서 찾기」에서 이미 모아 둔 1·2차 출처 RSS 글도 같이 찾는다 (11/10)
