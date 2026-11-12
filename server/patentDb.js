@@ -74,7 +74,7 @@ export function extractSql() {
          publication_date AS pub, NULLIF(priority_date, 0) AS pd, country_code AS cc,
          (SELECT t.text FROM UNNEST(title_localized) t WHERE t.language = 'en' LIMIT 1) AS title,
          ARRAY(SELECT a.name FROM UNNEST(assignee_harmonized) a WHERE a.name IS NOT NULL) AS who,
-         ARRAY(SELECT DISTINCT REGEXP_EXTRACT(c.code, r'^[A-H]\\d\\d[A-Z]\\d+/\\d{0,2}') FROM UNNEST(cpc) c
+         ARRAY(SELECT DISTINCT REGEXP_EXTRACT(c.code, r'^[A-H]\\d\\d[A-Z]\\d+/\\d+') FROM UNNEST(cpc) c
                 WHERE REGEXP_CONTAINS(c.code, r'${DISPLAY_CPC}')) AS dcpc
     FROM \`patents-public-data.patents.publications\`
    WHERE publication_date >= ${SINCE}),

@@ -491,3 +491,19 @@ export async function fetchRelated(q) {
 export function searchScopeApi(scope, period = 'all') {
   return postJson('/api/search/scope', { ...scope, period })
 }
+
+// 세부 카테고리 × 경쟁사 특허 (11/12, 대시보드 「이번 주 한눈에」)
+export async function fetchCategoryCompetitors() {
+  const res = await fetch('/api/category-competitors')
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}
+
+// 키워드 분석 묶음 (11/12): 상용화 시점 문장 · 경쟁사 특허 등 (보고서에 자동으로 들어가는 것과 같음)
+export async function fetchBundle(q) {
+  const res = await fetch(`/api/bundle?q=${encodeURIComponent(q)}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}

@@ -3141,6 +3141,48 @@ a.brand:focus-visible {
   font-size: var(--fs-lg);
 }
 
+/* 대시보드 「세부 기술 × 경쟁사 특허」 (11/12, CategoryGlance.jsx) */
+.cg-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.cg-scroll {
+  overflow-x: auto;
+}
+.cg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.cg-table th,
+.cg-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--tb-color-line-soft);
+  text-align: left;
+  white-space: nowrap;
+}
+.cg-table thead th {
+  color: var(--tb-color-text-sub);
+  font-size: 12px;
+  font-weight: 500;
+}
+.cg-table tbody th {
+  font-weight: 500;
+}
+.cg-up {
+  color: var(--tb-color-accent);
+  font-weight: 700;
+}
+.cg-down {
+  color: var(--tb-color-warning);
+}
+.cg-note {
+  margin: 8px 0 0;
+}
+
 .dash-note {
   margin: -4px 0 4px;
   color: var(--tb-color-text-sub);
