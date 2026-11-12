@@ -4413,6 +4413,84 @@ a.brand:focus-visible {
   font-size: 14px;
 }
 
+/* 담당자 회신 형식 (11/12, 35 문서): ① 헤드라인 · ② 핵심 사실 근거 · ③ 시사점 및 제언(기회 · 위협 · 할 일) · ④ 출처, 그 아래 유첨 */
+.report-slot {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: var(--tb-color-primary);
+  color: var(--tb-color-on-primary);
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: 2px;
+}
+.report-headline {
+  margin: 12px 0 4px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--tb-color-text);
+  text-wrap: balance;
+}
+.report-sources {
+  margin: 4px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--tb-color-line);
+  font-size: 13px;
+  color: var(--tb-color-text-sub);
+}
+.report-appendix-mark {
+  margin: 20px 0 0;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--tb-color-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+.report-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+.report-tag-threat {
+  background: var(--tb-color-danger-soft);
+  color: var(--tb-color-danger);
+}
+.report-tag-chance {
+  background: var(--tb-color-accent-soft);
+  color: var(--tb-color-accent);
+}
+.report-tag-todo {
+  background: var(--tb-color-bg-strong);
+  color: var(--tb-color-text);
+}
+.report-analysis {
+  margin-top: 8px;
+}
+.report-table {
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.report-table th,
+.report-table td {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--tb-color-line-soft);
+  text-align: left;
+}
+.report-table thead th {
+  color: var(--tb-color-text-sub);
+  font-weight: 500;
+}
+.report-topic {
+  display: block;
+  margin-top: 6px;
+}
+
 /* 줄 빼기 · 근거 찾기 */
 .report-bullets li {
   position: relative;

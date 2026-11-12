@@ -9,6 +9,7 @@ import { fetchReadyTimelines } from './api.js'
 import KeywordAnalysis, { AnalysisPreview } from './KeywordAnalysis.jsx'
 import { consumeOpenRequest, useOpenRequest, useStoryJobs } from './storyJobs.js'
 import TechTrends from './TechTrends.jsx'
+import { LAST_ANALYZED_KEY } from './utils.js'
 
 function Dashboard({ stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onScopeSearch, onKeyword, onGoCollect, onRemember }) {
   const [text, setText] = useState('')
@@ -44,6 +45,12 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
   function analyze(q) {
     setFocus(q)
     setText(q)
+    // 11/12: 마지막으로 분석한 키워드 — 보고서를 만들 때 그 분석 묶음이 자동으로 근거에 들어간다 (ReportComposer, server/keywordBundle.js)
+    try {
+      localStorage.setItem(LAST_ANALYZED_KEY, JSON.stringify({ query: q, at: Date.now() }))
+    } catch {
+      // 저장소를 못 쓰면 보고서에서 주제 키워드를 직접 고른다
+    }
     onRemember?.(q)
     requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }

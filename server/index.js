@@ -12,6 +12,7 @@ import { buildTimeline, timelineStory } from './timeline.js'
 import { readyTimelines, runPrecompute, startPrecompute } from './timelineJobs.js'
 import { relatedWords } from './related.js'
 import { fillMap, mapMaterials } from './mapMaterials.js'
+import { bundleFacts, headlineSeeds, prepareBundle } from './keywordBundle.js'
 import { scopeSearch } from './scopeSearch.js'
 import { popularPapers } from './papers/journals.js'
 import { getTechTrends, startTechTrends } from './techtrends.js'
@@ -46,6 +47,7 @@ import {
   buildReportMessages,
   buildSectionMessages,
   REPORT_SCHEMA,
+  TAGS,
   SECTION_KEYS,
   SECTION_SCHEMA,
 } from './llm/reportPrompts.js'
@@ -113,9 +115,15 @@ const SAME_BULLET = 0.3
 // - 그 밖은 ai (원리 설명·일반 지식·제안)
 function cleanBullets(bullets, articles) {
   const kept = []
-  for (const b of bullets ?? []) {
+  for (let b of bullets ?? []) {
     if (!b?.text?.trim()) continue
-    const text = stripInlineRefs(b.text)
+    let text = stripInlineRefs(b.text).replace(/\s*\[AI (?:보충|제안)\]/g, '').trim()
+    // 「기회: …」처럼 표시를 글 앞에 쓴 경우 표시로 옮긴다 (11/12 실측)
+    const lead = text.match(/^(기회|위협|할 일)\s*[:：·-]\s*/)
+    if (lead) {
+      b = { ...b, tag: b.tag || lead[1] }
+      text = text.slice(lead[0].length)
+    }
     const claimed = [...new Set((b.refs ?? []).filter((n) => Number.isInteger(n) && n >= 1 && n <= articles.length))]
     const all = articles.map((_, i) => i + 1)
     const min = b.kind === 'ai' ? STRONG_OVERLAP : undefined
@@ -131,9 +139,23 @@ function cleanBullets(bullets, articles) {
       dup.refs = [...new Set([...dup.refs, ...refs])].sort((x, y) => x - y)
       continue
     }
-    kept.push({ text, refs, kind, removedRefs: claimed.filter((n) => !refs.includes(n)), han: hasHan(text) })
+    kept.push({ text, refs, kind, ...(TAGS.includes(b.tag) ? { tag: b.tag } : {}), removedRefs: claimed.filter((n) => !refs.includes(n)), han: hasHan(text) })
   }
   return kept
+}
+
+// 시사점 글머리 표시 (AI가 tag를 비웠을 때만, 규칙)
+function inferTag(text) {
+  if (/위협|격차|뒤처|추격|잠식|열세|밀리/.test(text)) return '위협'
+  if (/기회|우위|선점|앞서|가장 빠르/.test(text)) return '기회'
+  return '할 일'
+}
+// 글머리 숫자 중 근거 글(기사 · [분석])에 그대로 없는 것 (연도 · 1~2자리 정수는 흔해서 소수 · 배수 · 큰 수만 본다)
+function numbersNotIn(b, articles) {
+  if (b.kind !== 'fact' || !b.refs?.length) return []
+  const ev = b.refs.map((n) => evidenceOf(articles[n - 1] ?? {})).join(' ')
+  const nums = [...b.text.matchAll(/\d+(?:[.,]\d+)*(?=\s*(?:배|건|%|편|곳|억|조|만|인치|Hz))/g)].map((m) => m[0])
+  return [...new Set(nums)].filter((x) => !ev.includes(x))
 }
 
 function reportWarnings(sections) {
@@ -142,6 +164,8 @@ function reportWarnings(sections) {
   const ai = all.filter((b) => b.kind === 'ai').length
   if (ai) warnings.push(`AI 해설·제안 ${ai}개는 기사에서 확인된 내용이 아니에요 — 확인 후 쓰세요`)
   if (all.some((b) => b.han)) warnings.push('한자·중국어가 섞인 문장이 있어요 — 한글로 고치세요')
+  const nums = all.filter((b) => b.numCheck?.length)
+  if (nums.length) warnings.push(`근거와 다른 숫자가 있어요 (${nums.flatMap((b) => b.numCheck).join(', ')}) — 근거를 열어 확인하세요`)
   return warnings
 }
 
@@ -150,11 +174,11 @@ const BODY_BUDGET = 12_000 // 모든 기사 본문 합계(글자). LLM_NUM_CTX=1
 async function attachBodies(articles) {
   const per = Math.min(2_500, Math.floor(BODY_BUDGET / articles.length))
   // 선별할 때 저장해 둔 원문이 있으면 그것을 쓰고, 없는 것만 가져온다
-  const stored = await Promise.all(articles.map((a) => getArticleText(a.id).catch(() => null)))
-  const fetched = await fetchBodies(articles.map((a, i) => (stored[i] ? null : a.url)))
+  const stored = await Promise.all(articles.map((a) => (a.analysis ? null : getArticleText(a.id).catch(() => null))))
+  const fetched = await fetchBodies(articles.map((a, i) => (stored[i] || a.analysis ? null : a.url)))
   const bodies = stored.map((t, i) => t ?? fetched[i])
   articles.forEach((a, i) => {
-    a.body = bodies[i] ? bodies[i].slice(0, per) : null
+    a.body = a.analysis ? null : bodies[i] ? bodies[i].slice(0, per) : null
   })
   return articles
 }
@@ -211,26 +235,52 @@ async function buildReportEntry(body) {
   for (const a of picked) if (await materialBlocksAi(String(a.id ?? ''))) throw Object.assign(new Error(`AI 입력을 허용하지 않은 자료가 있어요: ${a.title}`), { status: 403 })
   const title = body.title?.trim() || '테크 동향 브리핑'
   const direction = String(body.direction ?? '').trim().slice(0, 300)
-  const opts = { title, periodLabel: body.periodLabel ?? '오늘', direction }
+  // 11/12 조장: 대시보드에서 분석한 키워드는 보고서에 「당연히」 들어간다 — 주제 키워드의 분석 묶음(keywordBundle.js)을 [분석] 근거로 자동으로 붙인다
+  // 주제 키워드: 화면이 보낸 topics(대시보드에서 고른 범위의 중심 키워드). 묶음이 없으면 20초까지 만들어 보고, 못 만들면 없이 쓴다
+  const topics = [...new Set((body.topics ?? []).map((t) => String(t).trim()).filter(Boolean))].slice(0, 3)
+  const bundles = (
+    await Promise.all(topics.map((t) => Promise.race([prepareBundle(t), new Promise((res) => setTimeout(() => res(null), 20_000))]).catch(() => null)))
+  ).filter(Boolean)
+  const facts = bundles.flatMap(bundleFacts).map((f, i) => ({ ...f, n: picked.length + i + 1 }))
+  const opts = { title, periodLabel: body.periodLabel ?? '오늘', direction, topics, seeds: bundles.flatMap(headlineSeeds).slice(0, 4) }
   const long = picked.length > MAX_REPORT_ARTICLES
-  const articles = long ? picked : await attachBodies(picked)
+  const articles = [...(long ? picked : await attachBodies(picked)), ...facts]
   const { data, model } = long ? await draftLongReport(articles, opts) : await draftReport(articles, opts)
   const sections = Object.fromEntries(
     SECTION_KEYS.map((k) => [k, { bullets: cleanBullets(data.sections?.[k]?.bullets, articles) }]),
   )
+  // ① 헤드라인: 근거 정리는 글머리와 같은 규칙. 「~할 수 있음」 같은 제안이면 ai로 남는다
+  const headline = data.headline?.text?.trim() ? cleanBullets([data.headline], articles)[0] ?? null : null
+  // ③ 시사점 표시를 AI가 빠뜨리면 규칙으로 채운다 (기회 · 위협 · 할 일)
+  for (const b of sections.implications.bullets) b.tag ??= inferTag(b.text)
+  // 숫자 확인 (작업 원칙 2): 사실 글머리의 숫자가 근거 글에 없으면 표시 (11/12 실측: 2.04배 → 「2.1배」로 반올림)
+  for (const b of [headline, ...Object.values(sections).flatMap((x) => x.bullets)].filter(Boolean)) {
+    const bad = numbersNotIn(b, articles)
+    if (bad.length) b.numCheck = bad
+  }
+  // ④ 출처: AI가 아니라 서버가 센다 (담당자 회신: 수집 기간과 기사 수)
+  const dates = picked.map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite).sort((a, b) => a - b)
+  const day = (t) => new Date(t + 9 * 3600_000).toISOString().slice(0, 10)
+  const sources = {
+    period: dates.length ? `${day(dates[0])} ~ ${day(dates[dates.length - 1])}` : null,
+    articles: picked.length,
+    analysis: facts.length ? [...new Set(facts.map((f) => f.source))] : [],
+    topics,
+  }
   const createdAt = new Date().toISOString()
   // 보고서함에 넣을 한 건. DB가 있으면 서버에 저장하고, 없으면 화면이 브라우저에 저장한다
   const entry = {
     id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
     articleKey: articles.map((a) => String(a.id ?? '')).sort().join('|'),
-    report: { title, direction, sections, warnings: [...reportWarnings(sections), ...(data.warnings ?? [])] },
+    // analysis: 유첨 그래프용 분석 묶음 (규칙 숫자, 화면 전용 — report와 함께 저장돼 다시 열어도 보인다)
+    report: { title, direction, headline, sections, sources, analysis: bundles.map((b) => ({ keyword: b.keyword, stage: b.stage, patentYears: b.patentYears, competitors: b.competitors, owners: b.owners, quotes: b.quotes })), warnings: [...reportWarnings(sections), ...(headline?.numCheck?.length ? [`헤드라인 숫자가 근거와 달라요 (${headline.numCheck.join(', ')}) — 확인하세요`] : []), ...(headline && !headline.refs.length ? ['헤드라인에 근거 번호가 없어요 — AI 해설로 보고 확인하세요'] : []), ...(data.warnings ?? [])] },
     model,
     createdAt,
     periodLabel: body.periodLabel ?? '오늘',
     ...(long ? { chunks: Math.ceil(articles.length / REPORT_CHUNK) } : {}),
     // fulltext: 원문 본문을 반영했는지 (화면 근거 기사 목록에 표시). 본문 자체는 저장하지 않는다
-    articles: articles.map(({ title: t, source, url, publishedAt, body: b }) => ({ title: t, source, url, publishedAt, fulltext: Boolean(b) })),
-    inputs: articles.map(({ n: _n, body: _b, ...rest }) => rest),
+    articles: articles.map(({ title: t, source, url, publishedAt, body: b, analysis, description }) => ({ title: t, source, url, publishedAt, fulltext: Boolean(b), ...(analysis ? { analysis: true, description } : {}) })),
+    inputs: picked.map(({ n: _n, body: _b, ...rest }) => rest),
   }
   return entry
 }
@@ -525,7 +575,10 @@ export async function handleApi(req, res) {
     // 기술 시계열 (11/10): 숫자 · 단계는 규칙으로(buildTimeline), 글은 AI가 따로(timelineStory, 1분 안팎)
     if (req.method === 'POST' && req.url === '/api/timeline') {
       const { query, refresh = false } = await readJson(req)
-      return send(res, 200, await buildTimeline(query, { refresh: Boolean(refresh) }))
+      const tl = await buildTimeline(query, { refresh: Boolean(refresh) })
+      // 11/12: 분석한 키워드는 보고서에 쓸 묶음을 뒤에서 미리 만들어 둔다 (keywordBundle.js, 3일 기억)
+      prepareBundle(query, { refresh: Boolean(refresh) }).catch((err) => console.warn(`[bundle] ${query}: ${err.message}`))
+      return send(res, 200, tl)
     }
     if (req.method === 'GET' && req.url === '/api/timeline/ready') {
       return send(res, 200, await readyTimelines())

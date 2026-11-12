@@ -5,9 +5,11 @@
 // - AI 해설 보충은 보고서를 만들 때 대기열에서 자동으로 한다(자료 조사 수준). 보충한 줄은 「근거 보충」 표시
 import { useState } from 'react'
 import { exportPptx, printReport } from './reportExport.js'
-import { formatDate, kindOf, SECTIONS } from './reportStore.js'
+import { APPENDIX, formatDate, kindOf, SECTIONS, sourcesLine } from './reportStore.js'
 import { track } from './usage.js'
 
+// 시사점 및 제언의 표시 (담당자 회신: 자사에 기회인지 위협인지, 할 일은 무엇인지)
+const TAG_CLASS = { 기회: 'chance', 위협: 'threat', '할 일': 'todo' }
 const SUPPLEMENT_LABEL = { data: '우리 자료', wiki: '위키백과', 'data+wiki': '우리 자료 · 위키백과' }
 
 // tools: 보고서 맨 위 오른쪽 도구 줄 (복사·지우기 등) · onChange(entry): 고친 보고서 저장 (없으면 보기만)
@@ -115,6 +117,20 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, lead, onChange
           </span>
         </header>
         {report.direction && <p className="report-direction">방향: {report.direction}</p>}
+        {/* ① 헤드라인 (11/12, 담당자 회신: 결론 핵심 문장). 예전 보고서에는 없음 */}
+        {report.headline?.text && (
+          <p className="report-headline">
+            <span className="report-slot">헤드라인</span>
+            {report.headline.text}
+            {report.headline.refs?.map((n) => (
+              <a key={n} className="report-ref" href={`#ref-${saved.id}-${n}`} title={saved.articles[n - 1]?.title}>
+                [{n}]
+              </a>
+            ))}
+            {kindOf(report.headline) === 'ai' && <span className="report-ai-chip">AI 해설 · 확인 필요</span>}
+            {report.headline.numCheck?.length > 0 && <span className="basis basis-noref">숫자 확인: {report.headline.numCheck.join(', ')}</span>}
+          </p>
+        )}
 
         {report.warnings?.length > 0 &&
           (stacked ? (
@@ -145,12 +161,23 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, lead, onChange
         )}
 
         {SECTIONS.map(([key, label]) => {
+          const firstAppendix = APPENDIX.has(key) && key === SECTIONS.find(([k]) => APPENDIX.has(k))[0]
           const list = (report.sections[key]?.bullets ?? []).map((b, i) => ({ b, i }))
           const facts = list.filter(({ b }) => !b.excluded && kindOf(b) === 'fact')
           const ai = list.filter(({ b }) => !b.excluded && kindOf(b) === 'ai')
           const out = list.filter(({ b }) => b.excluded)
           return (
             <section key={key} className="report-section">
+              {firstAppendix && (
+                <>
+                  {/* ④ 출처 (서버가 센 값) → 그 아래부터 유첨 */}
+                  <p className="report-sources">
+                    <span className="report-slot">출처</span>
+                    {sourcesLine(saved)}
+                  </p>
+                  <p className="report-appendix-mark">유첨</p>
+                </>
+              )}
               <div className="report-section-head">
                 <h3>{label}</h3>
                 {onRegenerate && (
@@ -165,6 +192,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, lead, onChange
                   {facts.map(({ b, i }) => (
                     <li key={i}>
                       <span className="line-text">
+                        {b.tag && <span className={`report-tag report-tag-${TAG_CLASS[b.tag] ?? 'todo'}`}>{b.tag}</span>}
                         {b.text}
                         {b.refs.map((n) => (
                           <a key={n} className="report-ref" href={`#ref-${saved.id}-${n}`} title={saved.articles[n - 1]?.title}>
@@ -177,6 +205,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, lead, onChange
                           </span>
                         )}
                         {b.han && <span className="basis basis-ai_background">한자 확인</span>}
+                        {b.numCheck?.length > 0 && <span className="basis basis-noref">숫자 확인: {b.numCheck.join(', ')}</span>}
                       </span>
                       {lineTools(key, i, b)}
                     </li>
@@ -190,6 +219,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, lead, onChange
                     {ai.map(({ b, i }) => (
                       <li key={i}>
                         <span className="line-text">
+                          {b.tag && <span className={`report-tag report-tag-${TAG_CLASS[b.tag] ?? 'todo'}`}>{b.tag}</span>}
                           {b.text}
                           {b.noRef && <span className="basis basis-noref">근거 못 찾음{b.noRef.tried ? ` (자료 ${b.noRef.tried}건 확인)` : ''}</span>}
                           {b.han && <span className="basis basis-ai_background">한자 확인</span>}
@@ -221,6 +251,45 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, lead, onChange
             </section>
           )
         })}
+
+        {report.analysis?.some((a) => a.competitors) && (
+          <section className="report-section">
+            <div className="report-section-head">
+              <h3>분석 자료 (규칙 계산)</h3>
+            </div>
+            {report.analysis
+              .filter((a) => a.competitors)
+              .map((a) => (
+                <div key={a.keyword} className="report-analysis">
+                  <p className="hint">
+                    {a.keyword}
+                    {a.stage && ` · 단계 ${a.stage.stage}`} · 「{a.competitors.name}」 특허 (같은 발명 한 번, {a.competitors.years})
+                    {a.competitors.verdict && <span className={`report-tag report-tag-${TAG_CLASS[a.competitors.verdict]}`}>자사에 {a.competitors.verdict}</span>}
+                  </p>
+                  <table className="report-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">회사</th>
+                        <th scope="col">앞 3년</th>
+                        <th scope="col">최근 3년</th>
+                        <th scope="col">변화</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...a.competitors.companies.filter((c) => !c.unsure), { name: '분야 전체', ...a.competitors.field }].map((c) => (
+                        <tr key={c.name}>
+                          <th scope="row">{c.name}</th>
+                          <td>{c.before?.toLocaleString()}</td>
+                          <td>{c.now?.toLocaleString()}</td>
+                          <td>{c.ratio != null ? `${c.ratio}배` : '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+          </section>
+        )}
 
         <p className="hint">AI가 만든 초안이에요. 근거 기사를 확인하고 고쳐 쓰세요. · 모델 {saved.model}</p>
       </article>

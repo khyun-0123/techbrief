@@ -8,7 +8,7 @@ import { createReportJob } from './api.js'
 import { articleKey } from './reportStore.js'
 import { clientId, track } from './usage.js'
 import { AI_BLOCKED_TITLE, useOps } from './ops.js'
-import { load } from './utils.js'
+import { LAST_ANALYZED_KEY, load } from './utils.js'
 
 const DRAFT_INPUT_KEY = 'techbrief-report-input' // 제목 · 방향 · 조사 수준 (쓰던 것 남기기)
 const LAST_SCOPE_KEY = 'techbrief.lastScope' // 대시보드에서 마지막으로 고른 범위 (App.jsx runScopeSearch, 11/10)
@@ -116,6 +116,13 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
   const [direction, setDirection] = useState(saved0.direction ?? '')
   const [lastScope] = useState(() => load(LAST_SCOPE_KEY, null))
   const scopeText = scopeLine(lastScope)
+  // 주제 키워드 (11/12): 대시보드에서 마지막으로 분석한 키워드(또는 고른 범위의 중심). 그 분석(단계 · 특허 · 경쟁사 · 상용화 문장)이
+  // 보고서 근거 [분석]으로 자동으로 들어간다. 7일이 지났으면 쓰지 않는다. ×로 뺄 수 있다
+  const [topic, setTopic] = useState(() => {
+    const a = load(LAST_ANALYZED_KEY, null)
+    const fresh = a?.query && Date.now() - (a.at ?? 0) < 7 * 86_400_000 ? a.query : null
+    return lastScope?.query ?? fresh
+  })
   const [level, setLevel] = useState(saved0.level ?? 'owned')
   const [mode, setMode] = useState('top')
   const [sending, setSending] = useState(false)
@@ -151,7 +158,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
     setSending(true)
     setError('')
     try {
-      const job = await createReportJob({ articles, aiSummaries, title, direction, level, periodLabel: periodOf(articles), mode: useAll ? 'all' : undefined, clientId: clientId() })
+      const job = await createReportJob({ articles, aiSummaries, title, direction, topics: topic ? [topic] : [], level, periodLabel: periodOf(articles), mode: useAll ? 'all' : undefined, clientId: clientId() })
       track('report')
       onJobAdded?.(job)
     } catch (err) {
@@ -227,6 +234,16 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
                 placeholder="예: WOLED 관점에서 마이크로LED가 위협이 되는 시점과 대응 방향 위주로"
                 maxLength={300}
               />
+              {topic ? (
+                <span className="hint report-topic">
+                  주제 키워드: <strong>{topic}</strong> — 대시보드 분석(단계 · 특허 · 경쟁사 · 상용화 문장)이 근거 [분석]으로 함께 들어가요. 헤드라인은 이 키워드의 결론으로 써요{' '}
+                  <button type="button" className="link-btn" onClick={() => setTopic(null)}>
+                    빼기
+                  </button>
+                </span>
+              ) : (
+                <span className="hint report-topic">주제 키워드 없음 — 대시보드에서 키워드를 분석하면 그 분석이 보고서 근거로 함께 들어가요</span>
+              )}
               {scopeText && !direction.includes(scopeText) && (
                 <button
                   type="button"
