@@ -11,6 +11,7 @@ import { corpusStatus, startCorpus } from './papers/corpus.js'
 import { buildTimeline, timelineStory } from './timeline.js'
 import { readyTimelines, runPrecompute, startPrecompute } from './timelineJobs.js'
 import { relatedWords } from './related.js'
+import { fillMap, mapMaterials } from './mapMaterials.js'
 import { scopeSearch } from './scopeSearch.js'
 import { popularPapers } from './papers/journals.js'
 import { getTechTrends, startTechTrends } from './techtrends.js'
@@ -542,7 +543,9 @@ export async function handleApi(req, res) {
     // 연관 키워드 (11/10, 대시보드 맵 재료 · related.js)
     if (req.method === 'GET' && req.url.startsWith('/api/related?')) {
       const q = new URL(req.url, 'http://x').searchParams.get('q')
-      return send(res, 200, await relatedWords(q))
+      // 11/12: 뉴스에서 함께 나온 말 + 우리 DB 재료(특허 출원인 · 논문 핵심어 · 기업). 재료를 못 만들면 뉴스 맵만
+      const [news, materials] = await Promise.all([relatedWords(q), mapMaterials(q).catch(() => null)])
+      return send(res, 200, { ...news, nodes: fillMap(news.nodes, materials), materials })
     }
     // 범위 찾기 (11/10): 중심 키워드 + 고른 말 (scopeSearch.js)
     if (req.method === 'POST' && req.url === '/api/search/scope') {

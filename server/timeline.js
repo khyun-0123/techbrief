@@ -131,7 +131,7 @@ function tsq(terms, params) {
     .join(' || ')
 }
 
-async function corpusFacts(terms) {
+export async function corpusFacts(terms) {
   if (!dbEnabled()) return null
   const params = []
   const q = tsq(terms, params)
@@ -513,7 +513,7 @@ function storyInput(tl) {
 }
 
 // 디스플레이 근거가 적은 이유 (화면 · AI 흐름 정리 공통)
-const THIN_MIN = 15
+export const THIN_MIN = 15
 // 11/11 이전에 기억해 둔 값에는 thin이 없다 → 꺼낼 때 채운다
 const withThin = (tl) => (tl.thin !== undefined ? tl : { ...tl, thin: tl.display ? null : thinReason(tl.corpus) })
 function thinReason(corpus) {

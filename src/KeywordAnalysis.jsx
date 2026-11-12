@@ -16,6 +16,15 @@ const H = 360
 
 // 임시 맵: 가운데 키워드, 안쪽 고리에 연관도 높은 말, 바깥 고리에 나머지. 종류는 색이 아니라 모양(채움 · 점선 · 글자만)으로
 const KIND_LABEL = { tech: '기술', company: '회사', general: '일반' }
+// 노드가 맵에 들어온 까닭 (11/12: 뉴스 · 특허 출원인 · 논문 핵심어 재료, server/mapMaterials.js)
+const nodeWhy = (n) =>
+  [
+    (n.src ?? ['뉴스']).includes('뉴스') && `뉴스에서 함께 나온 이슈 ${n.score}개`,
+    n.patents != null && `특허 출원 ${n.patents}건`,
+    n.papers != null && `논문 ${n.papers}편`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 const MAP_MAX = 14
 function ScopeMap({ keyword, nodes, isOn, onToggle }) {
   const shown = nodes.slice(0, MAP_MAX)
@@ -62,7 +71,7 @@ function ScopeMap({ keyword, nodes, isOn, onToggle }) {
             role="checkbox"
             tabIndex={0}
             aria-checked={on}
-            aria-label={`${KIND_LABEL[n.kind]} ${n.word} · 함께 나온 이슈 ${n.score}개`}
+            aria-label={`${KIND_LABEL[n.kind]} ${n.word} · ${nodeWhy(n)}`}
             onClick={() => onToggle(n.word)}
             onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onToggle(n.word))}
           >
@@ -71,7 +80,7 @@ function ScopeMap({ keyword, nodes, isOn, onToggle }) {
               {on ? '✓ ' : ''}
               {label(n.word)}
             </text>
-            <title>{`${n.word} · ${KIND_LABEL[n.kind]} · 함께 나온 이슈 ${n.score}개`}</title>
+            <title>{`${n.word} · ${KIND_LABEL[n.kind]} · ${nodeWhy(n)}`}</title>
           </g>
         )
       })}
@@ -302,7 +311,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
                   )}
                 </div>
                 <span className="ka-legend">
-                  <span className="ka-key ka-key-tech" aria-hidden="true" /> 기술 <span className="ka-key ka-key-firm" aria-hidden="true" /> 회사 <span className="ka-key ka-key-general" aria-hidden="true" /> 일반 · 선 굵기 = 함께 나온 이슈 수 (뉴스 {related.issues}개 이슈 기준)
+                  <span className="ka-key ka-key-tech" aria-hidden="true" /> 기술 <span className="ka-key ka-key-firm" aria-hidden="true" /> 회사 <span className="ka-key ka-key-general" aria-hidden="true" /> 일반 · 재료: 뉴스(함께 나온 말, {related.issues}개 이슈) · 특허 출원인 · 논문 핵심어 (노드에 마우스를 올리면 출처)
                 </span>
               </>
             ) : (
