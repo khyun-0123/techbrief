@@ -94,6 +94,11 @@ function TechTimeline({ query, onClose, initialData = null, job = null }) {
                 <span className="muted"> · {STAGE_HINT[data.stage.stage] ?? ''} (비교: {data.stage.years}, 규칙으로 판정)</span>
               </span>
             </div>
+            {data.stage.attention?.label && (
+              <p className="hint" title={data.stage.attention.basis}>
+                관심 대 실질: {data.stage.attention.label} <span className="muted">({data.stage.attention.basis})</span>
+              </p>
+            )}
             {data.thin && (
               <p className="hint" role="note">
                 참고: {data.thin}
