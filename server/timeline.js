@@ -18,9 +18,9 @@ import { patentHistory, patternFromTerms } from './patents.js'
 import { englishTerms, openAlexQuery, queryKey } from './queryTerms.js'
 
 const DAY = 86_400_000
-// 기억 열쇠. 단계 기준(11/11 C)이 바뀌어 v2: 예전 단계 · 그 단계로 쓴 AI 정리는 다시 만든다 (열 때 또는 미리 분석 때)
-const TL_KEY = 'timeline:v2:'
-const STORY_KEY = 'timeline-story:v2:'
+// 기억 열쇠. 단계 기준이 바뀌면 올린다 (v2 11/11 분야 대비, v3 11/12 특허 · 관심 대 실질): 예전 단계 · 그 단계로 쓴 AI 정리는 다시 만든다 (열 때 또는 미리 분석 때)
+const TL_KEY = 'timeline:v3:'
+const STORY_KEY = 'timeline-story:v3:'
 const TTL = 7 * DAY
 const PATENT_TTL = 30 * DAY
 const PERIODS = [
@@ -32,11 +32,13 @@ const periodOf = (y) => PERIODS.find((p) => y >= p.from && y <= p.to)?.id ?? nul
 const topicFilter = `primary_topic.id:${DISPLAY_TOPICS.map((t) => t.id).join('|')}`
 
 // ── 논문 (장기 · OpenAlex) ──
-// display가 아니면(우리 논문 DB에 맞는 논문이 적음) 전체 분야에서 찾으므로 표현 그대로("…")만 센다
+// 표현 그대로("…")만 센다. display가 아니면(우리 논문 DB에 맞는 논문이 적음) 전체 분야에서
 // (11/11 검수: 따옴표 없이 찾으면 「media facade」가 media 또는 facade만 들어간 논문까지 해마다 수천 편으로 잡힘)
 async function longPapers(en, display, terms = []) {
   const filter = ['type:article|review|conference-paper', ...(display ? [topicFilter] : [])].join(',')
-  const search = display || !terms.length ? en : phraseVariants(terms).map((v) => `"${v}"`).join(' OR ')
+  // 11/12: 디스플레이 주제 안에서도 표현 그대로만 센다. 따옴표 없이 찾으면 「plasma display panel」이 display · panel만 든 논문까지 세어
+  //   PDP의 정점이 2020~2022로 나왔다 (33 문서 3장 검증). 표현이 없으면(영문 검색어 없음) 예전처럼
+  const search = !terms.length ? en : phraseVariants(terms).map((v) => `"${v}"`).join(' OR ')
   const data = await openAlexGet(`/works?search=${encodeURIComponent(search)}&filter=${filter}&group_by=publication_year`)
   const now = new Date().getFullYear()
   return (data.group_by ?? [])
@@ -205,14 +207,43 @@ async function patents(terms, { cacheOnly = false } = {}) {
 // ── 단계 판정 (규칙) ──
 // 끝난 해만 비교: 최근 3년(작년까지) 대 그 앞 3년. 기업 저자 비율 변화로 상용화 쪽인지 본다
 // 분야 전체 대비 증가 기준 (rel = 그 기술 증가 ÷ 분야 전체 증가). 출발값, 여러 기술로 돌려 보고 조정
-const REL_FAST = 1.4
+const REL_FAST = 1.3 // 11/12: 알려진 기술 12개 검증으로 1.4 → 1.3 (QD-OLED 1.37 · 마이크로 LED 1.34가 「완만」으로 나왔음, 33 문서 3장)
 const REL_MILD = 1.15
 const REL_FLAT = 0.85
+const PEAK_DROP = 0.6
 const sumYears = (list, from, to) => list.filter((x) => x.y >= from && x.y <= to).reduce((a, x) => a + x.n, 0)
 // base: 분야 전체 해마다 논문 수 (없으면 예전처럼 그 기술의 증가만 본다)
 // 11/11 C: 검수에서 37개 중 26개가 「연구 지속」 — 분야 전체가 3년에 1.2배쯤 늘어 1.5배 미만을 모두 「비슷」으로 봤기 때문.
 //   이제 「분야 전체보다 몇 배 빠른가」(rel)로 보고, 조금 빠른 것은 「완만한 성장」으로 따로 둔다
-function stageOf(long, corpus, pat, base = []) {
+// 개발 · 상용화 신호 (11/12, 33 문서 2장): 특허를 먼저 본다 — 기술 수명 주기(TLC) 연구의 주된 재료가 특허다 (Haupt 외 2007, Gao 외 2013).
+// 특허를 못 받았을 때만 기업 저자 비율을 쓴다 (11/10 처음 값, 레퍼런스 근거 없음 → 보조)
+// PAT_MIN: 최근 3년 특허 10건 이상일 때만 판단 (Porter 외 2019의 「최소 7건」과 같은 일회성 방지, 10은 우리 판단)
+const PAT_MIN = 10
+function devSignal(patRecent, patGrowth, shareNow, need) {
+  if (patRecent != null) return { on: patRecent >= PAT_MIN && patGrowth >= need.patent, by: 'patent' }
+  if (shareNow != null) return { on: shareNow >= need.share, by: 'company' }
+  return { on: false, by: null }
+}
+
+// 관심 대 실질 (11/12, 33 문서 2장): 검색 관심도(네이버 데이터랩, 최근 12달 vs 그 전 12달)와 논문 · 특허 증가를 나란히 본다.
+// 근거: 논문 · 특허는 S곡선, 뉴스 · 관심은 반짝 오르내리는 모양 (BIMATEM, Scientometrics 2018), 관심 측정에 검색량 (Steinert · Leifer 2010).
+// 하이프 사이클 「몇 단계」라고는 하지 않는다 (실증 연구에서 잘 안 맞음). 검색 관심도는 규칙 계산 · 그래프에만 쓰고 AI에는 넣지 않는다 (약관)
+const INTEREST_UP = 1.3
+const INTEREST_DOWN = 0.77
+function attentionOf(naver, substanceUp) {
+  const months = naver?.status === 'ok' ? naver.months ?? [] : []
+  if (months.length < 24) return null
+  const sum = (list) => list.reduce((a, p) => a + p.v, 0)
+  const cur = sum(months.slice(-12))
+  const prev = sum(months.slice(-24, -12))
+  const g = (cur + 12) / (prev + 12) // 보정: 한 달 1 (값은 그 용어 최대 = 100인 상대값)
+  const up = g >= INTEREST_UP
+  const down = g <= INTEREST_DOWN
+  const label = up && substanceUp ? '관심과 연구 · 개발이 함께 오름' : up ? '관심이 연구 · 개발보다 앞섬 (화제성일 수 있음)' : substanceUp ? '연구 · 개발이 관심보다 앞섬 (아직 덜 알려짐)' : down ? '관심이 줄어드는 중' : null
+  return { label, interestGrowth: Math.round(g * 100) / 100, basis: `네이버 검색 관심도 최근 12달 vs 그 전 12달 ${g.toFixed(1)}배` }
+}
+
+function stageOf(long, corpus, pat, base = [], naver = null) {
   const last = new Date().getFullYear() - 1
   const recent = sumYears(long, last - 2, last)
   const before = sumYears(long, last - 5, last - 3)
@@ -227,27 +258,51 @@ function stageOf(long, corpus, pat, base = []) {
   const patRecent = pat?.years ? sumYears(pat.years, last - 2, last) : null
   const patBefore = pat?.years ? sumYears(pat.years, last - 5, last - 3) : null
   const patGrowth = patRecent != null ? (patRecent + 1) / (patBefore + 1) : null
+  // 정점 대비 (11/12): 3년 대 3년만 보면 이미 정점을 지나 내려온 기술(예: PDP)이 「낮은 수준에서 평평」으로 보인다.
+  // 기술 수명 주기 개념(도입 → 성장 → 성숙 → 쇠퇴)대로, 최근 3년이 지난 정점 3년의 60% 미만이면 쇠퇴로 본다 (60%는 우리 판단)
+  let peak = 0
+  let peakEnd = null
+  for (let y = 2002; y <= last; y += 1) {
+    const v = sumYears(long, y - 2, y)
+    if (v > peak) [peak, peakEnd] = [v, y]
+  }
+  const pastPeak = peak > 0 && peakEnd <= last - 3 && recent < PEAK_DROP * peak
+  const patText = patRecent != null ? ` · 특허 최근 3년 ${patRecent}건 (앞 3년의 ${patGrowth.toFixed(1)}배)` : ''
+  const shareText = shareNow != null ? ` · 기업 저자 비율 ${Math.round(shareNow * 100)}%` : ''
+  // 개발 신호가 무엇으로 판단됐는지 함께 적는다 (특허가 없으면 기업 저자 비율로 대신했다고)
+  const devText = (d) => (d.by === 'patent' ? patText : d.by === 'company' ? `${shareText} (특허 자료 없음 → 기업 저자 비율로 판단)` : '')
   let stage
   let why
   if (recent < 15) {
     stage = '신생 · 탐색'
     why = `최근 3년 논문 ${recent}편으로 아직 적음`
+  } else if (pastPeak) {
+    stage = '정체 · 감소'
+    why = `최근 3년 논문 ${recent}편이 정점(${peakEnd - 2}~${peakEnd}, ${peak}편)의 ${Math.round((recent / peak) * 100)}%${patText}`
   } else if (rel >= REL_FAST) {
-    stage = shareNow != null && shareNow >= 0.2 ? '성장 · 상용화 진입' : '연구 성장'
-    why = `논문이 앞 3년보다 ${growth.toFixed(1)}배${vsBase}${shareNow != null ? ` · 기업 저자 비율 ${Math.round(shareNow * 100)}%` : ''}`
+    // 성장: 특허도 함께 늘면(1.2배 이상) 개발 · 상용화 쪽
+    const d = devSignal(patRecent, patGrowth, shareNow, { patent: 1.2, share: 0.2 })
+    stage = d.on ? '성장 · 상용화 진입' : '연구 성장'
+    why = `논문이 앞 3년보다 ${growth.toFixed(1)}배${vsBase}${devText(d)}`
   } else if (rel >= REL_MILD) {
     stage = '완만한 성장'
-    why = `논문이 앞 3년보다 ${growth.toFixed(1)}배${vsBase}${shareNow != null ? ` · 기업 저자 비율 ${Math.round(shareNow * 100)}%` : ''}`
+    why = `논문이 앞 3년보다 ${growth.toFixed(1)}배${vsBase}${patText || shareText}`
   } else if (rel >= REL_FLAT) {
-    stage = shareNow != null && shareNow >= 0.25 ? '성숙 · 상용화' : '연구 지속'
-    why = `논문이 앞 3년보다 ${growth.toFixed(1)}배로 분야 전체와 비슷${vsBase}${shareNow != null ? ` · 기업 저자 비율 ${Math.round(shareNow * 100)}%` : ''}`
+    // 논문이 분야만큼: 특허가 줄지 않고(0.85배 이상) 이어지면 성숙 · 상용화
+    const d = devSignal(patRecent, patGrowth, shareNow, { patent: 0.85, share: 0.25 })
+    stage = d.on ? '성숙 · 상용화' : '연구 지속'
+    why = `논문이 앞 3년보다 ${growth.toFixed(1)}배로 분야 전체와 비슷${vsBase}${devText(d)}`
   } else {
     stage = '정체 · 감소'
-    why = `논문이 앞 3년의 ${growth.toFixed(1)}배${vsBase}`
+    why = `논문이 앞 3년의 ${growth.toFixed(1)}배${vsBase}${patText}`
   }
+  const substanceUp = recent >= 15 && (rel >= REL_MILD || (patRecent != null && patRecent >= PAT_MIN && patGrowth >= 1.2))
   return {
     stage,
     why,
+    attention: attentionOf(naver, substanceUp),
+    patentRecent: patRecent,
+    peak: peakEnd ? { years: `${peakEnd - 2}~${peakEnd}`, papers: peak } : null,
     growth: Math.round(growth * 100) / 100,
     baseGrowth: baseGrowth != null ? Math.round(baseGrowth * 100) / 100 : null,
     relGrowth: Math.round(rel * 100) / 100,
@@ -274,7 +329,7 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
       // 미리 분석해 둔 값에 특허만 채운다
       const pat = await patents(hit.terms).catch((err) => ({ status: 'error', error: err.message }))
       const out = { ...hit, patents: pat }
-      out.stage = stageOf(out.long.length ? out.long : (out.corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n })), out.corpus, pat.status === 'ok' ? pat : null, out.base ?? [])
+      out.stage = stageOf(out.long.length ? out.long : (out.corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n })), out.corpus, pat.status === 'ok' ? pat : null, out.base ?? [], out.naver)
       await cachePut(key, out, pat.status === 'error' ? 10 * 60_000 : TTL).catch(() => {})
       return { ...withThin(out), cached: false }
     }
@@ -305,7 +360,7 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
   const basis = out.long.length ? out.long : (corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n }))
   // 기준선: OpenAlex 숫자로 판정할 때만 (논문 DB 숫자로 판정할 때는 기준선 단위가 달라 쓰지 않음)
   out.base = out.long.length ? base.value ?? [] : []
-  out.stage = stageOf(basis, corpus, out.patents.status === 'ok' ? out.patents : null, out.base)
+  out.stage = stageOf(basis, corpus, out.patents.status === 'ok' ? out.patents : null, out.base, out.naver)
   if (!out.long.length && basis.length) out.stage.why += ' (OpenAlex 응답이 없어 논문 DB 기준)'
   // 디스플레이 근거가 적은 말: 다른 분야 논문이 섞일 수 있어 숫자 · 단계는 참고만, AI 흐름 정리는 하지 않는다 (11/11 검수: DDI → 유전체 · 전력 소자 논문)
   out.thin = display ? null : thinReason(corpus)
