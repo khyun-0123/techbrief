@@ -29,7 +29,7 @@ const CATEGORIES = ['패널·디스플레이 기술', '공정·장비', '소재�
 export const SOURCES = [
   { id: 'naver', label: '네이버 검색량', axis: '관심', unit: '', daily: true, smooth: 5, min: 10, note: '네이버 데이터랩 · 용어마다 그 기간 최대 100' },
   { id: 'wiki', label: 'Wikipedia 조회수', axis: '관심', unit: '회', daily: true, smooth: 30, min: 50, note: '영문 Wikipedia 문서 조회수' },
-  { id: 'reddit', label: 'Reddit 글 수', axis: '현장 반응', unit: '건', daily: true, smooth: 1, min: 3, note: 'Reddit 검색 RSS · 최신 100건씩 쌓음' },
+  { id: 'reddit', label: 'Reddit 글 수', axis: '현장 반응', unit: '건', daily: true, smooth: 1, min: 3, note: 'Reddit 검색 RSS · 최신 100건씩 쌓음 · 11/13 종료 보도: 멈추면 점수에서 빠지고 네이버 · 위키로 계산' },
   { id: 'openalex', label: '논문 수', axis: '연구', unit: '편', daily: false, smooth: 1, min: 3, note: 'OpenAlex(막히면 Semantic Scholar · arXiv) · 제목·초록 · 월별 · 하루 한 번' },
   { id: 'patents', label: '특허 공개 건수', axis: '개발·투자', unit: '건', daily: false, smooth: 2, min: 5, note: 'Google Patents · 영문 제목 · 월별 (공개까지 약 18개월 늦음)' },
 ]
@@ -546,6 +546,9 @@ async function fetchPatents(keys) {
 // Reddit 검색 RSS: 최신 100건씩 받아 글 번호·날짜를 쌓는다. 처음에는 그 100건이 덮는 기간만 있음
 // ⚠️ 보도에 따르면 Reddit RSS는 2026-11-13 종료 예정, 무료 Data API도 2027-03 종료 (25 문서 · 23 문서)
 async function fetchReddit(keys) {
+  // 11/12: Reddit 검색 RSS 종료 보도(11/13). 한 번 돌 때 모든 용어가 실패하면 7일 쉰다 (용어마다 25초씩 기다리지 않게)
+  if (Date.now() < (state.redditPauseUntil ?? 0)) return
+  let ok = 0
   for (const k of keys) {
     const t = state.terms[k]
     const term = t.en?.trim() || t.name
@@ -576,12 +579,17 @@ async function fetchReddit(keys) {
       const series = []
       if (slot.since) for (let d = Date.parse(slot.since); d <= Date.now() - DAY; d += DAY) series.push({ t: ymd(d), v: counts[ymd(d)] ?? 0 })
       remember('reddit', k, series)
+      ok += 1
     } catch (err) {
       failed('reddit', k, err)
     }
     await save()
     await sleep(REDDIT_GAP_MS)
   }
+  if (keys.length && ok === 0) {
+    state.redditPauseUntil = Date.now() + 7 * DAY
+    console.warn('[techtrends] Reddit 검색 RSS가 모두 실패 — 7일 쉼 (11/13 종료 보도). 관심 신호는 네이버 · 위키로')
+  } else state.redditPauseUntil = 0
 }
 
 // ── 하루 한 번 도는 일 ──
@@ -835,6 +843,9 @@ const shiftWin = ([a, b], days) => [ymd(Date.parse(a) - days * DAY), ymd(Date.pa
 function dailySignal(srcId, slot, cur, days) {
   const series = slot?.series
   if (!series?.length) return null
+  // 11/12: 자료가 이번 구간 끝까지 오지 않았으면(출처가 멈춤 · 막힘, 예: Reddit RSS 종료) 「0건 → 하락」이 아니라 「없음」으로 뺀다
+  // → 남은 출처로 점수를 낸다. 마지막 날이 구간 끝보다 2일 넘게 이르면 덮지 못한 것으로 본다
+  if (series[series.length - 1].t < ymd(Date.parse(cur[1]) - 2 * DAY)) return null
   // 평소: 앞 구간 최대 4개(7일) · 3개(30일). 자료가 모자라면 있는 만큼, 2구간보다 적으면 빼기
   let back = days <= 7 ? 4 : 3
   while (back >= 2 && series[0].t > shiftWin(cur, days * back)[0]) back -= 1
