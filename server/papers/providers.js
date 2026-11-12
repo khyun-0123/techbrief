@@ -1,4 +1,5 @@
 // 논문 출처 4곳 (23 문서 「논문 출처」, 확인 2026-11-08). 순서대로 쓰고, 막히면 다음 곳으로 (index.js)
+import { reportSource } from '../sourceGuard.js'
 // 모든 출처는 같은 모양의 논문을 돌려준다:
 //   { title, doi, url, abstract, journal, date(YYYY-MM-DD), cited, provider }
 // 요청 모양 (search):
@@ -37,7 +38,13 @@ async function paced(id, gapMs, fn) {
   gates[id] = new Promise((r) => (release = r))
   await prev
   try {
-    return await fn()
+    const out = await fn()
+    reportSource(id, { ok: true })
+    return out
+  } catch (err) {
+    // 호출 수 · 실패만 센다 (쉬는 시간은 이 파일의 LimitedError가 관리, sourceGuard는 restMs 없음)
+    reportSource(id, { ok: false, status: err.status ?? 'network', error: err.message })
+    throw err
   } finally {
     setTimeout(release, gapMs)
   }

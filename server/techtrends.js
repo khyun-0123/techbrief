@@ -8,6 +8,7 @@
 // 3. 순위: 요청한 기간(이번 주·지난주·이번 달·직접)과 바로 전 같은 길이 기간을 비교해 출처마다 순위, 출처별 순위를 합쳐 종합 순위
 // 바깥 API는 실패하면 지난 값을 그대로 쓰고 받은 시각을 함께 보낸다 (trends.js와 같은 원칙)
 import { dbEnabled, query } from './db/index.js'
+import { guardedFetch } from './sourceGuard.js'
 import { getKeywords, getSetting, setSetting } from './db/store.js'
 import { chatJson, PRIORITY, PreemptedError } from './llm/client.js'
 import { countPatentsFor } from './patents.js'
@@ -412,12 +413,12 @@ async function fetchNaver(keys) {
     const group = keys.slice(i, i + 5)
     const keywordGroups = group.map((k) => ({ groupName: k, keywords: [...new Set([state.terms[k].name, ...state.terms[k].aliases])].slice(0, 5) }))
     try {
-      const res = await fetch(url, {
+      const res = await guardedFetch('naver-datalab', url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-NCP-APIGW-API-KEY-ID': id, 'X-NCP-APIGW-API-KEY': secret },
         body: JSON.stringify({ startDate: ymd(start), endDate: ymd(end), timeUnit: 'date', keywordGroups }),
         signal: AbortSignal.timeout(20_000),
-      })
+      }, { background: true })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error?.message ?? data?.errorMessage ?? `응답 ${res.status}`)
       for (const r of data.results ?? []) remember('naver', r.title, (r.data ?? []).map((p) => ({ t: p.period, v: Math.round(p.ratio * 10) / 10 })))

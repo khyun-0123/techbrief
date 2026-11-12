@@ -719,7 +719,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     try {
       const result = await searchNewsApi(q, p)
       if (seq !== searchSeq.current) return
-      setSearch({ query: result.query, period: result.period, articles: result.articles, truncated: result.truncated, oldestAt: result.oldestAt, newsCount: result.newsCount, collectedCount: result.collectedCount, paperCount: result.paperCount, paperNote: result.paperNote })
+      setSearch({ query: result.query, period: result.period, articles: result.articles, truncated: result.truncated, oldestAt: result.oldestAt, newsCount: result.newsCount, collectedCount: result.collectedCount, paperCount: result.paperCount, paperNote: result.paperNote, newsNote: result.newsNote })
       // 영문 검색어를 아직 만드는 중이면 (새 한글 키워드, 11/10) 뒤에서 논문 · 1·2차 출처만 다시 받아 채운다
       if (result.paperPending) {
         searchPapersApi(q, p)
@@ -757,7 +757,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     try {
       const result = await searchScopeApi(scope, p)
       if (seq !== searchSeq.current) return
-      setSearch({ query: result.query, period: result.period, articles: result.articles, truncated: result.truncated, oldestAt: result.oldestAt, newsCount: result.newsCount, collectedCount: result.collectedCount, paperCount: result.paperCount, paperNote: result.paperNote, scope: result.scope })
+      setSearch({ query: result.query, period: result.period, articles: result.articles, truncated: result.truncated, oldestAt: result.oldestAt, newsCount: result.newsCount, collectedCount: result.collectedCount, paperCount: result.paperCount, paperNote: result.paperNote, newsNote: result.newsNote, scope: result.scope })
     } catch (err) {
       if (seq !== searchSeq.current) return
       setSearch({ query: scope.query, period: p, error: err.message, scope })
@@ -1225,6 +1225,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                     <strong>‘{search.query}’</strong> 찾기 결과 · 뉴스 {searchScope(search.period)}
                     {search.articles && ` · 뉴스 ${search.newsCount ?? 0}건${search.collectedCount ? ` · 모아 둔 1·2차 출처 ${search.collectedCount}건` : ''} · 논문 ${search.paperCount ?? 0}건`}
                     {search.paperNote && <span className="search-note"> · {search.paperNote}</span>}
+                    {search.newsNote && <span className="search-note" role="status"> · {search.newsNote}</span>}
                     {search.articles && ` · 이슈 ${visible.length}개 · 기사 ${countArticles(visible)}건`}
                     {search.loading && ' · 찾는 중…'}
                     {search.truncated && (

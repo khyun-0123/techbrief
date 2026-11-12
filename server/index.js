@@ -36,6 +36,7 @@ import {
 import { reinforceBullet } from './reinforce.js'
 import { searchPaperArticles } from './searchPapers.js'
 import { addJob, answerJob, cancelJob, listJobs, setDraftBuilder } from './reportJobs.js'
+import { sourceStatus } from './sourceGuard.js'
 import { chatJson, llmProviders, modelName, pingModel, providerLabel, selectProvider } from './llm/client.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
@@ -330,7 +331,7 @@ export async function handleApi(req, res) {
     // 운영 상태(점검 중 · AI 정지)면 일반 사용자의 요청을 막는다. 관리 페이지에서 보낸 관리자 요청만 그대로 (19 문서 6장, 11/08 원칙)
     if (!adminHere(req)) await checkOps(req)
     if (req.method === 'GET' && req.url === '/api/health') {
-      const [modelReachable, db] = await Promise.all([pingModel(), dbStatus()])
+      const [modelReachable, db, sources] = await Promise.all([pingModel(), dbStatus(), sourceStatus()])
       return send(res, 200, {
         ok: true,
         model: modelName(),
@@ -338,6 +339,7 @@ export async function handleApi(req, res) {
         db,
         llm: llmProviders(),
         server: { startedAt: STARTED_AT, supervised: SUPERVISED },
+        sources, // 외부 출처 오늘 호출 수 · 한도 · 쉬는 중 (sourceGuard.js, 키는 없음)
       })
     }
     if (req.method === 'GET' && req.url === '/api/ops') {
@@ -511,6 +513,7 @@ export async function handleApi(req, res) {
         collectedCount: feedHits.length,
         paperCount: papers.articles.length,
         paperNote: papers.note,
+        newsNote: news.newsError ? `네이버 뉴스가 잠시 막혀 이미 모은 자료 · 논문만 보여요 (${news.newsError})` : null,
         paperTerms: papers.terms ?? [],
         paperPending: Boolean(papers.pending),
         paperProvider: papers.provider ?? null,

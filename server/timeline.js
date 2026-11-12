@@ -9,6 +9,7 @@
 // - 검색 관심도: 네이버 데이터랩 월별 (2016년~). 약관상 그래프로만 보여 주고 AI에는 넣지 않는다 (23 문서)
 // 결과는 7일 기억한다 (paper_cache)
 import { dbEnabled, query } from './db/index.js'
+import { guardedFetch } from './sourceGuard.js'
 import { chatJson, PRIORITY } from './llm/client.js'
 import { DISPLAY_TOPICS } from './papers/journals.js'
 import { cacheGet, cachePut } from './papers/index.js'
@@ -195,7 +196,7 @@ async function naverMonthly(word) {
   if (!id || !secret) return { status: 'no_key' }
   const url = process.env.NAVER_TREND_URL ?? 'https://naverapihub.apigw.ntruss.com/search-trend/v1/search'
   const end = new Date(Date.now() - DAY)
-  const res = await fetch(url, {
+  const res = await guardedFetch('naver-datalab', url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-NCP-APIGW-API-KEY-ID': id, 'X-NCP-APIGW-API-KEY': secret },
     body: JSON.stringify({ startDate: '2016-01-01', endDate: end.toISOString().slice(0, 10), timeUnit: 'month', keywordGroups: [{ groupName: word, keywords: [word] }] }),

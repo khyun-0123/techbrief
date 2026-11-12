@@ -7,6 +7,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getSetting, setSetting } from './db/store.js'
+import { guardedFetch } from './sourceGuard.js'
 
 const KEY = 'patent_trends'
 const REFRESH_MS = 30 * 86_400_000
@@ -71,7 +72,7 @@ async function countByPattern(key, cols) {
     FROM \`patents-public-data.patents.publications\`, UNNEST(title_localized) t
     WHERE publication_date >= ${SINCE} AND t.language = 'en' GROUP BY ym ORDER BY ym`
   const token = await accessToken(key)
-  const res = await fetch(`https://bigquery.googleapis.com/bigquery/v2/projects/${key.project_id}/queries`, {
+  const res = await guardedFetch('bigquery', `https://bigquery.googleapis.com/bigquery/v2/projects/${key.project_id}/queries`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: sql, useLegacySql: false, timeoutMs: 120_000 }),
@@ -156,7 +157,7 @@ export async function patentHistory(pattern, since = 20100101) {
      GROUP BY GROUPING SETS ((y), (y, a.name))
     HAVING GROUPING(a.name) = 1 OR (a.name IS NOT NULL AND COUNT(DISTINCT publication_number) >= 2)`
   const token = await accessToken(key)
-  const res = await fetch(`https://bigquery.googleapis.com/bigquery/v2/projects/${key.project_id}/queries`, {
+  const res = await guardedFetch('bigquery', `https://bigquery.googleapis.com/bigquery/v2/projects/${key.project_id}/queries`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: sql, useLegacySql: false, timeoutMs: 120_000, maxResults: 5000 }),

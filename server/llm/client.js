@@ -76,10 +76,22 @@ function config(id = currentId()) {
   return { ...c, baseUrl: c.baseUrl.replace(/\/$/, '') }
 }
 
+// 대체 AI 서버 (11/12, 33 문서 6장 W19): 지금 서버가 연결 실패 · 시간 초과 · 5xx · 429면 「사람이 누른 요청만」 한 번 다시 보낸다
+// LLM_FALLBACK(local|openrouter|exaone)이 있을 때만. 자동 요약 같은 뒤에서 도는 일은 넘기지 않는다 (유료 모델 비용이 쌓이지 않게)
+function fallbackId(primary) {
+  const id = process.env.LLM_FALLBACK
+  if (!PROVIDER_IDS.includes(id) || id === primary) return null
+  return isReady(providerConfig(id)) ? id : null
+}
+const reachable = (err) => err?.name === 'TimeoutError' || /fetch failed|ECONN|ENOTFOUND|AI 서버 응답 오류 (5\d\d|429)/.test(String(err?.message ?? ''))
+let lastFallback = null // { at, from, to, reason }
+
 // 화면 상단 선택 상자용 목록 (키는 보내지 않는다)
 export function llmProviders() {
   return {
     current: currentId(),
+    fallback: fallbackId(currentId()),
+    lastFallback,
     providers: PROVIDER_IDS.map((id) => {
       const c = providerConfig(id)
       return { id, label: c.label, model: c.model ?? '', ready: isReady(c) }
@@ -249,14 +261,26 @@ async function callChat(cfg, { messages, schema, schemaName, report = false, tim
 // report·timeoutMs는 선택 (보고서는 *_REPORT_MODEL과 더 긴 시간), priority는 PRIORITY 중 하나 (기본: 사람 요청)
 // AI 서버는 요청한 순간에 고른 곳을 쓴다 (기다리는 동안 상단에서 바꿔도 그대로)
 export async function chatJson({ messages, schema, schemaName = 'result', report, timeoutMs, priority = PRIORITY.USER, provider, kind: callKind }) {
-  const cfg = config(provider)
+  let cfg = config(provider)
   return enqueue(async (signal) => {
     // 사용 현황(17 문서 4장)에 AI 호출 수·실패·걸린 시간을 남긴다. 대기열에서 기다린 시간은 빼고 잰다
     const startedAt = Date.now()
     // callKind: 요약 · 보고서가 아닌 호출의 이름 (translate 검색어 영문 표기 · timeline 흐름 정리 · reinforce 근거 보충 · section 섹션 다시 쓰기 · terms 뜨는 기술, 11/11)
     const kind = provider ? 'test' : callKind ?? (report ? 'report' : 'summary')
     try {
-      const { content, model: used, usage } = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs, signal })
+      let result
+      try {
+        result = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs, signal })
+      } catch (err) {
+        const alt = !provider && priority === PRIORITY.USER && !signal.aborted && reachable(err) ? fallbackId(cfg.id) : null
+        if (!alt) throw err
+        recordAiCall(kind, false, Date.now() - startedAt, { provider: cfg.id, model: (report && cfg.reportModel) || cfg.model })
+        console.warn(`[llm] ${cfg.label} 실패(${err.message.slice(0, 80)}) → ${alt}로 한 번 다시`)
+        lastFallback = { at: new Date().toISOString(), from: cfg.id, to: alt, reason: err.message.slice(0, 120) }
+        cfg = config(alt)
+        result = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs, signal })
+      }
+      const { content, model: used, usage } = result
       let data
       try {
         // 일부 모델은 JSON을 ```json … ``` 으로 감싸 보낸다
