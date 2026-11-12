@@ -5,7 +5,7 @@
 // - 논문 수(장기): OpenAlex 검색 + 연도별 묶음 1번 ($0.001). 디스플레이 논문 DB에 맞는 논문이 있으면 디스플레이 주제로 좁힌다
 // - 출발점 논문: OpenAlex 2017년까지 인용 많은 순 1번 ($0.001)
 // - 2018년부터 자세히: 우리 논문 DB (기업 저자 비율 · 회사 · 핵심어 변화 · 시기별 대표 논문) — 비용 없음
-// - 특허: BigQuery 제목 기준 해마다 공개 수 + 출원인 (약 26GB, 월 1TB 무료 → 30일 기억)
+// - 특허: 디스플레이 기술은 우리 디스플레이 특허 DB(패밀리 · 첫 공개 연도, patentDb.js), 아니면 BigQuery 제목 기준 해마다 공개 수 + 출원인 (약 26GB → 30일 기억)
 // - 검색 관심도: 네이버 데이터랩 월별 (2016년~). 약관상 그래프로만 보여 주고 AI에는 넣지 않는다 (23 문서)
 // 결과는 7일 기억한다 (paper_cache)
 import { dbEnabled, query } from './db/index.js'
@@ -16,6 +16,7 @@ import { cacheGet, cachePut } from './papers/index.js'
 import { abstractFromIndex, bareDoi, clean, openAlexGet } from './papers/providers.js'
 import { corpusReady, DISPLAY_MAKERS } from './papers/corpus.js'
 import { patentHistory, patternFromTerms } from './patents.js'
+import { localPatentHistory, patentDbReady, titlePatentHistory, titlesReady } from './patentDb.js'
 import { englishTerms, openAlexQuery, queryKey } from './queryTerms.js'
 
 const DAY = 86_400_000
@@ -209,17 +210,47 @@ async function naverMonthly(word) {
   return { status: 'ok', months: (data.results?.[0]?.data ?? []).filter((p) => !p.period.startsWith(thisMonth)).map((p) => ({ t: p.period.slice(0, 7), v: Math.round(p.ratio * 10) / 10 })) }
 }
 
-// ── 특허 (30일 기억) ──
-// cacheOnly: 미리 분석(뒤에서 도는 일)은 BigQuery를 부르지 않는다 (한 번 26GB, 하루 할당량 50GiB) → 사람이 열 때 받는다
-async function patents(terms, { cacheOnly = false } = {}) {
+// ── 특허 ──
+// 11/12 D3: BigQuery를 키워드마다 부르지 않는다 (한 번 26GB). 한 번 받아 둔 자료에서 센다 (patentDb.js) — 같은 발명은 한 번, 첫 공개 연도, 몇 번을 열어도 0GB
+//   - 디스플레이 기술(논문을 디스플레이 주제로 좁힌 경우): 디스플레이 특허 DB
+//   - 그 밖의 말: 전 세계 특허 제목 파일 (서버 디스크, grep)
+//   - 제목 파일이 없으면 디스플레이 특허 DB에서 「디스플레이 특허 안에서만」 세고, 단계 판정에는 쓰지 않는다 (stagePatents)
+//   - 둘 다 없을 때만 예전처럼 BigQuery로 전 세계 공보를 센다 (30일 기억)
+// cacheOnly: 미리 분석(뒤에서 도는 일)은 BigQuery를 부르지 않는다 → 사람이 열 때 받는다. 받아 둔 자료는 미리 분석에서도 센다
+async function patents(terms, { cacheOnly = false, display = false } = {}) {
   const pattern = patternFromTerms(terms)
   if (!pattern) return { status: 'no_terms' }
+  const db = await patentDbReady()
+  const titles = display ? null : await titlesReady()
+  if (db || titles) {
+    const source = display ? 'db' : titles ? 'titles' : 'db-only'
+    const key = `timeline-patents-local2:${source}:${pattern}`
+    const hit = await cacheGet(key).catch(() => null)
+    if (hit) return hit
+    const r = source === 'titles' ? await titlePatentHistory(pattern) : await localPatentHistory(pattern)
+    if (r.status === 'ok') {
+      const out = { ...summarizeOwners(r), basis: source === 'titles' ? 'family-all' : 'family', inDisplay: source === 'db-only', db: r.db }
+      await cachePut(key, out, 30 * DAY).catch(() => {})
+      return out
+    }
+  }
   const key = `timeline-patents:${pattern}`
   const hit = await cacheGet(key).catch(() => null)
   if (hit) return hit
   if (cacheOnly) return { status: 'later' }
   const r = await patentHistory(pattern)
   if (r.status !== 'ok') return r
+  const out = { ...summarizeOwners(r), basis: '영문 제목' }
+  await cachePut(key, out, PATENT_TTL).catch(() => {})
+  return out
+}
+
+// 단계 판정에 쓸 특허: 디스플레이 근거가 적은 말은 디스플레이 특허 안에서만 센 숫자라 실제보다 훨씬 적다 → 판정에 쓰지 않고
+// 특허 자료가 없을 때처럼 처리한다 (「특허 없음 → 기업 저자 비율」). 그래프에는 참고로 남긴다 (11/12)
+const stagePatents = (pat) => (pat?.status === 'ok' && !pat.inDisplay ? pat : null)
+
+// 해마다 출원인 수 → 시기별 · 전체 상위 출원인
+function summarizeOwners(r) {
   const total = new Map()
   for (const o of r.owners) total.set(o.name, (total.get(o.name) ?? 0) + o.n)
   const byPeriod = PERIODS.map((p) => {
@@ -227,9 +258,7 @@ async function patents(terms, { cacheOnly = false } = {}) {
     for (const o of r.owners) if (o.y >= p.from && o.y <= p.to) m.set(o.name, (m.get(o.name) ?? 0) + o.n)
     return { id: p.id, label: p.label, owners: [...m].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, count]) => ({ name, count })) }
   })
-  const out = { status: 'ok', years: r.years, periods: byPeriod, topOwners: [...total].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, count]) => ({ name, count })), basis: '영문 제목' }
-  await cachePut(key, out, PATENT_TTL).catch(() => {})
-  return out
+  return { status: 'ok', years: r.years, fieldYears: r.fieldYears ?? null, periods: byPeriod, topOwners: [...total].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, count]) => ({ name, count })) }
 }
 
 // ── 단계 판정 (규칙) ──
@@ -249,8 +278,12 @@ const sumYears = (list, from, to) => list.filter((x) => x.y >= from && x.y <= to
 // 특허를 못 받았을 때만 기업 저자 비율을 쓴다 (11/10 처음 값, 레퍼런스 근거 없음 → 보조)
 // PAT_MIN: 최근 3년 특허 10건 이상일 때만 판단 (Porter 외 2019의 「최소 7건」과 같은 일회성 방지, 10은 우리 판단)
 const PAT_MIN = 10
+// 11/12 D3: 특허가 PAT_MIN 미만이면 「판단할 만큼 없음」 → 특허 자료가 없을 때처럼 기업 저자 비율로 (적다는 것을 상용화 신호가 없다는 증거로 쓰지 않음,
+//   Porter 2019의 최소 건수 규칙은 「적으면 판단하지 않는다」는 뜻). 같은 발명을 한 번만 세면(특허 DB) 제목에 그 말이 드문 기술(탠덤 · LTPO)이 여기에 걸린다
+// patGrowth는 분야 대비(특허 분야 전체 증가로 나눈 값)일 수 있다 — 논문 rel과 같은 근거 (Ghaemmaghami, Porter 2019)
 function devSignal(patRecent, patGrowth, shareNow, need) {
-  if (patRecent != null) return { on: patRecent >= PAT_MIN && patGrowth >= need.patent, by: 'patent' }
+  if (patRecent != null && patRecent >= PAT_MIN) return { on: patGrowth >= need.patent, by: 'patent' }
+  if (patRecent != null && shareNow != null) return { on: shareNow >= need.share, by: 'company-few' }
   if (shareNow != null) return { on: shareNow >= need.share, by: 'company' }
   return { on: false, by: null }
 }
@@ -287,7 +320,11 @@ function stageOf(long, corpus, pat, base = [], naver = null, breadth = null) {
   const shareThen = corpus?.periods?.[0]?.companyShare ?? null
   const patRecent = pat?.years ? sumYears(pat.years, last - 2, last) : null
   const patBefore = pat?.years ? sumYears(pat.years, last - 5, last - 3) : null
-  const patGrowth = patRecent != null ? (patRecent + 1) / (patBefore + 1) : null
+  const patRaw = patRecent != null ? (patRecent + 1) / (patBefore + 1) : null
+  // 특허 분야 전체(같은 자료의 모든 특허) 증가로 나눈다 (11/12, 논문 rel과 같은 근거). 분야 숫자가 없으면(BigQuery 공보) 그대로
+  const fieldBefore = pat?.fieldYears ? sumYears(pat.fieldYears, last - 5, last - 3) : 0
+  const patField = fieldBefore > 0 ? sumYears(pat.fieldYears, last - 2, last) / fieldBefore : null
+  const patGrowth = patRaw != null && patField ? patRaw / patField : patRaw
   // 정점 대비 (11/12): 3년 대 3년만 보면 이미 정점을 지나 내려온 기술(예: PDP)이 「낮은 수준에서 평평」으로 보인다.
   // 기술 수명 주기 개념(도입 → 성장 → 성숙 → 쇠퇴)대로, 최근 3년이 지난 정점 3년의 60% 미만이면 쇠퇴로 본다 (60%는 우리 판단)
   let peak = 0
@@ -296,11 +333,24 @@ function stageOf(long, corpus, pat, base = [], naver = null, breadth = null) {
     const v = sumYears(long, y - 2, y)
     if (v > peak) [peak, peakEnd] = [v, y]
   }
-  const pastPeak = peak > 0 && peakEnd <= last - 3 && recent < PEAK_DROP * peak
-  const patText = patRecent != null ? ` · 특허 최근 3년 ${patRecent}건 (앞 3년의 ${patGrowth.toFixed(1)}배)` : ''
+  // 11/12 D3: 특허가 분야 대비 늘고 있으면(충분한 건수 · 1.2배 이상) 쇠퇴로 보지 않는다 — 수명 주기 연구에서 쇠퇴기는 특허 활동도 줄어드는 단계
+  //   (Haupt 외 2007의 특허 지표, [응용]). 예: 전자종이는 논문이 정점의 39%지만 특허가 분야 대비 2.5배 → 연구는 줄고 개발이 이어지는 성숙 쪽
+  const patRising = patRecent != null && patRecent >= PAT_MIN && patGrowth >= 1.2
+  const pastPeak = peak > 0 && peakEnd <= last - 3 && recent < PEAK_DROP * peak && !patRising
+  const patText =
+    patRecent != null
+      ? ` · 특허 최근 3년 ${patRecent}건 (앞 3년의 ${patRaw.toFixed(2)}배${patField ? `, 특허 분야 전체 ${patField.toFixed(2)}배 대비 ${patGrowth.toFixed(2)}배` : ''})`
+      : ''
   const shareText = shareNow != null ? ` · 기업 저자 비율 ${Math.round(shareNow * 100)}%` : ''
   // 개발 신호가 무엇으로 판단됐는지 함께 적는다 (특허가 없으면 기업 저자 비율로 대신했다고)
-  const devText = (d) => (d.by === 'patent' ? patText : d.by === 'company' ? `${shareText} (특허 자료 없음 → 기업 저자 비율로 판단)` : '')
+  const devText = (d) =>
+    d.by === 'patent'
+      ? patText
+      : d.by === 'company-few'
+        ? `${shareText} (특허 최근 3년 ${patRecent}건으로 적음 → 기업 저자 비율로 판단)`
+        : d.by === 'company'
+          ? `${shareText} (특허 자료 없음 → 기업 저자 비율로 판단)`
+          : ''
   let stage
   let why
   const fewGroups = breadth?.institutions != null && breadth.institutions < COMMUNITY_MIN
@@ -326,7 +376,7 @@ function stageOf(long, corpus, pat, base = [], naver = null, breadth = null) {
     // 논문이 분야만큼 + 이미 특허가 많이 쌓인 기술 = 성숙 · 상용화. 성숙기에는 특허가 줄 수 있다
     // (CAS 2026 OLED 보고서: 2020년 이후 특허는 크게 줄고 논문은 유지 → 최적화 단계). 그래서 특허 「증가」가 아니라 「쌓인 양」으로 본다
     const matured = patRecent != null && patRecent + patBefore >= 2 * PAT_MIN * MATURE_PAT_FACTOR
-    const d = patRecent != null ? { on: matured, by: 'patent' } : devSignal(null, null, shareNow, { share: 0.25 })
+    const d = patRecent != null && patRecent >= PAT_MIN ? { on: matured, by: 'patent' } : devSignal(patRecent, null, shareNow, { share: 0.25 })
     stage = d.on ? '성숙 · 상용화' : '연구 지속'
     why = `논문이 앞 3년보다 ${growth.toFixed(1)}배로 분야 전체와 비슷${vsBase}${devText(d)}`
   } else {
@@ -339,6 +389,7 @@ function stageOf(long, corpus, pat, base = [], naver = null, breadth = null) {
     why,
     attention: attentionOf(naver, substanceUp),
     patentRecent: patRecent,
+    patentFieldGrowth: patField != null ? Math.round(patField * 100) / 100 : null,
     institutions: breadth?.institutions ?? null,
     fwci: breadth?.fwci ?? null,
     peak: peakEnd ? { years: `${peakEnd - 2}~${peakEnd}`, papers: peak } : null,
@@ -363,12 +414,14 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
   const key = `${TL_KEY}${queryKey(q)}`
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
-    if (hit && !(hit.patents?.status === 'later' && !background)) return { ...withThin(hit), cached: true }
+    // 11/12 D3: 디스플레이 특허 DB가 생긴 뒤에는 디스플레이 기술의 예전 특허 숫자(BigQuery 공보)를 특허 DB 숫자로 바꾼다 (단계도 다시)
+    const toDb = hit && Boolean(await patentDbReady()) && (!['family', 'family-all'].includes(hit.patents?.basis) || (hit.patents?.inDisplay && Boolean(await titlesReady())))
+    if (hit && !(hit.patents?.status === 'later' && !background) && !toDb) return { ...withThin(hit), cached: true }
     if (hit) {
       // 미리 분석해 둔 값에 특허만 채운다
-      const pat = await patents(hit.terms).catch((err) => ({ status: 'error', error: err.message }))
+      const pat = await patents(hit.terms, { display: hit.display, cacheOnly: background }).catch((err) => ({ status: 'error', error: err.message }))
       const out = { ...hit, patents: pat }
-      out.stage = stageOf(out.long.length ? out.long : (out.corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n })), out.corpus, pat.status === 'ok' ? pat : null, out.base ?? [], out.naver, out.breadth)
+      out.stage = stageOf(out.long.length ? out.long : (out.corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n })), out.corpus, stagePatents(pat), out.base ?? [], out.naver, out.breadth)
       await cachePut(key, out, pat.status === 'error' ? 10 * 60_000 : TTL).catch(() => {})
       return { ...withThin(out), cached: false }
     }
@@ -379,7 +432,7 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
   const corpus = await corpusFacts(t.terms).catch((err) => ({ error: err.message }))
   const display = (corpus?.total ?? 0) >= THIN_MIN
   const settle = (p) => p.then((value) => ({ value }), (err) => ({ error: err.message }))
-  let [long, origins, pat, naver, base, breadth] = await Promise.all([settle(longPapers(en, display, t.terms)), settle(originPapers(t.terms, display)), settle(patents(t.terms, { cacheOnly: background })), settle(naverMonthly(q)), settle(baselinePapers(display)), settle(researchBreadth(t.terms, display))])
+  let [long, origins, pat, naver, base, breadth] = await Promise.all([settle(longPapers(en, display, t.terms)), settle(originPapers(t.terms, display)), settle(patents(t.terms, { cacheOnly: background, display })), settle(naverMonthly(q)), settle(baselinePapers(display)), settle(researchBreadth(t.terms, display))])
   // OpenAlex가 큰 묶음에서 504(시간 초과)를 주기도 한다 (11/10 실측: micro led) → 한 번 더
   if (long.error) long = await settle(longPapers(en, display, t.terms))
   const out = {
@@ -400,7 +453,7 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
   // 기준선: OpenAlex 숫자로 판정할 때만 (논문 DB 숫자로 판정할 때는 기준선 단위가 달라 쓰지 않음)
   out.base = out.long.length ? base.value ?? [] : []
   out.breadth = breadth.value ?? null
-  out.stage = stageOf(basis, corpus, out.patents.status === 'ok' ? out.patents : null, out.base, out.naver, out.breadth)
+  out.stage = stageOf(basis, corpus, stagePatents(out.patents), out.base, out.naver, out.breadth)
   if (!out.long.length && basis.length) out.stage.why += ' (OpenAlex 응답이 없어 논문 DB 기준)'
   // 디스플레이 근거가 적은 말: 다른 분야 논문이 섞일 수 있어 숫자 · 단계는 참고만, AI 흐름 정리는 하지 않는다 (11/11 검수: DDI → 유전체 · 전력 소자 논문)
   out.thin = display ? null : thinReason(corpus)
@@ -450,7 +503,8 @@ function storyInput(tl) {
   }
   if (tl.corpus?.rising?.length) lines.push(`2024년 이후 새로 늘어난 핵심어 (2018~2023년 편수 → 2024년 이후 편수): ${tl.corpus.rising.map((r) => `${r.name}(${r.before}→${r.recent})`).join(', ')}`)
   if (tl.patents?.status === 'ok') {
-    lines.push(`특허 공개 수 (영문 제목 기준, 해마다, 끝난 해만): ${done(tl.patents.years).map((x) => `${x.y}년 ${x.n}건`).join(', ')}`)
+    const patLabel = { family: '특허 (디스플레이 특허, 같은 발명은 한 번, 첫 공개 연도, 영문 제목 기준, 끝난 해만)', 'family-all': '특허 (전 세계, 같은 발명은 한 번, 첫 공개 연도, 영문 제목 기준, 끝난 해만)' }[tl.patents.basis] ?? '특허 공개 수 (영문 제목 기준, 해마다, 끝난 해만)'
+    lines.push(`${patLabel}: ${done(tl.patents.years).map((x) => `${x.y}년 ${x.n}건`).join(', ')}`)
     lines.push(`특허 많은 출원인: ${tl.patents.topOwners.map((o) => `${o.name}(${o.count})`).join(', ')}`)
   }
   lines.push('\n근거 논문 목록 (refs에는 이 번호만):')
@@ -490,7 +544,9 @@ async function makeTimelineStory(rawQuery, { refresh = false, background = false
   if (thin) return { query: tl.query, story: Object.fromEntries(SECTIONS.map((k) => [k, []])), papers: [], thin, at: new Date().toISOString(), cached: false }
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
-    if (hit) return { ...demoteStory(hit), cached: true }
+    // 특허 숫자가 특허 DB 기준으로 바뀐 뒤에는 예전 숫자로 쓴 정리를 다시 만든다 (11/12 D3)
+    const stale = ['family', 'family-all'].includes(tl.patents?.basis) && hit?.patBasis !== tl.patents.basis
+    if (hit && !stale) return { ...demoteStory(hit), cached: true }
   }
   const { text, papers } = storyInput(tl)
   const { data, model } = await chatJson({
@@ -534,7 +590,7 @@ async function makeTimelineStory(rawQuery, { refresh = false, background = false
         .map(checkNumbers),
     ]),
   )
-  const out = { query: tl.query, story, papers: papers.map((p) => ({ title: p.title, year: p.year, journal: p.journal, doi: p.doi, cited: p.cited, companies: p.companies ?? [] })), model, at: new Date().toISOString() }
+  const out = { query: tl.query, story, papers: papers.map((p) => ({ title: p.title, year: p.year, journal: p.journal, doi: p.doi, cited: p.cited, companies: p.companies ?? [] })), model, patBasis: tl.patents?.basis ?? null, at: new Date().toISOString() }
   await cachePut(key, out, TTL).catch(() => {})
   return { ...out, cached: false }
 }

@@ -32,7 +32,7 @@ function uptime(iso) {
 
 // ops: 지금 운영 상태, onOps: 바뀐 상태 알림, health: 서버 정보, refreshRunning: 수집 중인지, dirtyCount: 저장 안 한 변경 수
 // 외부 출처 상태 (11/12, server/sourceGuard.js): 오늘 호출 수 · 하루 한도 · 쉬는 중 · 마지막 오류. 한도의 80%면 자동 수집이 멈추고 98%면 찾기도 멈춤
-function SourcesCard({ sources, llm }) {
+function SourcesCard({ sources, llm, patentDb }) {
   if (!sources?.length) return null
   const time = (iso) => new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
   return (
@@ -68,6 +68,15 @@ function SourcesCard({ sources, llm }) {
           ))}
         </tbody>
       </table>
+      <p className="adm-desc">
+        특허 자료 (기술 시계열 특허):{' '}
+        {patentDb?.ready
+          ? `디스플레이 특허 ${patentDb.rows.toLocaleString()}건 · 전 세계 특허 제목 ${(patentDb.titles ?? 0).toLocaleString()}건 · 마지막 공개일 ${String(patentDb.maxPub).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')} · 받은 날 ${new Date(patentDb.at).toLocaleDateString('ko-KR')}`
+          : '아직 없음 — 특허는 키워드마다 BigQuery로 셈 (한 번 약 26GB)'}
+        {patentDb?.loading && ' · 받는 중'}
+        {patentDb?.lastError && ` · 마지막 받기 실패: ${patentDb.lastError}`}
+        {' '}(같은 발명은 한 번. 분기에 한 번 서버에서 npm run patent-db, BigQuery 약 42GB)
+      </p>
     </section>
   )
 }
@@ -225,7 +234,7 @@ function AdminOps({ ops, onOps, onToast, health, refreshRunning, dirtyCount }) {
         </div>
       </section>
 
-      <SourcesCard sources={health?.sources} llm={health?.llm} />
+      <SourcesCard sources={health?.sources} llm={health?.llm} patentDb={health?.patentDb} />
 
       <section className="adm-card">
         <div className="adm-ops-head">
