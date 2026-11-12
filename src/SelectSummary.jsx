@@ -184,7 +184,7 @@ function SelectSummary({
             </li>
             <li>
               <b>보고서 만들기</b>
-              <span>필요하면 방향을 적고 「보고서 만들기」를 눌러요. 다 만들어지면 보고서함에 저장돼요.</span>
+              <span>필요하면 방향을 적고 「보고서 만들기」를 눌러요. 다 만들어지면 「내 보고서」에 저장돼요.</span>
             </li>
           </ol>
           <div className="select-empty-actions">

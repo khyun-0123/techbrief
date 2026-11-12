@@ -1,3 +1,8 @@
+// 내 보고서 (11/13 조장 개편: 「보고서함」 → 「내 보고서」, 참고 화면 배치)
+// - 왼쪽: 전체 보고서(팀 공용) · 내가 만든 · 최근 생성(7일) · 중요 보고서(IP별 별표) · 휴지통(내가 지운 것) · 생성 기간 · 키워드로 거르기
+// - 오른쪽 표: 제목 + 헤드라인(없으면 첫 줄) · 분석 키워드 칩 · 생성일시 · 미리보기 · 다운로드(PPT 4:3 · 텍스트 복사) · ⋯(중요 · 휴지통)
+// - 지우기 = 휴지통으로 (만든 사람만). 휴지통에서 되살리기 · 영구 삭제(만든 사람). 휴지통 보관 기간은 관리자가 관리 페이지에서 (기본 30일)
+// 아래는 11/08 개편 때 설명 (보고서 화면은 그대로)
 // 보고서함 (11/08 조장 개편)
 // - 목록 화면(기본): 찾기(제목 · 방향 · 본문 · 근거 기사 제목) · 「전체 | 내가 만든」 · 날짜별 묶음. 화면 높이에 맞추고 안에서 스크롤
 //   「내가 만든」: 이 브라우저에서 만든 보고서 (브라우저 무작위 번호, IP는 쓰지 않음). 11/08 전 보고서는 기록 없음
@@ -6,6 +11,7 @@
 // - 보고서를 열었을 때 그 보고서에 쓴 기사가 아직 선별 목록에 있으면 정리할지 한 번 묻는다
 // onDelete가 없으면 「지우기」를 숨긴다 (공용 보고서함은 관리자만 지움, 17 문서)
 import { useEffect, useState } from 'react'
+import { exportPptx } from './reportExport.js'
 import { copyText, toPlainText } from './reportStore.js'
 import { clientId, track } from './usage.js'
 import ReportView from './ReportView.jsx'
@@ -45,18 +51,34 @@ function Mark({ text, q }) {
   )
 }
 
-// 날짜 묶음 이름: 오늘 · 어제 · 11월 6일 (목)
-function dayLabel(iso) {
-  const d = new Date(iso)
-  const today = new Date()
-  const days = Math.round((new Date(today.toDateString()) - new Date(d.toDateString())) / 86_400_000)
-  if (days === 0) return '오늘'
-  if (days === 1) return '어제'
-  return d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })
-}
 
 // initialId가 있으면(진행 창 「보고서함에서 보기」) 그 보고서를 바로 연다. 없으면 목록부터
-function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, initialId, selectedIds = [], onCleanup, onOpened }) {
+// 분석 키워드 칩: ① 주제 키워드(11/12부터 저장) ② 근거 기사의 해시태그(자료 현황과 같은 규칙)에서 많이 나온 것. 3개까지
+function keywordsOf(r, tagsFor) {
+  const topics = r.report.sources?.topics ?? []
+  const count = new Map()
+  if (tagsFor) for (const a of r.inputs ?? []) for (const t of tagsFor(a) ?? []) count.set(t, (count.get(t) ?? 0) + 1)
+  const tags = [...count].sort((a, b) => b[1] - a[1]).map(([t]) => t)
+  return [...new Set([...topics, ...tags])].slice(0, 3)
+}
+const PERIODS = [
+  ['all', '전체 기간', null],
+  ['today', '오늘', 1],
+  ['7', '최근 7일', 7],
+  ['30', '최근 30일', 30],
+  ['90', '최근 90일', 90],
+]
+const SORTS = [
+  ['new', '최신순'],
+  ['old', '오래된순'],
+  ['title', '제목순'],
+]
+const fmtTime = (iso) => {
+  const d = new Date(iso)
+  return { day: d.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }), time: d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) }
+}
+
+function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, initialId, selectedIds = [], onCleanup, onOpened, onRestore, onPurge, onStar, tagsFor, trashDays }) {
   const [openId, setOpenId] = useState(initialId ?? null)
   useEffect(() => {
     if (openId) onOpened?.(openId) // 「새」 표시 지우기
@@ -65,19 +87,79 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
   const [asked, setAsked] = useState(() => load(ASKED_KEY, []))
   const [notice, setNotice] = useState('')
   const [q, setQ] = useState('')
-  const [mine, setMine] = useState(false)
+  const [view, setView] = useState('all') // all | mine | recent | starred | trash
+  const [period, setPeriod] = useState('all')
+  const [kwq, setKwq] = useState('')
+  const [sort, setSort] = useState('new')
+  const [checked, setChecked] = useState([])
+  const [previewId, setPreviewId] = useState(null)
+  const [menuId, setMenuId] = useState(null) // ⋯ · 다운로드 메뉴가 열린 줄 (`${kind}:${id}`)
+  const [busy, setBusy] = useState(false)
   const me = clientId()
   // 내가 만든 보고서: 공용 보고서함이면 서버가 IP로 알려 준 mine, 브라우저에만 있으면 예전처럼 브라우저 번호 (11/08)
   const isMine = (r) => r.mine ?? r.report.createdBy === me // mine: 서버가 IP로 판단 (createdBy는 11/09부터 내려오지 않음)
   const open = reports.find((r) => r.id === openId) ?? null
 
-  const results = reports.filter((r) => (!mine || isMine(r)) && (!q.trim() || norm(textOf(r)).includes(norm(q))))
-  const groups = []
-  for (const r of results) {
-    const label = dayLabel(r.createdAt)
-    if (groups.at(-1)?.label !== label) groups.push({ label, items: [] })
-    groups.at(-1).items.push(r)
+  const live = reports.filter((r) => !r.deletedAt)
+  const weekAgo = Date.now() - 7 * 86_400_000
+  const VIEWS = [
+    ['all', '전체 보고서', live, '팀 공용 보고서'],
+    ['mine', '내가 만든', live.filter(isMine), '이 IP에서 만든 보고서 (11/08부터 기록)'],
+    ['recent', '최근 생성', live.filter((r) => Date.parse(r.createdAt) >= weekAgo), '최근 7일'],
+    ['starred', '중요 보고서', live.filter((r) => r.starred), '내가 별표한 보고서'],
+    ['trash', '휴지통', reports.filter((r) => r.deletedAt && isMine(r)), '내가 지운 보고서'],
+  ]
+  const base = VIEWS.find(([id]) => id === view)?.[2] ?? live
+  const days = PERIODS.find(([id]) => id === period)?.[2]
+  const since = days ? (days === 1 ? new Date(new Date().toDateString()).getTime() : Date.now() - days * 86_400_000) : null
+  const kwOf = (r) => keywordsOf(r, tagsFor)
+  const results = base
+    .filter((r) => (!since || Date.parse(r.createdAt) >= since) && (!q.trim() || norm(textOf(r)).includes(norm(q))) && (!kwq.trim() || kwOf(r).some((k) => norm(k).includes(norm(kwq)))))
+    .sort((a, b) => (sort === 'title' ? a.report.title.localeCompare(b.report.title, 'ko') : sort === 'old' ? Date.parse(a.createdAt) - Date.parse(b.createdAt) : Date.parse(b.createdAt) - Date.parse(a.createdAt)))
+  const preview = reports.find((r) => r.id === previewId) ?? null
+  const inTrash = view === 'trash'
+  const checkedRows = results.filter((r) => checked.includes(r.id))
+
+  async function run(fn, done) {
+    setBusy(true)
+    setNotice('')
+    try {
+      await fn()
+      if (done) setNotice(done)
+    } catch (err) {
+      setNotice(err.message)
+    } finally {
+      setBusy(false)
+      setMenuId(null)
+    }
   }
+  const toTrash = (list) =>
+    run(async () => {
+      for (const r of list) if (canDelete?.(r)) await onDelete(r.id)
+      setChecked([])
+    }, `휴지통으로 옮겼어요${trashDays ? ` (${trashDays}일 뒤 영구 삭제)` : ''}.`)
+  const restore = (list) =>
+    run(async () => {
+      for (const r of list) await onRestore(r.id)
+      setChecked([])
+    }, '되살렸어요.')
+  const purge = (list) => {
+    if (!window.confirm(`${list.length === 1 ? `「${list[0].report.title}」` : `보고서 ${list.length}개`}를 영구 삭제할까요? 되돌릴 수 없어요.`)) return
+    run(async () => {
+      for (const r of list) await onPurge(r.id)
+      setChecked([])
+    }, '영구 삭제했어요.')
+  }
+  const download = (r, kind) =>
+    run(async () => {
+      if (kind === 'pptx') {
+        await exportPptx(r)
+        track('export', 'pptx')
+      } else {
+        await copyText(toPlainText(r))
+        track('export', 'copy')
+      }
+    }, kind === 'pptx' ? 'PPT(4:3)를 내려받았어요.' : '텍스트를 복사했어요.')
 
   const leftover = open ? (open.inputs ?? []).filter((a) => selectedIds.includes(a.id)) : []
   const askCleanup = onCleanup && open && leftover.length > 0 && !asked.includes(open.id)
@@ -100,7 +182,7 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
   }
 
   async function handleDelete() {
-    if (!window.confirm(`「${open.report.title}」 보고서를 지울까요? 모두의 보고서함에서 지워지고 되돌릴 수 없어요.`)) return
+    if (!window.confirm(`「${open.report.title}」 보고서를 휴지통으로 옮길까요? 휴지통에서 되살릴 수 있어요${trashDays ? ` (${trashDays}일 뒤 영구 삭제)` : ''}.`)) return
     try {
       await onDelete(open.id)
       setOpenId(null)
@@ -159,8 +241,8 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
                   텍스트 복사
                 </button>
                 {onDelete && canDelete?.(open) && (
-                  <button type="button" className="btn-text danger" onClick={handleDelete} title="이 보고서를 만든 브라우저나 관리자만 지울 수 있어요">
-                    지우기
+                  <button type="button" className="btn-text danger" onClick={handleDelete} title="이 보고서를 만든 사람만 지울 수 있어요. 휴지통에서 되살릴 수 있어요">
+                    휴지통으로
                   </button>
                 )}
               </>
@@ -171,68 +253,243 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
     )
   }
 
-  // ── 목록 화면 ──
+  // ── 목록 화면 (11/13: 왼쪽 메뉴 + 표 + 미리보기 창) ──
+  const allChecked = results.length > 0 && results.every((r) => checked.includes(r.id))
   return (
     <main className="page page-wide archive-page">
       <header className="archive-head">
-        <h1>보고서함</h1>
-        <div className="archive-search">
-          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목 · 방향 · 본문 · 근거 기사에서 찾기 (예: 탠덤)" aria-label="보고서 찾기" />
-          <div className="composer-tabs" role="tablist" aria-label="누가 만든 보고서">
-            <button type="button" role="tab" aria-selected={!mine} className={!mine ? 'active' : ''} onClick={() => setMine(false)}>
-              전체 {reports.length}
-            </button>
-            <button type="button" role="tab" aria-selected={mine} className={mine ? 'active' : ''} onClick={() => setMine(true)} title="이 브라우저에서 만든 보고서 (11/08부터 기록)">
-              내가 만든 {reports.filter(isMine).length}
-            </button>
-          </div>
+        <div>
+          <h1>내 보고서</h1>
+          <p className="hint">만든 보고서를 확인하고 내려받아요. 지운 보고서는 휴지통에서 되살릴 수 있어요.</p>
         </div>
         <button type="button" className="btn primary" onClick={onGoDraft}>
-          새 보고서 만들기
+          ＋ 새 보고서 만들기
         </button>
       </header>
 
-      <section className="panel archive-table" aria-label="보고서 목록">
-        {reports.length === 0 ? (
-          <p className="empty">아직 만든 보고서가 없어요.</p>
-        ) : results.length === 0 ? (
-          <p className="empty">맞는 보고서가 없어요{mine ? ' (「내가 만든」은 11/08부터 기록해요)' : ''}.</p>
-        ) : (
-          <div className="archive-scroll">
-            {groups.map((g) => (
-              <section key={g.label} className="archive-group">
-                <h2>{g.label}</h2>
-                <ul>
-                  {g.items.map((r) => {
-                    const base = r.articles.filter((a) => !a.supplement).length
-                    const added = r.articles.length - base
+      <div className="mr-layout">
+        <aside className="panel mr-side" aria-label="보고서 거르기">
+          <nav className="mr-views" aria-label="보고서 묶음">
+            {VIEWS.map(([id, label, list, title]) => (
+              <button
+                key={id}
+                type="button"
+                className={view === id ? 'mr-view active' : 'mr-view'}
+                aria-current={view === id ? 'true' : undefined}
+                title={title}
+                onClick={() => {
+                  setView(id)
+                  setChecked([])
+                }}
+              >
+                <span>{label}</span>
+                <span className="mr-count">{list.length}</span>
+              </button>
+            ))}
+          </nav>
+          <label className="mr-field">
+            <span>생성 기간</span>
+            <select value={period} onChange={(e) => setPeriod(e.target.value)}>
+              {PERIODS.map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="mr-field">
+            <span>키워드</span>
+            <input type="search" value={kwq} onChange={(e) => setKwq(e.target.value)} placeholder="키워드로 거르기 (예: OLED)" />
+          </label>
+          {inTrash && (
+            <p className="hint mr-trash-note">
+              {trashDays ? `휴지통에 ${trashDays}일 있으면 자동으로 영구 삭제돼요.` : '휴지통은 자동으로 비우지 않아요.'} 보관 기간은 관리자가 정해요.
+            </p>
+          )}
+        </aside>
+
+        <section className="panel mr-main" aria-label="보고서 목록">
+          <div className="mr-toolbar">
+            <h2>
+              {VIEWS.find(([id]) => id === view)?.[1]} {results.length}건
+            </h2>
+            <input type="search" className="mr-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목 · 본문 · 근거 기사에서 찾기" aria-label="보고서 찾기" />
+            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="정렬">
+              {SORTS.map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {(checkedRows.length > 0 || notice) && (
+            <div className="mr-bulk" role="status">
+              {checkedRows.length > 0 && <span>{checkedRows.length}개 고름</span>}
+              {checkedRows.length > 0 && !inTrash && (
+                <button type="button" className="btn" disabled={busy || !checkedRows.some((r) => canDelete?.(r))} onClick={() => toTrash(checkedRows)} title="내가 만든 보고서만 옮겨져요">
+                  휴지통으로
+                </button>
+              )}
+              {checkedRows.length > 0 && inTrash && onRestore && (
+                <>
+                  <button type="button" className="btn" disabled={busy} onClick={() => restore(checkedRows)}>
+                    되살리기
+                  </button>
+                  <button type="button" className="btn-text danger" disabled={busy} onClick={() => purge(checkedRows)}>
+                    영구 삭제
+                  </button>
+                </>
+              )}
+              {notice && <span className="toolbar-note">{notice}</span>}
+            </div>
+          )}
+
+          {results.length === 0 ? (
+            <p className="empty">{reports.length === 0 ? '아직 만든 보고서가 없어요.' : inTrash ? '휴지통이 비었어요.' : '맞는 보고서가 없어요.'}</p>
+          ) : (
+            <div className="mr-scroll">
+              <table className="mr-table">
+                <thead>
+                  <tr>
+                    <th scope="col" className="mr-check">
+                      <input type="checkbox" aria-label="모두 고르기" checked={allChecked} onChange={(e) => setChecked(e.target.checked ? results.map((r) => r.id) : [])} />
+                    </th>
+                    <th scope="col">보고서 제목</th>
+                    <th scope="col">분석 키워드</th>
+                    <th scope="col">생성일시</th>
+                    <th scope="col">작업</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((r) => {
+                    const t = fmtTime(r.createdAt)
+                    const line = r.report.headline?.text ?? snippetOf(r, q.trim())
                     return (
-                      <li key={r.id}>
-                        <button type="button" className="archive-row" onClick={() => setOpenId(r.id)}>
-                          <span className="archive-row-main">
-                            <span className="title">
-                              <Mark text={r.report.title} q={q.trim()} />
-                              {isMine(r) && <span className="mine-badge">내가 만듦</span>}
+                      <tr key={r.id}>
+                        <td className="mr-check">
+                          <input type="checkbox" aria-label={`${r.report.title} 고르기`} checked={checked.includes(r.id)} onChange={(e) => setChecked((prev) => (e.target.checked ? [...prev, r.id] : prev.filter((x) => x !== r.id)))} />
+                        </td>
+                        <td className="mr-title">
+                          <button type="button" className="mr-title-btn" onClick={() => (inTrash ? setPreviewId(r.id) : setOpenId(r.id))}>
+                            {r.starred && (
+                              <span className="mr-star" aria-label="중요">
+                                ★
+                              </span>
+                            )}
+                            <Mark text={r.report.title} q={q.trim()} />
+                            {isMine(r) && <span className="mine-badge">내가 만듦</span>}
+                          </button>
+                          {line && (
+                            <span className="mr-line">
+                              <Mark text={line} q={q.trim()} />
                             </span>
-                            {r.report.direction && <span className="archive-direction">방향: <Mark text={r.report.direction} q={q.trim()} /></span>}
-                            <span className="archive-preview">
-                              <Mark text={snippetOf(r, q.trim())} q={q.trim()} />
+                          )}
+                        </td>
+                        <td>
+                          <span className="mr-chips">
+                            {kwOf(r).map((k) => (
+                              <button key={k} type="button" className="chip mr-chip" onClick={() => setKwq(k)} title={`「${k}」 키워드 보고서만`}>
+                                {k}
+                              </button>
+                            ))}
+                          </span>
+                        </td>
+                        <td className="mr-time">
+                          {t.day}
+                          <br />
+                          <span className="hint">{t.time}</span>
+                        </td>
+                        <td className="mr-actions">
+                          <button type="button" className="btn" onClick={() => setPreviewId(r.id)}>
+                            미리보기
+                          </button>
+                          {!inTrash && (
+                            <span className="mr-menu-wrap">
+                              <button type="button" className="btn" aria-expanded={menuId === `dl:${r.id}`} onClick={() => setMenuId(menuId === `dl:${r.id}` ? null : `dl:${r.id}`)}>
+                                다운로드 ▾
+                              </button>
+                              {menuId === `dl:${r.id}` && (
+                                <span className="mr-menu" role="menu">
+                                  <button type="button" role="menuitem" disabled={busy} onClick={() => download(r, 'pptx')}>
+                                    PPT (4:3 가로)
+                                  </button>
+                                  <button type="button" role="menuitem" disabled={busy} onClick={() => download(r, 'copy')}>
+                                    텍스트 복사
+                                  </button>
+                                  <button type="button" role="menuitem" onClick={() => setOpenId(r.id)} title="보고서를 열어 PDF로 저장">
+                                    PDF (열어서 저장)
+                                  </button>
+                                </span>
+                              )}
                             </span>
+                          )}
+                          <span className="mr-menu-wrap">
+                            <button type="button" className="btn mr-more" aria-label="더 보기" aria-expanded={menuId === `more:${r.id}`} onClick={() => setMenuId(menuId === `more:${r.id}` ? null : `more:${r.id}`)}>
+                              ⋯
+                            </button>
+                            {menuId === `more:${r.id}` && (
+                              <span className="mr-menu" role="menu">
+                                {!inTrash && onStar && (
+                                  <button type="button" role="menuitem" onClick={() => run(() => onStar(r.id, !r.starred))}>
+                                    {r.starred ? '중요 표시 빼기' : '중요 보고서로 표시'}
+                                  </button>
+                                )}
+                                {!inTrash && canDelete?.(r) && (
+                                  <button type="button" role="menuitem" className="danger" onClick={() => toTrash([r])}>
+                                    휴지통으로
+                                  </button>
+                                )}
+                                {inTrash && onRestore && (
+                                  <button type="button" role="menuitem" onClick={() => restore([r])}>
+                                    되살리기
+                                  </button>
+                                )}
+                                {inTrash && onPurge && (
+                                  <button type="button" role="menuitem" className="danger" onClick={() => purge([r])}>
+                                    영구 삭제
+                                  </button>
+                                )}
+                                {!inTrash && !canDelete?.(r) && <span className="mr-menu-note">다른 사람이 만든 보고서는 지울 수 없어요</span>}
+                              </span>
+                            )}
                           </span>
-                          <span className="archive-row-side">
-                            <span>기사 {base}건{added ? ` · 보충 ${added}` : ''}</span>
-                            <span className="hint">{new Date(r.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</span>
-                          </span>
-                        </button>
-                      </li>
+                        </td>
+                      </tr>
                     )
                   })}
-                </ul>
-              </section>
-            ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {preview && (
+        <div className="mr-preview-backdrop" onClick={(e) => e.target === e.currentTarget && setPreviewId(null)} onKeyDown={(e) => e.key === 'Escape' && setPreviewId(null)} role="presentation">
+          <div className="mr-preview panel" role="dialog" aria-modal="true" aria-label={`미리보기: ${preview.report.title}`}>
+            <div className="mr-preview-bar">
+              <strong>미리보기</strong>
+              <span className="hint">{preview.deletedAt ? '휴지통에 있는 보고서' : '보기만 해요 — 고치려면 열기'}</span>
+              {!preview.deletedAt && (
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => {
+                    setOpenId(preview.id)
+                    setPreviewId(null)
+                  }}
+                >
+                  열기
+                </button>
+              )}
+              <button type="button" className="btn" onClick={() => setPreviewId(null)} autoFocus>
+                닫기
+              </button>
+            </div>
+            <ReportView saved={preview} stacked />
           </div>
-        )}
-      </section>
+        </div>
+      )}
     </main>
   )
 }

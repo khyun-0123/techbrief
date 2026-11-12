@@ -86,10 +86,12 @@ function rowToEntry(r) {
     periodLabel: r.period_label,
     articles: r.articles,
     inputs: r.inputs,
+    ...(r.deleted_at ? { deletedAt: r.deleted_at.toISOString() } : {}),
   }
 }
 
-// ip: 요청한 사람의 IP → 각 보고서에 mine(내가 만든 것)만 붙인다. withIp: 관리 페이지에서만 만든 IP까지
+// ip: 요청한 사람의 IP → 각 보고서에 mine(내가 만든 것) · starred(내가 중요 표시)를 붙인다. withIp: 관리 페이지에서만 만든 IP까지
+// 휴지통: 일반 화면에는 자기 휴지통만 보인다 (다른 사람이 휴지통에 넣은 보고서는 목록에서 빠짐). 관리 페이지(withIp)는 모두
 export async function listReports(limit = 30, { ip = null, withIp = false } = {}) {
   // 만든 브라우저 번호(createdBy)는 내보내지 않는다. 내 것인지는 mine으로 (11/09)
   const mark = (entry, createdIp) => ({
@@ -98,9 +100,49 @@ export async function listReports(limit = 30, { ip = null, withIp = false } = {}
     mine: Boolean(ip && createdIp && createdIp === ip),
     ...(withIp ? { createdIp: createdIp ?? null } : {}),
   })
-  if (!dbEnabled()) return memoryReports.slice(0, limit).map((e) => mark(e, memoryReportIps.get(e.id)))
-  const { rows } = await query('SELECT * FROM reports ORDER BY created_at DESC LIMIT $1', [limit])
-  return rows.map((r) => mark(rowToEntry(r), r.created_ip))
+  if (!dbEnabled()) return memoryReports.filter((e) => withIp || !e.deletedAt || memoryReportIps.get(e.id) === ip).slice(0, limit).map((e) => mark(e, memoryReportIps.get(e.id)))
+  const { rows } = await query(
+    `SELECT * FROM reports WHERE $2::boolean OR deleted_at IS NULL OR created_ip = $3 ORDER BY created_at DESC LIMIT $1`,
+    [limit, withIp, ip],
+  )
+  const stars = ip ? new Set((await query('SELECT report_id FROM report_stars WHERE owner = $1', [ip])).rows.map((x) => x.report_id)) : new Set()
+  return rows.map((r) => ({ ...mark(rowToEntry(r), r.created_ip), starred: stars.has(r.id) }))
+}
+
+// ── 휴지통 (11/13) ──
+export async function trashReport(id) {
+  if (!dbEnabled()) {
+    const e = memoryReports.find((x) => x.id === id)
+    if (e) e.deletedAt = new Date().toISOString()
+    return
+  }
+  await query('UPDATE reports SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL', [id])
+}
+export async function restoreReport(id) {
+  if (!dbEnabled()) {
+    const e = memoryReports.find((x) => x.id === id)
+    if (e) delete e.deletedAt
+    return
+  }
+  await query('UPDATE reports SET deleted_at = NULL WHERE id = $1', [id])
+}
+export async function reportTrashedAt(id) {
+  if (!dbEnabled()) return memoryReports.find((x) => x.id === id)?.deletedAt ?? null
+  const { rows } = await query('SELECT deleted_at FROM reports WHERE id = $1', [id])
+  return rows[0]?.deleted_at ?? null
+}
+// 휴지통에 days일 넘게 있던 보고서를 영구 삭제 (0이면 자동으로 지우지 않음)
+export async function purgeTrash(days) {
+  if (!(days > 0) || !dbEnabled()) return 0
+  const { rowCount } = await query(`DELETE FROM reports WHERE deleted_at IS NOT NULL AND deleted_at < now() - make_interval(days => $1)`, [days])
+  return rowCount
+}
+
+// ── 중요 표시 (11/13, owner = IP) ──
+export async function setReportStar(owner, id, on) {
+  if (!dbEnabled() || !owner) return
+  if (on) await query('INSERT INTO report_stars (owner, report_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [owner, id])
+  else await query('DELETE FROM report_stars WHERE owner = $1 AND report_id = $2', [owner, id])
 }
 
 // ip: 만든 사람의 IP (일반 화면에서 지울 수 있는 사람). 화면에는 보내지 않는다
@@ -170,7 +212,15 @@ export async function reportOwnerIp(id) {
   return rows[0]?.created_ip ?? null
 }
 
-// 보고서 자동 삭제: 만든 지 days일이 지난 보고서를 지운다. 지운 개수를 돌려준다
+// 보고서 자동 정리: 만든 지 days일이 지난 보고서를 휴지통으로 보낸다 (11/13부터: 바로 지우지 않음 → 휴지통 보관 기간 뒤 영구 삭제)
+export async function trashReportsOlderThan(days) {
+  if (!(days > 0)) return 0
+  if (!dbEnabled()) return deleteReportsOlderThan(days)
+  const { rowCount } = await query(`UPDATE reports SET deleted_at = now() WHERE deleted_at IS NULL AND created_at < now() - make_interval(days => $1)`, [days])
+  return rowCount
+}
+
+// 영구 삭제 (DB 없을 때 · 관리자). 지운 개수를 돌려준다
 export async function deleteReportsOlderThan(days) {
   if (!(days > 0)) return 0
   const cutoff = Date.now() - days * 86_400_000

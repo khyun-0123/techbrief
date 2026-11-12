@@ -1,9 +1,16 @@
 // 관리 페이지 「보고서 관리」 (11/08)
 // - 모든 보고서를 지울 수 있는 곳은 여기뿐이다. 일반 화면에서는 관리자도 자기 IP로 만든 보고서만 지운다
-// - 자동 삭제 주기: 만든 지 정한 기간이 지난 보고서를 하루 한 번 지운다 (기본 꺼짐). 바꾸면 바로 한 번 정리
+// - 자동 정리: 만든 지 정한 기간이 지난 보고서를 하루 한 번 휴지통으로 (기본 꺼짐). 바꾸면 바로 한 번 정리
+// - 휴지통 보관 기간 (11/13 조장): 휴지통에 정한 기간 있으면 영구 삭제 (기본 30일, 「안 지움」 가능). 여기서 지우면 휴지통 없이 바로 영구 삭제
 import { useEffect, useState } from 'react'
-import { deleteReportApi, fetchAdminReports, saveReportRetentionApi } from './api.js'
+import { deleteReportApi, fetchAdminReports, saveReportRetentionApi, saveReportTrashDaysApi } from './api.js'
 
+const TRASH = [
+  [0, '안 지움'],
+  [7, '7일'],
+  [30, '30일'],
+  [90, '90일'],
+]
 const RETENTION = [
   [0, '끄기'],
   [30, '30일'],
@@ -60,9 +67,12 @@ function AdminReports({ onToast, onChanged }) {
       if (confirm.kind === 'delete') {
         await deleteReportApi(confirm.report.id)
         onToast({ text: `「${confirm.report.report.title}」 보고서를 지웠어요.` })
+      } else if (confirm.kind === 'trash') {
+        const { purged } = await saveReportTrashDaysApi(confirm.days)
+        onToast({ text: confirm.days ? `휴지통 보관 기간을 ${confirm.days}일로 바꿨어요. 지금 ${purged}개를 영구 삭제했어요.` : '휴지통을 자동으로 비우지 않아요.' })
       } else {
         const { deleted } = await saveReportRetentionApi(confirm.days)
-        onToast({ text: confirm.days ? `자동 삭제를 ${confirm.days}일로 바꿨어요. 지금 ${deleted}개를 지웠어요.` : '자동 삭제를 껐어요.' })
+        onToast({ text: confirm.days ? `자동 정리를 ${confirm.days}일로 바꿨어요. 지금 ${deleted}개를 휴지통으로 옮겼어요.` : '자동 정리를 껐어요.' })
       }
       setConfirm(null)
       await load()
@@ -77,12 +87,34 @@ function AdminReports({ onToast, onChanged }) {
   return (
     <>
       <section className="adm-card">
-        <h2>자동 삭제</h2>
+        <h2>휴지통 보관 기간</h2>
         <p className="adm-desc">
-          만든 지 정한 기간이 지난 보고서를 하루 한 번 지워요. 지운 보고서는 되돌릴 수 없어요. 지금:{' '}
-          <strong>{data.retentionDays ? `${data.retentionDays}일 지나면 삭제` : '꺼짐 (지우지 않음)'}</strong>
+          일반 화면에서 지운 보고서는 휴지통으로 가요. 휴지통에 이 기간 있으면 하루 한 번 영구 삭제해요. 만든 사람은 그 전에 휴지통에서 되살리거나 직접 영구 삭제할 수 있어요. 지금:{' '}
+          <strong>{data.trashDays ? `${data.trashDays}일 뒤 영구 삭제` : '자동으로 지우지 않음'}</strong> · 휴지통 {data.reports.filter((r) => r.deletedAt).length}개
         </p>
-        <div className="adm-segment" role="radiogroup" aria-label="보고서 자동 삭제 기간">
+        <div className="adm-segment" role="radiogroup" aria-label="휴지통 보관 기간">
+          {TRASH.map(([days, label]) => (
+            <button
+              key={days}
+              type="button"
+              role="radio"
+              aria-checked={data.trashDays === days}
+              disabled={busy}
+              onClick={() => days !== data.trashDays && setConfirm({ kind: 'trash', days, count: data.reports.filter((r) => r.deletedAt && days && Date.parse(r.deletedAt) < Date.now() - days * 86_400_000).length })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="adm-card">
+        <h2>자동 정리</h2>
+        <p className="adm-desc">
+          만든 지 정한 기간이 지난 보고서를 하루 한 번 휴지통으로 옮겨요 (바로 지우지 않음). 지금:{' '}
+          <strong>{data.retentionDays ? `${data.retentionDays}일 지나면 휴지통으로` : '꺼짐'}</strong>
+        </p>
+        <div className="adm-segment" role="radiogroup" aria-label="보고서 자동 정리 기간">
           {RETENTION.map(([days, label]) => (
             <button
               key={days}
@@ -111,7 +143,7 @@ function AdminReports({ onToast, onChanged }) {
           />
         </div>
         <p className="adm-desc">
-          일반 화면에서는 보고서를 만든 IP에서만 지울 수 있어요. 관리자도 일반 화면에서는 같아요. 다른 사람 보고서나 11/8 전에 만들어 IP가 없는 보고서는 여기서 지워요.
+          일반 화면에서는 보고서를 만든 IP에서만 휴지통으로 옮기고 되살려요. 관리자도 일반 화면에서는 같아요. 여기서 지우면 휴지통을 거치지 않고 바로 영구 삭제돼요.
         </p>
         {!data.stored ? (
           <p className="adm-empty">DB가 연결되지 않아 보고서함이 각 브라우저에만 있어요.</p>
@@ -135,7 +167,7 @@ function AdminReports({ onToast, onChanged }) {
                   <td className="adm-nowrap">{formatAt(r.createdAt)}</td>
                   <td>
                     {r.report.title}
-                    <small className="adm-sub"> · 기사 {r.articles?.length ?? 0}건</small>
+                    <small className="adm-sub"> · 기사 {r.articles?.length ?? 0}건{r.deletedAt ? ` · 휴지통 (${formatAt(r.deletedAt)})` : ''}</small>
                   </td>
                   <td className="adm-nowrap">{r.createdIp ?? '기록 없음'}</td>
                   <td className="adm-nowrap">
@@ -156,16 +188,24 @@ function AdminReports({ onToast, onChanged }) {
             <h2 id="rep-confirm-title">
               {confirm.kind === 'delete'
                 ? `「${confirm.report.report.title}」 보고서를 지울까요?`
-                : confirm.days
-                  ? `만든 지 ${confirm.days}일 지난 보고서를 자동으로 지울까요?`
-                  : '자동 삭제를 끌까요?'}
+                : confirm.kind === 'trash'
+                  ? confirm.days
+                    ? `휴지통 보관 기간을 ${confirm.days}일로 할까요?`
+                    : '휴지통을 자동으로 비우지 않을까요?'
+                  : confirm.days
+                    ? `만든 지 ${confirm.days}일 지난 보고서를 휴지통으로 옮길까요?`
+                    : '자동 정리를 끌까요?'}
             </h2>
             <p>
               {confirm.kind === 'delete'
-                ? `${formatAt(confirm.report.createdAt)}에 만든 보고서예요. 모든 사람의 보고서함에서 사라지고 되돌릴 수 없어요.`
-                : confirm.days
-                  ? `저장하면 지금 바로 ${confirm.count}개가 지워지고, 그 뒤 하루 한 번 정리해요. 되돌릴 수 없어요.`
-                  : '이제 보고서를 자동으로 지우지 않아요.'}
+                ? `${formatAt(confirm.report.createdAt)}에 만든 보고서예요. 휴지통을 거치지 않고 모든 사람의 보고서함에서 사라지며 되돌릴 수 없어요.`
+                : confirm.kind === 'trash'
+                  ? confirm.days
+                    ? `저장하면 휴지통에 ${confirm.days}일 넘게 있던 ${confirm.count}개가 지금 영구 삭제되고, 그 뒤 하루 한 번 정리해요. 되돌릴 수 없어요.`
+                    : '휴지통의 보고서는 만든 사람이나 관리자가 지울 때까지 남아요.'
+                  : confirm.days
+                    ? `저장하면 지금 ${confirm.count}개가 휴지통으로 옮겨지고, 그 뒤 하루 한 번 정리해요. 휴지통에서 되살릴 수 있어요.`
+                    : '이제 보고서를 자동으로 휴지통에 옮기지 않아요.'}
             </p>
             <div className="adm-modal-actions">
               <button type="button" className="adm-btn" onClick={() => setConfirm(null)} disabled={busy} autoFocus>
