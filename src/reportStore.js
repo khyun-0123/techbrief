@@ -30,12 +30,22 @@ export function kindOf(b) {
   return b.kind ?? (b.refs?.length ? 'fact' : 'ai')
 }
 
+// 11/12: 담당자 회신(11/10, 35 문서) — 1페이지 = 헤드라인 · 핵심 사실 근거 · 시사점 및 제언 · 출처, 상세(기술 개요 · 업계 동향)는 유첨
+// 섹션 키는 그대로 (예전 보고서도 같은 자리에 보인다)
 export const SECTIONS = [
-  ['summary', '핵심 요약'],
+  ['summary', '핵심 사실 근거'],
+  ['implications', '시사점 및 제언'],
   ['tech', '기술 개요'],
-  ['industry', '업계 동향'],
-  ['implications', '시사점'],
+  ['industry', '업계 동향 · 경쟁사'],
 ]
+export const APPENDIX = new Set(['tech', 'industry'])
+
+// ④ 출처 한 줄 (서버가 센 값. 예전 보고서는 기사 수만)
+export function sourcesLine(saved) {
+  const s = saved.report.sources
+  const n = s?.articles ?? saved.articles.filter((a) => !a.supplement && !a.analysis).length
+  return [s?.period && `수집 기간 ${s.period}`, `기사 ${n}건`, ...(s?.analysis ?? []).map((x) => `분석: ${x}`)].filter(Boolean).join(' · ')
+}
 
 export function formatDate(iso, withTime = false) {
   if (!iso) return ''
@@ -50,15 +60,21 @@ export function toPlainText(saved) {
   const { report, articles, createdAt } = saved
   const lines = [`${report.title} (${formatDate(createdAt)} · 기사 ${articles.filter((a) => !a.supplement).length}건 기준)`, '']
   if (report.direction) lines.push(`방향: ${report.direction}`, '')
+  if (report.headline?.text) lines.push(`▶ ${report.headline.text}${report.headline.refs?.length ? ` [${report.headline.refs.join('][')}]` : ''}`, '')
+  let appendix = false
   for (const [key, label] of SECTIONS) {
+    if (APPENDIX.has(key) && !appendix) {
+      lines.push(`■ 출처: ${sourcesLine(saved)}`, '', '──── 유첨 ────', '')
+      appendix = true
+    }
     lines.push(`■ ${label}`)
     const bullets = (report.sections[key]?.bullets ?? []).filter((b) => !b.excluded) // 뺀 줄은 넣지 않는다
     const facts = bullets.filter((b) => kindOf(b) === 'fact')
     const ai = bullets.filter((b) => kindOf(b) === 'ai')
-    for (const b of facts) lines.push(` - ${b.text} [${b.refs.join('][')}]`)
+    for (const b of facts) lines.push(` - ${b.tag ? `(${b.tag}) ` : ''}${b.text} [${b.refs.join('][')}]`)
     if (ai.length) {
       lines.push('  (AI 해설·제안 — 기사에서 확인된 내용 아님, 확인 필요)')
-      for (const b of ai) lines.push(`  · ${b.text}`)
+      for (const b of ai) lines.push(`  · ${b.tag ? `(${b.tag}) ` : ''}${b.text}`)
     }
     lines.push('')
   }
