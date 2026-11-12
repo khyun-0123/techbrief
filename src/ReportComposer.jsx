@@ -175,7 +175,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
         <div className="composer-title">
           <h2>보고서</h2>
           {matching && (
-            <button type="button" className="composer-made" onClick={() => onOpenReport?.(matching.id)} title="지금 체크한 기사로 만든 보고서가 있어요 — 보고서함에서 열기">
+            <button type="button" className="composer-made" onClick={() => onOpenReport?.(matching.id)} title="지금 체크한 기사로 만든 보고서가 있어요 — 내 보고서에서 열기">
               ✓ 만든 보고서 있음 · 보기
             </button>
           )}
@@ -347,7 +347,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
             <button type="button" className="btn primary composer-go" onClick={handleSend} disabled={!canSend} title={aiBlocked ? AI_BLOCKED_TITLE : picked.length === 0 ? '왼쪽에서 보고서에 넣을 기사를 체크하세요' : undefined}>
               {sending ? '대기열에 넣는 중…' : `체크한 기사 ${articles.length}건으로 보고서 만들기`}
             </button>
-            <p className="hint composer-go-note">대기열에 들어가요. 다른 탭에 가도 오른쪽 아래 진행 창에서 볼 수 있고, 완성되면 보고서함에 저장돼요.</p>
+            <p className="hint composer-go-note">대기열에 들어가요. 다른 탭에 가도 오른쪽 아래 진행 창에서 볼 수 있고, 완성되면 「내 보고서」에 저장돼요.</p>
           </div>
         </div>
       )}

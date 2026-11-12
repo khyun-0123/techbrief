@@ -31,7 +31,12 @@ import {
   saveReport,
   setKeywords,
   reportOwnerIp,
-  deleteReportsOlderThan,
+  purgeTrash,
+  reportTrashedAt,
+  restoreReport,
+  setReportStar,
+  trashReport,
+  trashReportsOlderThan,
   updateReport,
   updateReportSection,
 } from './db/store.js'
@@ -65,8 +70,16 @@ const SUPERVISED = process.env.TECHBRIEF_SUPERVISED === '1'
 const RESTART_EXIT_CODE = 75
 
 // 보고서 자동 삭제 주기 (관리 페이지에서 고름, 0 = 끄기). 기본 꺼짐 (11/08)
-const REPORT_RETENTION_SETTING = 'report_retention_days'
+const REPORT_RETENTION_SETTING = 'report_retention_days' // 만든 지 N일 지나면 휴지통으로 (0 = 끄기, 기본)
 const REPORT_RETENTION_CHOICES = [0, 30, 90, 180, 365]
+// 휴지통 보관 기간 (11/13 조장: 관리자가 설정에서 정함): 휴지통에 N일 있으면 영구 삭제. 0 = 자동으로 지우지 않음
+const REPORT_TRASH_SETTING = 'report_trash_days'
+const REPORT_TRASH_DEFAULT = 30
+const REPORT_TRASH_CHOICES = [0, 7, 30, 90]
+const trashDays = async () => {
+  const v = await getSetting(REPORT_TRASH_SETTING, REPORT_TRASH_DEFAULT)
+  return Number.isFinite(Number(v)) ? Number(v) : REPORT_TRASH_DEFAULT
+}
 const REPORT_TIMEOUT_MS = 240_000 // 보고서는 출력이 길어 요약보다 오래 걸린다
 // 보고서 한 번에 넣는 기사 수 (맥미니 문맥 크기 기준). 넘으면 화면이 고르게 한다 (21 문서 6-3)
 // - 중요도 높은 10건만 (빠름) / 전부 (REPORT_CHUNK건씩 나눠 쓰고 합침, 오래 걸림, 최대 MAX_REPORT_ALL건)
@@ -228,6 +241,15 @@ async function draftLongReport(articles, opts) {
   return { ...merged, data: { ...merged.data, warnings: [...new Set([...(merged.data.warnings ?? []), ...notes])] } }
 }
 
+// 일반 화면에서 보고서를 휴지통에 넣거나 · 되살리거나 · 영구 삭제하는 것은 만든 사람(같은 IP)만 (11/08 원칙, 17 문서)
+async function requireReportOwner(req, id) {
+  const ip = clientIp(req)
+  const owner = await reportOwnerIp(id)
+  if (!ip || !owner || owner !== ip) {
+    throw Object.assign(new Error('보고서는 만든 사람(같은 IP)만 지우거나 되살릴 수 있어요. 다른 보고서는 관리 페이지에서 관리자가 지워요.'), { status: 403 })
+  }
+}
+
 // 보고서 한 건 만들기 (아직 저장 전). 대기열(reportJobs)과 예전 바로 만들기(/api/reports)가 같이 쓴다
 async function buildReportEntry(body) {
   const all = body.mode === 'all'
@@ -326,11 +348,13 @@ export function startScheduler() {
     pruneUsage().catch((err) => console.warn(`[usage] 오래된 기록 정리 실패: ${err.message}`))
     pruneArticleTexts().catch((err) => console.warn(`[texts] 오래된 원문 정리 실패: ${err.message}`)) // 원문은 90일만
     pruneSearchCounts().catch((err) => console.warn(`[search] 오래된 검색어 횟수 정리 실패: ${err.message}`)) // 검색어 횟수는 90일만
-    // 보고서 자동 삭제: 관리자가 정한 기간(기본 꺼짐)이 지난 보고서
+    // 보고서 자동 정리 (11/13): 관리자가 정한 기간(기본 꺼짐)이 지난 보고서는 휴지통으로, 휴지통 보관 기간(기본 30일)이 지나면 영구 삭제
     getSetting(REPORT_RETENTION_SETTING, 0)
-      .then((days) => deleteReportsOlderThan(Number(days) || 0))
-      .then((n) => n && console.log(`[reports] 자동 삭제 ${n}개`))
-      .catch((err) => console.warn(`[reports] 자동 삭제 실패: ${err.message}`))
+      .then((days) => trashReportsOlderThan(Number(days) || 0))
+      .then((n) => n && console.log(`[reports] 휴지통으로 ${n}개`))
+      .then(async () => purgeTrash(await trashDays()))
+      .then((n) => n && console.log(`[reports] 휴지통 영구 삭제 ${n}개`))
+      .catch((err) => console.warn(`[reports] 자동 정리 실패: ${err.message}`))
   }
   prune()
   setInterval(prune, 86_400_000).unref()
@@ -749,22 +773,45 @@ export async function handleApi(req, res) {
       return send(res, 200, await lookupWiki(term))
     }
     if (req.method === 'GET' && req.url === '/api/reports') {
-      return send(res, 200, { stored: dbEnabled(), reports: dbEnabled() ? await listReports(200, { ip: clientIp(req) }) : [] })
+      return send(res, 200, { stored: dbEnabled(), trashDays: await trashDays(), reports: dbEnabled() ? await listReports(200, { ip: clientIp(req) }) : [] })
     }
     // 관리 페이지 보고서 관리 (11/08): 전체 목록(만든 IP 포함) · 자동 삭제 주기
     if (req.method === 'GET' && req.url === '/api/admin/reports') {
       requireAdmin(req)
       const retentionDays = Number(await getSetting(REPORT_RETENTION_SETTING, 0)) || 0
-      return send(res, 200, { stored: dbEnabled(), retentionDays, reports: await listReports(1000, { withIp: true }) })
+      return send(res, 200, { stored: dbEnabled(), retentionDays, trashDays: await trashDays(), reports: await listReports(1000, { withIp: true }) })
     }
     if (req.method === 'PUT' && req.url === '/api/admin/reports/retention') {
       const admin = requireAdmin(req)
       const days = Number((await readJson(req)).days)
       if (!REPORT_RETENTION_CHOICES.includes(days)) return send(res, 400, { error: '고를 수 있는 기간이 아니에요.' })
       await setSetting(REPORT_RETENTION_SETTING, days)
-      const deleted = await deleteReportsOlderThan(days)
-      await logChange(admin, '보고서 자동 삭제', days ? `만든 지 ${days}일 지난 보고서 (지금 ${deleted}개 지움)` : '꺼짐')
+      const deleted = await trashReportsOlderThan(days)
+      await logChange(admin, '보고서 자동 정리', days ? `만든 지 ${days}일 지난 보고서는 휴지통으로 (지금 ${deleted}개)` : '꺼짐')
       return send(res, 200, { retentionDays: days, deleted })
+    }
+    // 휴지통 보관 기간 (11/13): 관리자가 정함. 바꾸면 바로 한 번 정리
+    if (req.method === 'PUT' && req.url === '/api/admin/reports/trash') {
+      const admin = requireAdmin(req)
+      const days = Number((await readJson(req)).days)
+      if (!REPORT_TRASH_CHOICES.includes(days)) return send(res, 400, { error: '고를 수 있는 기간이 아니에요.' })
+      await setSetting(REPORT_TRASH_SETTING, days)
+      const purged = await purgeTrash(days)
+      await logChange(admin, '휴지통 보관 기간', days ? `${days}일 지나면 영구 삭제 (지금 ${purged}개 지움)` : '자동으로 지우지 않음')
+      return send(res, 200, { trashDays: days, purged })
+    }
+    // 휴지통에서 되살리기 · 중요 표시 (11/13). 되살리기는 만든 사람(같은 IP)만
+    if (req.method === 'POST' && /^\/api\/reports\/[^/]+\/restore$/.test(req.url)) {
+      const id = decodeURIComponent(req.url.split('/')[3])
+      await requireReportOwner(req, id)
+      await restoreReport(id)
+      return send(res, 200, { ok: true })
+    }
+    if (req.method === 'PUT' && /^\/api\/reports\/[^/]+\/star$/.test(req.url)) {
+      const id = decodeURIComponent(req.url.split('/')[3])
+      const { on } = await readJson(req)
+      await setReportStar(clientIp(req), id, Boolean(on))
+      return send(res, 200, { ok: true, starred: Boolean(on) })
     }
     if (req.method === 'POST' && req.url === '/api/reports/import') {
       // 브라우저(localStorage)에 있던 보고서함을 DB로 옮긴다. 이미 있는 건 건너뜀
@@ -775,21 +822,24 @@ export async function handleApi(req, res) {
       return send(res, 200, { reports: await listReports(30, { ip }) })
     }
     if (req.method === 'DELETE' && req.url.startsWith('/api/reports/')) {
-      // 공용 보고서함에서 지우면 되돌릴 수 없다 (11/08): 일반 화면에서는 그 보고서를 만든 IP만,
-      // 관리자는 관리 페이지에서만 모든 보고서를 지운다 (일반 화면에서는 관리자도 일반 사용자와 같음)
-      const [path] = req.url.split('?')
+      // 11/13 휴지통: 일반 화면에서 지우면 휴지통으로 (만든 IP만, 11/08 원칙 그대로). 휴지통에 있는 것을 ?permanent=1로 지우면 영구 삭제 (만든 사람)
+      // 관리자는 관리 페이지에서만 모든 보고서를 바로 영구 삭제한다 (일반 화면에서는 관리자도 일반 사용자와 같음)
+      const [path, qs] = req.url.split('?')
       const id = decodeURIComponent(path.slice('/api/reports/'.length))
       const admin = adminHere(req)
-      if (!admin) {
-        const ip = clientIp(req)
-        const owner = await reportOwnerIp(id)
-        if (!ip || !owner || owner !== ip) {
-          throw Object.assign(new Error('보고서는 만든 사람(같은 IP)만 지울 수 있어요. 다른 보고서는 관리 페이지에서 관리자가 지워요.'), { status: 403 })
-        }
+      if (admin) {
+        await deleteReport(id)
+        await logChange(admin, '보고서 삭제', id)
+        return send(res, 200, { ok: true, permanent: true })
       }
-      await deleteReport(id)
-      if (admin) await logChange(admin, '보고서 삭제', id)
-      return send(res, 200, { ok: true })
+      await requireReportOwner(req, id)
+      if (new URLSearchParams(qs ?? '').get('permanent') === '1') {
+        if (!(await reportTrashedAt(id))) return send(res, 400, { error: '영구 삭제는 휴지통에서만 할 수 있어요.' })
+        await deleteReport(id)
+        return send(res, 200, { ok: true, permanent: true })
+      }
+      await trashReport(id)
+      return send(res, 200, { ok: true, trashed: true })
     }
     if (req.method === 'POST' && req.url === '/api/reports') {
       return await handleReport(req, res)

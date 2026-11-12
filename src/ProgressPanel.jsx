@@ -139,7 +139,7 @@ function ReportJobs({ jobs, onAnswer, onCancel, onOpenReport, onHide }) {
             <p className="progress-sub">
               {j.result?.research?.filled ? `AI 해설 ${j.result.research.gaps}줄 중 ${j.result.research.filled}줄 보충 · ` : ''}
               <button type="button" className="link-btn" onClick={() => onOpenReport(j.entryId)}>
-                보고서함에서 보기
+                내 보고서에서 보기
               </button>
             </p>
           )}

@@ -5,6 +5,8 @@ import {
   answerReportJob,
   cancelReportJob,
   deleteReportApi,
+  restoreReportApi,
+  starReportApi,
   fetchReportJobs,
   updateReportApi,
   fetchAdminMe,
@@ -245,6 +247,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [aiSummaries, setAiSummaries] = useState(() => load(AI_SUMMARIES_KEY, {}))
   const [reports, setReports] = useState(() => loadReports())
   const [reportsInDb, setReportsInDb] = useState(false) // true면 보고서함을 서버 DB에 저장
+  const [reportTrashDays, setReportTrashDays] = useState(null) // 휴지통 보관 기간 (관리자 설정, 11/13)
   // 보고서 작업 대기열 (11/08): 서버가 만들고, 화면은 3초마다 상태를 받아 진행 창에 보여 준다
   const [reportJobs, setReportJobs] = useState([])
   const ingestedJobs = useRef(new Set())
@@ -386,8 +389,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   useEffect(() => {
     let alive = true
     fetchReports()
-      .then(async ({ stored, reports: serverReports }) => {
+      .then(async ({ stored, reports: serverReports, trashDays }) => {
         if (!alive || !stored) return
+        setReportTrashDays(trashDays ?? null)
         const local = loadReports()
         const list = serverReports.length === 0 && local.length > 0 ? (await importReports(local)).reports : serverReports
         if (!alive) return
@@ -503,10 +507,26 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     if (reportsInDb) updateReportApi(entry).catch(() => {})
   }
 
+  // 11/13 휴지통: 지우면 휴지통으로(공용 보고서함은 서버, 브라우저 보관이면 바로 지움). 영구 삭제는 휴지통에서
   async function handleDeleteReport(id) {
-    if (reportsInDb) await deleteReportApi(id, clientId())
+    if (!reportsInDb) return updateReports((list) => list.filter((r) => r.id !== id))
+    await deleteReportApi(id, clientId())
+    updateReports((list) => list.map((r) => (r.id === id ? { ...r, deletedAt: new Date().toISOString() } : r)))
+  }
+  async function handleRestoreReport(id) {
+    await restoreReportApi(id)
+    updateReports((list) => list.map((r) => (r.id === id ? (({ deletedAt: _d, ...rest }) => rest)(r) : r)))
+  }
+  async function handlePurgeReport(id) {
+    if (reportsInDb) await deleteReportApi(id, clientId(), { permanent: true })
     updateReports((list) => list.filter((r) => r.id !== id))
   }
+  async function handleStarReport(id, on) {
+    updateReports((list) => list.map((r) => (r.id === id ? { ...r, starred: on } : r)))
+    if (reportsInDb) await starReportApi(id, on).catch(() => updateReports((list) => list.map((r) => (r.id === id ? { ...r, starred: !on } : r))))
+  }
+  // 휴지통에 있는 보고서는 보고서함(휴지통 보기) 밖에서는 쓰지 않는다 (탭 숫자 · 선별 · 내보내기)
+  const liveReports = useMemo(() => reports.filter((r) => !r.deletedAt), [reports])
   // 공용 보고서함(DB): 일반 화면에서는 그 보고서를 만든 IP만 지운다(서버가 mine으로 알려 줌). 관리자로 로그인해 있어도 같다.
   // 관리자 권한은 관리 페이지(/admin 보고서 관리, /admin/test)에서만 (11/08 원칙). 브라우저에만 있는 보고서함은 각자 지움
   const canDeleteReport = (r) => !reportsInDb || Boolean(r?.mine) || (isTest && Boolean(admin))
@@ -783,7 +803,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   // 「설정 → 내 보고서 · 선별 정리본 받기」 (11/09): 내가 만든 보고서 전문 + 선별 목록(폴더별, 한 줄 요약)을 HTML 파일로
   function downloadBundle() {
     const html = buildBundleHtml({
-      reports: reports.filter((r) => r.mine),
+      reports: liveReports.filter((r) => r.mine),
       folders: folders.map((f) => ({
         name: f.name,
         articles: candidates
@@ -967,7 +987,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             setScreen('archive')
           }}
         >
-          보고서함{reports.length > 0 && <span className="tab-count">{reports.length}</span>}
+          내 보고서{liveReports.length > 0 && <span className="tab-count">{liveReports.length}</span>}
           {newReportIds.some((id) => reports.some((r) => r.id === id)) && (
             <span className="tab-new" title="새로 만들어진 보고서가 있어요 — 누르면 바로 열려요">
               새 {newReportIds.filter((id) => reports.some((r) => r.id === id)).length}
@@ -1019,7 +1039,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             </span>
           )}
           {/* 「내 자료」 · 「관리자」는 「설정」 하나로 모음 (11/09 조장) */}
-          <SettingsMenu admin={admin} reportCount={reports.filter((r) => r.mine).length} selectedCount={selectedIds.length} onBundle={downloadBundle} onMove={() => setShowMove(true)} />
+          <SettingsMenu admin={admin} reportCount={liveReports.filter((r) => r.mine).length} selectedCount={selectedIds.length} onBundle={downloadBundle} onMove={() => setShowMove(true)} />
         </span>
       </nav>
       {ops.mode !== 'normal' && (isTest || ops.mode !== 'maintenance') && (
@@ -1077,6 +1097,11 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       ) : screen === 'archive' ? (
         <ReportArchive
           reports={reports}
+          trashDays={reportTrashDays}
+          onRestore={reportsInDb ? handleRestoreReport : null}
+          onPurge={reportsInDb ? handlePurgeReport : null}
+          onStar={reportsInDb ? handleStarReport : null}
+          tagsFor={tagsFor}
           onDelete={handleDeleteReport}
           canDelete={canDeleteReport}
           onGoDraft={() => setScreen('select')}
@@ -1105,7 +1130,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           onDeleteFolder={deleteFolder}
           onMaterialAdded={handleMaterialAdded}
           reportArticles={reportArticles}
-          reports={reports}
+          reports={liveReports}
           reportJobs={reportJobs}
           onJobAdded={(job) => setReportJobs((prev) => [...prev.filter((j) => j.id !== job.id), job])}
           onOpenReport={(id) => {

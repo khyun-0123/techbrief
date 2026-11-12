@@ -214,9 +214,27 @@ export async function saveReportRetentionApi(days) {
   return data
 }
 
-export async function deleteReportApi(id, clientId) {
-  const res = await fetch(`/api/reports/${encodeURIComponent(id)}?client=${encodeURIComponent(clientId ?? '')}`, { method: 'DELETE' })
+// 휴지통 보관 기간 (11/13, 관리 페이지): 휴지통에 N일 있으면 영구 삭제. 0 = 자동으로 지우지 않음
+export async function saveReportTrashDaysApi(days) {
+  const res = await fetch('/api/admin/reports/trash', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days }) })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? '휴지통 보관 기간을 저장하지 못했어요')
+  return data
+}
+
+// 11/13: 일반 화면에서 지우면 휴지통으로. permanent: 휴지통에 있는 내 보고서를 영구 삭제
+export async function deleteReportApi(id, clientId, { permanent = false } = {}) {
+  const res = await fetch(`/api/reports/${encodeURIComponent(id)}?client=${encodeURIComponent(clientId ?? '')}${permanent ? '&permanent=1' : ''}`, { method: 'DELETE' })
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '보고서를 지우지 못했어요')
+  return res.json().catch(() => ({}))
+}
+export async function restoreReportApi(id) {
+  const res = await fetch(`/api/reports/${encodeURIComponent(id)}/restore`, { method: 'POST' })
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '보고서를 되살리지 못했어요')
+}
+export async function starReportApi(id, on) {
+  const res = await fetch(`/api/reports/${encodeURIComponent(id)}/star`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on }) })
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '중요 표시를 바꾸지 못했어요')
 }
 
 // DB에 저장된 요약 (다른 브라우저에서 만든 요약도 보이게)

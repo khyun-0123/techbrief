@@ -56,6 +56,16 @@ CREATE TABLE IF NOT EXISTS reports (
 CREATE INDEX IF NOT EXISTS reports_created_idx ON reports (created_at DESC);
 -- 보고서를 만든 사람의 IP (11/08): 일반 화면에서는 같은 IP만 지울 수 있다. 화면(다른 사용자)에는 보내지 않는다
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS created_ip text;
+-- 휴지통 (11/13 조장): 지우면 바로 없애지 않고 휴지통으로. 만든 사람은 휴지통에서 되살리거나 영구 삭제,
+-- 관리자가 정한 보관 기간(기본 30일)이 지나면 자동으로 영구 삭제 (report_trash_days)
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+-- 중요 보고서 표시 (11/13 조장): 사람마다(지금은 IP별 — 나중에 사람 구분으로 나눔)
+CREATE TABLE IF NOT EXISTS report_stars (
+  owner      text NOT NULL,
+  report_id  text NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (owner, report_id)
+);
 
 -- 정기 수집 키워드 (팀이 같이 쓰도록 브라우저가 아니라 DB에 둔다). position은 화면 순서
 CREATE TABLE IF NOT EXISTS keywords (
