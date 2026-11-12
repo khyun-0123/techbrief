@@ -99,6 +99,12 @@ function TechTimeline({ query, onClose, initialData = null, job = null }) {
                 관심 대 실질: {data.stage.attention.label} <span className="muted">({data.stage.attention.basis})</span>
               </p>
             )}
+            {data.breadth && (
+              <p className="hint">
+                연구 폭: 최근 3년({data.breadth.years}) 논문 낸 기관 {data.breadth.institutions >= 200 ? "200곳 이상" : `${data.breadth.institutions}곳`}
+                {data.breadth.fwci && ` · 인용 영향 FWCI ${data.breadth.fwci.mean} (1 = 분야 평균, ${data.breadth.fwci.years} 논문 ${data.breadth.fwci.papers}편)`}
+              </p>
+            )}
             {data.thin && (
               <p className="hint" role="note">
                 참고: {data.thin}

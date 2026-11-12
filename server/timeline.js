@@ -18,9 +18,9 @@ import { patentHistory, patternFromTerms } from './patents.js'
 import { englishTerms, openAlexQuery, queryKey } from './queryTerms.js'
 
 const DAY = 86_400_000
-// 기억 열쇠. 단계 기준이 바뀌면 올린다 (v2 11/11 분야 대비, v3 11/12 특허 · 관심 대 실질): 예전 단계 · 그 단계로 쓴 AI 정리는 다시 만든다 (열 때 또는 미리 분석 때)
-const TL_KEY = 'timeline:v3:'
-const STORY_KEY = 'timeline-story:v3:'
+// 기억 열쇠. 단계 기준이 바뀌면 올린다 (v2 11/11 분야 대비, v3 11/12 특허 · 관심 대 실질, v4 11/12 기관 수 · FWCI · 성숙 규칙): 예전 단계 · 그 단계로 쓴 AI 정리는 다시 만든다 (열 때 또는 미리 분석 때)
+const TL_KEY = 'timeline:v4:'
+const STORY_KEY = 'timeline-story:v4:'
 const TTL = 7 * DAY
 const PATENT_TTL = 30 * DAY
 const PERIODS = [
@@ -49,6 +49,33 @@ async function longPapers(en, display, terms = []) {
 
 // 기준선: 같은 조건(디스플레이 주제 또는 전체 분야)의 해마다 논문 수 (30일 기억, 한 번 $0.001)
 // 논문은 분야 전체가 해마다 늘고, 최근 해는 OpenAlex에 덜 올라와 있다 → 그 기술만의 증가인지 보려면 분야 전체 증가로 나눈다 (11/11 C)
+// 연구 폭 · 영향 (11/12, 33 문서 2장 · 7장 D4): 최근 3년(끝난 해) 그 기술 논문을 낸 기관 수 · 기관 유형, 그 앞 1~3년 논문의 FWCI
+// - 기관 수: Porter 외 2019 조건 e(서로 다른 연구 그룹이 다뤄야 한다 — 한 연구실의 일시적 연구를 거름)
+// - FWCI(분야 · 연도 · 문서 유형 보정 인용, 1 = 분야 평균): OpenAlex가 계산해 주는 표준 지표. 단계 판정에는 쓰지 않고 참고로만 (기준값 근거가 없어서)
+// 키워드 하나에 OpenAlex 3번 (약 $0.003)
+async function researchBreadth(terms, display) {
+  if (!terms.length) return null
+  const last = new Date().getFullYear() - 1
+  const search = encodeURIComponent(phraseVariants(terms).map((v) => `"${v}"`).join(' OR '))
+  const filter = (from, to) => ['type:article|review|conference-paper', ...(display ? [topicFilter] : []), `from_publication_date:${from}-01-01`, `to_publication_date:${to}-12-31`].join(',')
+  const [inst, types, cites] = await Promise.all([
+    openAlexGet(`/works?search=${search}&filter=${filter(last - 2, last)}&group_by=authorships.institutions.id`),
+    openAlexGet(`/works?search=${search}&filter=${filter(last - 2, last)}&group_by=authorships.institutions.type`),
+    // 인용이 쌓일 시간을 주려고 작년 논문은 빼고 그 앞 3년 (최대 200편)
+    openAlexGet(`/works?search=${search}&filter=${filter(last - 3, last - 1)}&per-page=200&select=fwci`),
+  ])
+  const fw = (cites.results ?? []).map((w) => w.fwci).filter((x) => typeof x === 'number').sort((a, b) => a - b)
+  const median = fw.length ? fw[Math.floor(fw.length / 2)] : null
+  const institutions = inst.meta?.groups_count ?? (inst.group_by ?? []).filter((g) => g.key).length
+  return {
+    years: `${last - 2}~${last}`,
+    institutions,
+    topInstitutions: (inst.group_by ?? []).filter((g) => g.key).slice(0, 5).map((g) => ({ name: g.key_display_name, count: g.count })),
+    institutionTypes: Object.fromEntries((types.group_by ?? []).filter((g) => g.key).map((g) => [g.key_display_name, g.count])),
+    fwci: fw.length ? { years: `${last - 3}~${last - 1}`, papers: fw.length, mean: Math.round((fw.reduce((a, b) => a + b, 0) / fw.length) * 100) / 100, median: Math.round(median * 100) / 100 } : null,
+  }
+}
+
 async function baselinePapers(display) {
   const key = `timeline-baseline:${display ? 'display' : 'all'}`
   const hit = await cacheGet(key).catch(() => null)
@@ -211,6 +238,8 @@ const REL_FAST = 1.3 // 11/12: 알려진 기술 12개 검증으로 1.4 → 1.3 (
 const REL_MILD = 1.15
 const REL_FLAT = 0.85
 const PEAK_DROP = 0.6
+const COMMUNITY_MIN = 3 // 최근 3년 논문 낸 기관 3곳 미만이면 아직 분야가 아님 (Porter 2019 조건 e의 「여러 그룹」, 3은 우리 판단)
+const MATURE_PAT_FACTOR = 5 // 성숙: 최근 6년 특허 100건 이상 (= 2 × 10 × 5, 우리 판단)
 const sumYears = (list, from, to) => list.filter((x) => x.y >= from && x.y <= to).reduce((a, x) => a + x.n, 0)
 // base: 분야 전체 해마다 논문 수 (없으면 예전처럼 그 기술의 증가만 본다)
 // 11/11 C: 검수에서 37개 중 26개가 「연구 지속」 — 분야 전체가 3년에 1.2배쯤 늘어 1.5배 미만을 모두 「비슷」으로 봤기 때문.
@@ -243,7 +272,7 @@ function attentionOf(naver, substanceUp) {
   return { label, interestGrowth: Math.round(g * 100) / 100, basis: `네이버 검색 관심도 최근 12달 vs 그 전 12달 ${g.toFixed(1)}배` }
 }
 
-function stageOf(long, corpus, pat, base = [], naver = null) {
+function stageOf(long, corpus, pat, base = [], naver = null, breadth = null) {
   const last = new Date().getFullYear() - 1
   const recent = sumYears(long, last - 2, last)
   const before = sumYears(long, last - 5, last - 3)
@@ -273,9 +302,14 @@ function stageOf(long, corpus, pat, base = [], naver = null) {
   const devText = (d) => (d.by === 'patent' ? patText : d.by === 'company' ? `${shareText} (특허 자료 없음 → 기업 저자 비율로 판단)` : '')
   let stage
   let why
+  const fewGroups = breadth?.institutions != null && breadth.institutions < COMMUNITY_MIN
   if (recent < 15) {
     stage = '신생 · 탐색'
     why = `최근 3년 논문 ${recent}편으로 아직 적음`
+  } else if (fewGroups) {
+    // Porter 2019 조건 e: 한두 기관만 다루면 아직 분야로 자리 잡지 않음
+    stage = '신생 · 탐색'
+    why = `최근 3년 논문 ${recent}편이지만 낸 기관이 ${breadth.institutions}곳뿐 (${COMMUNITY_MIN}곳 미만)`
   } else if (pastPeak) {
     stage = '정체 · 감소'
     why = `최근 3년 논문 ${recent}편이 정점(${peakEnd - 2}~${peakEnd}, ${peak}편)의 ${Math.round((recent / peak) * 100)}%${patText}`
@@ -288,8 +322,10 @@ function stageOf(long, corpus, pat, base = [], naver = null) {
     stage = '완만한 성장'
     why = `논문이 앞 3년보다 ${growth.toFixed(1)}배${vsBase}${patText || shareText}`
   } else if (rel >= REL_FLAT) {
-    // 논문이 분야만큼: 특허가 줄지 않고(0.85배 이상) 이어지면 성숙 · 상용화
-    const d = devSignal(patRecent, patGrowth, shareNow, { patent: 0.85, share: 0.25 })
+    // 논문이 분야만큼 + 이미 특허가 많이 쌓인 기술 = 성숙 · 상용화. 성숙기에는 특허가 줄 수 있다
+    // (CAS 2026 OLED 보고서: 2020년 이후 특허는 크게 줄고 논문은 유지 → 최적화 단계). 그래서 특허 「증가」가 아니라 「쌓인 양」으로 본다
+    const matured = patRecent != null && patRecent + patBefore >= 2 * PAT_MIN * MATURE_PAT_FACTOR
+    const d = patRecent != null ? { on: matured, by: 'patent' } : devSignal(null, null, shareNow, { share: 0.25 })
     stage = d.on ? '성숙 · 상용화' : '연구 지속'
     why = `논문이 앞 3년보다 ${growth.toFixed(1)}배로 분야 전체와 비슷${vsBase}${devText(d)}`
   } else {
@@ -302,6 +338,8 @@ function stageOf(long, corpus, pat, base = [], naver = null) {
     why,
     attention: attentionOf(naver, substanceUp),
     patentRecent: patRecent,
+    institutions: breadth?.institutions ?? null,
+    fwci: breadth?.fwci ?? null,
     peak: peakEnd ? { years: `${peakEnd - 2}~${peakEnd}`, papers: peak } : null,
     growth: Math.round(growth * 100) / 100,
     baseGrowth: baseGrowth != null ? Math.round(baseGrowth * 100) / 100 : null,
@@ -329,7 +367,7 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
       // 미리 분석해 둔 값에 특허만 채운다
       const pat = await patents(hit.terms).catch((err) => ({ status: 'error', error: err.message }))
       const out = { ...hit, patents: pat }
-      out.stage = stageOf(out.long.length ? out.long : (out.corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n })), out.corpus, pat.status === 'ok' ? pat : null, out.base ?? [], out.naver)
+      out.stage = stageOf(out.long.length ? out.long : (out.corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n })), out.corpus, pat.status === 'ok' ? pat : null, out.base ?? [], out.naver, out.breadth)
       await cachePut(key, out, pat.status === 'error' ? 10 * 60_000 : TTL).catch(() => {})
       return { ...withThin(out), cached: false }
     }
@@ -340,7 +378,7 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
   const corpus = await corpusFacts(t.terms).catch((err) => ({ error: err.message }))
   const display = (corpus?.total ?? 0) >= THIN_MIN
   const settle = (p) => p.then((value) => ({ value }), (err) => ({ error: err.message }))
-  let [long, origins, pat, naver, base] = await Promise.all([settle(longPapers(en, display, t.terms)), settle(originPapers(t.terms, display)), settle(patents(t.terms, { cacheOnly: background })), settle(naverMonthly(q)), settle(baselinePapers(display))])
+  let [long, origins, pat, naver, base, breadth] = await Promise.all([settle(longPapers(en, display, t.terms)), settle(originPapers(t.terms, display)), settle(patents(t.terms, { cacheOnly: background })), settle(naverMonthly(q)), settle(baselinePapers(display)), settle(researchBreadth(t.terms, display))])
   // OpenAlex가 큰 묶음에서 504(시간 초과)를 주기도 한다 (11/10 실측: micro led) → 한 번 더
   if (long.error) long = await settle(longPapers(en, display, t.terms))
   const out = {
@@ -360,7 +398,8 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
   const basis = out.long.length ? out.long : (corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n }))
   // 기준선: OpenAlex 숫자로 판정할 때만 (논문 DB 숫자로 판정할 때는 기준선 단위가 달라 쓰지 않음)
   out.base = out.long.length ? base.value ?? [] : []
-  out.stage = stageOf(basis, corpus, out.patents.status === 'ok' ? out.patents : null, out.base, out.naver)
+  out.breadth = breadth.value ?? null
+  out.stage = stageOf(basis, corpus, out.patents.status === 'ok' ? out.patents : null, out.base, out.naver, out.breadth)
   if (!out.long.length && basis.length) out.stage.why += ' (OpenAlex 응답이 없어 논문 DB 기준)'
   // 디스플레이 근거가 적은 말: 다른 분야 논문이 섞일 수 있어 숫자 · 단계는 참고만, AI 흐름 정리는 하지 않는다 (11/11 검수: DDI → 유전체 · 전력 소자 논문)
   out.thin = display ? null : thinReason(corpus)
@@ -396,6 +435,11 @@ function storyInput(tl) {
   const lines = []
   lines.push(`기술: ${tl.query} (영문 검색어: ${tl.terms.join(', ')})`)
   lines.push(`규칙으로 판정한 단계: ${tl.stage.stage} — ${tl.stage.why} (비교 구간 ${tl.stage.years})`)
+  if (tl.breadth) {
+    const types = Object.entries(tl.breadth.institutionTypes ?? {}).map(([k, n]) => `${k} ${n}`).join(', ')
+    lines.push(`연구 폭 (${tl.breadth.years}, OpenAlex): 논문 낸 기관 ${tl.breadth.institutions}곳${types ? ` (기관 유형별 논문 수: ${types})` : ''}`)
+    if (tl.breadth.fwci) lines.push(`인용 영향 (${tl.breadth.fwci.years} 논문 ${tl.breadth.fwci.papers}편): FWCI 평균 ${tl.breadth.fwci.mean} · 중앙값 ${tl.breadth.fwci.median} (1 = 분야 평균)`)
+  }
   // 올해는 아직 안 끝나 적게 잡히므로 AI에 주지 않는다 (11/10 실측: 올해 값을 「증가」로 씀)
   const done = (list) => list.filter((x) => x.y < new Date().getFullYear())
   lines.push(`논문 수 (OpenAlex, 해마다, 끝난 해만${tl.display ? ', 디스플레이 주제' : ''}): ${done(tl.long).map((x) => `${x.y}년 ${x.n}편`).join(', ')}`)
