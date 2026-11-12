@@ -2,13 +2,14 @@
 // 대상 (겹치면 한 번): 자동 수집 키워드 + 최근 14일 「뉴스·논문에서 찾기」로 많이 찾은 말 20개 + 요즘 뜨는 기술 종합 10위
 // - 숫자(buildTimeline)와 AI 흐름 정리(timelineStory)를 둘 다 만들어 7일 기억. 3일이 지나면 다시 만든다
 // - AI는 「뒤에서 도는 일」 순서라 사람이 누른 요약 · 보고서가 먼저다 (llm/client.js PRIORITY.BACKGROUND)
-// - 특허(BigQuery 한 번 26GB)는 미리 받지 않는다 → 사람이 열 때 받는다 (하루 할당량 50GiB, 23 문서)
+// - 특허: 받아 둔 디스플레이 특허 DB · 전 세계 특허 제목 파일에서 미리 센다(비용 없음, 11/12). 둘 다 없을 때만 BigQuery(한 번 26GB)라 미리 받지 않고 사람이 열 때 받는다
 // - OpenAlex는 한 말에 $0.002 → 30개면 $0.06. 서버가 켜지고 10분 뒤, 그 뒤 6시간마다. TIMELINE_PRECOMPUTE=off면 안 함
 import { dbEnabled } from './db/index.js'
 import { getKeywords, getSetting, setSetting } from './db/store.js'
 import { frequentSearches, queryKey, rememberTerms } from './queryTerms.js'
 import { getTechTrends } from './techtrends.js'
 import { buildTimeline, cachedTimeline, timelineStory } from './timeline.js'
+import { patentDbReady, titlesReady } from './patentDb.js'
 
 const STATE_KEY = 'timeline_precompute'
 const FRESH_MS = 3 * 86_400_000
@@ -50,7 +51,9 @@ export async function runPrecompute() {
     await setSetting(STATE_KEY, { ...(await getSetting(STATE_KEY, {})), phase: 'running', startedAt: started, total: targets.length })
     for (const t of targets) {
       const { timeline, story } = await cachedTimeline(t.query)
-      if (timeline && story && Date.now() - Date.parse(story.at) < FRESH_MS) {
+      // 11/12 D3: 디스플레이 특허 DB가 생기면 예전 특허 숫자로 만든 것은 3일이 안 지났어도 다시 (특허 DB는 비용 없음)
+      const toDb = timeline && Boolean(await patentDbReady()) && (!['family', 'family-all'].includes(timeline.patents?.basis) || (timeline.patents?.inDisplay && Boolean(await titlesReady())))
+      if (timeline && story && Date.now() - Date.parse(story.at) < FRESH_MS && !toDb) {
         skipped += 1
         continue
       }

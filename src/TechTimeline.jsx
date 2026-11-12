@@ -122,11 +122,17 @@ function TechTimeline({ query, onClose, initialData = null, job = null }) {
                 note="2018년 이후 논문 DB에 맞는 논문이 없어요."
               />
               <Spark
-                title="특허 공개 수"
+                title={['family', 'family-all'].includes(data.patents.basis) ? '특허 (같은 발명 한 번)' : '특허 공개 수'}
                 unit="건"
                 monthly="year"
                 series={data.patents.status === 'ok' ? yearly(full(data.patents.years)) : []}
-                source="Google Patents · 영문 제목 기준"
+                source={
+                  data.patents.basis === 'family'
+                    ? `디스플레이 특허 · Google Patents · 영문 제목 · 첫 공개 연도${data.patents.inDisplay ? ' · 디스플레이 특허 안에서만 (전체보다 적음)' : ''}`
+                    : data.patents.basis === 'family-all'
+                      ? '전 세계 특허 · Google Patents · 영문 제목 · 첫 공개 연도'
+                      : 'Google Patents · 영문 제목 기준'
+                }
                 note={data.patents.status === 'no_key' ? 'Google Cloud 키가 없어요.' : data.patents.error ?? '특허가 없어요.'}
               />
               <Spark
