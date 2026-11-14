@@ -196,7 +196,12 @@ export async function searchCorpus(terms, { from, to, limit = 400 } = {}) {
 }
 
 // ── 논문 점수 (11/10, 0~100) ──
-// 관련도 35(결과 안 순위 백분위) · 기업 저자 20(디스플레이 회사 만점, 그 밖의 기업 절반) · 영향력 20 · 최신성 15 · 전문 학술지 10
+// 관련도 35(결과 안 순위 백분위) · 기업 저자 10(디스플레이 회사 만점, 그 밖의 기업 절반) · 산업 응용 10 · 영향력 20 · 최신성 15 · 전문 학술지 10
+// 11/15 팀 회의: 기업 저자 20점은 논문 93%(학계 · 개인 · 소기업, 12만 편 중 기업 저자 6.9%)가 늘 0점이라 응용 연구를 한 학계 논문이 덜 반영됨
+//   → 기업 저자 20 → 10, 남은 10은 저자와 상관없이 제목 · 초록의 산업 응용 말(양산 · 공정 · 수율 · 대면적 · 패널 · 수명 · 봉지 …) 1개 5점 · 2개 이상 10점
+//   표본 4,000편(2022~, 핵심지): 응용 5점 이상 — 디스플레이 기업 48% · 학계 21% · 그 밖의 기업 27%. 영향력은 올리지 않음(2년 안 된 논문은 인용 정보가 거의 없어 신규성과 반대 — 33 문서)
+export const APPLIED_WORDS =
+  /\b(mass[- ]production|manufactur\w*|fabrication process|large[- ]area|yield|pilot[- ]line|prototype|commerciali[sz]\w*|commercial|panel|\d+(\.\d+)?[- ]?inch|gen(eration)?[- ]?\d+(\.\d+)?|throughput|low[- ]cost|cost[- ]effective|reliabilit\w*|lifetime|mura|inkjet[- ]print\w*|roll[- ]to[- ]roll|scalab\w*|encapsulat\w*|backplane|driving circuit|module)\b/gi
 // 영향력: 2년 넘은 논문은 분야 · 연도 보정 인용 백분위. 2년 안 된 논문은 백분위가 의미 없어(인용 0도 0.68, 11/10 실측) FWCI, 없으면 중간값
 export function paperScore2(w, relPct) {
   const ageYears = w.date || w.published ? Math.max(0, (Date.now() - Date.parse(w.date || w.published)) / (365.25 * 86_400_000)) : 3
@@ -206,7 +211,8 @@ export function paperScore2(w, relPct) {
   const venue = w.displayJournal || DISPLAY_SOURCE.has(w.source_id) ? 1 : w.is_core ? 0.5 : 0
   const parts = {
     relevance: Math.round(35 * relPct),
-    company: maker ? 20 : companies.length ? 10 : 0,
+    company: maker ? 10 : companies.length ? 5 : 0,
+    applied: Math.min(10, 5 * new Set([...`${w.title ?? ''} ${w.abstract ?? ''}`.matchAll(APPLIED_WORDS)].map((m) => m[0].toLowerCase())).size),
     impact: Math.round(20 * impact),
     recency: Math.round(15 * Math.exp(-ageYears / 3)),
     journal: Math.round(10 * venue),
@@ -214,6 +220,6 @@ export function paperScore2(w, relPct) {
   const score = Math.min(100, Object.values(parts).reduce((a, b) => a + b, 0))
   return {
     score,
-    parts: { ...parts, cited: w.cited ?? 0, fwciValue: w.fwci ?? null, pctValue: w.pct ?? null, top10: Boolean(w.top10), companies: companies.map((c) => c.name).slice(0, 4), maker: maker?.name ?? null },
+    parts: { ...parts, cited: w.cited ?? 0, fwciValue: w.fwci ?? null, pctValue: w.pct ?? null, top10: Boolean(w.top10), companies: companies.map((c) => c.name).slice(0, 4), maker: maker?.name ?? null, appliedWords: [...new Set([...`${w.title ?? ''} ${w.abstract ?? ''}`.matchAll(APPLIED_WORDS)].map((m) => m[0].toLowerCase()))].slice(0, 3) },
   }
 }

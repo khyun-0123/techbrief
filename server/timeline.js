@@ -21,7 +21,7 @@ import { englishTerms, openAlexQuery, queryKey } from './queryTerms.js'
 
 const DAY = 86_400_000
 // 기억 열쇠. 단계 기준이 바뀌면 올린다 (v2 11/11 분야 대비, v3 11/12 특허 · 관심 대 실질, v4 11/12 기관 수 · FWCI · 성숙 규칙): 예전 단계 · 그 단계로 쓴 AI 정리는 다시 만든다 (열 때 또는 미리 분석 때)
-const TL_KEY = 'timeline:v4:'
+const TL_KEY = 'timeline:v5:' // v5: 특허 2개국 이상 출원 비율 (11/15)
 const STORY_KEY = 'timeline-story:v4:'
 const TTL = 7 * DAY
 const PATENT_TTL = 30 * DAY
@@ -224,7 +224,7 @@ async function patents(terms, { cacheOnly = false, display = false } = {}) {
   const titles = display ? null : await titlesReady()
   if (db || titles) {
     const source = display ? 'db' : titles ? 'titles' : 'db-only'
-    const key = `timeline-patents-local2:${source}:${pattern}`
+    const key = `timeline-patents-local3:${source}:${pattern}` // local3: 해마다 2개국 이상 출원 수(intl, 11/15)
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return hit
     const r = source === 'titles' ? await titlePatentHistory(pattern) : await localPatentHistory(pattern)
@@ -320,6 +320,9 @@ function stageOf(long, corpus, pat, base = [], naver = null, breadth = null) {
   const shareThen = corpus?.periods?.[0]?.companyShare ?? null
   const patRecent = pat?.years ? sumYears(pat.years, last - 2, last) : null
   const patBefore = pat?.years ? sumYears(pat.years, last - 5, last - 3) : null
+  // 해외 출원 비율 (11/15 팀 회의): 최근 3년 특허 중 2개 나라 이상에 낸 것의 몫. 판정에는 아직 넣지 않고 보여 주기만 (33 문서)
+  const intlRecent = pat?.years?.some((x) => x.intl != null) ? pat.years.filter((x) => x.y >= last - 2 && x.y <= last).reduce((a, x) => a + (x.intl ?? 0), 0) : null
+  const patIntlShare = intlRecent != null && patRecent >= PAT_MIN ? Math.round((intlRecent / patRecent) * 100) / 100 : null
   const patRaw = patRecent != null ? (patRecent + 1) / (patBefore + 1) : null
   // 특허 분야 전체(같은 자료의 모든 특허) 증가로 나눈다 (11/12, 논문 rel과 같은 근거). 분야 숫자가 없으면(BigQuery 공보) 그대로
   const fieldBefore = pat?.fieldYears ? sumYears(pat.fieldYears, last - 5, last - 3) : 0
@@ -339,7 +342,7 @@ function stageOf(long, corpus, pat, base = [], naver = null, breadth = null) {
   const pastPeak = peak > 0 && peakEnd <= last - 3 && recent < PEAK_DROP * peak && !patRising
   const patText =
     patRecent != null
-      ? ` · 특허 최근 3년 ${patRecent}건 (앞 3년의 ${patRaw.toFixed(2)}배${patField ? `, 특허 분야 전체 ${patField.toFixed(2)}배 대비 ${patGrowth.toFixed(2)}배` : ''})`
+      ? ` · 특허 최근 3년 ${patRecent}건 (앞 3년의 ${patRaw.toFixed(2)}배${patField ? `, 특허 분야 전체 ${patField.toFixed(2)}배 대비 ${patGrowth.toFixed(2)}배` : ''}${patIntlShare != null ? `, 2개국 이상 출원 ${Math.round(patIntlShare * 100)}%` : ''})`
       : ''
   const shareText = shareNow != null ? ` · 기업 저자 비율 ${Math.round(shareNow * 100)}%` : ''
   // 개발 신호가 무엇으로 판단됐는지 함께 적는다 (특허가 없으면 기업 저자 비율로 대신했다고)
@@ -397,6 +400,7 @@ function stageOf(long, corpus, pat, base = [], naver = null, breadth = null) {
     why,
     attention: attentionOf(naver, substanceUp),
     patentRecent: patRecent,
+    patentIntlShare: patIntlShare, // 최근 3년 특허 중 2개 나라 이상에 낸 몫 (11/15)
     patentFieldGrowth: patField != null ? Math.round(patField * 100) / 100 : null,
     institutions: breadth?.institutions ?? null,
     fwci: breadth?.fwci ?? null,

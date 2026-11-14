@@ -49,11 +49,11 @@ function Change({ change, growth, cur }) {
 }
 
 // 작은 그래프: 비교 기간(앞)은 흐리게, 고른 기간(뒤)은 진하게
-function Mini({ points, curFrom }) {
+function Mini({ points, curFrom, floor = 1 }) {
   if (!points || points.length < 2) return <span className="tt-mini-empty" />
   const W = 96
   const H = 24
-  const max = Math.max(...points.map((p) => p.v), 1)
+  const max = Math.max(...points.map((p) => p.v), floor) // 11/15: 출처마다 최소 의미 있는 값(src.min)까지는 축을 고정 — 적은 수가 급등처럼 안 보이게
   const xy = points.map((p, i) => [(i / (points.length - 1)) * W, H - 2 - (p.v / max) * (H - 4)])
   const split = curFrom ? points.findIndex((p) => p.t >= curFrom) : -1
   const path = (arr) => arr.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join('')
@@ -230,7 +230,7 @@ function SourceList({ src, win, onPick }) {
               {fmtNum(r.cur)}
               {src.unit} <small>← {fmtNum(r.prev)}{src.unit}</small>
             </span>
-            <Mini points={r.points} curFrom={src.daily ? win.cur[0] : null} />
+            <Mini points={r.points} curFrom={src.daily ? win.cur[0] : null} floor={src.min ?? 1} />
             {r.stale && <span className="tt-stale" title="이번에 새로 받지 못해 지난 값으로 셈">지난 값</span>}
           </li>
         ))}

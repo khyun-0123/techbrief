@@ -17,15 +17,22 @@ const fmtDay = (t, monthly) => {
 const fmtAt = (iso) => new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
 const fmtNum = (v) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}천` : String(Math.round(v * 10) / 10))
 
+// 세로축 최소 꼭대기 (11/15 팀 회의: 1건 → 5건이 그래프를 꽉 채워 급등처럼 보이면 안 됨): 건수는 10, 비율(%)은 50
+// 값이 이보다 작으면 축을 이 값으로 고정하고 「적은 건수 — 축 0~10」을 보여 준다. 검색량 지수처럼 단위가 없는 값은 그대로
+export const axisFloor = (unit) => (unit === '%' ? 50 : ['편', '건', '회'].includes(unit) ? 10 : 1)
+
 // monthly: false(일별) · true(월별) · 'year'(해마다, 기술 시계열 11/10). 기술 시계열(TechTimeline.jsx)도 같이 쓴다
 export function Spark({ title, unit, series, note, source, asOf, monthly = false }) {
   const [hover, setHover] = useState(null)
+  const floor = axisFloor(unit)
+  const dataMax = series?.length ? Math.max(...series.map((p) => p.v)) : 0
+  const floored = dataMax > 0 && dataMax < floor
   const pts = useMemo(() => {
     if (!series?.length) return []
-    const max = Math.max(...series.map((p) => p.v), 1)
+    const max = Math.max(...series.map((p) => p.v), axisFloor(unit))
     const step = series.length > 1 ? (W - PAD.l - PAD.r) / (series.length - 1) : 0
     return series.map((p, i) => ({ ...p, x: PAD.l + i * step, y: PAD.t + (H - PAD.t - PAD.b) * (1 - p.v / max) }))
-  }, [series])
+  }, [series, unit])
 
   const last = pts.at(-1)
   const shown = hover ?? last
@@ -71,7 +78,12 @@ export function Spark({ title, unit, series, note, source, asOf, monthly = false
       ) : (
         <p className="trend-empty">{note ?? '아직 데이터가 없어요.'}</p>
       )}
-      {source && <span className="trend-source">{source}</span>}
+      {source && (
+        <span className="trend-source">
+          {source}
+          {floored && pts.length > 1 ? ` · 적은 건수 — 축 0~${floor}${unit}` : ''}
+        </span>
+      )}
       {/* 언제 받은 값인지. 새로 받기에 실패해 지난 값을 보여 주는 중이면 따로 표시 (11/07) */}
       {asOf?.at && pts.length > 1 && (
         <span className={asOf.stale ? 'trend-asof stale' : 'trend-asof'} title={asOf.error ? `새로 받기 실패: ${asOf.error}` : undefined}>

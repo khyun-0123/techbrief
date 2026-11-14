@@ -13,7 +13,7 @@ export default function VerdictModal({ term, info, threatFactor = 1.5, onClose, 
     return () => window.removeEventListener('keydown', esc)
   }, [onClose])
   const c = info.competitors
-  const rows = [{ name: '분야 전체', before: c.field?.before, now: c.field?.now, ratio: c.field?.ratio, field: true }, ...(c.companies ?? []).filter((x) => !x.unsure)]
+  const rows = [{ name: '분야 전체', before: c.field?.before, now: c.field?.now, ratio: c.field?.ratio, intl: c.field?.intl, field: true }, ...(c.companies ?? []).filter((x) => !x.unsure)]
   const why =
     info.verdict === '위협'
       ? `「${c.name}」에서 경쟁사 특허가 분야 전체보다 ${threatFactor}배 이상 빠르게 늘었는데, 자사는 분야보다 느려요.`
@@ -49,6 +49,9 @@ export default function VerdictModal({ term, info, threatFactor = 1.5, onClose, 
                 <th scope="col" className="cg-num">
                   증가
                 </th>
+                <th scope="col" className="cg-num" title="최근 3년 특허 중 같은 발명을 2개 나라 이상에 낸 몫 (11/15 팀 회의: 해외 특허가 더 중요할 수 있음 — 판정에는 아직 안 넣음)">
+                  해외 출원
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -58,12 +61,13 @@ export default function VerdictModal({ term, info, threatFactor = 1.5, onClose, 
                   <td className="cg-num">{r.before?.toLocaleString() ?? '—'}</td>
                   <td className="cg-num">{r.now?.toLocaleString() ?? '—'}</td>
                   <td className="cg-num">{fmt(r.ratio)}</td>
+                  <td className="cg-num">{r.intl == null ? '—' : `${Math.round(r.intl * 100)}%`}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="vm-note">특허 수는 테크브리프 디스플레이 특허 DB(같은 발명은 한 번)에서 규칙으로 센 값이에요. 판정 기준은 팀이 정한 값이라 담당자 확인이 필요해요. CSOT는 출원인 이름 확인 전이라 뺐어요.</p>
+        <p className="vm-note">특허 수는 테크브리프 디스플레이 특허 DB(같은 발명은 한 번)에서 규칙으로 센 값이에요. 판정 기준은 팀이 정한 값이라 담당자 확인이 필요해요. 증가 배수는 적은 건수가 부풀지 않게 앞 · 뒤에 5건씩 더해 계산하고(1→5건은 5배가 아니라 1.7배), 두 기간 합이 10건 미만이면 「—」(판정에서 뺌)로 둬요. 「해외 출원」은 최근 3년 특허 중 2개 나라 이상에 낸 몫이에요(판정에는 아직 안 넣음). CSOT는 출원인 이름 확인 전이라 뺐어요.</p>
         <div className="vm-actions">
           <button type="button" className="btn" onClick={onClose}>
             닫기
