@@ -59,7 +59,7 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
         {step === 'confirm' && result && (
           <>
             <p className="ar-rule">
-              자료 {result.pool}건(같은 이슈는 하나로) 중 <b>「중요」({AUTO_PICK.high}점 이상) {result.important}건</b>
+              자료 {result.pool}건(같은 이슈는 하나로) 중 <b>「중요」({result.rule.high}점 이상) {result.important}건</b>
               {result.important > AUTO_PICK.max
                 ? ` — 많아서 점수 높은 ${AUTO_PICK.max}건만 넣어요 (보고서를 한 번에 쓰는 한도)`
                 : result.important < AUTO_PICK.min

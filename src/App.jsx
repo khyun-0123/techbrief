@@ -161,18 +161,19 @@ function scoreTitle(a) {
     return `중요도 ${a.importance ?? 0}점 = 검색 관련도 ${pp.relevance}/35 + 기업 저자 ${pp.company}/${companyMax}${pp.companies?.length ? ` (${pp.companies.join(', ')})` : ''}${pp.applied != null ? ` + 산업 응용 ${pp.applied}/10${pp.appliedWords?.length ? ` (${pp.appliedWords.join(', ')})` : ''}` : ''} + 영향력 ${pp.impact}/20 (인용 ${pp.cited}회${pp.pctValue != null ? ` · 백분위 ${Math.round(pp.pctValue * 100)}` : ''}) + 최신성 ${pp.recency}/15 + 전문 학술지 ${pp.journal}/10 · 60점 이상이면 중요`
   }
   const p = a.scoreParts ?? {}
+  const m = p.max ?? { novelty: 30, business: 25, source: 20, recency: 15, coverage: 10 } // 관리 페이지 「중요도 기준」 배점 (11/15)
   const parts = [
-    `신규성 ${p.novelty ?? 0}/30`,
-    `사업 연관성 ${p.business ?? 0}/25`,
-    `출처 신뢰도 ${p.source ?? 0}/20`,
-    `최신성 ${p.recency ?? 0}/15`,
-    `보도량 ${p.coverage ?? 0}/10`,
+    `신규성 ${p.novelty ?? 0}/${m.novelty}`,
+    `사업 연관성 ${p.business ?? 0}/${m.business}`,
+    `출처 신뢰도 ${p.source ?? 0}/${m.source}`,
+    `최신성 ${p.recency ?? 0}/${m.recency}`,
+    `보도량 ${p.coverage ?? 0}/${m.coverage}`,
   ]
   if (p.noise < 0) parts.push(`시황·홍보성 ${p.noise}`) // 11/11 전 점수
   const weight = p.weight ?? 1
   const relevance = weight < 1 ? ` × 관련도 ${weight} (${weight >= 0.5 ? '관련도 중간' : '관련도 낮음'})` : ''
   const noisy = p.noise > 0 && p.noise < 1 ? ` × ${p.noise} (시황·홍보성)` : ''
-  return `중요도 ${a.importance ?? 0}점 = (${parts.join(' + ')})${relevance}${noisy} · 45점 이상이면 중요`
+  return `중요도 ${a.importance ?? 0}점 = (${parts.join(' + ')})${relevance}${noisy} · ${p.high ?? 45}점 이상이면 중요`
 }
 
 // 논문 초록 (11/09 조장: 찾을 때마다 요약문 옆에 초록을). 찾기 결과는 abstract, 모은 논문은 description(앞의 [학술지] 떼고)

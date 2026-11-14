@@ -33,12 +33,14 @@ import AdminOps from './AdminOps.jsx'
 import AdminReports from './AdminReports.jsx'
 import AdminSources from './AdminSources.jsx'
 import AdminSearchTerms from './AdminSearchTerms.jsx'
+import AdminImportance from './AdminImportance.jsx'
 import { OPS_LABEL } from './ops.js'
 
 const SECTIONS = [
   ['overview', '개요', '시스템 상태와 확인할 일을 한눈에 봐요.'],
   ['usage', '사용 현황', '누가 얼마나 쓰고, 무엇을 찾고, 보고서까지 이어지는지 봐요. 일반 화면에서 한 일만 세요.'],
   ['targets', '수집 대상', '무엇을 모으고, 어떤 회사·기술을 중요하게 볼지 정해요. 다음 최신화부터 반영되고, 이미 모은 기사는 그대로예요.'],
+  ['importance', '중요도 기준', '중요도 다섯 칸의 배점과 「중요」 기준 점수를 정해요. 미리보기로 몇 건이 바뀌는지 보고 저장하면 다음 목록부터 반영돼요.'],
   ['refresh', '자동 최신화', '언제 기사를 모으고, 자동 요약을 할지 정해요.'],
   ['llm', 'AI 모델', '요약·보고서에 쓸 AI 서버를 골라요. 모든 사용자에게 바로 적용돼요.'],
   ['features', '실험 기능', '새 기능을 테스트 페이지에서 먼저 써 보고, 괜찮으면 모두에게 켜요.'],
@@ -817,6 +819,13 @@ function AdminApp() {
             health={health}
             refreshRunning={Boolean(refresh?.running)}
             dirtyCount={dirty.length}
+          />
+        )}
+
+        {section === 'importance' && (
+          <AdminImportance
+            onToast={setToast}
+            onChanged={() => fetchAdminLog().then(setLog).catch(() => {})}
           />
         )}
 
