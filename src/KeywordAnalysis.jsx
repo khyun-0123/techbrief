@@ -115,6 +115,8 @@ function Glance({ job, stage, keyword }) {
 }
 
 // 대시보드 「키워드 분석」 패널 안(검색창 아래)에 펼쳐진다. 기간은 「자료 찾기 →」로 자료 현황에서 찾을 때만 쓴다
+const MAX_SCOPE_TERMS = 6 // server/scopeSearch.js MAX_TERMS와 같게 (고른 말 하나에 네이버 1번)
+
 function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], period, onPeriod }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
@@ -188,7 +190,11 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
   const autoable = nodes.filter((n) => n.kind !== 'general' && !n.broad)
   const autoSet = new Set(autoable.slice(0, auto).map((n) => n.word))
   const isOn = (w) => manual[w] ?? autoSet.has(w)
-  const picked = nodes.filter((n) => isOn(n.word)).map((n) => n.word)
+  // 고른 말 = 1단계 중 켠 말 + 손으로 켠 2단계 말(맵의 회색 점 · 워드클라우드). 11/14: 2단계를 눌러도 「자료 찾기」 개수에 안 들어가던 문제
+  const firstWords = new Set(nodes.map((n) => n.word))
+  const pickedAll = [...nodes.filter((n) => isOn(n.word)).map((n) => n.word), ...Object.keys(manual).filter((w) => manual[w] && !firstWords.has(w))]
+  const picked = pickedAll.slice(0, MAX_SCOPE_TERMS) // 서버(scopeSearch.js MAX_TERMS)가 6개까지만 찾음 — 화면도 같은 수로
+  const overflow = pickedAll.slice(MAX_SCOPE_TERMS)
   const toggle = (w) => setManual((m) => ({ ...m, [w]: !isOn(w) }))
   const autoMax = autoable.length
   function findScope() {
@@ -255,8 +261,14 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
                         ))}
                       </div>
                     </div>
+                    <p className="hint ka-mode-help" aria-live="polite">
+                      {mode === 'narrow'
+                        ? `좁게: 「${keyword}」 자료 중 고른 말이 하나 이상 함께 나온 것만 자료 현황에 보여요.`
+                        : `넓게: 「${keyword}」 자료 전부에 고른 말과 함께 찾은 자료를 더해 자료 현황에 보여요.`}{' '}
+                      「자료 찾기」를 누르면 적용돼요{picked.length ? '' : ' (고른 말이 없으면 둘이 같아요)'}.
+                    </p>
                     <p id="ka-auto-help" className="hint">
-                      레버는 연관도(함께 나온 이슈 수) 순으로 기술 · 회사 말을 골라요 (PC · TV처럼 너무 넓은 말은 빼고). 노드를 눌러 더하거나 빼면 그건 레버를 움직여도 그대로예요.
+                      레버는 연관도(함께 나온 이슈 수) 순으로 기술 · 회사 말을 골라요 (PC · TV처럼 너무 넓은 말은 빼고). 맵의 점(검정 · 회색)이나 워드클라우드 글자를 눌러 더하거나 빼면 그건 레버를 움직여도 그대로예요.
                     </p>
                     <div className="ka-picked" aria-live="polite">
                       {picked.length ? (
@@ -267,6 +279,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
                               {w} ×
                             </button>
                           ))}
+                          {overflow.length > 0 && <span className="hint ka-overflow">한 번에 6개까지 찾아요 · 빠지는 말: {overflow.join(', ')}</span>}
                           {Object.keys(manual).length > 0 && (
                             <button type="button" className="link-btn ka-reset" onClick={() => setManual({})}>
                               손으로 고른 것 되돌리기
