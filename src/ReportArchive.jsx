@@ -242,12 +242,15 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
                 <button type="button" className="btn" onClick={handleCopy}>
                   텍스트 복사
                 </button>
-                {onDelete && canDelete?.(open) && (
-                  <button type="button" className="btn-text danger" onClick={handleDelete} title="이 보고서를 만든 사람만 지울 수 있어요. 휴지통에서 되살릴 수 있어요">
-                    휴지통으로
-                  </button>
-                )}
               </>
+            }
+            trailing={
+              onDelete &&
+              canDelete?.(open) && (
+                <button type="button" className="btn-text danger report-trash" onClick={handleDelete} title="이 보고서를 만든 사람만 지울 수 있어요. 휴지통에서 되살릴 수 있어요">
+                  휴지통으로
+                </button>
+              )
             }
           />
         </div>

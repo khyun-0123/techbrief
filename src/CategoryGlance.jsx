@@ -11,7 +11,15 @@ const SELF = 'lgd'
 const FAST = 1.2 // 분야보다 1.2배 이상 빠름
 const SLOW = 0.85 // 분야의 0.85배 미만
 const pace = (r, field) => (r == null || !field ? '' : r / field >= FAST ? 'up' : r / field < SLOW ? 'down' : '')
-const fmt = (r) => (r == null ? '—' : `${r.toFixed(2)}배`)
+// 「배」는 휴대폰에서 숨김(칸 폭) — 대신 설명 줄에 「단위: 배」
+const fmt = (r) => (r == null ? '—' : <>{r.toFixed(2)}<span className="cg-unit">배</span></>)
+const SHORT = { sdc: '삼성D', lgd: '자사', boe: 'BOE' }
+const Label = ({ long, short }) => (
+  <>
+    <span className="cg-long">{long}</span>
+    <span className="cg-short">{short}</span>
+  </>
+)
 const TAG = { 위협: 'threat', 기회: 'chance' }
 
 function Ratio({ value, field }) {
@@ -48,7 +56,7 @@ export default function CategoryGlance() {
       <div className="cg-head">
         <h2 id="cg-title">세부 기술 × 경쟁사 특허</h2>
         <p className="cg-sub">
-          {rows[0]?.years ?? '최근 3년 대 앞 3년'} 특허가 몇 배 늘었나 · 같은 발명은 한 번 · 디스플레이 특허 DB
+          {rows[0]?.years ?? '최근 3년 대 앞 3년'} 특허가 몇 배 늘었나(단위: 배) · 같은 발명은 한 번 · 디스플레이 특허 DB
         </p>
       </div>
       {error && <p className="cg-empty">특허 표를 불러오지 못했어요: {error}</p>}
@@ -63,11 +71,11 @@ export default function CategoryGlance() {
                   자사 판정
                 </th>
                 <th scope="col" className="cg-num">
-                  분야 전체
+                  <Label long="분야 전체" short="분야" />
                 </th>
                 {head.map((c) => (
                   <th key={c.id} scope="col" className={c.id === SELF ? 'cg-num cg-self' : 'cg-num'}>
-                    {c.id === SELF ? '자사' : c.name}
+                    {c.id === SELF ? '자사' : <Label long={c.name} short={SHORT[c.id] ?? c.name} />}
                   </th>
                 ))}
               </tr>
