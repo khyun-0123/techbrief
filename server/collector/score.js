@@ -24,7 +24,7 @@ const RELEVANCE_WEIGHT = { high: 1, mid: 0.5, low: 0.2 }
 const NEW_WORDS = ['최초', '세계 첫', '첫 ', '신기술', '개발', '공개', '상용화', '시연', '신제품', '출시', '양산', '특허', '표준', '시제품', '선보', 'first', 'unveil', 'launch', 'develop', 'breakthrough', 'prototype', 'demonstrat', 'introduc', 'record']
 // 사업 연관성의 사업 사건 낱말 (제목). 5점
 const BIZ_WORDS = ['수주', '공급', '투자', '인수', '합병', '협력', '계약', '증설', '수율', '공정', '라인', '점유율', 'supply', 'invest', 'acquir', 'partner', 'contract', 'capacity', 'yield']
-// 사진 · 인사 · 홍보 · 증시 시황 · 자동 생성 주가 기사 (−15점)
+// 사진 · 인사 · 홍보 · 증시 시황 · 자동 생성 주가 기사 (×0.3, 11/11 — 예전 −15점)
 const NOISE_WORDS = ['[포토]', '[사진]', '[인사]', '[부고]', '할인', '이벤트', '모집', '강좌', '특강', '경진대회', '[공시]', '마감시황', '코스피', '코스닥', '주가']
 const STOCK_PATTERN = /\d[\d,]*원으로|\d+(\.\d+)?% (상승|하락|급등|급락)|강보합|약보합|상한가|하한가|목표주가/
 
