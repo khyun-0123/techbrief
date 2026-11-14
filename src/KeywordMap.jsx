@@ -38,8 +38,10 @@ function readColors() {
 
 // 그릴 말 고르기 (가이드 「단어 고르기」): 함께 나온 이슈 minCo개 이상인 말 중 1단계 = 위에서 가지 수만큼,
 // 2단계 = 가지마다 돌아가며 하나씩(키워드 수까지). 같은 말은 한 번만
-function pickGraph(nodes, branches, edges, branchN, totalN, minCo) {
-  const l1 = nodes.filter((n) => n.score >= minCo).slice(0, branchN)
+// extra: 고른 말인데 위 기준에 안 들어 맵에 없던 1단계 말 — 늘 그린다 (11/14: 레버가 고른 8위 이하 말이 칩에만 있고 맵에 안 보였음)
+function pickGraph(nodes, branches, edges, branchN, totalN, minCo, extra = []) {
+  const base = nodes.filter((n) => n.score >= minCo).slice(0, branchN)
+  const l1 = [...base, ...nodes.filter((n) => extra.includes(n.word) && !base.includes(n))]
   const seen = new Set(l1.map((n) => n.word.toLowerCase()))
   const lists = l1.map((n) => (branches?.[n.word] ?? []).filter((c) => c.score >= minCo && !seen.has(c.word.toLowerCase())))
   const l2 = []
@@ -66,7 +68,7 @@ function makeSim(keyword, l1, l2, cross, hidden, seed = null, alpha0 = 1) {
   const P = new Map()
   const add = (w, x, y) => {
     const q = seed?.get(w) // 펼치기 · 접기: 있던 점은 있던 자리에서 시작
-    P.set(w, { w, x: q ? q.x : x, y: q ? q.y : y, vx: 0, vy: 0, fx: null, fy: null })
+    P.set(w, { w, x: q ? q.x : x, y: q ? q.y : y, vx: 0, vy: 0, fx: null, fy: null, cr: Math.max(16, Math.min(56, textW(short(w, 14), 12.5) / 2 + 6)) }) // cr: 글자 반폭
   }
   add(keyword, 0, 0)
   l1.forEach((n, i) => {
@@ -108,6 +110,14 @@ function makeSim(keyword, l1, l2, cross, hidden, seed = null, alpha0 = 1) {
         const w = (-140 * alpha) / d2
         a.vx += dx * w
         a.vy += dy * w
+        // 글자 폭만큼 겹치지 않게 (팀 맵에는 없음 — 반 칸에서 긴 영문 말 · 고른 말 알약이 겹쳤음, 11/14)
+        const need = a.cr + b.cr
+        if (d2 < need * need) {
+          const d = Math.sqrt(d2)
+          const push = ((need - d) / d) * 0.25 * Math.max(alpha, 0.15)
+          a.vx -= dx * push
+          a.vy -= dy * push * 0.6
+        }
       }
     }
     for (const l of links) {
@@ -522,7 +532,15 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
   const [openSet, setOpenSet] = useState({}) // 손으로 펼치거나 접은 가지 { 말: true | false }. 없으면 위 3개만 펼침
   const [hover, setHover] = useState(null)
   const [saveMsg, setSaveMsg] = useState('')
-  const graph = useMemo(() => pickGraph(nodes, branches, edges, branchN, totalN, minCo), [nodes, branches, edges, branchN, totalN, minCo])
+  // 고른 1단계 말 중 기준(가지 수 · 함께 나온 이슈)에 안 들어 빠진 것은 덧붙여 그린다. 맵 안 점을 고를 때는 그래프가 그대로라 배치가 안 흔들림
+  const extraKey = useMemo(() => {
+    const base = new Set(nodes.filter((n) => n.score >= minCo).slice(0, branchN).map((n) => n.word))
+    return nodes
+      .filter((n) => !base.has(n.word) && isOn(n.word))
+      .map((n) => n.word)
+      .join('\u0001')
+  }, [nodes, minCo, branchN, isOn])
+  const graph = useMemo(() => pickGraph(nodes, branches, edges, branchN, totalN, minCo, extraKey ? extraKey.split('\u0001') : []), [nodes, branches, edges, branchN, totalN, minCo, extraKey])
   const isOpen = useCallback((w) => openSet[w] ?? graph.l1.findIndex((n) => n.word === w) < 3, [openSet, graph])
   const hidden = useMemo(() => new Set(graph.l1.filter((n) => !isOpen(n.word)).map((n) => n.word)), [graph, isOpen])
   const minK = phone ? 0.75 : 0.3 // 휴대폰은 0.75배 아래로 줄이지 않음 — 다 안 들어오면 끌어서 봄
