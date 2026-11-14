@@ -443,6 +443,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
                               <dt>특허 (같은 발명 한 번)</dt>
                               <dd>
                                 최근 3년 {data.stage.patentRecent.toLocaleString()}건 · {data.stage.patentFieldGrowth != null ? `특허 분야 대비 ${data.stage.patentGrowth}배` : `앞 3년의 ${data.stage.patentGrowth}배`}
+                                {data.stage.patentIntlShare != null && ` · 해외 출원(2개국 이상) ${Math.round(data.stage.patentIntlShare * 100)}%`}
                               </dd>
                             </div>
                           )}

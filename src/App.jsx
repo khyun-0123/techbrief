@@ -133,6 +133,7 @@ function importanceReasons(a) {
     const pp = a.paperParts
     return [
       pp.maker ? `기업 논문 · ${pp.maker}` : pp.companies?.length ? `기업 저자 · ${pp.companies[0]}` : null,
+      pp.applied >= 5 && `산업 응용 · ${(pp.appliedWords ?? []).join(', ')}`,
       pp.top10 && '인용 상위 10%',
       !pp.top10 && pp.fwciValue >= 1 && `분야 평균의 ${pp.fwciValue.toFixed(1)}배 인용`,
       pp.journal >= 10 && '디스플레이 전문지',
@@ -156,7 +157,8 @@ function scoreTitle(a) {
   if (a.paperParts) {
     const pp = a.paperParts
     if (pp.company == null) return `중요도 ${a.importance ?? 0}점 · 60점 이상이면 중요` // 11/10 전 점수
-    return `중요도 ${a.importance ?? 0}점 = 검색 관련도 ${pp.relevance}/35 + 기업 저자 ${pp.company}/20${pp.companies?.length ? ` (${pp.companies.join(', ')})` : ''} + 영향력 ${pp.impact}/20 (인용 ${pp.cited}회${pp.pctValue != null ? ` · 백분위 ${Math.round(pp.pctValue * 100)}` : ''}) + 최신성 ${pp.recency}/15 + 전문 학술지 ${pp.journal}/10 · 60점 이상이면 중요`
+    const companyMax = pp.applied == null ? 20 : 10 // 11/15: 기업 저자 20 → 10 + 산업 응용 10
+    return `중요도 ${a.importance ?? 0}점 = 검색 관련도 ${pp.relevance}/35 + 기업 저자 ${pp.company}/${companyMax}${pp.companies?.length ? ` (${pp.companies.join(', ')})` : ''}${pp.applied != null ? ` + 산업 응용 ${pp.applied}/10${pp.appliedWords?.length ? ` (${pp.appliedWords.join(', ')})` : ''}` : ''} + 영향력 ${pp.impact}/20 (인용 ${pp.cited}회${pp.pctValue != null ? ` · 백분위 ${Math.round(pp.pctValue * 100)}` : ''}) + 최신성 ${pp.recency}/15 + 전문 학술지 ${pp.journal}/10 · 60점 이상이면 중요`
   }
   const p = a.scoreParts ?? {}
   const parts = [

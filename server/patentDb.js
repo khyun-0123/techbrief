@@ -268,13 +268,14 @@ export async function localPatentHistory(pattern, since = SINCE) {
   if (!meta) return { status: 'no_db' }
   await ensureTable()
   const { rows } = await query(
-    `WITH m AS (SELECT family, pub / 10000 AS y, owners FROM display_patents WHERE pub >= $2 AND lower(title) ~ $1)
-     SELECT y, NULL::text AS name, count(*)::int AS n, 1 AS total FROM m GROUP BY y
+    // intl (11/15 팀 회의 「해외 특허가 더 중요할 수 있다」): 같은 발명을 2개 나라(관청) 이상에 낸 특허 수 — 국제 특허군 지표
+    `WITH m AS (SELECT family, pub / 10000 AS y, owners, countries FROM display_patents WHERE pub >= $2 AND lower(title) ~ $1)
+     SELECT y, NULL::text AS name, count(*)::int AS n, 1 AS total, count(*) FILTER (WHERE cardinality(countries) >= 2)::int AS intl FROM m GROUP BY y
      UNION ALL
-     SELECT y, o, count(*)::int, 0 FROM m, unnest(m.owners) o GROUP BY y, o HAVING count(*) >= 2`,
+     SELECT y, o, count(*)::int, 0, 0 FROM m, unnest(m.owners) o GROUP BY y, o HAVING count(*) >= 2`,
     [toPg(pattern.toLowerCase()), Number(since)],
   )
-  const years = rows.filter((r) => r.total === 1).map((r) => ({ y: Number(r.y), n: r.n })).sort((a, b) => a.y - b.y)
+  const years = rows.filter((r) => r.total === 1).map((r) => ({ y: Number(r.y), n: r.n, intl: r.intl })).sort((a, b) => a.y - b.y)
   const owners = rows.filter((r) => r.total === 0).map((r) => ({ y: Number(r.y), name: r.name, n: r.n }))
   return { status: 'ok', years, owners, fieldYears: await displayFieldYears(meta), db: { at: meta.at, maxPub: meta.maxPub } }
 }
