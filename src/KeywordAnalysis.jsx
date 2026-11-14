@@ -257,7 +257,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
               {related ? (
                 nodes.length ? (
                   <>
-                    <KeywordMap keyword={keyword} issues={related.issues} nodes={nodes} edges={related.edges} branches={related.children} isOn={isOn} onToggle={toggle} view={mapView} onView={setMapView} />
+                    <KeywordMap keyword={keyword} issues={related.issues} nodes={nodes} edges={related.edges} branches={related.children} isOn={isOn} onToggle={toggle} view={mapView} onView={setMapView} onEnlarge={() => setBigMap(true)} />
                     <div className="ka-controls">
                       <label>
                         자동으로 고를 범위 <b>{Math.min(auto, autoMax)}</b>개

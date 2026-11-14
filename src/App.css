@@ -7504,3 +7504,58 @@ a.brand:focus-visible {
 .km-badge:focus {
   outline: none;
 }
+/* 빽빽함 안내 (11/14): 글자가 3곳 이상 겹치면 맵 오른쪽 위에 「크게 보기」 */
+.km-crowd {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 200px);
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: 12px;
+  background: var(--tb-color-surface);
+  box-shadow: 0 8px 24px rgb(17 17 17 / 8%);
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+}
+.km-crowd-go {
+  flex: none;
+  min-height: 28px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-primary);
+  color: var(--tb-color-on-primary);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  cursor: pointer;
+}
+.km-crowd-x {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--tb-color-text-faint);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+.km-crowd-x:hover {
+  color: var(--tb-color-text);
+}
+@media (max-width: 720px) {
+  .km-crowd {
+    top: auto;
+    right: 12px;
+    bottom: 64px;
+    left: 12px;
+    max-width: none;
+  }
+}

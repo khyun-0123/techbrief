@@ -502,7 +502,46 @@ function savePng(svg, name, colors) {
 }
 
 // view · onView: 보기(마인드맵 · 워드클라우드)는 칸 머리 칩과 표시 설정이 같이 쓰므로 바깥(KeywordAnalysis)에서 가짐
-export default function KeywordMap({ keyword, issues, nodes, edges, branches, isOn, onToggle, large = false, view: mode = 'map', onView }) {
+// 빽빽함 (11/14 조장): 멈춘 자리(final)와 지금 확대로 글자 상자끼리 겹치는 쌍을 센다. 많으면 「크게 보기」 안내
+function countOverlaps(final, view, graph, hidden, keyword, isOn) {
+  const max = Math.max(1, ...graph.l1.map((n) => n.score), ...graph.l2.map((n) => n.score))
+  const items = [
+    { word: keyword, fs: 15, r: 11 },
+    ...graph.l1.map((n) => ({ word: n.word, fs: 12.5, r: radius(n.score, max), max: 14 })),
+    ...graph.l2.filter((n) => !hidden.has(n.parent)).map((n) => ({ word: n.word, fs: 11, r: radius(n.score, max), max: 11 })),
+  ]
+  const boxes = []
+  for (const it of items) {
+    const p = final.get(it.word)
+    if (!p) continue
+    const x = p.x * view.k + view.tx
+    const y = p.y * view.k + view.ty
+    const on = it.word !== keyword && isOn(it.word)
+    const w = textW(`${on ? '✓ ' : ''}${short(it.word, it.max ?? 18)}`, it.fs) + (on ? 14 : 4) // 고른 말은 알약 폭
+    boxes.push({ x0: x - w / 2, x1: x + w / 2, y0: y + it.r + 2, y1: y + it.r + (on ? 9 : 4) + it.fs, dot: { x0: x - it.r, x1: x + it.r, y0: y - it.r, y1: y + it.r } })
+    // 펼치기 배지 (검정 점 오른쪽 위)도 글자처럼 센다
+    const kids = it.max === 14 ? graph.l2.filter((c) => c.parent === it.word).length : 0
+    if (kids) {
+      const bw = 12 + (hidden.has(it.word) ? `+${kids}`.length : 1) * 6.5
+      const bx = x + it.r * 0.7 + 3
+      const by = y - it.r * 0.7 - 15
+      boxes.push({ x0: bx, x1: bx + bw, y0: by, y1: by + 16, dot: { x0: 0, x1: 0, y0: 0, y1: 0 } })
+    }
+  }
+  // 글자 ↔ 글자, 글자 ↔ 다른 점이 겹치는 곳을 센다
+  const hit = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
+  let n = 0
+  for (let i = 0; i < boxes.length; i++)
+    for (let j = 0; j < boxes.length; j++) {
+      if (i === j) continue
+      if (j > i && hit(boxes[i], boxes[j])) n++
+      if (hit(boxes[i], boxes[j].dot)) n++
+    }
+  return n
+}
+const CROWDED = 6 // 글자 · 알약 · 배지 겹침이 이만큼 이상이면 안내 (11/14 3038 실측: 1440 반 칸 ai 안경 10 · 탠덤 OLED 4 · QD-OLED 2, 크게 보기 ai 안경 4)
+
+export default function KeywordMap({ keyword, issues, nodes, edges, branches, isOn, onToggle, large = false, view: mode = 'map', onView, onEnlarge }) {
   const box = useRef(null)
   const svgRef = useRef(null)
   const [size, setSize] = useState({ W: 640, H: 520 })
@@ -532,6 +571,7 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
   const [openSet, setOpenSet] = useState({}) // 손으로 펼치거나 접은 가지 { 말: true | false }. 없으면 위 3개만 펼침
   const [hover, setHover] = useState(null)
   const [saveMsg, setSaveMsg] = useState('')
+  const [crowdOff, setCrowdOff] = useState(false) // 안내를 닫았으면 이 맵에서는 다시 안 띄움
   // 고른 1단계 말 중 기준(가지 수 · 함께 나온 이슈)에 안 들어 빠진 것은 덧붙여 그린다. 맵 안 점을 고를 때는 그래프가 그대로라 배치가 안 흔들림
   const extraKey = useMemo(() => {
     const base = new Set(nodes.filter((n) => n.score >= minCo).slice(0, branchN).map((n) => n.word))
@@ -659,9 +699,10 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
   const cloudAvoid = useMemo(() => (panelOpen ? { x: 0, y: 0, w: Math.min(330, W), h: 330 } : { x: 0, y: 0, w: 180, h: 60 }), [panelOpen, W])
   const cardLeft = hover ? Math.max(8, Math.min(W - 200, hover.x - 90)) : 0
   const cardTop = hover ? (hover.y + 120 > H ? Math.max(8, hover.y - 130) : hover.y + 22) : 0
+  const overlaps = useMemo(() => (mode === 'map' ? countOverlaps(final, view, graph, hidden, keyword, isOn) : 0), [mode, final, view, graph, hidden, keyword, isOn])
   return (
     <div className={large ? 'km km-large' : 'km'}>
-      <div ref={box} className="km-stage">
+      <div ref={box} className="km-stage" data-overlaps={overlaps}>
         {mode === 'cloud' ? (
           <CloudView W={W} H={H} keyword={keyword} nodes={nodes} branches={branches} isOn={isOn} onPick={onToggle} total={totalN} avoid={cloudAvoid} colors={colors} svgRef={svgRef} onHover={setHover} />
         ) : (
@@ -725,6 +766,19 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
             </div>
           )}
         </section>
+        {mode === 'map' && !crowdOff && overlaps >= CROWDED && (
+          <div className="km-crowd" role="status">
+            <span>점이 많아 글자가 겹쳐요{large ? ` · ${phone ? '두 손가락으로 벌려 확대' : '휠로 확대'}하거나 표시 설정에서 가지 수를 줄여 보세요` : ''}</span>
+            {!large && onEnlarge && (
+              <button type="button" className="km-crowd-go" onClick={onEnlarge}>
+                ⤢ 크게 보기
+              </button>
+            )}
+            <button type="button" className="km-crowd-x" onClick={() => setCrowdOff(true)} aria-label="안내 닫기">
+              ×
+            </button>
+          </div>
+        )}
         {mode === 'map' && graph.l1.length === 0 && <p className="km-empty">함께 나온 이슈가 {minCo}개 이상인 말이 없어요. 「함께 나온 이슈」 기준을 낮춰 보세요.</p>}
         <div className="km-legend">
           {mode === 'cloud' ? (
