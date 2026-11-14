@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { exportPptx, printReport } from './reportExport.js'
 import { APPENDIX, formatDate, kindOf, SECTIONS, sourcesLine } from './reportStore.js'
 import { track } from './usage.js'
+import { ACCESS_LABEL, ACCESS_TITLE, paperAccess } from './paperAccess.js'
 
 // 시사점 및 제언의 표시 (담당자 회신: 자사에 기회인지 위협인지, 할 일은 무엇인지)
 const TAG_CLASS = { 기회: 'chance', 위협: 'threat', '할 일': 'todo' }
@@ -74,7 +75,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
                   onClick={(e) => {
                     e.currentTarget.closest('details').open = false
                     track('export', 'pdf')
-                    printReport()
+                    printReport(saved)
                   }}
                 >
                   PDF로 저장
@@ -98,7 +99,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
                 className="btn"
                 onClick={() => {
                   track('export', 'pdf')
-                  printReport()
+                  printReport(saved)
                 }}
                 title="인쇄 창에서 'PDF로 저장'을 고르세요"
               >
@@ -311,8 +312,15 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
                 <div className="meta">
                   {a.source}
                   {a.publishedAt && ` · ${formatDate(a.publishedAt)}`}
-                  {a.fulltext === true && <span className="fulltext-badge on"> · 원문 반영</span>}
-                  {a.fulltext === false && (
+                  {/* 논문은 원문 반영 대신 유료 여부 (11/14, 보고서팀 작업 이식) */}
+                  {paperAccess(a) && (
+                    <span className={paperAccess(a) === 'open' ? 'fulltext-badge on' : 'fulltext-badge off'} title={ACCESS_TITLE[paperAccess(a)]}>
+                      {' '}
+                      · {ACCESS_LABEL[paperAccess(a)]}
+                    </span>
+                  )}
+                  {!a.paper && a.fulltext === true && <span className="fulltext-badge on"> · 원문 반영</span>}
+                  {!a.paper && a.fulltext === false && (
                     <span className="fulltext-badge off" title="원문 페이지에서 본문을 가져오지 못해 네이버 발췌문으로 썼어요">
                       {' '}
                       · 발췌문으로 작성
@@ -343,8 +351,15 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
                 <div className="meta">
                   {a.source}
                   {a.publishedAt && ` · ${formatDate(a.publishedAt)}`}
-                  {a.fulltext === true && <span className="fulltext-badge on"> · 원문 반영</span>}
-                  {a.fulltext === false && (
+                  {/* 논문은 원문 반영 대신 유료 여부 (11/14, 보고서팀 작업 이식) */}
+                  {paperAccess(a) && (
+                    <span className={paperAccess(a) === 'open' ? 'fulltext-badge on' : 'fulltext-badge off'} title={ACCESS_TITLE[paperAccess(a)]}>
+                      {' '}
+                      · {ACCESS_LABEL[paperAccess(a)]}
+                    </span>
+                  )}
+                  {!a.paper && a.fulltext === true && <span className="fulltext-badge on"> · 원문 반영</span>}
+                  {!a.paper && a.fulltext === false && (
                     <span className="fulltext-badge off" title="원문 페이지에서 본문을 가져오지 못해 네이버 발췌문으로 썼어요">
                       {' '}
                       · 발췌문으로 작성

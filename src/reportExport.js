@@ -1,20 +1,8 @@
-// 보고서 내보내기: PPT(.pptx)와 PDF(브라우저 인쇄 → PDF로 저장). 여러 쪽 가능, 인터랙션 없음
-// 사내 규칙(1차 인터뷰): 제목 18pt · 소주제 14pt · 본문 11pt · 유첨·주석 10pt, 개조식
-// 한글 'LG 스마트체'는 PC마다 설치 여부가 달라 기본은 맑은 고딕. 회사 PC에서는 PPT 글꼴만 바꾸면 된다
-import { formatDate, kindOf, sourcesLine } from './reportStore.js'
-
-const FONT_KO = '맑은 고딕'
-const INK = '1C2533'
-const MUTED = '5B6677'
-const ACCENT = '1B6A96'
-const WARN = 'B45309'
-
-function bulletRuns(b) {
-  return [
-    { text: `${b.tag ? `(${b.tag}) ` : ''}${b.text}`, options: { color: b.tag === '위협' ? WARN : INK } },
-    { text: ` [${b.refs.join('][')}]`, options: { color: ACCENT, fontSize: 10 } },
-  ]
-}
+// 보고서 PPT(.pptx) 내보내기 — 4:3 가로형 (11/12 실무자 확정 양식)
+// 자리 · 글자 크기는 reportSlides.js가 정한 값 그대로 (화면 미리보기 · PDF와 같은 모양)
+// 글꼴: 글자마다 latin = Arial Narrow, ea(한글) = LG 스마트체 — pptxgenjs는 한 글꼴만 넣으므로 파일을 만든 뒤 XML에서 ea를 바꾼다
+// 장식 이미지 · 아이콘 · 애니메이션 없음. 글자 크기 18/14/11/10pt만 (자동 줄이기도 쓰지 않음)
+import { COLOR, FONT, LH, PAGE, PIE_COLORS, reportPages } from './reportSlides.js'
 
 function fileName(saved, ext) {
   const date = (saved.createdAt ?? new Date().toISOString()).slice(0, 10)
@@ -22,114 +10,175 @@ function fileName(saved, ext) {
   return `${title}_${date}.${ext}`
 }
 
-// 11/12 담당자 회신(35 문서): 4:3 가로, 1페이지 + 유첨
-// ① 1페이지: 헤드라인 · 핵심 사실 근거(왼쪽) · 시사점 및 제언(오른쪽, 기회 · 위협 · 할 일) · 출처(수집 기간 · 기사 수)
-// ② 유첨: 기술 개요 · 업계 동향 · 경쟁사 ③ 유첨: 분석 자료(경쟁사 특허 비교, 있을 때) ④ 근거 기사
-// 내용이 넘치면 PowerPoint가 글자를 줄여 상자에 맞춘다 (fit: shrink)
-export async function exportPptx(saved) {
-  const { default: PptxGenJS } = await import('pptxgenjs')
+const runOpts = (r) => ({ ...(r.color ? { color: r.color } : {}), ...(r.bold ? { bold: true } : {}) })
+
+// 모든 XML의 글꼴 지정: latin = Arial Narrow, ea = LG 스마트체 (ea가 없는 곳 · 테마에도 넣는다)
+function fixFonts(xml) {
+  const ea = `<a:ea typeface="${FONT.ea}"/>`
+  return xml
+    .replace(new RegExp(`<a:ea typeface="${FONT.latin}"[^>]*/>`, 'g'), ea)
+    .replace(new RegExp(`(<a:latin typeface="${FONT.latin}"[^>]*/>)(?!<a:ea)`, 'g'), `$1${ea}`)
+}
+function fixTheme(xml) {
+  return xml
+    .replace(/(<a:(?:major|minor)Font>\s*<a:latin typeface=")[^"]*(")/g, `$1${FONT.latin}$2`)
+    .replace(/(<a:(?:major|minor)Font>\s*<a:latin[^>]*\/>\s*<a:ea typeface=")[^"]*(")/g, `$1${FONT.ea}$2`)
+}
+
+// .pptx 파일 내용(ArrayBuffer)을 만든다. 화면에서는 exportPptx가 내려받기로 넘긴다
+// extra: 화면이 받아 둔 추가 데이터 (기사 수 추이용 /api/trends) — 미리보기와 같은 그래프가 되게
+export async function buildPptx(saved, { PptxGenJS, JSZip, extra } = {}) {
+  PptxGenJS ??= (await import('pptxgenjs')).default
+  JSZip ??= (await import('jszip')).default // pptxgenjs가 함께 설치하는 압축 도구
   const pptx = new PptxGenJS()
-  pptx.defineLayout({ name: 'TB_4X3', width: 10, height: 7.5 }) // 4:3 (담당자 회신 11/10)
-  pptx.layout = 'TB_4X3'
+  pptx.layout = 'LAYOUT_4x3' // 10 × 7.5 in
   pptx.title = saved.report.title
-  const W = 10
-  const M = 0.5
-  const meta = `${formatDate(saved.createdAt)} · ${saved.periodLabel ?? ''} · 기사 ${saved.articles.length}건 기준`
-  const sections = saved.report.sections
+  pptx.theme = { headFontFace: FONT.latin, bodyFontFace: FONT.latin }
+  const deck = reportPages(saved, extra)
+  const base = { fontFace: FONT.latin, margin: 0, valign: 'top', paraSpaceBefore: 0, paraSpaceAfter: 0 }
+  const S = pptx.ShapeType
+  const axis = { fontFace: FONT.latin, size: 10 }
 
-  // 기사에서 확인된 내용 → (줄 바꿔) AI 해설·제안 순서. 둘을 섞지 않는다 (15 문서 F15)
-  function runs(list) {
-    const facts = (list ?? []).filter((b) => !b.excluded && kindOf(b) === 'fact')
-    const ai = (list ?? []).filter((b) => !b.excluded && kindOf(b) === 'ai')
-    const out = []
-    const push = (text, options = {}) => out.push({ text, options })
-    facts.forEach((b, i) => {
-      const parts = bulletRuns(b)
-      push(`• ${parts[0].text}`, parts[0].options)
-      push(parts[1].text, { ...parts[1].options, breakLine: i < facts.length - 1 || ai.length > 0 })
-    })
-    if (ai.length) {
-      push('AI 해설·제안 (기사에서 확인된 내용 아님, 확인 필요)', { color: WARN, fontSize: 10, bold: true, breakLine: true })
-      ai.forEach((b, i) => push(`· ${b.text}`, { color: MUTED, breakLine: i < ai.length - 1 }))
-    }
-    if (out.length === 0) push('내용 없음', { color: MUTED })
-    return out
-  }
-  function box(slide, label, list, x, y, w, h) {
-    slide.addText(`■ ${label}`, { x, y, w, h: 0.4, fontFace: FONT_KO, fontSize: 14, bold: true, color: INK })
-    slide.addText(runs(list), {
-      x, y: y + 0.42, w, h: h - 0.42,
-      fontFace: FONT_KO, fontSize: 11, color: INK, valign: 'top', paraSpaceAfter: 6, lineSpacingMultiple: 1.15, fit: 'shrink',
-    })
-  }
-  function header(slide, title, sub) {
+  deck.pages.forEach((page) => {
+    const slide = pptx.addSlide()
     slide.background = { color: 'FFFFFF' }
-    slide.addText(title, { x: M, y: 0.3, w: W - 2 * M - 3.2, h: 0.55, fontFace: FONT_KO, fontSize: 18, bold: true, color: INK, fit: 'shrink' })
-    slide.addText(sub, { x: W - M - 3.2, y: 0.38, w: 3.2, h: 0.4, fontFace: FONT_KO, fontSize: 10, color: MUTED, align: 'right' })
-    slide.addShape(pptx.ShapeType.line, { x: M, y: 0.9, w: W - 2 * M, h: 0, line: { color: INK, width: 1.5 } })
-  }
-  function footer(slide, text) {
-    slide.addText(text, { x: M, y: 7.05, w: W - 2 * M, h: 0.3, fontFace: FONT_KO, fontSize: 10, color: MUTED })
-  }
-
-  const page = pptx.addSlide()
-  header(page, saved.report.title, meta)
-  const h = saved.report.headline
-  page.addShape(pptx.ShapeType.rect, { x: M, y: 1.02, w: W - 2 * M, h: 1.05, fill: { color: 'F3F6FA' }, line: { color: 'F3F6FA' } })
-  page.addText(
-    h?.text ? [{ text: h.text, options: { color: INK, bold: true } }, ...(h.refs?.length ? [{ text: ` [${h.refs.join('][')}]`, options: { color: ACCENT, fontSize: 11, bold: false } }] : [])] : [{ text: '헤드라인 없음 (예전 형식 보고서)', options: { color: MUTED } }],
-    { x: M + 0.15, y: 1.05, w: W - 2 * M - 0.3, h: 1.0, fontFace: FONT_KO, fontSize: 16, valign: 'middle', fit: 'shrink' },
-  )
-  const colW = (W - 2 * M - 0.3) / 2
-  box(page, '핵심 사실 근거', sections.summary?.bullets, M, 2.25, colW, 4.55)
-  box(page, '시사점 및 제언', sections.implications?.bullets, M + colW + 0.3, 2.25, colW, 4.55)
-  footer(page, `출처: ${sourcesLine(saved)} · [n]은 근거 번호(유첨) · AI 초안, 확인 후 사용`)
-
-  const apx = pptx.addSlide()
-  header(apx, '유첨 1 · 상세 분석', saved.report.title)
-  box(apx, '기술 개요', sections.tech?.bullets, M, 1.1, W - 2 * M, 2.8)
-  box(apx, '업계 동향 · 경쟁사', sections.industry?.bullets, M, 4.0, W - 2 * M, 2.9)
-  footer(apx, `모델 ${saved.model ?? ''} · AI 해설 · 제안은 기사에서 확인된 내용이 아님`)
-
-  const analysis = (saved.report.analysis ?? []).filter((a) => a.competitors)
-  if (analysis.length) {
-    const sl = pptx.addSlide()
-    header(sl, '유첨 2 · 분석 자료 (규칙 계산)', saved.report.title)
-    let y = 1.1
-    for (const a of analysis.slice(0, 2)) {
-      const c = a.competitors
-      sl.addText(`${a.keyword}${a.stage ? ` · 단계 ${a.stage.stage}` : ''} · 「${c.name}」 특허 (같은 발명 한 번, ${c.years})${c.verdict ? ` · 자사에 ${c.verdict}` : ''}`, {
-        x: M, y, w: W - 2 * M, h: 0.4, fontFace: FONT_KO, fontSize: 12, bold: true, color: INK,
-      })
-      const rows = [['회사', '앞 3년', '최근 3년', '변화'], ...[...c.companies.filter((x) => !x.unsure), { name: '분야 전체', ...c.field }].map((x) => [x.name, String(x.before ?? ''), String(x.now ?? ''), x.ratio != null ? `${x.ratio}배` : '-'])]
-      sl.addTable(rows.map((r, i) => r.map((t) => ({ text: t, options: { fontFace: FONT_KO, fontSize: 10, bold: i === 0, color: i === 0 ? MUTED : INK } }))), { x: M, y: y + 0.45, w: W - 2 * M, colW: [3.4, 1.7, 1.7, 2.2], border: { type: 'solid', color: 'DDE2EA', pt: 0.5 } })
-      y += 0.45 + 0.3 * rows.length + 0.4
+    for (const el of page.els) {
+      if (el.t === 'text') {
+        slide.addText(
+          el.runs.map((r) => ({ text: r.text, options: { ...runOpts(r), ...(r.size ? { fontSize: r.size } : {}), ...(r.link ? { hyperlink: { url: r.link } } : {}) } })),
+          { ...base, x: el.x, y: el.y, w: el.w, h: el.h, fontSize: el.size, lineSpacing: el.size * 1.35, color: el.color ?? COLOR.ink, bold: Boolean(el.bold), align: el.align ?? 'left' },
+        )
+      } else if (el.t === 'rect') {
+        slide.addShape(el.radius ? S.roundRect : S.rect, {
+          x: el.x,
+          y: el.y,
+          w: el.w,
+          h: el.h,
+          ...(el.radius ? { rectRadius: Math.min(0.5, el.radius / Math.min(el.w, el.h)) } : {}),
+          fill: el.fill ? { color: el.fill } : { type: 'none' },
+          line: el.line ? { color: el.line, width: 1.25 } : { type: 'none' },
+        })
+      } else if (el.t === 'tri') {
+        slide.addShape(S.rtTriangle, { x: el.x, y: el.y, w: el.w, h: el.h, fill: { color: el.fill }, line: { type: 'none' }, flipH: true })
+      } else if (el.t === 'check') {
+        slide.addText('✓', { ...base, shape: S.ellipse, x: el.x, y: el.y, w: el.d, h: el.d, fill: { color: COLOR.accent }, color: 'FFFFFF', fontSize: 10, bold: true, align: 'center', valign: 'middle' })
+      } else if (el.t === 'line') {
+        slide.addShape(S.line, { x: el.x, y: el.y, w: el.w, h: 0, line: { color: el.color ?? COLOR.line, width: 0.75 } })
+      } else if (el.t === 'pageno') {
+        slide.addText(`${el.no} / ${deck.pages.length}`, { ...base, x: PAGE.w - PAGE.m - 1, y: PAGE.h - 0.42, w: 1, h: LH(10), fontSize: 10, lineSpacing: 13.5, color: COLOR.ink, bold: true, align: 'right' })
+      } else if (el.t === 'table') {
+        const cell = (text, opts = {}) => ({ text, options: { fontFace: FONT.latin, fontSize: el.size, color: COLOR.ink, valign: 'middle', ...opts } })
+        slide.addTable(
+          el.rows.map((r) => r.cells.map((c, i) => (i === 0 && el.headCol ? cell(c, { bold: true, fill: { color: COLOR.gray } }) : cell(c)))),
+          { x: el.x, y: el.y, w: el.w, colW: el.cols, rowH: el.rows.map((r) => r.h), border: { type: 'solid', pt: 0.75, color: COLOR.line }, margin: 0.05, fontFace: FONT.latin, fontSize: el.size, autoPage: false },
+        )
+      } else if (el.t === 'chart') {
+        if (!el.values.length || el.values.every((v) => !v)) {
+          slide.addText(el.empty, { ...base, x: el.x, y: el.y + el.h / 2 - 0.2, w: el.w, h: 0.3, fontSize: 10, color: COLOR.sub, align: 'center' })
+          continue
+        }
+        const box = { x: el.x, y: el.y, w: el.w, h: el.h, showTitle: false }
+        if (el.kind === 'pie' || el.kind === 'donut') {
+          slide.addChart(el.kind === 'donut' ? pptx.ChartType.doughnut : pptx.ChartType.pie, [{ name: el.title ?? el.yTitle, labels: el.labels.map((l, i) => `${l} (${el.values[i]}${el.unit})`), values: el.values }], {
+            ...box,
+            chartColors: PIE_COLORS.slice(0, el.values.length),
+            showPercent: true,
+            showValue: false,
+            showLegend: !el.legendOutside, // 범례는 reportSlides.js가 글 상자로 따로 놓음 (화면과 같은 자리)
+            legendPos: 'r',
+            legendFontSize: 10,
+            legendFontFace: FONT.latin,
+            dataLabelColor: 'FFFFFF',
+            dataLabelFontSize: 10,
+            dataLabelFontFace: FONT.latin,
+            dataLabelFontBold: true,
+            ...(el.kind === 'donut' ? { holeSize: 55 } : {}),
+          })
+          continue
+        }
+        const max = Math.max(1, ...el.values)
+        const common = {
+          ...box,
+          chartColors: [COLOR.accent],
+          showLegend: false,
+          catAxisLabelFontSize: axis.size,
+          catAxisLabelFontFace: axis.fontFace,
+          valAxisLabelFontSize: axis.size,
+          valAxisLabelFontFace: axis.fontFace,
+          valAxisMinVal: 0,
+          valAxisMajorUnit: max <= 5 ? 1 : undefined,
+          valGridLine: { color: 'E5E5E5', size: 0.5 },
+          showValAxisTitle: true,
+          valAxisTitle: el.yTitle,
+          valAxisTitleFontSize: axis.size,
+          valAxisTitleFontFace: axis.fontFace,
+          showCatAxisTitle: el.kind !== 'hbar',
+          catAxisTitle: el.xTitle,
+          catAxisTitleFontSize: axis.size,
+          catAxisTitleFontFace: axis.fontFace,
+        }
+        if (el.kind === 'line') {
+          // 가로축 라벨: 고른 것(최대 7개 · 첫/마지막)만 남기고 나머지는 빈칸, 겹치면 45도 (reportSlides.js axisLayout)
+          const shown = new Set(el.ticks ?? el.labels.map((_, i) => i))
+          const labels = el.labels.map((l, i) => (shown.has(i) ? l : ''))
+          slide.addChart(pptx.ChartType.line, [{ name: el.yTitle, labels, values: el.values }], {
+            ...common,
+            lineSize: 2,
+            lineDataSymbol: 'circle',
+            lineDataSymbolSize: 5,
+            catAxisLabelRotate: el.rotate ? -45 : 0,
+            catAxisLabelFrequency: 1,
+          })
+        } else {
+          const hbar = el.kind === 'hbar'
+          // 가로막대는 PPT가 아래부터 그리므로 순서를 뒤집어 1위가 위에 오게
+          const labels = hbar ? [...el.labels].reverse() : el.labels
+          const values = hbar ? [...el.values].reverse() : el.values
+          slide.addChart(pptx.ChartType.bar, [{ name: el.yTitle, labels, values }], {
+            ...common,
+            barDir: hbar ? 'bar' : 'col',
+            showValue: true,
+            dataLabelFontSize: 10,
+            dataLabelFontFace: FONT.latin,
+            dataLabelColor: COLOR.ink,
+            catAxisLabelRotate: !hbar && el.labels.length > 6 ? -35 : 0,
+          })
+        }
+      }
     }
-    footer(sl, '출처: 디스플레이 특허 DB (Google Patents Public Data, IFI CLAIMS · Google, CC BY 4.0) · 출원인 이름 기준')
-  }
+  })
 
-  const refs = pptx.addSlide()
-  header(refs, '근거 기사', saved.report.title)
-  refs.addText(
-    saved.articles.map((a, i) => ({
-      text: `[${i + 1}] ${a.title} — ${a.source}${a.publishedAt ? `, ${formatDate(a.publishedAt)}` : ''}${a.fulltext === false ? ' (발췌문으로 작성)' : ''}`,
-      options: { breakLine: i < saved.articles.length - 1, hyperlink: a.url ? { url: a.url } : undefined },
-    })),
-    { x: M, y: 1.1, w: W - 2 * M, h: 5.8, fontFace: FONT_KO, fontSize: 10, color: INK, valign: 'top', paraSpaceAfter: 6, fit: 'shrink' },
+  const raw = await pptx.write({ outputType: 'arraybuffer' })
+  const zip = await JSZip.loadAsync(raw)
+  await Promise.all(
+    Object.keys(zip.files)
+      .filter((n) => /^ppt\/(slides|charts|theme|slideMasters|slideLayouts)\/[^/]+\.xml$/.test(n))
+      .map(async (n) => {
+        let xml = await zip.file(n).async('string')
+        // 도넛: pptxgenjs가 showLegend: false여도 범례를 넣어 원을 가린다 → 범례는 reportSlides.js가 글 상자로 따로 놓으므로 지운다
+        if (n.includes('/charts/') && xml.includes('<c:doughnutChart>')) xml = xml.replace(/<c:legend>[\s\S]*?<\/c:legend>/, '')
+        zip.file(n, n.includes('/theme/') ? fixTheme(fixFonts(xml)) : fixFonts(xml))
+      }),
   )
-  footer(refs, '원문 링크는 제목을 누르면 열려요')
-
-  await pptx.writeFile({ fileName: fileName(saved, 'pptx') })
+  return zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' })
 }
 
-// PDF: 인쇄용 화면(보고서만, A4)으로 브라우저 인쇄 창을 연다 → 'PDF로 저장'
-export function printReport() {
-  document.body.classList.add('printing-report')
-  const done = () => {
-    document.body.classList.remove('printing-report')
-    window.removeEventListener('afterprint', done)
-  }
-  window.addEventListener('afterprint', done)
-  window.print()
+// 어디서 내려받든(보고서 화면 · 편집 탭) 미리보기와 같은 그래프가 되게, 추가 데이터를 안 받았으면 여기서 불러온다
+export async function loadReportExtra() {
+  const { fetchTrends } = await import('./api.js')
+  return { trends: await fetchTrends().catch(() => null) }
 }
 
+export async function exportPptx(saved, extra) {
+  extra ??= await loadReportExtra()
+  const data = await buildPptx(saved, { extra })
+  const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = fileName(saved, 'pptx')
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(link.href), 10_000)
+}
+
+// PDF는 ReportSlide.jsx의 printSlides (같은 4:3 쪽을 인쇄 → PDF로 저장)
+export { printSlides as printReport } from './ReportSlide.jsx'

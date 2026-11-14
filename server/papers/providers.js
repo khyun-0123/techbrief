@@ -139,6 +139,9 @@ function oaWork(w) {
     fwci: w.fwci ?? null,
     topic: w.primary_topic ? { id: w.primary_topic.id.split('/').pop(), name: w.primary_topic.display_name } : null,
     oaUrl: w.open_access?.oa_url ?? null, // 무료로 볼 수 있는 원문 주소 (나중에 전문 분석에 씀)
+    // 유료 여부 (11/14, 보고서팀 작업 이식): OpenAlex가 오픈 액세스라고 하면 open, 아니라고 하면 paid, 정보가 없으면 unknown
+    access: w.open_access ? (w.open_access.is_oa ? 'open' : 'paid') : 'unknown',
+    authors: (w.authorships ?? []).map((a) => a.author?.display_name).filter(Boolean).slice(0, 6),
     // 11/10 논문 점수(corpus.js paperScore2)용: 인용 백분위 · 기업 저자 · 학술지 (같은 비용으로 받음)
     pct: w.citation_normalized_percentile?.value ?? null,
     top10: Boolean(w.citation_normalized_percentile?.is_in_top_10_percent),
