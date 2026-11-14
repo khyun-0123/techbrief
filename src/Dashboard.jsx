@@ -12,10 +12,16 @@ import CategoryGlance from './CategoryGlance.jsx'
 import TechTrends from './TechTrends.jsx'
 import { LAST_ANALYZED_KEY } from './utils.js'
 
+// 칩에 보이는 이름 (11/14 D6): 저장된 검색어가 「ai 안경」 · 「tandem oled」처럼 소문자라 표 · 카드의 「AI 안경」과 달라 보였음
+// → 4글자 이하 영문 낱말(AI · OLED · LED · TFT · QD)만 대문자로. 누르면 원래 말 그대로 분석한다
+const showTerm = (q) => String(q).replace(/\b[a-z]{2,4}\b/g, (w) => w.toUpperCase())
+const READY_SHOWN = 8 // 「바로 볼 수 있는 분석」 처음에 보이는 수 (11/14 D5: 칩 12개 + 예시 4칸 + 접힌 목록이 한 카드에 세 겹)
+
 function Dashboard({ stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onScopeSearch, onKeyword, onGoCollect, onRemember }) {
   const [text, setText] = useState('')
   const [focus, setFocus] = useState(null) // 분석 중인 말 (없으면 검색창 + 미리 분석된 키워드 + 요즘 뜨는 기술)
   const [ready, setReady] = useState([]) // 미리 분석해 둔 말 (11/10): 검색 전에도 분석이 어떤 모양인지 보이게
+  const [allReady, setAllReady] = useState(false)
   useEffect(() => {
     let alive = true
     fetchReadyTimelines()
@@ -110,22 +116,31 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
         {!focus && (
           <>
             <p className="dash-note">무엇을 찾을지 모르겠으면 아래 「요즘 뜨는 기술」이나 바로 볼 수 있는 분석에서 골라 보세요.</p>
-            {/* 예시: AI 정리까지 있는 미리 분석 중 흐름이 잘 보이는 것(「연구 지속」이 아닌 단계)을 먼저 */}
-            <AnalysisPreview example={(ready.find((r) => r.story && r.stage && r.stage !== '연구 지속') ?? ready.find((r) => r.story))?.query ?? null} onOpen={analyze} />
+            {/* 11/14 D5: 눈 갈 곳은 「바로 볼 수 있는 분석」 칩 줄 하나. 분석 예시(11/10)는 아래 접힌 줄로 (자동 수집 키워드 목록과 같은 모양) */}
             {ready.length > 0 && (
               <div className="dash-ready" aria-label="미리 분석된 키워드">
                 <span className="dash-chips-label">바로 볼 수 있는 분석</span>
                 <div className="dash-ready-list">
-                  {ready.map((r) => (
+                  {(allReady ? ready : ready.slice(0, READY_SHOWN)).map((r) => (
                     <button key={r.query} type="button" className="dash-ready-item" onClick={() => analyze(r.query)} title={`${r.from.join(' · ')}${r.growth ? ` · 논문 ${r.growth}배` : ''}${r.story ? ' · AI 정리 있음' : ''}`}>
-                      <b>{r.query}</b>
+                      <b>{showTerm(r.query)}</b>
                       {r.stage && <span className="dash-ready-stage">{r.stage}</span>}
                       {mark(r.query)}
                     </button>
                   ))}
+                  {ready.length > READY_SHOWN && (
+                    <button type="button" className="btn-text dash-ready-more" aria-expanded={allReady} onClick={() => setAllReady((v) => !v)}>
+                      {allReady ? '접기' : `+${ready.length - READY_SHOWN}개 더`}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
+            <details className="dash-more">
+              <summary>분석하면 이렇게 보여요 · 예시</summary>
+              {/* 예시: AI 정리까지 있는 미리 분석 중 흐름이 잘 보이는 것(「연구 지속」이 아닌 단계)을 먼저 */}
+              <AnalysisPreview example={(ready.find((r) => r.story && r.stage && r.stage !== '연구 지속') ?? ready.find((r) => r.story))?.query ?? null} onOpen={analyze} />
+            </details>
           </>
         )}
 
@@ -144,7 +159,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
                 <div className="dash-chips-list">
                   {keywords.map((k) => (
                     <button key={k} type="button" className="chip dash-chip" onClick={() => onKeyword(k)} title={`모은 기사 중 「${k}」만 보기`}>
-                      {k}
+                      {showTerm(k)}
                     </button>
                   ))}
                 </div>
@@ -159,7 +174,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
                 <div className="dash-chips-list">
                   {recommendedOnly.map((k) => (
                     <button key={k} type="button" className="chip dash-chip" onClick={() => analyze(k)} title={`「${k}」 분석 (관리자가 고른 추천 검색어)`}>
-                      {k}
+                      {showTerm(k)}
                       {mark(k)}
                     </button>
                   ))}
@@ -175,7 +190,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
                 <div className="dash-chips-list">
                   {favorites.map((k) => (
                     <button key={k} type="button" className="chip dash-chip" onClick={() => analyze(k)} title={`「${k}」 분석`}>
-                      {k}
+                      {showTerm(k)}
                       {mark(k)}
                     </button>
                   ))}
@@ -191,7 +206,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
                 <div className="dash-chips-list">
                   {recentOnly.map((k) => (
                     <button key={k} type="button" className="chip dash-chip" onClick={() => analyze(k)} title={`「${k}」 분석`}>
-                      {k}
+                      {showTerm(k)}
                       {mark(k)}
                     </button>
                   ))}

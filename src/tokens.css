@@ -57,6 +57,13 @@
   --tb-space-8: var(--primitive-spacing-32);
   --tb-space-10: var(--primitive-spacing-40);
 
+  /* ── 화면 배치 여백 (11/14): 새 화면 · 카드는 이 값만 쓴다. 카드마다 margin · padding을 따로 정하면 새 기능마다 어긋났음 ── */
+  --tb-page-head-gap: var(--tb-space-6); /* 24 — 페이지 제목 · 설명 → 첫 카드 */
+  --tb-card-gap: var(--tb-space-5); /* 20 — 카드와 카드 사이 (위아래 · 좌우 칸 모두) */
+  --tb-card-pad: var(--tb-space-5); /* 20 — 카드 안쪽 여백 (.panel 기본값, 휴대폰 16) */
+  --tb-card-head-gap: var(--tb-space-4); /* 16 — 카드 제목줄 → 내용 */
+  --tb-rail-w: 200px; /* 왼쪽 막대 폭 (자료 현황 검색어 · 내 보고서 묶음) */
+
   /* ── 모서리 (LG radius-semantic) ── */
   --tb-radius-button: var(--semantic-radius-button-m); /* 8 */
   --tb-radius-input: var(--semantic-radius-button-m); /* 8 */

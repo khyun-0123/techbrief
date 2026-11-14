@@ -64,7 +64,7 @@ export function addJob(body, clientId, ip = null) {
     id: `rj-${randomUUID().slice(0, 8)}`,
     clientId: String(clientId ?? '').slice(0, 64) || null,
     ip,
-    title: String(body.title ?? '').trim() || '테크 동향 브리핑',
+    title: String(body.title ?? '').trim() || `${String(body.topics?.[0] ?? '').trim() || '테크'} 동향 브리핑`, // 11/14: 주제 키워드를 제목에
     level,
     levelLabel: LEVELS[level],
     count: (body.articles ?? []).length,

@@ -62,20 +62,22 @@ function keywordsOf(r, tagsFor) {
   return [...new Set([...topics, ...tags])].slice(0, 3)
 }
 const PERIODS = [
-  ['all', '전체 기간', null],
+  ['all', '전체', null],
   ['today', '오늘', 1],
-  ['7', '최근 7일', 7],
-  ['30', '최근 30일', 30],
-  ['90', '최근 90일', 90],
+  ['7', '7일', 7],
+  ['30', '30일', 30],
+  ['90', '90일', 90],
 ]
 const SORTS = [
   ['new', '최신순'],
   ['old', '오래된순'],
   ['title', '제목순'],
 ]
+// 2026.11.12 · 22:05 (11/14: 「2026. 11. 12.」 · 「오후 10:05」보다 짧고 열이 맞음)
+const pad2 = (n) => String(n).padStart(2, '0')
 const fmtTime = (iso) => {
   const d = new Date(iso)
-  return { day: d.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }), time: d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) }
+  return { day: `${d.getFullYear()}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`, time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}` }
 }
 
 function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, initialId, selectedIds = [], onCleanup, onOpened, onRestore, onPurge, onStar, tagsFor, trashDays }) {
@@ -240,12 +242,15 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
                 <button type="button" className="btn" onClick={handleCopy}>
                   텍스트 복사
                 </button>
-                {onDelete && canDelete?.(open) && (
-                  <button type="button" className="btn-text danger" onClick={handleDelete} title="이 보고서를 만든 사람만 지울 수 있어요. 휴지통에서 되살릴 수 있어요">
-                    휴지통으로
-                  </button>
-                )}
               </>
+            }
+            trailing={
+              onDelete &&
+              canDelete?.(open) && (
+                <button type="button" className="btn-text danger report-trash" onClick={handleDelete} title="이 보고서를 만든 사람만 지울 수 있어요. 휴지통에서 되살릴 수 있어요">
+                  휴지통으로
+                </button>
+              )
             }
           />
         </div>
@@ -254,13 +259,17 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
   }
 
   // ── 목록 화면 (11/13: 왼쪽 메뉴 + 표 + 미리보기 창) ──
+  // 11/14 디자인: 다른 화면과 같은 머리말 · 여백 규칙(20 문서 6장), 기간은 알약 버튼, 키워드는 지우기 · 자주 나온 키워드, 작업은 글자 버튼
   const allChecked = results.length > 0 && results.every((r) => checked.includes(r.id))
+  const kwCount = new Map()
+  for (const r of base) for (const k of kwOf(r)) kwCount.set(k, (kwCount.get(k) ?? 0) + 1)
+  const topKw = [...kwCount].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k]) => k)
   return (
-    <main className="page page-wide archive-page">
-      <header className="archive-head">
+    <main className="page page-wide mr-page">
+      <header className="page-header with-actions">
         <div>
           <h1>내 보고서</h1>
-          <p className="hint">만든 보고서를 확인하고 내려받아요. 지운 보고서는 휴지통에서 되살릴 수 있어요.</p>
+          <p>만든 보고서를 확인하고 내려받아요. 지운 보고서는 휴지통에서 되살릴 수 있어요.</p>
         </div>
         <button type="button" className="btn primary" onClick={onGoDraft}>
           ＋ 새 보고서 만들기
@@ -269,7 +278,7 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
 
       <div className="mr-layout">
         <aside className="panel mr-side" aria-label="보고서 거르기">
-          <nav className="mr-views" aria-label="보고서 묶음">
+          <nav className="mr-group mr-views" aria-label="보고서 묶음">
             {VIEWS.map(([id, label, list, title]) => (
               <button
                 key={id}
@@ -287,40 +296,62 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
               </button>
             ))}
           </nav>
-          <label className="mr-field">
-            <span>생성 기간</span>
-            <select value={period} onChange={(e) => setPeriod(e.target.value)}>
+          <div className="mr-group" role="radiogroup" aria-labelledby="mr-period-title">
+            <h2 id="mr-period-title" className="mr-group-title">
+              생성 기간
+            </h2>
+            <div className="pill-group">
               {PERIODS.map(([id, label]) => (
-                <option key={id} value={id}>
+                <button key={id} type="button" role="radio" aria-checked={period === id} className={period === id ? 'pill on' : 'pill'} onClick={() => setPeriod(id)}>
                   {label}
-                </option>
+                </button>
               ))}
-            </select>
-          </label>
-          <label className="mr-field">
-            <span>키워드</span>
-            <input type="search" value={kwq} onChange={(e) => setKwq(e.target.value)} placeholder="키워드로 거르기 (예: OLED)" />
-          </label>
+            </div>
+          </div>
+          <div className="mr-group">
+            <h2 className="mr-group-title">
+              <label htmlFor="mr-kw">키워드</label>
+            </h2>
+            <div className="field-clear">
+              <input id="mr-kw" type="text" value={kwq} onChange={(e) => setKwq(e.target.value)} placeholder="예: OLED" autoComplete="off" />
+              {kwq && (
+                <button type="button" className="field-clear-btn" aria-label="키워드 지우기" onClick={() => setKwq('')}>
+                  ×
+                </button>
+              )}
+            </div>
+            {topKw.length > 0 && (
+              <div className="mr-kw-list" aria-label="자주 나온 키워드">
+                {topKw.map((k) => (
+                  <button key={k} type="button" className={norm(kwq) === norm(k) ? 'mr-kw on' : 'mr-kw'} aria-pressed={norm(kwq) === norm(k)} onClick={() => setKwq(norm(kwq) === norm(k) ? '' : k)}>
+                    #{k}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           {inTrash && (
-            <p className="hint mr-trash-note">
+            <p className="mr-group mr-trash-note">
               {trashDays ? `휴지통에 ${trashDays}일 있으면 자동으로 영구 삭제돼요.` : '휴지통은 자동으로 비우지 않아요.'} 보관 기간은 관리자가 정해요.
             </p>
           )}
         </aside>
 
-        <section className="panel mr-main" aria-label="보고서 목록">
+        <section className="panel panel-flush mr-main" aria-labelledby="mr-list-title">
           <div className="mr-toolbar">
-            <h2>
-              {VIEWS.find(([id]) => id === view)?.[1]} {results.length}건
+            <h2 id="mr-list-title">
+              {VIEWS.find(([id]) => id === view)?.[1]} <span className="mr-total">{results.length}건</span>
             </h2>
-            <input type="search" className="mr-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목 · 본문 · 근거 기사에서 찾기" aria-label="보고서 찾기" />
-            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="정렬">
+            <div className="field-clear mr-search">
+              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목 · 본문 · 근거 기사에서 찾기" aria-label="보고서 찾기" />
+            </div>
+            <div className="segmented" role="radiogroup" aria-label="정렬">
               {SORTS.map(([id, label]) => (
-                <option key={id} value={id}>
+                <button key={id} type="button" role="radio" aria-checked={sort === id} onClick={() => setSort(id)}>
                   {label}
-                </option>
+                </button>
               ))}
-            </select>
+            </div>
           </div>
           {(checkedRows.length > 0 || notice) && (
             <div className="mr-bulk" role="status">
@@ -354,16 +385,23 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
                     <th scope="col" className="mr-check">
                       <input type="checkbox" aria-label="모두 고르기" checked={allChecked} onChange={(e) => setChecked(e.target.checked ? results.map((r) => r.id) : [])} />
                     </th>
-                    <th scope="col">보고서 제목</th>
-                    <th scope="col">분석 키워드</th>
-                    <th scope="col">생성일시</th>
-                    <th scope="col">작업</th>
+                    <th scope="col">보고서</th>
+                    <th scope="col" className="mr-kw-col">
+                      분석 키워드
+                    </th>
+                    <th scope="col" className="mr-time">
+                      만든 때
+                    </th>
+                    <th scope="col" className="mr-actions">
+                      <span className="sr-only">작업</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {results.map((r) => {
                     const t = fmtTime(r.createdAt)
                     const line = r.report.headline?.text ?? snippetOf(r, q.trim())
+                    const kws = kwOf(r)
                     return (
                       <tr key={r.id}>
                         <td className="mr-check">
@@ -377,35 +415,41 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
                               </span>
                             )}
                             <Mark text={r.report.title} q={q.trim()} />
-                            {isMine(r) && <span className="mine-badge">내가 만듦</span>}
+                            {/* 예전 기본 제목은 모두 같아 구분이 안 됨 → 첫 키워드를 흐리게 덧붙임 (11/14) */}
+                            {r.report.title === '테크 동향 브리핑' && kws[0] && <span className="mr-title-kw"> · {kws[0]}</span>}
                           </button>
+                          {isMine(r) && <span className="mine-badge">내가 만듦</span>}
                           {line && (
                             <span className="mr-line">
                               <Mark text={line} q={q.trim()} />
                             </span>
                           )}
                         </td>
-                        <td>
+                        <td className="mr-kw-col">
                           <span className="mr-chips">
-                            {kwOf(r).map((k) => (
-                              <button key={k} type="button" className="chip mr-chip" onClick={() => setKwq(k)} title={`「${k}」 키워드 보고서만`}>
-                                {k}
+                            {kws.slice(0, 2).map((k) => (
+                              <button key={k} type="button" className="mr-kw" onClick={() => setKwq(k)} title={`「${k}」 키워드 보고서만`}>
+                                #{k}
                               </button>
                             ))}
+                            {kws.length > 2 && (
+                              <span className="mr-kw-more" title={kws.slice(2).join(' · ')}>
+                                +{kws.length - 2}
+                              </span>
+                            )}
                           </span>
                         </td>
                         <td className="mr-time">
                           {t.day}
-                          <br />
-                          <span className="hint">{t.time}</span>
+                          <span>{t.time}</span>
                         </td>
                         <td className="mr-actions">
-                          <button type="button" className="btn" onClick={() => setPreviewId(r.id)}>
+                          <button type="button" className="mr-act" onClick={() => setPreviewId(r.id)}>
                             미리보기
                           </button>
                           {!inTrash && (
                             <span className="mr-menu-wrap">
-                              <button type="button" className="btn" aria-expanded={menuId === `dl:${r.id}`} onClick={() => setMenuId(menuId === `dl:${r.id}` ? null : `dl:${r.id}`)}>
+                              <button type="button" className="mr-act" aria-expanded={menuId === `dl:${r.id}`} onClick={() => setMenuId(menuId === `dl:${r.id}` ? null : `dl:${r.id}`)}>
                                 다운로드 ▾
                               </button>
                               {menuId === `dl:${r.id}` && (
@@ -424,7 +468,7 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
                             </span>
                           )}
                           <span className="mr-menu-wrap">
-                            <button type="button" className="btn mr-more" aria-label="더 보기" aria-expanded={menuId === `more:${r.id}`} onClick={() => setMenuId(menuId === `more:${r.id}` ? null : `more:${r.id}`)}>
+                            <button type="button" className="mr-act mr-more" aria-label="더 보기" aria-expanded={menuId === `more:${r.id}`} onClick={() => setMenuId(menuId === `more:${r.id}` ? null : `more:${r.id}`)}>
                               ⋯
                             </button>
                             {menuId === `more:${r.id}` && (

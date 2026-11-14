@@ -1188,7 +1188,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               onToggleFavorite={(q) => changeFavorites(favorites.includes(q) ? favorites.filter((f) => f !== q) : [...favorites, q])}
               onRemoveRecent={(q) => saveRecent(recent.filter((r) => r !== q))}
             />
-            <section className="panel list-panel">
+            <section className="panel panel-flush list-panel">
               {/* 「선별 추가」가 담을 폴더 (11/08: 끌어 놓기는 뺐다. 담긴 기사는 옆 폴더 메뉴로 옮김) */}
               <FolderBar
                 label="담을 폴더"
