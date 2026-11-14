@@ -2,7 +2,7 @@
 // 두 기능은 다르다: ①은 네이버에서 제목·150자 발췌·링크를 DB에 쌓고, ②는 그 발췌문으로 AI 6항목 요약을 만든다
 // 일반 화면의 RefreshPanel(보기 전용)과 같은 서버 값을 쓰고, 화면 구성만 관리자용으로 다르다
 // 주기·간격은 선택 상자 대신 버튼으로 (사파리가 선택 상자를 기본 모양으로만 그려 화면과 어울리지 않아서)
-import { backlogText, formatTime, progressText, resultText } from './refreshText.js'
+import { backlogText, formatTime, progressText, resultText, runnerText, schedulerText } from './refreshText.js'
 import { Seg } from './Dropdown.jsx'
 
 const MODES = [
@@ -154,6 +154,18 @@ function AdminRefresh({ status, starting, disabled, onRun, onSave, keywords = []
             <div className="adm-status-wide">
               <dt>결과</dt>
               <dd className={status.lastResult.error ? 'bad' : undefined}>{resultText(status.lastResult)}</dd>
+            </div>
+          )}
+          {status.lastResult && !running && (
+            <div className="adm-status-wide">
+              <dt>돌린 앱</dt>
+              <dd className={status.lastResult.runner ? undefined : 'bad'}>{runnerText(status.lastResult)}</dd>
+            </div>
+          )}
+          {status.scheduler && (
+            <div className="adm-status-wide">
+              <dt>수집 담당</dt>
+              <dd className={status.scheduler.mode === 'leader' && !status.scheduler.leader ? 'bad' : undefined}>{schedulerText(status.scheduler)}</dd>
             </div>
           )}
           {status.backlog && (

@@ -10,6 +10,9 @@ import { getKeywords, getSetting, getSummaries, setSetting } from './db/store.js
 import { pingModel, PRIORITY, queueStatus } from './llm/client.js'
 import { summarizeArticle } from './summarize.js'
 import { aiPaused } from './ops.js'
+import { execFileSync } from 'node:child_process'
+import { hostname } from 'node:os'
+import pg from 'pg'
 
 const SETTINGS_KEY = 'refresh_settings'
 const STATE_KEY = 'refresh_state'
@@ -28,6 +31,73 @@ const DEFAULT_SETTINGS = { mode: 'off', time: '06:00', hours: 2, autoSummary: 'o
 export const SUMMARY_DAY_OPTIONS = [3, 7, 14, 21]
 const PAPER_SUMMARY_DAYS = 7
 const isPaper = (a) => String(a.section ?? '').startsWith('feed:crossref')
+
+// ── 수집 담당 앱 (11/15) ──
+// REFRESH_SCHEDULER: leader(잠금을 늘 쥐고 혼자 수집) | on(예전처럼 잠금을 잡은 앱이 수집) | off(이 앱은 수집 · 자동 요약 안 함)
+// 기본값: 공용 서버(npm run serve, 3038)는 leader, 나머지(npm run dev)는 on
+// 왜: 예전 코드로 켜 둔 팀원 앱이 같은 DB 잠금(50505)을 먼저 잡아, 옛 코드로 수집해 RSS · 자동 요약이 빠졌다.
+// 3038이 잠금을 전용 연결로 늘 쥐고 있으면 다른 앱은 잠금을 못 잡아 건너뛴다 (다른 앱의 DB 연결 수 자체는 줄지 않음)
+export function schedulerMode() {
+  const v = String(process.env.REFRESH_SCHEDULER ?? '').trim().toLowerCase()
+  if (['leader', 'on', 'off'].includes(v)) return v
+  return process.env.TECHBRIEF_SUPERVISED === '1' ? 'leader' : 'on'
+}
+
+// 전용 연결 하나로 수집 잠금(LOCK_ID) · 자동 요약 잠금(LOCK_ID + 1)을 쥔다. 풀(최대 5)에서 빌리지 않는다
+// Vite가 서버 코드만 다시 읽어도 연결이 남도록 globalThis에 둔다. 연결이 끊기면 PG가 잠금을 풀고, 다음 확인(1분) 때 다시 잡는다
+const leader = (globalThis.__techbriefLeader ??= { client: null, held: false, since: null, error: null, connecting: false })
+export const leaderHolds = () => leader.held && Boolean(leader.client)
+
+async function ensureLeaderLock() {
+  if (schedulerMode() !== 'leader' || !dbEnabled() || leader.held || leader.connecting) return
+  leader.connecting = true
+  let client = null
+  try {
+    client = new pg.Client({ connectionString: process.env.DATABASE_URL, application_name: `techbrief-leader:${process.env.PORT ?? ''}` })
+    client.on('error', (err) => dropLeader(client, err))
+    client.on('end', () => dropLeader(client))
+    await client.connect()
+    const { rows } = await client.query('SELECT pg_try_advisory_lock($1) AS a, pg_try_advisory_lock($2) AS b', [LOCK_ID, LOCK_ID + 1])
+    if (rows[0].a && rows[0].b) {
+      Object.assign(leader, { client, held: true, since: new Date().toISOString(), error: null })
+      console.log('[refresh] 수집 잠금을 쥐었어요 (이 앱이 수집 · 자동 요약 담당)')
+      client = null
+    } else {
+      // 다른 앱이 지금 잡고 있다 (실행 중). 그 실행이 끝나면 다음 확인 때 잡는다
+      leader.error = '다른 앱이 잠금을 쥐고 있어 기다리는 중'
+    }
+  } catch (err) {
+    leader.error = err.message
+  } finally {
+    leader.connecting = false
+    if (client) client.end().catch(() => {})
+  }
+}
+
+function dropLeader(client, err) {
+  if (leader.client !== client) return
+  Object.assign(leader, { client: null, held: false, since: null, error: err ? `잠금 연결 끊김: ${err.message}` : '잠금 연결 끊김' })
+  console.warn(`[refresh] ${leader.error} · 1분 안에 다시 잡아요`)
+}
+
+// 어느 앱 · 어느 코드가 돌렸는지 (실행 기록 · 관리 페이지)
+function runnerInfo() {
+  const git = (...args) => {
+    try {
+      return execFileSync('git', args, { cwd: process.cwd(), encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    } catch {
+      return null
+    }
+  }
+  return {
+    host: hostname(),
+    port: process.env.PORT ?? null,
+    pid: process.pid,
+    mode: schedulerMode(),
+    branch: git('rev-parse', '--abbrev-ref', 'HEAD'),
+    commit: git('rev-parse', '--short', 'HEAD'),
+  }
+}
 
 let memoryKeywords = [] // DB가 없을 때 마지막으로 받은 키워드
 let localRun = null // 이 프로세스에서 도는 실행 { promise, progress }
@@ -79,6 +149,8 @@ export async function refreshStatus() {
     lastRunAt: state.lastRunAt ?? null,
     lastResult: state.lastResult ?? null,
     nextRunAt: next ? next.toISOString() : null,
+    // 이 앱(지금 응답하는 앱)의 수집 담당 상태
+    scheduler: { mode: schedulerMode(), leader: leaderHolds(), since: leader.since, error: leaderHolds() ? null : leader.error },
   }
 }
 
@@ -195,7 +267,9 @@ async function runWorker() {
     stats.note = 'AI 모델에 연결되지 않아 자동 요약을 멈춤 (다음 최신화 때 다시 시도)'
     return saveBacklogStatus()
   }
-  const client = dbEnabled() ? await (await db()).connect() : null
+  if (schedulerMode() === 'off') return
+  // 담당 앱이면 전용 연결이 이미 잠금을 쥐고 있다 (같은 잠금을 다른 연결로 다시 잡으면 실패하므로 건너뜀)
+  const client = dbEnabled() && !leaderHolds() ? await (await db()).connect() : null
   try {
     if (client && !(await client.query('SELECT pg_try_advisory_lock($1) AS ok', [WORKER_LOCK_ID])).rows[0].ok) return
     stats.note = null
@@ -258,6 +332,7 @@ async function runWorker() {
 
 // 앱이 켜질 때: 밀린 요약이 있으면 이어서 한다 (자동 요약이 꺼짐이면 대기열이 비어 아무것도 안 함)
 async function resumeBacklog() {
+  if (schedulerMode() === 'off') return
   try {
     const n = await setBacklog(await buildBacklog())
     if (n) console.log(`[summary] 밀린 자동 요약 ${n}건 이어서 시작`)
@@ -268,6 +343,8 @@ async function resumeBacklog() {
 
 async function withLock(fn) {
   if (!dbEnabled()) return fn()
+  if (schedulerMode() === 'leader') await ensureLeaderLock()
+  if (leaderHolds()) return fn() // 앱 안에서는 localRun이 겹쳐 돌지 않게 막는다
   const client = await (await db()).connect()
   try {
     const { rows } = await client.query('SELECT pg_try_advisory_lock($1) AS ok', [LOCK_ID])
@@ -284,14 +361,15 @@ async function withLock(fn) {
 
 async function execute({ trigger, keywords }) {
   const startedAt = new Date().toISOString()
-  const progress = { trigger, startedAt, phase: 'collect', done: 0, total: 0, current: null, by: process.env.PORT ?? null }
+  const runner = runnerInfo()
+  const progress = { trigger, startedAt, phase: 'collect', done: 0, total: 0, current: null, by: process.env.PORT ?? null, runner }
   localRun.progress = progress
   const prev = await loadState()
   // updatedAt: 키워드가 많으면 요약이 30분을 넘길 수 있어, 멈춤 판단은 마지막 진행 시각으로 한다
   const saveProgress = () => setSetting(STATE_KEY, { ...prev, running: { ...progress, updatedAt: new Date().toISOString() } })
   await saveProgress()
 
-  const result = { trigger, startedAt, fetched: 0, added: 0, queued: 0, failedKeywords: [], note: null }
+  const result = { trigger, startedAt, fetched: 0, added: 0, queued: 0, failedKeywords: [], note: null, runner }
   try {
     const collected = await collect(keywords)
     Object.assign(result, { fetched: collected.fetched, added: collected.added })
@@ -350,6 +428,8 @@ export async function startRefresh(keywords) {
 }
 
 async function tick() {
+  if (schedulerMode() === 'off') return
+  await ensureLeaderLock().catch(() => {}) // 담당 앱: 잠금을 놓쳤으면 다시 잡는다 (예약이 꺼져 있어도)
   if (localRun) return
   try {
     const settings = normalizeSettings(await getSetting(SETTINGS_KEY, {}))

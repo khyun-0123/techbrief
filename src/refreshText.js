@@ -30,3 +30,18 @@ export function backlogText(b) {
   const counts = [b.done ? `완료 ${b.done}` : null, b.failed ? `실패 ${b.failed}` : null, b.preempted ? `사람 요청에 양보 ${b.preempted}(다시 넣음)` : null].filter(Boolean)
   return counts.length ? `${base} · ${counts.join(' · ')}` : base
 }
+
+// 어느 앱 · 어느 코드가 돌렸는지 (관리 페이지, 11/15). runner가 없으면 이 기록을 남기기 전 코드(예전 앱)가 돌린 것
+export function runnerText(r) {
+  if (!r?.runner) return '기록 없음 (예전 코드로 켠 앱이 돌렸을 수 있음)'
+  const { host, port, branch, commit } = r.runner
+  return [`${host ?? '?'}:${port ?? '?'}`, branch && commit ? `${branch} @ ${commit}` : null].filter(Boolean).join(' · ')
+}
+
+// 지금 이 앱(응답한 앱)이 수집 담당인지
+export function schedulerText(s) {
+  if (!s) return '-'
+  if (s.mode === 'off') return '이 앱은 수집 안 함 (REFRESH_SCHEDULER=off)'
+  if (s.mode === 'on') return '잠금을 먼저 잡은 앱이 수집 (담당 고정 안 함)'
+  return s.leader ? `이 앱이 수집 담당 · 잠금 쥠 (${formatTime(s.since)}부터)` : `담당 대기 · ${s.error ?? '잠금을 잡는 중'}`
+}
