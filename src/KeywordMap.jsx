@@ -9,6 +9,7 @@
 //   키보드: Enter = 넣기/빼기, → = 펼치기, ← = 접기. 펼치거나 접어도 다른 점은 제자리에서 조금만 움직임
 // - 가이드에서 아직 안 옮긴 것: 보고서에 넣기(초안 6장), 키워드 편집, 불용어 · 예외 단어 관리(지금은 서버 CSV), 고르는 기준 「중요도」(맵 데이터에 중요도 합이 없음), 관련 기사 칸
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Seg } from './Dropdown.jsx'
 
 const short = (t, n = 14) => (t.length > n ? `${t.slice(0, n - 1)}…` : t)
 const textW = (t, px) => [...t].reduce((n, ch) => n + (/[가-힣]/.test(ch) ? px : px * 0.6), 0)
@@ -301,9 +302,9 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
       >
         <circle cx={p.x} cy={p.y} r={r + 3} fill="transparent" />
         <circle cx={p.x} cy={p.y} r={r} fill={fill} />
-        {/* 고른 말 (11/14): 점 둘레 테두리는 1단계 점과 헷갈려서, 글자를 검정 알약(눌린 칩과 같은 모양)으로 */}
+        {/* 고른 말 (11/14): 점 둘레 테두리는 1단계 점과 헷갈려서, 글자를 검정 알약(눌린 칩과 같은 모양)으로. 글자는 알약 가운데(central, 11/15 실측 2.3px 위로 떠 있었음) */}
         {on && <rect x={p.x - (textW(label, fs) + 14) / 2} y={p.y + r + 2} width={textW(label, fs) + 14} height={fs + 7} rx={(fs + 7) / 2} fill={colors.text} />}
-        <text x={p.x} y={p.y + r + 2 + fs * 0.85 + (on ? 2.5 : 0)} textAnchor="middle" fontSize={fs} fontWeight={lv === 2 && !on ? 400 : on ? 700 : 600} fill={on ? colors.surface : lv === 2 ? colors.sub : colors.text} stroke={on ? 'none' : '#fff'} strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
+        <text x={p.x} y={on ? p.y + r + 2 + (fs + 7) / 2 : p.y + r + 2 + fs * 0.85} dominantBaseline={on ? 'central' : undefined} textAnchor="middle" fontSize={fs} fontWeight={lv === 2 && !on ? 400 : on ? 700 : 600} fill={on ? colors.surface : lv === 2 ? colors.sub : colors.text} stroke={on ? 'none' : '#fff'} strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
           {label}
         </text>
       </g>
@@ -739,13 +740,7 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
             <div className="km-pbody">
               <div className="km-ctl">
                 <span className="km-lbl">보기</span>
-                <div className="km-seg" role="group" aria-label="보기">
-                  {MAP_VIEWS.map(([v, t]) => (
-                    <button key={v} type="button" aria-pressed={mode === v} onClick={() => onView?.(v)}>
-                      {t}
-                    </button>
-                  ))}
-                </div>
+                <Seg value={mode} onChange={(v) => onView?.(v)} label="보기" size="md" options={MAP_VIEWS.map(([value, label]) => ({ value, label }))} />
               </div>
               <div className="km-prow">
                 <label className="km-ctl">

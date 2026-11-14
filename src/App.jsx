@@ -29,7 +29,11 @@ import {
   searchNewsApi,
   searchPapersApi,
   searchScopeApi,
+  createReportJob,
 } from './api.js'
+import AutoReportDialog from './AutoReportDialog.jsx'
+import Dropdown, { PeriodSeg, Seg } from './Dropdown.jsx'
+import { pickMaterials, periodLabelOf } from './autoPick.js'
 import { buildTagDict, tagsOf } from './hashtags.js'
 import SettingsMenu from './SettingsMenu.jsx'
 import { buildBundleHtml } from './exportBundle.js'
@@ -792,6 +796,90 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     else if (search?.query) runSearch(search.query, p)
   }
 
+  // ── 자동 보고서 (11/15 조장: 키워드만 넣으면 보고서까지, 확인 창 한 번) ──
+  // 범위 찾기 → 중요도로 자동 선별(autoPick.js) → 확인 창 → 선별 폴더에 담기 + 요약 → 다 요약되면 보고서 작업 (요약 실패한 건 빼고)
+  const [autoRun, setAutoRun] = useState(null)
+  const autoSending = useRef(false)
+  async function startAutoReport(scope) {
+    if (opsValue.aiBlocked) {
+      setAutoRun({ step: 'error', scope, error: 'AI 요약 · 보고서가 잠시 멈춰 있어요 (관리자 운영 설정).' })
+      return
+    }
+    setAutoRun({ step: 'search', scope })
+    track('search', scope.query)
+    try {
+      localStorage.setItem(LAST_SCOPE_KEY, JSON.stringify({ ...scope, at: new Date().toISOString() }))
+    } catch {
+      // 저장 공간이 막혀도 그대로
+    }
+    try {
+      const res = await searchScopeApi(scope, period)
+      const marked = res.articles.map((a) => ({ ...a, hasSummary: Boolean(aiSummaries[a.id]?.summary?.items) }))
+      setAutoRun((r) => (r?.scope === scope ? { step: 'confirm', scope, result: pickMaterials(marked, scope.terms) } : r))
+    } catch (err) {
+      setAutoRun((r) => (r?.scope === scope ? { step: 'error', scope, error: err.message } : r))
+    }
+  }
+  function beginAutoReport({ articles, title, level }) {
+    const scope = autoRun.scope
+    const folderName = `${scope.query} · 자동`.slice(0, 40)
+    const folderId = folders.find((f) => f.name === folderName)?.id ?? createFolder(folderName)
+    for (const a of articles) {
+      if (!selectedIds.includes(a.id)) toggleSelected(a, folderId) // 선별 + 요약 대기열 (원문 기반 요약이 없으면)
+      else if (!aiSummaries[a.id]?.summary?.items && a.aiAllowed !== false) queue.enqueue(a, { select: true })
+    }
+    setFolderOf((prev) => ({ ...prev, ...Object.fromEntries(articles.map((a) => [a.id, folderId])) }))
+    autoSending.current = false
+    setAutoRun({ step: 'summarizing', scope, articles, title, level, folderName })
+    track('report', 'auto')
+  }
+  // 요약 진행: 대기열에 남아 있지 않고 요약이 있으면 끝, 대기열이 오류면 실패
+  const autoProgress = (() => {
+    if (autoRun?.step !== 'summarizing' && autoRun?.step !== 'sending' && autoRun?.step !== 'sent') return null
+    let done = 0
+    let failed = 0
+    const ready = []
+    for (const a of autoRun.articles) {
+      const job = queue.jobs.find((j) => j.id === a.id)
+      const active = job && (job.status === 'queued' || job.status === 'running')
+      if (!active && aiSummaries[a.id]?.summary?.items) {
+        done++
+        ready.push(a)
+      } else if (!active && (job?.status === 'error' || a.aiAllowed === false || opsValue.aiBlocked)) failed++
+    }
+    return { done, failed, ready, total: autoRun.articles.length, finished: done + failed === autoRun.articles.length }
+  })()
+  useEffect(() => {
+    if (autoRun?.step !== 'summarizing' || !autoProgress?.finished || autoSending.current) return
+    autoSending.current = true
+    const { ready } = autoProgress
+    const { scope, title, level } = autoRun
+    ;(async () => {
+      if (!ready.length) {
+        setAutoRun((r) => ({ ...r, step: 'error', error: '요약된 자료가 없어 보고서를 만들지 못했어요. 선별·요약에서 요약 오류를 확인해 주세요.' }))
+        return
+      }
+      setAutoRun((r) => ({ ...r, step: 'sending' }))
+      try {
+        const job = await createReportJob({
+          articles: ready,
+          aiSummaries,
+          title,
+          direction: scope.terms.length ? `${scope.query} — ${scope.terms.join(' · ')} 중심` : '',
+          topics: [scope.query],
+          level,
+          periodLabel: periodLabelOf(ready),
+          mode: ready.length > 10 ? 'all' : undefined,
+          clientId: clientId(),
+        })
+        setReportJobs((prev) => [...prev.filter((j) => j.id !== job.id), job])
+        setAutoRun((r) => ({ ...r, step: 'sent' }))
+      } catch (err) {
+        setAutoRun((r) => ({ ...r, step: 'error', error: err.message }))
+      }
+    })()
+  }, [autoRun, autoProgress, aiSummaries])
+
   async function changeFavorites(next) {
     setFavorites(next)
     try {
@@ -1058,6 +1146,19 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         </div>
       )}
 
+      {autoRun && !autoRun.hidden && (
+        <AutoReportDialog
+          key={autoRun.scope.query + autoRun.scope.terms.join('|')}
+          run={{ ...autoRun, done: autoProgress?.done ?? 0, failed: autoProgress?.failed ?? 0, total: autoProgress?.total ?? 0 }}
+          onStart={beginAutoReport}
+          onClose={() => setAutoRun((r) => (r && ['summarizing', 'sending'].includes(r.step) ? { ...r, hidden: true } : null))}
+          onOpenSelect={() => {
+            setAutoRun(null)
+            setScreen('select')
+            window.scrollTo({ top: 0 })
+          }}
+        />
+      )}
       {screen === 'tools' && isTest ? (
         <TestTools providers={health?.llm?.providers ?? []} />
       ) : screen === 'dashboard' ? (
@@ -1076,6 +1177,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           period={period}
           onPeriod={setPeriod}
           onRemember={(q) => saveRecent([q, ...recent.filter((r) => r !== q)].slice(0, RECENT_MAX))}
+          onAutoReport={startAutoReport}
           onScopeSearch={(scope) => {
             runScopeSearch(scope)
             setScreen('collect')
@@ -1212,38 +1314,37 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                     {search?.loading ? '찾는 중…' : '뉴스·논문에서 찾기'}
                   </button>
                 </form>
-                <select
-                  value={period}
-                  onChange={(e) => changePeriod(e.target.value)}
-                  aria-label="기간"
-                  title={search ? '바꾸면 이 기간으로 다시 찾아요' : undefined}
-                >
-                  {PERIODS.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-                <select value={source} onChange={(e) => setSource(e.target.value)} aria-label="출처">
-                  <option value="all">모든 출처</option>
-                  <optgroup label="출처 단계">
-                    <option value="tier:1">1차 · 기업 발표·학회·논문</option>
-                    <option value="tier:2">2차 · 전문매체</option>
-                    <option value="tier:3">3차 · 일반 뉴스</option>
-                  </optgroup>
-                  <option value="material">직접 추가한 자료 ({materials.length})</option>
-                  <optgroup label="매체">
-                    {sources.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
-                <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="정렬">
-                  <option value="importance">중요도순</option>
-                  <option value="latest">최신순</option>
-                </select>
+                <PeriodSeg value={period} onChange={changePeriod} options={PERIODS} title={search ? '바꾸면 이 기간으로 다시 찾아요' : undefined} />
+                <Dropdown
+                  value={source}
+                  onChange={setSource}
+                  label="출처"
+                  size="lg"
+                  className="dd-source"
+                  options={[
+                    { value: 'all', label: '모든 출처' },
+                    { value: 'material', label: `직접 추가한 자료 (${materials.length})` },
+                    {
+                      group: '출처 단계',
+                      options: [
+                        { value: 'tier:1', label: '1차 · 기업 발표·학회·논문' },
+                        { value: 'tier:2', label: '2차 · 전문매체' },
+                        { value: 'tier:3', label: '3차 · 일반 뉴스' },
+                      ],
+                    },
+                    { group: '매체', options: sources.map((x) => ({ value: x, label: x })) },
+                  ]}
+                />
+                <Seg
+                  value={sort}
+                  onChange={setSort}
+                  size="lg"
+                  label="정렬"
+                  options={[
+                    { value: 'importance', label: '중요도순' },
+                    { value: 'latest', label: '최신순' },
+                  ]}
+                />
               </div>
               {search ? (
                 <div className="search-banner">
@@ -1311,18 +1412,20 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   관련도 낮은 기사도 보기 <span className="own-count">{lowCount}건</span>
                 </label>
                 {features.has('sentiment') && (
-                <select
+                <Dropdown
                   className="sentiment-filter"
+                  size="lg"
                   value={sentimentFilter}
-                  onChange={(e) => setSentimentFilter(e.target.value)}
-                  aria-label="긍정·중립·부정 거르기"
+                  onChange={setSentimentFilter}
+                  label="긍정·중립·부정 거르기"
                   title="기사 속 소식 자체의 성격이에요. 요약 전에는 제목 기준, 요약 후에는 요약 기준이에요 (투자 판단용 아님)"
-                >
-                  <option value="all">긍정·부정 전체</option>
-                  <option value="긍정">○ 긍정만</option>
-                  <option value="중립">△ 중립만</option>
-                  <option value="부정">✕ 부정만</option>
-                </select>
+                  options={[
+                    { value: 'all', label: '긍정·부정 전체' },
+                    { value: '긍정', label: '○ 긍정만' },
+                    { value: '중립', label: '△ 중립만' },
+                    { value: '부정', label: '✕ 부정만' },
+                  ]}
+                />
                 )}
                 <label className="own-toggle" title="자사·자회사만 나온 기사를 숨겨요. 경쟁사도 함께 나오면 남겨요">
                   <input type="checkbox" checked={excludeOwn} onChange={(e) => toggleExcludeOwn(e.target.checked)} />

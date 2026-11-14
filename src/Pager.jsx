@@ -1,4 +1,5 @@
 // 목록 페이지 번호 (13 문서 F2): ‹ 1 … 4 5 [6] 7 8 … 12 › · 페이지당 개수
+import Dropdown from './Dropdown.jsx'
 const SIZES = [10, 20, 50]
 
 function pageList(page, total) {
@@ -47,13 +48,7 @@ function Pager({ page, pageSize, total, onPage, onPageSize }) {
           ›
         </button>
       </div>
-      <select value={pageSize} onChange={(e) => onPageSize(Number(e.target.value))} aria-label="페이지당 개수">
-        {SIZES.map((n) => (
-          <option key={n} value={n}>
-            {n}개씩
-          </option>
-        ))}
-      </select>
+      <Dropdown value={pageSize} onChange={(v) => onPageSize(Number(v))} label="페이지당 개수" size="sm" options={SIZES.map((n) => ({ value: n, label: `${n}개씩` }))} />
     </nav>
   )
 }

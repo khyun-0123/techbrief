@@ -11,6 +11,7 @@
 // - 보고서를 열었을 때 그 보고서에 쓴 기사가 아직 선별 목록에 있으면 정리할지 한 번 묻는다
 // onDelete가 없으면 「지우기」를 숨긴다 (공용 보고서함은 관리자만 지움, 17 문서)
 import { useEffect, useState } from 'react'
+import { PeriodSeg, Seg } from './Dropdown.jsx'
 import { exportPptx, loadReportExtra, printReport } from './reportExport.js'
 import { SlideFrame } from './ReportSlide.jsx'
 import { reportPages } from './reportSlides.js'
@@ -336,13 +337,7 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
             <h2 id="mr-period-title" className="mr-group-title">
               생성 기간
             </h2>
-            <div className="pill-group">
-              {PERIODS.map(([id, label]) => (
-                <button key={id} type="button" role="radio" aria-checked={period === id} className={period === id ? 'pill on' : 'pill'} onClick={() => setPeriod(id)}>
-                  {label}
-                </button>
-              ))}
-            </div>
+            <PeriodSeg value={period} onChange={setPeriod} label="생성 기간" size="md" full options={PERIODS.map(([value, label]) => ({ value, label }))} />
           </div>
           <div className="mr-group">
             <h2 className="mr-group-title">
@@ -381,13 +376,7 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
             <div className="field-clear mr-search">
               <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목 · 본문 · 근거 기사에서 찾기" aria-label="보고서 찾기" />
             </div>
-            <div className="segmented" role="radiogroup" aria-label="정렬">
-              {SORTS.map(([id, label]) => (
-                <button key={id} type="button" role="radio" aria-checked={sort === id} onClick={() => setSort(id)}>
-                  {label}
-                </button>
-              ))}
-            </div>
+            <Seg value={sort} onChange={setSort} label="정렬" size="lg" options={SORTS.map(([value, label]) => ({ value, label }))} />
           </div>
           {(checkedRows.length > 0 || notice) && (
             <div className="mr-bulk" role="status">

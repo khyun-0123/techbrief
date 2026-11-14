@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { addMaterialApi } from './api.js'
 import { clientId } from './usage.js'
+import Dropdown from './Dropdown.jsx'
 
 const KINDS = [
   ['link', '링크'],
@@ -131,12 +132,18 @@ function AddMaterial({ folders, defaultFolder, selectByDefault = false, onAdded,
           </label>
           <label>
             출처 단계
-            <select value={tier} onChange={(e) => setTier(e.target.value)}>
-              <option value="">자동 (논문 1차 · 나머지 2차)</option>
-              <option value="1">1차 · 기업 발표 · 학회 · 논문 · 분석 보고서</option>
-              <option value="2">2차 · 전문매체</option>
-              <option value="3">3차 · 일반 뉴스</option>
-            </select>
+            <Dropdown
+              value={tier}
+              onChange={setTier}
+              size="lg"
+              label="출처 단계"
+              options={[
+                { value: '', label: '자동 (논문 1차 · 나머지 2차)' },
+                { value: '1', label: '1차 · 기업 발표 · 학회 · 논문 · 분석 보고서' },
+                { value: '2', label: '2차 · 전문매체' },
+                { value: '3', label: '3차 · 일반 뉴스' },
+              ]}
+            />
           </label>
         </div>
         <label className="check">
@@ -152,13 +159,7 @@ function AddMaterial({ folders, defaultFolder, selectByDefault = false, onAdded,
           {folders && select && (
             <label>
               담을 폴더
-              <select value={folderId} onChange={(e) => setFolderId(e.target.value)}>
-                {folders.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
+              <Dropdown value={folderId} onChange={setFolderId} size="lg" label="담을 폴더" options={folders.map((f) => ({ value: f.id, label: f.name }))} />
             </label>
           )}
         </div>

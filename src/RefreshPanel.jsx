@@ -2,6 +2,7 @@
 // 주기·자동 요약 설정은 모두에게 영향을 주므로 관리자 화면(canEdit)에서만 바꾼다. 일반 화면은 보기만 (17 문서)
 
 import { backlogText, formatTime, MODE_LABEL, progressText, resultText } from './refreshText.js'
+import Dropdown, { Seg } from './Dropdown.jsx'
 
 // showRun: 「지금 최신화」 버튼을 보일지 (일반 화면은 실험 기능 refreshButton을 따름)
 function RefreshPanel({ status, error, starting, disabled, onRun, onSave, canEdit = false, showRun = true }) {
@@ -45,14 +46,8 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, canEdi
       {settings && (
         <div className="refresh-settings">
           <h3>자동 최신화{locked && <span className="refresh-lock"> 관리자가 정해요</span>}</h3>
-          <label htmlFor="refresh-mode">주기</label>
-          <select id="refresh-mode" disabled={locked} value={settings.mode} onChange={(e) => change({ mode: e.target.value })}>
-            {Object.entries(MODE_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
+          <span className="refresh-label">주기</span>
+          <Seg value={settings.mode} onChange={(v) => change({ mode: v })} label="주기" disabled={locked} options={Object.entries(MODE_LABEL).map(([value, label]) => ({ value, label }))} />
           {settings.mode === 'daily' && (
             <>
               <label htmlFor="refresh-time">시각</label>
@@ -67,14 +62,8 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, canEdi
           )}
           {settings.mode === 'interval' && (
             <>
-              <label htmlFor="refresh-hours">간격</label>
-              <select id="refresh-hours" disabled={locked} value={settings.hours} onChange={(e) => change({ hours: Number(e.target.value) })}>
-                {status.hourOptions.map((h) => (
-                  <option key={h} value={h}>
-                    {h}시간마다
-                  </option>
-                ))}
-              </select>
+              <span className="refresh-label">간격</span>
+              <Dropdown size="lg" value={settings.hours} onChange={(v) => change({ hours: Number(v) })} label="간격" disabled={locked} options={status.hourOptions.map((h) => ({ value: h, label: `${h}시간마다` }))} />
             </>
           )}
           {/* 자동 요약 켜기/끄기. 개발 중에는 끄고, 시연·테스트 때 켠다 (켜면 관련도 낮음을 뺀 기사 전부, 중요도 순) */}
