@@ -20,7 +20,7 @@ import path from 'node:path'
 import { dbEnabled, query } from './db/index.js'
 import { getSetting, setSetting } from './db/store.js'
 import { accessToken, readKey } from './patents.js'
-import { checkSource, reportSource } from './sourceGuard.js'
+import { checkSource, reportBytes, reportSource } from './sourceGuard.js'
 
 const META = 'patent_db'
 export const SINCE = 20100101
@@ -177,6 +177,7 @@ export async function extractDisplayPatents({ log = console.log, jobId: resumeJo
   let displayOnly = null // 첫 쪽의 칸 이름으로 정함
   if (!resumeJob) reportSource('bigquery', { ok: true })
   const bytes = Number(status.statistics?.totalBytesProcessed ?? 0)
+  if (!resumeJob) reportBytes('bigquery', bytes) // 결과만 다시 받을 때는 이미 셈
   log(`[patent-db] 집계 끝 (${(bytes / 1e9).toFixed(1)}GB 읽음, 작업 ${jobId}). 받는 중…`)
   await setSetting(META, { ...(prev ?? {}), loading: true, loadingSince: new Date().toISOString(), jobId })
   // 제목 파일은 임시 이름으로 쓰고 다 받은 뒤 바꾼다 (도중에 실패해도 예전 파일이 남음)

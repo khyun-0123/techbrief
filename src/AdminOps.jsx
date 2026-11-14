@@ -37,9 +37,9 @@ function SourcesCard({ sources, llm, patentDb }) {
   const time = (iso) => new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
   return (
     <section className="adm-card">
-      <h2>외부 출처 상태 (오늘)</h2>
+      <h2>외부 출처 상태 (오늘 · 이번 달)</h2>
       <p className="adm-desc">
-        한도가 알려진 출처는 한도의 80%에서 자동 수집이, 98%에서 사람이 누른 찾기도 멈춰요. 막히면(한도 · 서버 오류) 잠시 쉬고, 그동안 찾기는 이미 모은 자료 · 논문으로 보여 줘요.
+        한도가 알려진 출처는 한도(하루 · 월)의 80%에서 자동 수집이, 98%에서 사람이 누른 찾기도 멈춰요. BigQuery는 이번 달 읽은 양이 무료량 기준의 85%면 자동 작업, 98%면 모두 멈춰요(크레딧이 나가지 않게). 막히면(한도 · 서버 오류) 잠시 쉬고, 그동안 찾기는 이미 모은 자료 · 논문으로 보여 줘요.
         {' '}AI 대체 서버: {llm?.fallback ? `${llm.fallback} (사람이 누른 요청만)` : '없음 (.env.local LLM_FALLBACK)'}
         {llm?.lastFallback && ` · 마지막 전환 ${time(llm.lastFallback.at)} ${llm.lastFallback.from} → ${llm.lastFallback.to}`}
       </p>
@@ -49,7 +49,8 @@ function SourcesCard({ sources, llm, patentDb }) {
             <th scope="col">출처</th>
             <th scope="col">오늘 호출</th>
             <th scope="col">실패</th>
-            <th scope="col">하루 한도</th>
+            <th scope="col">이번 달</th>
+            <th scope="col">한도</th>
             <th scope="col">상태</th>
           </tr>
         </thead>
@@ -59,7 +60,17 @@ function SourcesCard({ sources, llm, patentDb }) {
               <td title={s.note}>{s.label}</td>
               <td>{s.today.toLocaleString()}</td>
               <td>{s.fails}</td>
-              <td>{s.daily ? `${s.daily.toLocaleString()} (${s.usedShare}%)` : '—'}</td>
+              <td>{s.monthGB != null ? `${s.monthGB.toLocaleString()}GB 읽음` : `${(s.month ?? 0).toLocaleString()}회`}</td>
+              <td>
+                {s.monthlyGB
+                  ? `월 ${s.monthlyGB.toLocaleString()}GB`
+                  : s.monthly
+                    ? `월 ${s.monthly.toLocaleString()}회`
+                    : s.daily
+                      ? `하루 ${s.daily.toLocaleString()}회`
+                      : '—'}
+                {s.usedShare != null && ` (${s.usedShare}%)`}
+              </td>
               <td>
                 {s.restingUntil ? <span className="adm-state bad">쉬는 중 ({time(s.restingUntil)}까지)</span> : s.usedShare >= 80 ? <span className="adm-state bad">한도 가까움</span> : '정상'}
                 {s.lastError && <small title={s.lastError.message}> · 마지막 오류 {time(s.lastError.at)}</small>}

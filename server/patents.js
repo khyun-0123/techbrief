@@ -7,7 +7,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getSetting, setSetting } from './db/store.js'
-import { guardedFetch } from './sourceGuard.js'
+import { guardedFetch, reportBytes } from './sourceGuard.js'
 
 const KEY = 'patent_trends'
 const REFRESH_MS = 30 * 86_400_000
@@ -79,6 +79,7 @@ async function countByPattern(key, cols) {
     signal: AbortSignal.timeout(150_000),
   })
   const data = await res.json()
+  reportBytes('bigquery', data.totalBytesProcessed) // 이번 달 읽은 양 (sourceGuard: 무료량에 가까우면 막음)
   if (data.error) throw new Error(data.error.message)
   if (!data.jobComplete) throw new Error('BigQuery 집계가 시간 안에 끝나지 않았어요')
   const series = {}
@@ -164,6 +165,7 @@ export async function patentHistory(pattern, since = 20100101) {
     signal: AbortSignal.timeout(150_000),
   })
   const data = await res.json()
+  reportBytes('bigquery', data.totalBytesProcessed)
   if (data.error) throw new Error(data.error.message)
   if (!data.jobComplete) throw new Error('BigQuery 집계가 시간 안에 끝나지 않았어요')
   const years = []
