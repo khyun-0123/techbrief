@@ -58,6 +58,7 @@ export const REPORT_SCHEMA = {
 export const SECTION_SCHEMA = bullets
 
 const RULES = `규칙
+- [유료 논문 — 초록까지만 공개] 표시가 있는 논문은 제목 · 저자 · 출처 · 초록에 있는 내용만 쓴다. 초록에 없는 실험 결과 · 수치 · 결론을 추측해서 쓰지 않는다.
 - 개조식, 명사형 종결("~함", "~임"). 서술식 문장 금지.
 - 섹션별 글머리 2~4개, 핵심 사실 근거는 3~5개. 한 글머리는 한 문장.
 - 글머리마다 kind를 정한다. 기사(원문 본문·요약문)에 나온 사실이면 "fact", 원리 설명·일반 지식·전망·우리 회사 활용 제안처럼 기사 밖의 해설이면 "ai".
@@ -114,6 +115,16 @@ function describeArticles(articles, itemKeys = Object.keys(ITEM_LABELS)) {
     .map((a) => {
       const head = `[${a.n}] ${a.title} (${a.source ?? '매체 미상'}${a.publishedAt ? `, ${a.publishedAt.slice(0, 10)}` : ''})`
       const lines = [head]
+      // 유료 논문 (11/14, 보고서팀 작업 이식): 제목 · 저자 · 출처 · 초록까지만 넣고 표시한다. 6항목 요약은 초록 밖 추측이 섞일 수 있어 넣지 않음
+      const paid = a.paper && !a.body && a.access === 'paid'
+      if (a.paper) {
+        lines[0] += paid ? ' [유료 논문 — 초록까지만 공개]' : ' [논문]'
+        if (a.authors?.length) lines.push(`  - 저자: ${a.authors.slice(0, 6).join(', ')}`)
+      }
+      if (paid) {
+        if (a.abstract || a.description) lines.push(`  - 초록: ${String(a.abstract || a.description).replace(/\n+/g, ' ').slice(0, 1200)}`)
+        return lines.join('\n')
+      }
       if (a.body) lines.push(`  - 원문 본문: ${a.body.replace(/\n+/g, ' ')}`)
       else if (a.description) lines.push(`  - 기사 요약문: ${a.description.slice(0, DESC_MAX)}`)
       for (const [key, label] of Object.entries(ITEM_LABELS).filter(([k]) => itemKeys.includes(k))) {

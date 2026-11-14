@@ -141,6 +141,8 @@ function reportArticle(article, aiSummary) {
     description: article.description,
     related: (article.related ?? []).map(({ title, source, description }) => ({ title, source, description })),
     summary: aiSummary?.summary,
+    // 논문: 유료 여부 · 저자 · 초록 (11/14, 보고서팀 작업 이식 — 유료면 초록까지만 쓴다)
+    ...(article.paper ? { paper: true, access: article.access, authors: article.authors, abstract: article.abstract, oaUrl: article.oaUrl, doi: article.doi } : {}),
   }
 }
 

@@ -61,6 +61,7 @@ import DataMove from './DataMove.jsx'
 import TechTimeline from './TechTimeline.jsx'
 import FolderBar from './FolderBar.jsx'
 import { INBOX, INBOX_FOLDER } from './folders.js'
+import { ACCESS_TITLE, paperAccess } from './paperAccess.js'
 
 const KEYWORDS_KEY = 'techbrief-keywords'
 const SELECTED_KEY = 'techbrief-selected'
@@ -1396,6 +1397,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                                 </span>
                               )}
                               {a.paper && <span className="badge-material" title={`논문 · 인용 ${a.cited ?? 0}회`}>논문</span>}
+                              {/* 유료 논문 (11/14): 보고서에 초록까지만 들어감을 미리 알림. 모르면 표시 안 함 */}
+                              {paperAccess(a) === 'paid' && (
+                                <span className="badge-material badge-paid" title={ACCESS_TITLE.paid}>
+                                  유료 · 초록까지만
+                                </span>
+                              )}
                               {a.material && (
                                 <span className="badge-material" title={a.aiAllowed === false ? 'AI 요약 · 보고서에 쓰지 않는 자료예요' : undefined}>
                                   직접 추가 · {a.kindLabel}
