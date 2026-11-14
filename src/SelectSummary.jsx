@@ -198,7 +198,7 @@ function SelectSummary({
         </section>
       ) : (
         <div className="select-report">
-          <section className="panel select-list" aria-label="선별 기사">
+          <section className="panel panel-flush select-list" aria-label="선별 기사">
             <div className="select-list-head">
               <h2>선별 기사</h2>
               <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="정렬">

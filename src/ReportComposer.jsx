@@ -169,7 +169,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
   }
 
   return (
-    <aside className="panel composer" aria-label="보고서">
+    <aside className="panel panel-flush composer" aria-label="보고서">
       <div className="composer-head">
         {/* 만든 보고서 안내는 제목 옆 작은 버튼으로 (11/09: 한 줄을 차지해 스크롤이 늘던 것) */}
         <div className="composer-title">
