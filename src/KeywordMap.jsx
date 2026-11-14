@@ -580,7 +580,13 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
       .map((n) => n.word)
       .join('\u0001')
   }, [nodes, minCo, branchN, isOn])
-  const graph = useMemo(() => pickGraph(nodes, branches, edges, branchN, totalN, minCo, extraKey ? extraKey.split('\u0001') : []), [nodes, branches, edges, branchN, totalN, minCo, extraKey])
+  // 한 번 그린 말은 빼도 맵에 남긴다 (11/14: 영문 말을 눌러 빼면 점이 사라져 다시 고를 수 없었음)
+  const [kept, setKept] = useState('')
+  const keptList = kept ? kept.split('\u0001') : []
+  const newExtra = extraKey ? extraKey.split('\u0001').filter((w) => !keptList.includes(w)) : []
+  if (newExtra.length) setKept([...keptList, ...newExtra].join('\u0001'))
+  const extraAll = [...keptList, ...newExtra].join('\u0001')
+  const graph = useMemo(() => pickGraph(nodes, branches, edges, branchN, totalN, minCo, extraAll ? extraAll.split('\u0001') : []), [nodes, branches, edges, branchN, totalN, minCo, extraAll])
   const isOpen = useCallback((w) => openSet[w] ?? graph.l1.findIndex((n) => n.word === w) < 3, [openSet, graph])
   const hidden = useMemo(() => new Set(graph.l1.filter((n) => !isOpen(n.word)).map((n) => n.word)), [graph, isOpen])
   const minK = phone ? 0.75 : 0.3 // 휴대폰은 0.75배 아래로 줄이지 않음 — 다 안 들어오면 끌어서 봄
