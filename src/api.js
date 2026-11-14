@@ -141,6 +141,8 @@ function reportArticle(article, aiSummary) {
     description: article.description,
     related: (article.related ?? []).map(({ title, source, description }) => ({ title, source, description })),
     summary: aiSummary?.summary,
+    // 논문: 유료 여부 · 저자 · 초록 (11/14, 보고서팀 작업 이식 — 유료면 초록까지만 쓴다)
+    ...(article.paper ? { paper: true, access: article.access, authors: article.authors, abstract: article.abstract, oaUrl: article.oaUrl, doi: article.doi } : {}),
   }
 }
 
@@ -436,11 +438,13 @@ export async function updateReportApi(entry) {
 
 // ── 보고서 작업 대기열 (11/08) ──
 // level: 'selected' | 'owned' | 'research' (자료 조사 수준)
-export async function createReportJob({ articles, aiSummaries, title, direction, periodLabel, mode, level, clientId }) {
+// topics: 주제 키워드 (11/12 #109) — 11/14까지 여기서 빠져 서버에 가지 않았음 → 분석 묶음 자동 포함 · 자동 제목이 동작하지 않던 원인
+export async function createReportJob({ articles, aiSummaries, title, direction, topics = [], periodLabel, mode, level, clientId }) {
   return (
     await postJson('/api/report-jobs', {
       title,
       direction,
+      topics,
       periodLabel,
       mode,
       level,
@@ -521,6 +525,14 @@ export async function fetchCategoryCompetitors() {
 // 키워드 분석 묶음 (11/12): 상용화 시점 문장 · 경쟁사 특허 등 (보고서에 자동으로 들어가는 것과 같음)
 export async function fetchBundle(q) {
   const res = await fetch(`/api/bundle?q=${encodeURIComponent(q)}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}
+
+// 요즘 뜨는 기술 옆 자사 위협 · 기회 (11/14): { verdicts: { [기술]: { category, verdict, competitors } | null } }
+export async function fetchTrendVerdicts(terms) {
+  const res = await fetch(`/api/trend-verdicts?terms=${encodeURIComponent(terms.join('|'))}`)
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
   return data

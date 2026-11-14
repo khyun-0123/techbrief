@@ -12,6 +12,7 @@ import { searchNews } from './collector/naver.js'
 import { cleanText } from './collector/normalize.js'
 import { cacheGet, cachePut } from './papers/index.js'
 import { queryKey } from './queryTerms.js'
+import { isException, isStop, subcatsOf } from './wordFilter.js'
 
 const TTL = 6 * 3600_000
 const MAX_NODES = 24
@@ -56,14 +57,20 @@ export function wordsOf(text) {
   for (const m of t.matchAll(/\b(?:\d{2,4}\s?(?:Hz|hz|인치)|[A-Za-z][A-Za-z0-9]*(?:[-+][A-Za-z0-9]+)*)\b/g)) {
     const w = m[0].replace(/\s+/g, '')
     if (w.length < 2 || /^\d+$/.test(w) || EN_STOP.has(w.toLowerCase())) continue
+    if (!isException(w) && isStop(w)) continue // 워드클라우드팀 불용어 · 예외 (11/14, wordFilter.js)
     out.add(/^[a-z]+$/.test(w) && w.length <= 3 ? w.toUpperCase() : w)
   }
   // 한글 (영문이 붙은 말 포함: LG디스플레이, OLED패널)
   for (const m of t.matchAll(/[A-Za-z0-9]*[가-힣]+[A-Za-z0-9가-힣]*/g)) {
     let w = stripJosa(m[0])
+    // 디스플레이 · 반도체 예외어(응답속도 · 양자점 …)는 다른 거르기를 건너뛴다 (11/14, 워드클라우드팀 예외 v3)
+    if (w.length >= 2 && w.length <= 12 && isException(w)) {
+      out.add(w)
+      continue
+    }
     if (VERB_END.test(w) || (w.length >= 3 && /[혔했됐었였렸켰웠졌봤왔갔냈썼섰났쳤]다$|[가-힣]다$/.test(w) && !TECH_WORD.test(w))) continue // 「밝혔다」 같은 서술어
     w = w.replace(/(들|적|화)$/, (x) => (w.length > 3 ? '' : x))
-    if (w.length < 2 || w.length > 12 || STOP.has(w)) continue
+    if (w.length < 2 || w.length > 12 || STOP.has(w) || isStop(w)) continue // + 워드클라우드팀 불용어 v3 (1차 검수본)
     out.add(w)
   }
   return out
@@ -97,11 +104,49 @@ async function collectedDocs(center) {
   return rows
 }
 
-// 돌려주는 값: { center, docs, issues, nodes: [{ word, kind, score(함께 나온 이슈 수), share }] }
+// 교차선 · 2단계 (11/14 통합, 워드클라우드팀 맵 v2의 규칙을 서버로):
+// - 교차선: 1단계 말 둘이 함께 나온 이슈 3개 이상이고 NPMI 0.15 초과 (팀 규칙 그대로)
+// - 2단계: 1단계 말(상위 14개)마다, 그 말이 든 이슈에서 함께 나온 다른 말 상위 5개 (2개 이슈 이상, 키워드 · 1단계 말 제외)
+const CHILD_FOR = 14
+const CHILD_MAX = 5
+function linksOf(nodes, issueWords, merged) {
+  const N = issueWords.length
+  const lows = nodes.map((n) => n.word.toLowerCase())
+  const has = lows.map((w) => issueWords.map((s) => s.has(w)))
+  const edges = []
+  for (let i = 0; i < lows.length; i++)
+    for (let j = i + 1; j < lows.length; j++) {
+      let both = 0
+      for (let k = 0; k < N; k++) if (has[i][k] && has[j][k]) both++
+      if (both < 3) continue
+      const pa = nodes[i].score / N
+      const pb = nodes[j].score / N
+      const pab = both / N
+      const npmi = pab >= 1 ? 1 : Math.log(pab / (pa * pb)) / -Math.log(pab)
+      if (npmi > 0.15) edges.push({ a: nodes[i].word, b: nodes[j].word, n: both, npmi: Math.round(npmi * 100) / 100 })
+    }
+  const first = new Set(lows)
+  const children = {}
+  nodes.slice(0, CHILD_FOR).forEach((node, i) => {
+    const c = new Map()
+    issueWords.forEach((s, k) => {
+      if (!has[i][k]) return
+      for (const w of s) if (!first.has(w)) c.set(w, (c.get(w) ?? 0) + 1)
+    })
+    children[node.word] = [...c]
+      .filter(([, n]) => n >= 2)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, CHILD_MAX)
+      .map(([w, n]) => ({ word: merged.get(w)?.w ?? w, score: n, subcats: subcatsOf(merged.get(w)?.w ?? w) }))
+  })
+  return { edges, children }
+}
+
+// 돌려주는 값: { center, docs, issues, nodes: [{ word, kind, score(함께 나온 이슈 수), share, subcats }], edges, children }
 export async function relatedWords(rawCenter, { refresh = false } = {}) {
   const center = String(rawCenter ?? '').trim().slice(0, 50)
   if (!center) throw Object.assign(new Error('키워드를 입력해 주세요.'), { status: 400 })
-  const key = `related:v2:${queryKey(center)}` // v2: 영어 기능어를 빼기 전(11/11) 기억한 값은 쓰지 않는다
+  const key = `related:v4:${queryKey(center)}` // v2: 영어 기능어(11/11) · v3: 워드클라우드팀 불용어 · 예외 · 사업 분류 · v4: 교차선 · 2단계(11/14)
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return { ...hit, cached: true }
@@ -123,11 +168,17 @@ export async function relatedWords(rawCenter, { refresh = false } = {}) {
   const own = wordsOf(center)
   const ownSquash = center.toLowerCase().replace(/\s+/g, '')
   const count = new Map()
-  for (const is of issues) for (const raw of new Set([...wordsOf(is.text)].map((x) => SAME[x] ?? x))) {
-    const w = raw
-    const low = w.toLowerCase()
-    if (own.has(w) || ownSquash.includes(low) || low.includes(ownSquash)) continue // 키워드 자신과 그 조각
-    count.set(w, (count.get(w) ?? 0) + 1)
+  const issueWords = [] // 이슈마다 든 말 (소문자) — 교차선 · 2단계 계산용 (11/14)
+  for (const is of issues) {
+    const set = new Set()
+    for (const raw of new Set([...wordsOf(is.text)].map((x) => SAME[x] ?? x))) {
+      const w = raw
+      const low = w.toLowerCase()
+      if (own.has(w) || ownSquash.includes(low) || low.includes(ownSquash)) continue // 키워드 자신과 그 조각
+      count.set(w, (count.get(w) ?? 0) + 1)
+      set.add(low)
+    }
+    issueWords.push(set)
   }
   // 대소문자만 다른 영문은 합친다 (OLED · oled)
   const merged = new Map()
@@ -142,8 +193,9 @@ export async function relatedWords(rawCenter, { refresh = false } = {}) {
     .filter((x) => x.n >= min && x.n < issues.length * 0.9) // 너무 드문 말 · 거의 모든 글에 나오는 말은 뺀다
     .sort((a, b) => b.n - a.n)
     .slice(0, MAX_NODES)
-    .map((x) => ({ word: x.w, kind: kindOf(x.w, lists), score: x.n, share: Math.round((x.n / Math.max(1, issues.length)) * 100) / 100, broad: tooBroad(x.w) }))
-  const out = { center, docs: docs.length, issues: issues.length, nodes, at: new Date().toISOString() }
+    .map((x) => ({ word: x.w, kind: kindOf(x.w, lists), score: x.n, share: Math.round((x.n / Math.max(1, issues.length)) * 100) / 100, broad: tooBroad(x.w), subcats: subcatsOf(x.w) }))
+  const { edges, children } = linksOf(nodes, issueWords, merged)
+  const out = { center, docs: docs.length, issues: issues.length, nodes, edges, children, at: new Date().toISOString() }
   await cachePut(key, out, TTL).catch(() => {})
   return { ...out, cached: false }
 }

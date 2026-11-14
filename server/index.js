@@ -12,7 +12,7 @@ import { buildTimeline, timelineStory } from './timeline.js'
 import { readyTimelines, runPrecompute, startPrecompute } from './timelineJobs.js'
 import { relatedWords } from './related.js'
 import { fillMap, mapMaterials } from './mapMaterials.js'
-import { allCategoryCompetitors, bundleFacts, headlineSeeds, prepareBundle, THREAT_FACTOR } from './keywordBundle.js'
+import { allCategoryCompetitors, bundleFacts, categoryCompetitors, headlineSeeds, prepareBundle, THREAT_FACTOR } from './keywordBundle.js'
 import { scopeSearch } from './scopeSearch.js'
 import { popularPapers } from './papers/journals.js'
 import { getTechTrends, startTechTrends } from './techtrends.js'
@@ -184,11 +184,19 @@ function reportWarnings(sections) {
 
 // 원문 본문을 붙인다 (13 문서 9절). 기사마다 길이를 나눠 전체 입력이 문맥 크기를 넘지 않게 한다
 const BODY_BUDGET = 12_000 // 모든 기사 본문 합계(글자). LLM_NUM_CTX=16384 기준 여유 있게
+// 유료 논문 (11/14, 보고서팀 작업 이식): access가 paid인 논문은 원문을 가져오지 않는다 (초록까지만)
+const isPaidPaper = (a) => Boolean(a.paper && a.access === 'paid')
+// 보고서에 남길 유료 여부: 원문을 실제로 받았으면 open, 서버가 알면 그 값, 모르면 unknown (초록만 있다고 유료로 단정하지 않음)
+function paperAccessOf(a) {
+  if (a.access === 'paid' || a.access === 'open') return a.access
+  return a.body ? 'open' : 'unknown'
+}
 async function attachBodies(articles) {
   const per = Math.min(2_500, Math.floor(BODY_BUDGET / articles.length))
   // 선별할 때 저장해 둔 원문이 있으면 그것을 쓰고, 없는 것만 가져온다
-  const stored = await Promise.all(articles.map((a) => (a.analysis ? null : getArticleText(a.id).catch(() => null))))
-  const fetched = await fetchBodies(articles.map((a, i) => (stored[i] || a.analysis ? null : a.url)))
+  const skip = (a) => a.analysis || isPaidPaper(a)
+  const stored = await Promise.all(articles.map((a) => (skip(a) ? null : getArticleText(a.id).catch(() => null))))
+  const fetched = await fetchBodies(articles.map((a, i) => (stored[i] || skip(a) ? null : a.url)))
   const bodies = stored.map((t, i) => t ?? fetched[i])
   articles.forEach((a, i) => {
     a.body = a.analysis ? null : bodies[i] ? bodies[i].slice(0, per) : null
@@ -301,7 +309,18 @@ async function buildReportEntry(body) {
     periodLabel: body.periodLabel ?? '오늘',
     ...(long ? { chunks: Math.ceil(articles.length / REPORT_CHUNK) } : {}),
     // fulltext: 원문 본문을 반영했는지 (화면 근거 기사 목록에 표시). 본문 자체는 저장하지 않는다
-    articles: articles.map(({ title: t, source, url, publishedAt, body: b, analysis, description }) => ({ title: t, source, url, publishedAt, fulltext: Boolean(b), ...(analysis ? { analysis: true, description } : {}) })),
+    articles: articles.map((a) => {
+      const { title: t, source, url, publishedAt, body: b, analysis, description, paper, authors } = a
+      return {
+        title: t,
+        source,
+        url,
+        publishedAt,
+        fulltext: Boolean(b),
+        ...(analysis ? { analysis: true, description } : {}),
+        ...(paper ? { paper: true, access: paperAccessOf(a), ...(authors?.length ? { authors: authors.slice(0, 6) } : {}) } : {}),
+      }
+    }),
     inputs: picked.map(({ n: _n, body: _b, ...rest }) => rest),
   }
   return entry
@@ -623,6 +642,19 @@ export async function handleApi(req, res) {
       return send(res, 200, (await prepareBundle(q)) ?? {})
     }
     // 세부 카테고리 × 경쟁사 특허 (11/12, 대시보드 「이번 주 한눈에」 · keywordBundle.js). 7일 기억, 특허 DB를 다시 받으면 다시 셈
+    // 요즘 뜨는 기술 옆 자사 위협 · 기회 (11/14 조장): 기술 용어 → 그 말이 든 특허가 가장 많은 세부 기술(CPC) → 경쟁사 특허 판정
+    // 특허 10건 미만이면 연결이 약해 판정하지 않음. 값은 mapMaterials(24시간) · categoryCompetitors(7일) 기억을 그대로 씀
+    if (req.method === 'GET' && req.url.startsWith('/api/trend-verdicts?')) {
+      const terms = (new URL(req.url, 'http://x').searchParams.get('terms') ?? '').split('|').map((t) => t.trim()).filter(Boolean).slice(0, 20)
+      const one = async (term) => {
+        const m = await Promise.race([mapMaterials(term), new Promise((res) => setTimeout(() => res(null), 8_000))]).catch(() => null)
+        const cat = m?.categories?.[0]
+        if (!cat || cat.count < 10) return [term, null]
+        const comp = await categoryCompetitors(cat.id).catch(() => null)
+        return [term, comp ? { category: { id: cat.id, name: cat.name, patents: cat.count }, verdict: comp.verdict, competitors: comp } : null]
+      }
+      return send(res, 200, { verdicts: Object.fromEntries(await Promise.all(terms.map(one))), threatFactor: THREAT_FACTOR })
+    }
     if (req.method === 'GET' && req.url === '/api/category-competitors') {
       return send(res, 200, { categories: await allCategoryCompetitors(), rule: `위협: 경쟁사 중 하나가 분야 증가의 ${THREAT_FACTOR}배 이상 · 자사는 분야보다 느림 / 기회: 자사가 경쟁사 모두보다 빠르고 분야 이상` })
     }
