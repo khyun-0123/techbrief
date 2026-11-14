@@ -32,6 +32,7 @@ import {
   createReportJob,
 } from './api.js'
 import AutoReportDialog from './AutoReportDialog.jsx'
+import GuideTour from './GuideTour.jsx'
 import Dropdown, { PeriodSeg, Seg } from './Dropdown.jsx'
 import { pickMaterials, periodLabelOf } from './autoPick.js'
 import { buildTagDict, tagsOf } from './hashtags.js'
@@ -178,6 +179,9 @@ function paperAbstract(a) {
   return String(a.abstract ?? a.description ?? '').replace(/^(\[[^\]]*\]\s*)+/, '').trim()
 }
 
+// 사용 안내 (11/15 팀 회의, GuideTour.jsx): 이 브라우저에서 본 판. 안내가 크게 바뀌면 판을 올려 다시 보여 줌
+const TOUR_KEY = 'techbrief.tourSeen'
+const TOUR_VERSION = '1'
 export const LAST_SCOPE_KEY = 'techbrief.lastScope' // 마지막 범위 찾기 (보고서 방향 채우기, 11/10)
 const NEW_REPORTS_KEY = 'techbrief.newReports' // 아직 안 연 새 보고서 id
 const SEEN_REPORTS_KEY = 'techbrief.seenReports' // 한 번이라도 연 보고서 id (새로 고침 뒤 다시 「새」로 뜨지 않게)
@@ -799,6 +803,30 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   // ── 자동 보고서 (11/15 조장: 키워드만 넣으면 보고서까지, 확인 창 한 번) ──
   // 범위 찾기 → 중요도로 자동 선별(autoPick.js) → 확인 창 → 선별 폴더에 담기 + 요약 → 다 요약되면 보고서 작업 (요약 실패한 건 빼고)
   const [autoRun, setAutoRun] = useState(null)
+  // 사용 안내: 처음 온 사람에게 대시보드에서 한 번 (일반 화면만), 상단 「? 사용 안내」로 다시
+  const [tour, setTour] = useState(0) // 0 = 닫힘, 그 밖 = 열 때마다 새 번호(처음 단계부터)
+  useEffect(() => {
+    if (isTest) return undefined
+    let seen = null
+    try {
+      seen = localStorage.getItem(TOUR_KEY)
+    } catch {
+      // 저장소를 못 쓰면 매번 안 띄움
+      seen = TOUR_VERSION
+    }
+    if (seen === TOUR_VERSION) return undefined
+    const t = setTimeout(() => setTour(Date.now()), 900)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  function closeTour() {
+    setTour(0)
+    try {
+      localStorage.setItem(TOUR_KEY, TOUR_VERSION)
+    } catch {
+      // 저장 못 하면 다음에 또 보임
+    }
+  }
   const autoSending = useRef(false)
   async function startAutoReport(scope) {
     if (opsValue.aiBlocked) {
@@ -1054,6 +1082,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           type="button"
           className={screen === 'collect' ? 'tab active' : 'tab'}
           aria-current={screen === 'collect' ? 'page' : undefined}
+          data-tour="tab-collect"
           onClick={() => setScreen('collect')}
         >
           자료 현황
@@ -1062,6 +1091,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           type="button"
           className={screen === 'select' ? 'tab active' : 'tab'}
           aria-current={screen === 'select' ? 'page' : undefined}
+          data-tour="tab-select"
           onClick={() => setScreen('select')}
         >
           선별·요약
@@ -1070,6 +1100,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           type="button"
           className={screen === 'archive' ? 'tab active' : 'tab'}
           aria-current={screen === 'archive' ? 'page' : undefined}
+          data-tour="tab-reports"
           onClick={() => {
             // 새로 만들어진(아직 안 연) 내 보고서가 있으면 그것부터, 없으면 목록
             setArchiveTarget(newReportIds.find((id) => reports.some((r) => r.id === id)) ?? null)
@@ -1128,6 +1159,19 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             </span>
           )}
           {/* 「내 자료」 · 「관리자」는 「설정」 하나로 모음 (11/09 조장) */}
+          <button
+            type="button"
+            className="topbar-link guide-btn"
+            data-tour="guide"
+            onClick={() => {
+              setScreen('dashboard')
+              setTour(Date.now())
+            }}
+            title="화면 둘러보기 — 처음 쓰는 방법을 차례로 보여 줘요"
+            aria-label="사용 안내"
+          >
+            ?<span className="guide-btn-text"> 사용 안내</span>
+          </button>
           <SettingsMenu admin={admin} reportCount={liveReports.filter((r) => r.mine).length} selectedCount={selectedIds.length} onBundle={downloadBundle} onMove={() => setShowMove(true)} />
         </span>
       </nav>
@@ -1146,6 +1190,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         </div>
       )}
 
+      {tour > 0 && screen === 'dashboard' && <GuideTour key={tour} open onClose={closeTour} />}
       {autoRun && !autoRun.hidden && (
         <AutoReportDialog
           key={autoRun.scope.query + autoRun.scope.terms.join('|')}

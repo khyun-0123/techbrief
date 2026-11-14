@@ -517,7 +517,7 @@ export default KeywordAnalysis
 function MiniLine({ series }) {
   const pts = series.filter((p) => p.v != null)
   if (pts.length < 2) return null
-  const max = Math.max(...pts.map((p) => p.v), 1)
+  const max = Math.max(...pts.map((p) => p.v), 10) // 11/15: 최소 축 10 (적은 수가 급등처럼 안 보이게)
   const d = pts.map((p, i) => `${i ? 'L' : 'M'}${((i / (pts.length - 1)) * 116 + 2).toFixed(1)},${(30 - (p.v / max) * 26).toFixed(1)}`).join('')
   return (
     <svg className="kp-line" viewBox="0 0 120 32" aria-hidden="true">

@@ -63,7 +63,7 @@ export default function VerdictModal({ term, info, threatFactor = 1.5, onClose, 
             </tbody>
           </table>
         </div>
-        <p className="vm-note">특허 수는 테크브리프 디스플레이 특허 DB(같은 발명은 한 번)에서 규칙으로 센 값이에요. 판정 기준은 팀이 정한 값이라 담당자 확인이 필요해요. CSOT는 출원인 이름 확인 전이라 뺐어요.</p>
+        <p className="vm-note">특허 수는 테크브리프 디스플레이 특허 DB(같은 발명은 한 번)에서 규칙으로 센 값이에요. 판정 기준은 팀이 정한 값이라 담당자 확인이 필요해요. 증가 배수는 적은 건수가 부풀지 않게 앞 · 뒤에 5건씩 더해 계산하고(1→5건은 5배가 아니라 1.7배), 두 기간 합이 10건 미만이면 「—」(판정에서 뺌)로 둬요. CSOT는 출원인 이름 확인 전이라 뺐어요.</p>
         <div className="vm-actions">
           <button type="button" className="btn" onClick={onClose}>
             닫기

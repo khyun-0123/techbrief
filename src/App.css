@@ -8085,3 +8085,100 @@ button.ka-auto-note {
 .filters {
   align-items: center;
 }
+/* ── 사용 안내 (11/15, GuideTour.jsx): 가리키는 요소만 밝게(둘레 그림자로 나머지를 어둡게) + 설명 카드 ── */
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+.tour-dim {
+  position: absolute;
+  inset: 0;
+  background: rgb(17 17 17 / 55%);
+  animation: tb-fade 0.15s ease-out;
+}
+.tour-hole {
+  position: absolute;
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgb(17 17 17 / 55%);
+  outline: 2px solid var(--tb-color-surface);
+  transition: left 0.2s, top 0.2s, width 0.2s, height 0.2s;
+  pointer-events: none;
+}
+.tour-card {
+  position: absolute;
+  display: grid;
+  gap: 8px;
+  padding: 18px 20px 16px;
+  border-radius: var(--tb-radius-card);
+  background: var(--tb-color-surface);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 25%);
+  animation: tb-fade 0.15s ease-out;
+}
+.tour-card.center {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.tour-card h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+.tour-card p {
+  margin: 0;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+.tour-card .tour-count {
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.tour-dots {
+  display: flex;
+  gap: 5px;
+  margin-top: 4px;
+}
+.tour-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tb-color-line);
+}
+.tour-dots span.on {
+  width: 16px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-text);
+}
+.tour-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+.tour-nav {
+  display: flex;
+  gap: 6px;
+}
+.tour-nav .btn {
+  margin-right: 0;
+}
+.guide-btn {
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-hole {
+    transition: none;
+  }
+}
+.tour-card.bottom {
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+@media (max-width: 720px) {
+  .guide-btn-text {
+    display: none; /* 휴대폰: 상단바가 좁아 「?」만 */
+  }
+}

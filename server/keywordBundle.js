@@ -37,13 +37,18 @@ const COMPANIES = [
 // 위협 · 기회 (규칙, [우리 판단] — 33 문서): 경쟁사 중 누군가 분야보다 1.5배 이상 빠르고 자사가 분야보다 느리면 위협,
 // 자사가 확실한 경쟁사 모두보다 빠르고 분야 이상이면 기회
 export const THREAT_FACTOR = 1.5
+// 작은 수 보정 (11/15 팀 회의: 「1건 → 5건을 500% 늘었다고 강조하면 안 됨 — 근원값을 보고 가중해서」):
+// - 앞 · 뒤 기간 합이 RATIO_MIN건 미만이면 비율을 내지 않음(「건수 적음」, 판정에서 뺌) — Porter 외 2019 「최소 7건」과 같은 일회성 방지, 10은 timeline.js PAT_MIN과 맞춤
+// - 비율은 양쪽에 RATIO_PRIOR건씩 더해 계산 (가법 보정 · 작은 표본일수록 1배 쪽으로 당겨짐): 1→5건 = 5배가 아니라 (5+5)/(1+5) = 1.67배, 100→500건은 4.9배로 거의 그대로
+export const RATIO_MIN = 10
+export const RATIO_PRIOR = 5
 export async function categoryCompetitors(catId) {
   const cat = DISPLAY_CATEGORIES.find((c) => c.id === catId)
   if (!cat || !dbEnabled()) return null
   // 특허 DB를 다시 받으면(분기 · 11/13 CPC 전체 코드) 다시 센다
   const meta = await patentDbReady().catch(() => null)
   if (!meta) return null
-  const key = `cat-competitors:v1:${catId}:${meta.at}`
+  const key = `cat-competitors:v2:${catId}:${meta.at}` // v2: 작은 수 보정 (11/15)
   const hit = await cacheGet(key).catch(() => null)
   if (hit) return hit
   const last = new Date().getFullYear() - 1
@@ -60,7 +65,7 @@ export async function categoryCompetitors(catId) {
   )
   const r = rows[0]
   if (!r?.fb) return null
-  const ratio = (before, now) => (before > 0 ? Math.round((now / before) * 100) / 100 : null)
+  const ratio = (before, now) => (before + now >= RATIO_MIN ? Math.round(((now + RATIO_PRIOR) / (before + RATIO_PRIOR)) * 100) / 100 : null)
   const field = ratio(r.fb, r.fr)
   const companies = COMPANIES.map((c, i) => ({ id: c.id, name: c.name, own: Boolean(c.own), unsure: Boolean(c.unsure), before: r[`b${i}`], now: r[`r${i}`], ratio: ratio(r[`b${i}`], r[`r${i}`]) }))
   const sure = companies.filter((c) => !c.unsure && !c.own && c.ratio != null)
