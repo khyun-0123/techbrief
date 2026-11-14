@@ -6479,3 +6479,458 @@ a.brand:focus-visible {
   color: var(--tb-color-text-sub);
   font-weight: 500;
 }
+
+/* ══ 대시보드 11/14 조장: 왼쪽 「요즘 뜨는 기술」 막대 · 펼쳐 보기 판 · 맵 | 시계열 비율 조절 · 위협/기회 설명 창 ══ */
+.dash-layout {
+  display: grid;
+  grid-template-columns: var(--tb-rail-w) minmax(0, 1fr);
+  gap: var(--tb-card-gap);
+  align-items: start;
+}
+.dash-layout > .dash-search {
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .dash-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dash-layout > .trend-rail {
+    order: 2;
+  }
+}
+
+/* 막대: 내 보고서 왼쪽 막대와 같은 폭 · 안쪽 12 (20 문서 6장) */
+.trend-rail.panel {
+  position: sticky;
+  top: 84px; /* 위 메뉴 막대 64 + 20 */
+  display: flex;
+  flex-direction: column;
+  gap: var(--tb-space-2);
+  padding: var(--tb-space-3);
+}
+.tr-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--tb-space-1) var(--tb-space-1) var(--tb-space-2);
+  border-bottom: 1px solid var(--tb-color-line-soft);
+}
+.tr-head h2 {
+  margin: 0;
+  font-size: var(--fs-md);
+}
+.tr-sub,
+.tr-empty {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+}
+.tr-empty {
+  margin: 0;
+  padding: var(--tb-space-2) var(--tb-space-1);
+}
+.tr-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tr-list li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: baseline;
+  padding: 6px var(--tb-space-1);
+  border-radius: var(--tb-radius-input);
+}
+.tr-list li:hover {
+  background: var(--tb-color-bg);
+}
+.tr-rank {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.tr-rank.top {
+  color: var(--tb-color-text);
+  font-weight: 800;
+}
+.tr-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tr-name {
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tr-name:hover {
+  text-decoration: underline;
+}
+.tr-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+}
+.tr-score {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+/* 자사 위협 · 기회: 위협만 레드(강조), 기회는 검정 테두리 — 특허 표와 같은 규칙 */
+.tr-verdict {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--tb-radius-full);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tr-threat {
+  background: var(--tb-color-danger-soft);
+  color: var(--tb-color-danger);
+}
+.tr-chance {
+  border-color: var(--tb-color-text);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+}
+.tt-table .tr-verdict {
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+.tr-open {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 34px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.tr-open:hover {
+  border-color: var(--tb-color-text);
+}
+
+/* 펼쳐 보기 판: 큰 칠판에서 왼쪽 판을 꺼내듯 왼쪽에서 미끄러져 나옴 */
+.trend-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgb(0 0 0 / 28%);
+  animation: tb-fade 0.2s ease-out;
+}
+.trend-drawer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--tb-space-3);
+  width: min(1120px, calc(100vw - 48px));
+  padding: var(--tb-card-pad);
+  overflow-y: auto;
+  background: var(--tb-color-bg);
+  box-shadow: var(--tb-shadow-pop);
+  animation: tb-slide-from-left 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.trend-drawer > .tt {
+  margin: 0;
+}
+.trend-drawer-close {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+@keyframes tb-slide-from-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes tb-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trend-drawer,
+  .trend-drawer-backdrop {
+    animation: none;
+  }
+}
+
+/* 맵 | 기술 시계열 두 칸 (SplitPanes.jsx) */
+.split {
+  --split-handle: 16px;
+  --split-tab: 40px;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--split-cols);
+  align-items: stretch;
+}
+.split-pane {
+  display: grid;
+  min-width: 0;
+  overflow: hidden; /* 끄는 동안 좁아진 칸의 글자가 옆 칸으로 넘치지 않게 */
+  container-type: inline-size;
+  transition: opacity 0.15s;
+}
+.split-pane.will-close {
+  opacity: 0.4;
+}
+.split-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+}
+.split-handle:focus-visible {
+  outline: none;
+}
+.split-grip {
+  width: 4px;
+  height: 40px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-line);
+  transition: height 0.15s, background 0.15s;
+}
+.split-handle:hover .split-grip,
+.split-handle:focus-visible .split-grip,
+.split.dragging .split-grip {
+  height: 72px;
+  background: var(--tb-color-text);
+}
+.split.dragging {
+  cursor: col-resize;
+  user-select: none;
+}
+.split-close {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border: 0;
+  border-radius: var(--tb-radius-input);
+  background: none;
+  color: var(--tb-color-text-sub);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.split-close:hover,
+.split-close:focus-visible {
+  background: var(--tb-color-bg-strong);
+  color: var(--tb-color-text);
+}
+.split-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-bg);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.split-tab:hover {
+  border-color: var(--tb-color-text);
+}
+.split-tab-text {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.04em;
+}
+.split-tab-icon {
+  font-size: 16px;
+}
+.split.closed-left .split-tab {
+  margin-right: var(--tb-space-3);
+}
+.split.closed-right .split-tab {
+  margin-left: var(--tb-space-3);
+}
+.split-hint {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 2;
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-text);
+  color: var(--tb-color-text-inverse);
+  font-size: var(--fs-xs);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+/* 칸이 좁을 때 모양 (비율에 따라): 시계열 사실 목록은 위아래로, 그래프는 두 칸 */
+@container (max-width: 460px) {
+  .ka-facts div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .ka-sparks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ka-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--tb-space-3);
+  }
+  .split-handle,
+  .split > span[aria-hidden='true'] {
+    display: none;
+  }
+  .split-tab {
+    flex-direction: row;
+    justify-content: flex-start;
+    padding: 10px 14px;
+  }
+  .split-tab-text {
+    writing-mode: horizontal-tb;
+  }
+  .split.closed-left .split-tab,
+  .split.closed-right .split-tab {
+    margin: 0;
+  }
+}
+
+/* 위협 · 기회 설명 창 */
+.verdict-modal {
+  width: min(560px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--tb-space-3);
+}
+.vm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vm-head h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+.vm-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--tb-radius-full);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.vm-threat {
+  background: var(--tb-color-danger-soft);
+  color: var(--tb-color-danger);
+}
+.vm-chance {
+  border-color: var(--tb-color-text);
+}
+.vm-why {
+  margin: 0;
+  font-size: var(--fs-base);
+}
+.vm-sub,
+.vm-note {
+  margin: 0;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+}
+.vm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.vm-table th,
+.vm-table td {
+  padding: 8px;
+  border-top: 1px solid var(--tb-color-bg-strong);
+  text-align: left;
+}
+.vm-table thead th {
+  border-top: 0;
+  color: var(--tb-color-text-sub);
+  font-weight: 500;
+}
+.vm-table th:first-child {
+  padding-left: 0;
+}
+.vm-table tr > :last-child {
+  padding-right: 0;
+}
+.vm-table .vm-own {
+  background: var(--tb-color-bg);
+}
+.vm-table .vm-field {
+  color: var(--tb-color-text-sub);
+}
+.vm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--tb-space-2);
+}
+
+/* 넓은 칸(맵을 크게 끌었을 때)은 맵도 크게 — 비율에 따라 모양이 바뀜 */
+@container (min-width: 700px) {
+  .ka-map {
+    max-height: 540px;
+  }
+}
