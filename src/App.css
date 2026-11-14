@@ -7083,3 +7083,222 @@ a.brand:focus-visible {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+/* ── 연관 키워드 맵 (11/14 통합, KeywordMap.jsx — 워드클라우드팀 맵 v2 이식) ──
+   11/14 조장: 대시보드 분할 칸(SplitPanes) 왼쪽에 들어감 — 시안 1(맵 전체 너비)은 쓰지 않음 */
+.km {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tb-space-3);
+}
+.km-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tb-space-2) var(--tb-space-3);
+}
+.km-svg {
+  width: 100%;
+  height: auto;
+  max-height: 560px;
+  font-family: inherit;
+}
+.km-edge {
+  stroke: var(--tb-color-line);
+}
+.km-edge.on {
+  stroke: var(--tb-color-text);
+}
+.km-edge2 {
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.km-cross {
+  stroke: var(--tb-color-line-soft);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+.km-center rect {
+  fill: var(--tb-color-text);
+}
+.km-center text {
+  fill: var(--tb-color-text-inverse);
+  font-size: 16px;
+  font-weight: 700;
+}
+.km-node {
+  cursor: pointer;
+}
+.km-node rect {
+  fill: var(--tb-color-surface);
+  stroke: transparent;
+  stroke-width: 1.5;
+}
+.km-node text {
+  fill: var(--tb-color-text);
+  font-size: 13px;
+  pointer-events: none;
+}
+.km-node.km-l2 text {
+  font-size: 11.5px;
+  fill: var(--tb-color-text-sub);
+}
+.km-node .km-sub {
+  fill: var(--tb-color-text-faint);
+  font-size: 10.5px;
+}
+.km-node.km-tech rect {
+  fill: var(--tb-color-bg-strong);
+}
+.km-node.km-company rect {
+  stroke: var(--tb-color-text-sub);
+  stroke-dasharray: 4 3;
+}
+.km-node:hover rect,
+.km-node:focus-visible rect {
+  stroke: var(--tb-color-text);
+  stroke-dasharray: none;
+}
+.km-node:focus-visible {
+  outline: none;
+}
+.km-node.on rect {
+  stroke: var(--tb-color-primary);
+  stroke-width: 2.5;
+  stroke-dasharray: none;
+}
+.km-node.on text,
+.km-node.open text {
+  font-weight: 700;
+}
+.km-cloud-center {
+  fill: var(--tb-color-text);
+  font-weight: 800;
+}
+.km-word {
+  fill: var(--tb-color-text-faint);
+  cursor: pointer;
+}
+.km-word.mid {
+  fill: var(--tb-color-text-sub);
+}
+.km-word.top {
+  fill: var(--tb-color-text);
+  font-weight: 700;
+}
+.km-word.on {
+  fill: var(--tb-color-text);
+  font-weight: 800;
+  text-decoration: underline;
+}
+.km-word:focus-visible {
+  outline: 2px solid var(--tb-color-line-focus);
+}
+/* 휴대폰: 맵은 최소 폭을 두고 옆으로 밀어 봄 (390px에서 글자가 너무 작았음), 워드클라우드는 그대로 */
+.km-scroll {
+  overflow-x: auto;
+}
+@media (max-width: 720px) {
+  .km-scroll .km-svg {
+    min-width: 720px;
+  }
+}
+/* 범위 레버: 브라우저 기본 파랑 대신 토큰 색 (11/14, 배치 시안 검토에서 지적) */
+.ka-controls input[type='range'] {
+  accent-color: var(--tb-color-text);
+}
+.km,
+.km-scroll {
+  min-width: 0;
+  max-width: 100%;
+}
+/* 크게 보기 (11/14 조장): 칸 제목줄의 확대 버튼, 맵 한 화면 판 */
+.pane-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pane-zoom:hover {
+  border-color: var(--tb-color-text);
+}
+.km-full-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  display: grid;
+  place-items: center;
+  padding: var(--tb-space-4);
+  background: rgb(0 0 0 / 35%);
+  animation: tb-fade 0.15s ease-out;
+}
+.km-full {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tb-space-3);
+  width: min(1600px, 100%);
+  height: 100%;
+  padding: var(--tb-card-pad);
+  overflow: auto;
+  border-radius: var(--tb-radius-card);
+  background: var(--tb-color-surface);
+  box-shadow: var(--tb-shadow-pop);
+}
+.km-full-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+}
+.km-full-head h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+.km-full-kw {
+  margin-left: 6px;
+  padding: 2px 10px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-text);
+  color: var(--tb-color-text-inverse);
+  font-size: var(--fs-md);
+}
+.km-full-sub {
+  flex: 1;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+}
+.km-full-head .trend-drawer-close {
+  align-self: center;
+}
+.km-large {
+  flex: 1;
+  min-height: 0;
+}
+.km-large .km-svg {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+.km-large .km-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.km-heat {
+  color: var(--tb-color-text);
+}
+.km-heat .km-heat-blobs {
+  mix-blend-mode: multiply;
+}
+.tech-timeline {
+  width: min(1200px, 100%); /* 크게 보기 (11/14) */
+}
