@@ -117,7 +117,7 @@ function Glance({ job, stage, keyword }) {
 // 대시보드 「키워드 분석」 패널 안(검색창 아래)에 펼쳐진다. 기간은 「자료 찾기 →」로 자료 현황에서 찾을 때만 쓴다
 const MAX_SCOPE_TERMS = 30 // server/scopeSearch.js MAX_TERMS와 같게 (거르기용, 네이버는 앞 6개만 따로 부름)
 
-function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], period, onPeriod }) {
+function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, periods = [], period, onPeriod }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [related, setRelated] = useState(null)
@@ -197,7 +197,11 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
   const nodes = related?.nodes ?? []
   // 자동으로 고를 수 있는 말: 기술 · 회사이고 너무 넓지 않은 말 (PC · TV · LG 같은 두 글자 영문은 직접 눌러야)
   const autoable = nodes.filter((n) => n.kind !== 'general' && !n.broad)
-  const picked = picks ?? autoable.slice(0, 1).map((n) => n.word) // 1단계 · 2단계 · 워드클라우드 말 모두 (11/14: 2단계도 개수에 넣음)
+  // 처음 개수 = 서버의 자동 개수 (11/15: 고른 말이 주제어 이슈를 새로 5% 이상 덮는 동안 더함, server/related.js suggestCount). 없으면 1개
+  const autoN = Math.min(autoable.length, related?.autoPick?.n ?? 1)
+  const autoWords = autoable.slice(0, autoN).map((n) => n.word)
+  const picked = picks ?? autoWords // 1단계 · 2단계 · 워드클라우드 말 모두 (11/14: 2단계도 개수에 넣음)
+  const isAuto = picked.length === autoWords.length && picked.every((w, i) => w === autoWords[i])
   const pickedSet = new Set(picked)
   const isOn = (w) => pickedSet.has(w)
   // 레버를 올리면 붙을 다음 말: 기술 · 회사 말 먼저, 그다음 나머지 1단계 말 (연관도 순)
@@ -249,6 +253,11 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
               ))}
             </select>
           )}
+          {onAutoReport && related && (
+            <button type="button" className="btn" onClick={() => onAutoReport({ query: keyword, terms: picked })} title="고른 범위의 자료를 중요도로 자동으로 골라 보고서까지 — 만들기 전에 확인 창이 떠요">
+              자동으로 보고서 만들기
+            </button>
+          )}
           <span className="ka-flash" aria-live="polite" key={flash?.at}>
             {flash?.text}
           </span>
@@ -282,6 +291,21 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
                     <div className="ka-controls">
                       <label>
                         자동으로 고를 범위 <b>{picked.length ? `「${keyword}」 + ${picked.length}개` : `「${keyword}」만`}</b>
+                        {autoN > 0 &&
+                          (isAuto ? (
+                            <span className="ka-auto-note">추천 개수 · 「{keyword}」 이슈의 {Math.round((related.autoPick?.coverage ?? 0) * 100)}%를 덮어요</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="link-btn ka-auto-note"
+                              onClick={() => {
+                                setPicks(null)
+                                setSkip({})
+                              }}
+                            >
+                              추천 {autoN}개로
+                            </button>
+                          ))}
                         <input type="range" min={0} max={Math.max(1, leverMax)} className="ka-lever" style={{ '--f': Math.min(picked.length, leverMax) / Math.max(1, leverMax) }} value={Math.min(picked.length, leverMax)} onChange={(e) => setCount(Number(e.target.value))} aria-describedby="ka-auto-help" aria-valuetext={picked.length ? `「${keyword}」 + ${picked.length}개 · ${picked.join(', ')}` : `「${keyword}」만`} />
                       </label>
                       <span className="ka-lever-ends" aria-hidden="true">
@@ -291,7 +315,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
                     </div>
                     <p className="hint ka-mode-help">「자료 찾기」는 「{keyword}」 자료 중 고른 말이 하나 이상 든 것만 보여 줘요. 더 넓게 보려면 맵에서 말을 더 고르세요.</p>
                     <p id="ka-auto-help" className="hint">
-                      레버 왼쪽 끝은 주제어만, 오른쪽 끝은 맵의 말 전부예요. 처음엔 연관도(함께 나온 이슈 수)가 가장 높은 기술 · 회사 말 1개를 골라 둬요. 레버를 올리면 다음 말을 하나씩 더하고(기술 · 회사 말 먼저), 내리면 마지막에 더한 말부터 빼요. 맵의 점이나 글자를 눌러 넣고 빼면 개수도 같이 바뀌어요 (직접 뺀 말은 오른쪽 끝이 아니면 다시 안 들어가요). 검정 점 옆 「+n」은 그 가지를 펼쳐요.
+                      레버 왼쪽 끝은 주제어만, 오른쪽 끝은 맵의 말 전부예요. 처음엔 추천 개수만큼 골라 둬요 — 연관도(함께 나온 이슈 수) 순 기술 · 회사 말을 하나씩 더하다가, 「{keyword}」 이슈를 새로 5% 이상 덮지 못하면 멈춘 개수예요. 레버를 올리면 다음 말을 하나씩 더하고(기술 · 회사 말 먼저), 내리면 마지막에 더한 말부터 빼요. 맵의 점이나 글자를 눌러 넣고 빼면 개수도 같이 바뀌어요 (직접 뺀 말은 오른쪽 끝이 아니면 다시 안 들어가요). 검정 점 옆 「+n」은 그 가지를 펼쳐요.
                     </p>
                     <div className="ka-picked" aria-live="polite">
                       {picked.length ? (

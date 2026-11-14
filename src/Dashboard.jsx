@@ -18,7 +18,7 @@ import { LAST_ANALYZED_KEY } from './utils.js'
 const showTerm = (q) => String(q).replace(/\b[a-z]{2,4}\b/g, (w) => w.toUpperCase())
 const READY_SHOWN = 8 // 「바로 볼 수 있는 분석」 처음에 보이는 수 (11/14 D5: 칩 12개 + 예시 4칸 + 접힌 목록이 한 카드에 세 겹)
 
-function Dashboard({ stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onScopeSearch, onKeyword, onGoCollect, onRemember }) {
+function Dashboard({ stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onScopeSearch, onAutoReport, onKeyword, onGoCollect, onRemember }) {
   const [text, setText] = useState('')
   const [focus, setFocus] = useState(null) // 분석 중인 말 (없으면 검색창 + 미리 분석된 키워드 + 요즘 뜨는 기술)
   const [ready, setReady] = useState([]) // 미리 분석해 둔 말 (11/10): 검색 전에도 분석이 어떤 모양인지 보이게
@@ -233,7 +233,7 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
           </details>
         )}
         {/* key: 키워드가 바뀌면 새로 그린다 (고른 범위 · 받은 값 초기화) */}
-        {focus && <KeywordAnalysis key={focus} keyword={focus} onSearch={onSearch} onScopeSearch={onScopeSearch} periods={periods} period={period} onPeriod={onPeriod} />}
+        {focus && <KeywordAnalysis key={focus} keyword={focus} onSearch={onSearch} onScopeSearch={onScopeSearch} onAutoReport={onAutoReport} periods={periods} period={period} onPeriod={onPeriod} />}
       </section>
       </div>
 

@@ -142,11 +142,40 @@ function linksOf(nodes, issueWords, merged) {
   return { edges, children }
 }
 
-// 돌려주는 값: { center, docs, issues, nodes: [{ word, kind, score(함께 나온 이슈 수), share, subcats }], edges, children }
+// 자동 개수 (11/15 조장: 「골라 주는 개수 자체도 자동으로」): 화면 레버와 같은 순서(기술 · 회사이고 너무 넓지 않은 말, 연관도 순)로 하나씩 더하며
+// 주제어 이슈 중 고른 말이 하나라도 든 이슈의 몫(덮는 비율)을 센다. 새로 덮는 몫이 5% 미만이면 멈춤. 1 ~ 6개
+// 돌려주는 값: { n, coverage(0~1), steps: [{ word, coverage }] } — AI 안 씀
+const PICK_GAIN = 0.05
+const PICK_MAX = 6
+function suggestCount(nodes, issueWords) {
+  const N = issueWords.length
+  const order = nodes.filter((n) => n.kind !== 'general' && !n.broad)
+  if (!N || !order.length) return { n: 0, coverage: 0, steps: [] }
+  const covered = new Array(N).fill(false)
+  let count = 0
+  const steps = []
+  for (const node of order.slice(0, PICK_MAX)) {
+    const w = node.word.toLowerCase()
+    let gain = 0
+    issueWords.forEach((s, k) => {
+      if (!covered[k] && s.has(w)) {
+        covered[k] = true
+        gain++
+      }
+    })
+    count += gain
+    steps.push({ word: node.word, coverage: Math.round((count / N) * 100) / 100, gain: Math.round((gain / N) * 100) / 100 })
+  }
+  let n = 1
+  while (n < steps.length && steps[n].gain >= PICK_GAIN) n++
+  return { n, coverage: steps[n - 1].coverage, steps }
+}
+
+// 돌려주는 값: { center, docs, issues, nodes: [{ word, kind, score(함께 나온 이슈 수), share, subcats }], edges, children, autoPick }
 export async function relatedWords(rawCenter, { refresh = false } = {}) {
   const center = String(rawCenter ?? '').trim().slice(0, 50)
   if (!center) throw Object.assign(new Error('키워드를 입력해 주세요.'), { status: 400 })
-  const key = `related:v4:${queryKey(center)}` // v2: 영어 기능어(11/11) · v3: 워드클라우드팀 불용어 · 예외 · 사업 분류 · v4: 교차선 · 2단계(11/14)
+  const key = `related:v5:${queryKey(center)}` // v2: 영어 기능어(11/11) · v3: 워드클라우드팀 불용어 · 예외 · 사업 분류 · v4: 교차선 · 2단계(11/14) · v5: 자동 개수(11/15)
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return { ...hit, cached: true }
@@ -195,7 +224,8 @@ export async function relatedWords(rawCenter, { refresh = false } = {}) {
     .slice(0, MAX_NODES)
     .map((x) => ({ word: x.w, kind: kindOf(x.w, lists), score: x.n, share: Math.round((x.n / Math.max(1, issues.length)) * 100) / 100, broad: tooBroad(x.w), subcats: subcatsOf(x.w) }))
   const { edges, children } = linksOf(nodes, issueWords, merged)
-  const out = { center, docs: docs.length, issues: issues.length, nodes, edges, children, at: new Date().toISOString() }
+  const autoPick = suggestCount(nodes, issueWords)
+  const out = { center, docs: docs.length, issues: issues.length, nodes, edges, children, autoPick, at: new Date().toISOString() }
   await cachePut(key, out, TTL).catch(() => {})
   return { ...out, cached: false }
 }
