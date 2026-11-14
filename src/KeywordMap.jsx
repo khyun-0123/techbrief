@@ -291,8 +291,9 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
       >
         <circle cx={p.x} cy={p.y} r={r + 3} fill="transparent" />
         <circle cx={p.x} cy={p.y} r={r} fill={fill} />
-        {on && <circle cx={p.x} cy={p.y} r={r + 3.5} fill="none" stroke={colors.text} strokeWidth="2" />}
-        <text x={p.x} y={p.y + r + 2 + fs * 0.85} textAnchor="middle" fontSize={fs} fontWeight={lv === 2 && !on ? 400 : on ? 700 : 600} fill={lv === 2 && !on ? colors.sub : colors.text} stroke="#fff" strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
+        {/* 고른 말 (11/14): 점 둘레 테두리는 1단계 점과 헷갈려서, 글자를 검정 알약(눌린 칩과 같은 모양)으로 */}
+        {on && <rect x={p.x - (textW(label, fs) + 14) / 2} y={p.y + r + 2} width={textW(label, fs) + 14} height={fs + 7} rx={(fs + 7) / 2} fill={colors.text} />}
+        <text x={p.x} y={p.y + r + 2 + fs * 0.85 + (on ? 2.5 : 0)} textAnchor="middle" fontSize={fs} fontWeight={lv === 2 && !on ? 400 : on ? 700 : 600} fill={on ? colors.surface : lv === 2 ? colors.sub : colors.text} stroke={on ? 'none' : '#fff'} strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
           {label}
         </text>
       </g>
@@ -725,8 +726,7 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
                 2단계
               </span>
               <span>
-                <i className="km-lg-on" />
-                고른 범위
+                <b className="km-lg-on">✓ 고른 말</b>
               </span>
               <span>
                 <b className="km-lg-badge">+n</b>

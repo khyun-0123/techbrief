@@ -7432,7 +7432,13 @@ a.brand:focus-visible {
   border-radius: 50%;
 }
 .km-legend .km-lg-on {
-  border: 2px solid var(--tb-color-text);
+  padding: 0 7px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-text);
+  color: var(--tb-color-surface);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 16px;
 }
 .km-actions {
   position: absolute;
