@@ -279,3 +279,54 @@ export async function relatedWords(rawCenter, { refresh = false } = {}) {
   await cachePut(key, out, TTL).catch(() => {})
   return { ...out, cached: false }
 }
+
+// 맵 점의 관련 기사 (11/15, 마인드맵 가이드 「관련 기사 칸」): 주제어와 그 말이 함께 든 기사 3건, 최신순
+// - 우리 DB(모은 기사, 1·2차 출처 포함)를 먼저 — 제목에 그 말 → 제목에 주제어 → 최신순, 모음 기사([데일리픽] 등) 뺌 — 모자라면 네이버 「주제어 말」 검색(정확도순 30건 중 두 말이 다 든 것)으로 채움 — 제목 · 링크만 보여 주고 저장 · AI 입력 안 함
+// - 6시간 기억 (같은 점을 여러 번 눌러도 네이버를 한 번만)
+export async function wordArticles(rawCenter, rawWord) {
+  const center = String(rawCenter ?? '').trim().slice(0, 50)
+  const word = String(rawWord ?? '').trim().slice(0, 50)
+  if (!center || !word) throw Object.assign(new Error('주제어와 말이 필요해요.'), { status: 400 })
+  const key = `word-articles:v3:${queryKey(center)}:${queryKey(word)}`
+  const hit = await cacheGet(key).catch(() => null)
+  if (hit) return { ...hit, cached: true }
+  const sq = (s) => s.toLowerCase().replace(/\s+/g, '')
+  const like = (s) => `%${sq(s).replace(/[%_\\]/g, '\\$&')}%`
+  const out = []
+  if (dbEnabled()) {
+    // 같은 이슈(group_id)는 한 건만 — 제목에 그 말 → 제목에 주제어 → 최신 기사로 이슈마다 하나 고른 뒤 같은 순서로 3건
+    const { rows } = await query(
+      `WITH m AS (
+         SELECT coalesce(full_title, title) AS title, source, url, published_at, coalesce(group_id, id::text) AS g,
+                (lower(regexp_replace(coalesce(full_title, title), '\\s+', '', 'g')) LIKE $2) AS w_in_title,
+                (lower(regexp_replace(coalesce(full_title, title), '\\s+', '', 'g')) LIKE $1) AS c_in_title
+           FROM articles
+          WHERE lower(regexp_replace(coalesce(full_title, title) || ' ' || coalesce(description, ''), '\\s+', '', 'g')) LIKE $1
+            AND lower(regexp_replace(coalesce(full_title, title) || ' ' || coalesce(description, ''), '\\s+', '', 'g')) LIKE $2
+            AND coalesce(full_title, title) !~ '^\\[(데일리|모닝|이브닝|오늘의|주간|위클리|뉴스|헤드라인)'),
+       one AS (SELECT DISTINCT ON (g) * FROM m ORDER BY g, w_in_title DESC, c_in_title DESC, published_at DESC)
+       SELECT title, source, url, published_at FROM one ORDER BY w_in_title DESC, c_in_title DESC, published_at DESC LIMIT 3`,
+      [like(center), like(word)],
+    ).catch((err) => {
+      console.warn(`[word-articles] ${err.message}`)
+      return { rows: [] }
+    })
+    for (const r of rows) out.push({ title: cleanText(r.title), source: r.source, url: r.url, publishedAt: r.published_at, from: 'db' })
+  }
+  if (out.length < 3) {
+    const items = await searchNews(`${center} ${word}`, { sort: 'sim', display: 30 }).catch(() => [])
+    const both = (it) => {
+      const t = sq(cleanText(`${it.title} ${it.description}`))
+      return t.includes(sq(center)) && t.includes(sq(word))
+    }
+    for (const it of items.filter(both).sort((a, b) => Date.parse(b.pubDate) - Date.parse(a.pubDate))) {
+      if (out.length >= 3) break
+      const url = it.originallink || it.link
+      if (out.some((x) => x.url === url)) continue
+      out.push({ title: cleanText(it.title), source: new URL(url).hostname.replace(/^www\./, ''), url, publishedAt: new Date(it.pubDate).toISOString(), from: 'naver' })
+    }
+  }
+  const result = { center, word, articles: out }
+  await cachePut(key, result, TTL).catch(() => {})
+  return result
+}

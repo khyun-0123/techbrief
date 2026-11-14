@@ -552,3 +552,11 @@ export async function saveImportanceRuleApi(rule) {
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
   return data
 }
+
+// 맵 점의 관련 기사 3건 (11/15, server/related.js wordArticles)
+export async function fetchWordArticles(center, word) {
+  const res = await fetch(`/api/related/articles?q=${encodeURIComponent(center)}&w=${encodeURIComponent(word)}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}

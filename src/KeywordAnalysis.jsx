@@ -7,7 +7,7 @@
 import KeywordMap from './KeywordMap.jsx'
 import SplitPanes from './SplitPanes.jsx'
 import { useEffect, useState } from 'react'
-import { fetchBundle, fetchRelated, fetchTimeline, fetchTimelineStory } from './api.js'
+import { fetchBundle, fetchRelated, fetchTimeline, fetchTimelineStory, fetchWordArticles } from './api.js'
 import { retryStory, useStory } from './storyJobs.js'
 import { Spark } from './KeywordTrends.jsx'
 import TechTimeline from './TechTimeline.jsx'
@@ -131,6 +131,19 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
   const [picks, setPicks] = useState(null) // null = 아직 안 건드림(처음 1개)
   const [skip, setSkip] = useState({}) // 직접 뺀 말 — 레버를 올려도 다시 안 넣음
   const [flash, setFlash] = useState(null) // 넣고 뺄 때 「자료 찾기」 옆에 잠깐: { text, at }
+  // 관련 기사 칸 (11/15, 마인드맵 가이드): 맵에서 점을 눌러 범위에 넣은 말의 기사 3건. 「숨기기」로 닫음
+  const [relWord, setRelWord] = useState(null)
+  const [relArticles, setRelArticles] = useState(null) // { word, articles } | { word, error }
+  useEffect(() => {
+    if (!relWord) return undefined
+    let alive = true
+    fetchWordArticles(keyword, relWord)
+      .then((d) => alive && setRelArticles({ word: relWord, articles: d.articles }))
+      .catch((err) => alive && setRelArticles({ word: relWord, error: err.message }))
+    return () => {
+      alive = false
+    }
+  }, [keyword, relWord])
   useEffect(() => {
     if (!flash) return undefined
     const t = setTimeout(() => setFlash(null), 2500)
@@ -226,6 +239,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
         return n
       })
       setFlash({ text: `+ 「${w}」 · 지금 ${picked.length + 1}개`, at: Date.now() })
+      setRelWord(w)
     }
   }
   const setCount = (n) => {
@@ -284,6 +298,38 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
                 nodes.length ? (
                   <>
                     <KeywordMap keyword={keyword} issues={related.issues} nodes={nodes} edges={related.edges} branches={related.children} isOn={isOn} onToggle={toggle} view={mapView} onView={setMapView} onEnlarge={() => setBigMap(true)} />
+                    {relWord && (
+                      <section className="ka-rel" aria-live="polite" aria-label={`「${relWord}」 관련 기사`}>
+                        <div className="ka-rel-head">
+                          <b>「{relWord}」 관련 기사</b>
+                          <span className="hint">「{keyword}」와 함께 나온 기사 · 제목에 그 말이 든 것 먼저</span>
+                          <button type="button" className="btn-text" onClick={() => setRelWord(null)}>
+                            숨기기
+                          </button>
+                        </div>
+                        {relArticles?.word !== relWord ? (
+                          <p className="hint">찾는 중…</p>
+                        ) : relArticles.error ? (
+                          <p className="hint">관련 기사를 못 불러왔어요 ({relArticles.error})</p>
+                        ) : relArticles.articles.length ? (
+                          <ol className="ka-rel-list">
+                            {relArticles.articles.map((a) => (
+                              <li key={a.url}>
+                                <a href={a.url} target="_blank" rel="noreferrer">
+                                  {a.title}
+                                </a>
+                                <span className="ka-rel-meta">
+                                  {a.source} · {new Date(a.publishedAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
+                                  {a.from === 'naver' ? ' · 네이버 검색' : ''}
+                                </span>
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <p className="hint">「{keyword}」와 「{relWord}」가 함께 나온 기사가 아직 없어요.</p>
+                        )}
+                      </section>
+                    )}
                     <div className="ka-controls">
                       <label>
                         자동으로 고를 범위 <b>{picked.length ? `「${keyword}」 + ${picked.length}개` : `「${keyword}」만`}</b>

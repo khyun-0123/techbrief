@@ -8182,3 +8182,56 @@ button.ka-auto-note {
     display: none; /* 휴대폰: 상단바가 좁아 「?」만 */
   }
 }
+/* 맵 점의 관련 기사 칸 (11/15, 마인드맵 가이드 「관련 기사」): 맵 바로 아래, 3건 · 원문은 새 탭 */
+.ka-rel {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: 12px;
+  background: var(--tb-color-surface);
+  animation: tb-fade 0.15s ease-out;
+}
+.ka-rel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+.ka-rel-head .hint {
+  flex: 1;
+  margin: 0;
+}
+.ka-rel-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ka-rel-list li {
+  display: grid;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--tb-color-line-soft);
+}
+.ka-rel-list li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.ka-rel-list a {
+  color: var(--tb-color-text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1.45;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.ka-rel-list a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ka-rel-meta {
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+}

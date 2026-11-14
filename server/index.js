@@ -10,7 +10,7 @@ import { paperProviderStatus } from './papers/index.js'
 import { corpusStatus, startCorpus } from './papers/corpus.js'
 import { buildTimeline, timelineStory } from './timeline.js'
 import { readyTimelines, runPrecompute, startPrecompute } from './timelineJobs.js'
-import { relatedWords } from './related.js'
+import { relatedWords, wordArticles } from './related.js'
 import { checkRule, DEFAULT_RULE, describeRule, loadImportanceRule, PARTS as IMPORTANCE_PARTS, previewRule, ruleHistory, saveImportanceRule } from './importanceRule.js'
 import { kiwiStatus } from './kiwi.js'
 import { fillMap, mapMaterials } from './mapMaterials.js'
@@ -662,6 +662,11 @@ export async function handleApi(req, res) {
       return send(res, 200, { categories: await allCategoryCompetitors(), rule: `위협: 경쟁사 중 하나가 분야 증가의 ${THREAT_FACTOR}배 이상 · 자사는 분야보다 느림 / 기회: 자사가 경쟁사 모두보다 빠르고 분야 이상` })
     }
     // 연관 키워드 (11/10, 대시보드 맵 재료 · related.js)
+    // 맵 점의 관련 기사 3건 (11/15, related.js wordArticles)
+    if (req.method === 'GET' && req.url.startsWith('/api/related/articles?')) {
+      const sp = new URL(req.url, 'http://x').searchParams
+      return send(res, 200, await wordArticles(sp.get('q'), sp.get('w')))
+    }
     if (req.method === 'GET' && req.url.startsWith('/api/related?')) {
       const q = new URL(req.url, 'http://x').searchParams.get('q')
       // 11/12: 뉴스에서 함께 나온 말 + 우리 DB 재료(특허 출원인 · 논문 핵심어 · 기업). 재료를 못 만들면 뉴스 맵만
