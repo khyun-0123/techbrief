@@ -7585,3 +7585,50 @@ a.brand:focus-visible {
   color: var(--tb-color-text-faint);
   font-size: var(--fs-xs);
 }
+/* 범위 레버 직접 그림 (11/14): 브라우저 기본 레버는 맥(Safari · Chrome)에서 채움 끝과 손잡이 위치가 어긋나 「1/24」가 엉뚱한 자리로 보였음
+   채움 = 손잡이 가운데까지 (손잡이 18px: 9px + (폭 - 18px) × 비율) */
+.ka-controls input.ka-lever {
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.ka-lever::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: var(--tb-radius-full);
+  background: linear-gradient(to right, var(--tb-color-text) 0 calc(9px + (100% - 18px) * var(--f, 0)), var(--tb-color-line-soft) 0);
+}
+.ka-lever::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border: 2px solid var(--tb-color-text);
+  border-radius: 50%;
+  background: var(--tb-color-surface);
+  box-shadow: 0 1px 3px rgb(17 17 17 / 20%);
+  -webkit-appearance: none;
+}
+.ka-lever::-moz-range-track {
+  height: 6px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-line-soft);
+}
+.ka-lever::-moz-range-progress {
+  height: 6px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-text);
+}
+.ka-lever::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--tb-color-text);
+  border-radius: 50%;
+  background: var(--tb-color-surface);
+}
+.ka-lever:focus-visible {
+  outline: 2px solid var(--tb-color-line-focus);
+  outline-offset: 4px;
+  border-radius: 4px;
+}

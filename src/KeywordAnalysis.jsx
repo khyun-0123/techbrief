@@ -282,7 +282,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
                     <div className="ka-controls">
                       <label>
                         자동으로 고를 범위 <b>{picked.length ? `「${keyword}」 + ${picked.length}개` : `「${keyword}」만`}</b>
-                        <input type="range" min={0} max={Math.max(1, leverMax)} value={Math.min(picked.length, leverMax)} onChange={(e) => setCount(Number(e.target.value))} aria-describedby="ka-auto-help" aria-valuetext={picked.length ? `「${keyword}」 + ${picked.length}개 · ${picked.join(', ')}` : `「${keyword}」만`} />
+                        <input type="range" min={0} max={Math.max(1, leverMax)} className="ka-lever" style={{ '--f': Math.min(picked.length, leverMax) / Math.max(1, leverMax) }} value={Math.min(picked.length, leverMax)} onChange={(e) => setCount(Number(e.target.value))} aria-describedby="ka-auto-help" aria-valuetext={picked.length ? `「${keyword}」 + ${picked.length}개 · ${picked.join(', ')}` : `「${keyword}」만`} />
                       </label>
                       <span className="ka-lever-ends" aria-hidden="true">
                         <span>주제어만</span>
