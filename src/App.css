@@ -6938,3 +6938,148 @@ a.brand:focus-visible {
 .badge-material.badge-paid {
   color: var(--tb-color-text-sub);
 }
+
+/* ══ (11/14 통합, 보고서팀 작업 이식) 보고서 4:3 가로형 쪽 (ReportSlide.jsx) — 화면 미리보기 · PDF 인쇄 공용. 960×720px = 10×7.5in ══ */
+.rs-frame-wrap {
+  width: 100%;
+}
+
+.rs-frame {
+  overflow: hidden;
+  border: 1px solid var(--tb-color-line);
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 8px 30px -16px rgb(0 0 0 / 30%);
+}
+
+/* 쪽 안의 글 상자 · 표는 reportSlides.js가 정한 자리(인치 × 96px)에 놓는다. 흰 바탕 · 진한 글자 · 강조색 1개 (11/12 양식) */
+.rs-slide {
+  position: relative;
+  box-sizing: border-box;
+  width: 960px;
+  height: 720px;
+  overflow: hidden;
+  background: #fff;
+  color: #111;
+  /* 영문 · 숫자는 Arial Narrow, 한글은 LG 스마트체 (없는 PC는 다음 글꼴) */
+  font-family: 'Arial Narrow', 'LG 스마트체', 'LG Smart', 'LG Smart UI', 'Pretendard Variable', Pretendard, sans-serif;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.rs-text {
+  position: absolute;
+  margin: 0;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+
+.rs-line {
+  position: absolute;
+  height: 0;
+  border-top: 1px solid #bbb;
+}
+
+.rs-rect {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.rs-check {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #a50034;
+  color: #fff;
+  font-size: 10pt;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.rs-pageno {
+  white-space: nowrap;
+}
+
+.rs-table-info th {
+  width: auto;
+  background: #f2f2f3;
+}
+
+.rs-table {
+  position: absolute;
+  border-collapse: collapse;
+  table-layout: fixed;
+  line-height: 1.35;
+}
+
+.rs-table th,
+.rs-table td {
+  overflow: hidden;
+  padding: 3px 5px;
+  border: 1px solid #bbb;
+  text-align: left;
+  vertical-align: top;
+}
+
+.rs-table th {
+  background: #f2f2f2;
+  font-weight: 700;
+}
+
+.rs-table a {
+  color: #111;
+}
+
+/* PDF 인쇄: 보고서 쪽만, 쪽마다 10×7.5in 가로 */
+.print-slides {
+  display: none;
+}
+
+@page slides {
+  size: 10in 7.5in;
+  margin: 0;
+}
+
+@media print {
+  body.printing-slides > *:not(.print-slides) {
+    display: none !important;
+  }
+  body.printing-slides .print-slides {
+    display: block;
+  }
+  body.printing-slides .print-slides .rs-slide {
+    page: slides;
+    break-after: page;
+  }
+}
+
+.rs-frame-wrap:fullscreen {
+  display: grid;
+  place-items: center;
+  width: min(100vw, 133.33vh);
+  margin: auto;
+  background: #111;
+}
+
+/* 내 보고서 미리보기 창: 4:3 쪽 + 쪽 넘김 (11/14) */
+.mr-slides {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tb-space-3);
+}
+.mr-slides-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--tb-space-3);
+}
+.mr-slides-label {
+  min-width: 200px;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}

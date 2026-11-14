@@ -438,11 +438,13 @@ export async function updateReportApi(entry) {
 
 // ── 보고서 작업 대기열 (11/08) ──
 // level: 'selected' | 'owned' | 'research' (자료 조사 수준)
-export async function createReportJob({ articles, aiSummaries, title, direction, periodLabel, mode, level, clientId }) {
+// topics: 주제 키워드 (11/12 #109) — 11/14까지 여기서 빠져 서버에 가지 않았음 → 분석 묶음 자동 포함 · 자동 제목이 동작하지 않던 원인
+export async function createReportJob({ articles, aiSummaries, title, direction, topics = [], periodLabel, mode, level, clientId }) {
   return (
     await postJson('/api/report-jobs', {
       title,
       direction,
+      topics,
       periodLabel,
       mode,
       level,

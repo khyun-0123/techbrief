@@ -75,7 +75,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
                   onClick={(e) => {
                     e.currentTarget.closest('details').open = false
                     track('export', 'pdf')
-                    printReport()
+                    printReport(saved)
                   }}
                 >
                   PDF로 저장
@@ -99,7 +99,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
                 className="btn"
                 onClick={() => {
                   track('export', 'pdf')
-                  printReport()
+                  printReport(saved)
                 }}
                 title="인쇄 창에서 'PDF로 저장'을 고르세요"
               >
