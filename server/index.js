@@ -11,6 +11,7 @@ import { corpusStatus, startCorpus } from './papers/corpus.js'
 import { buildTimeline, timelineStory } from './timeline.js'
 import { readyTimelines, runPrecompute, startPrecompute } from './timelineJobs.js'
 import { relatedWords } from './related.js'
+import { checkRule, DEFAULT_RULE, describeRule, loadImportanceRule, PARTS as IMPORTANCE_PARTS, previewRule, ruleHistory, saveImportanceRule } from './importanceRule.js'
 import { kiwiStatus } from './kiwi.js'
 import { fillMap, mapMaterials } from './mapMaterials.js'
 import { allCategoryCompetitors, bundleFacts, categoryCompetitors, headlineSeeds, prepareBundle, THREAT_FACTOR } from './keywordBundle.js'
@@ -711,6 +712,24 @@ export async function handleApi(req, res) {
       return send(res, 200, out)
     }
     // 자주 찾은 새 키워드 · 검색어 영문 표기 (11/10): 자동 수집 키워드는 회의를 거쳐 관리자가 넣는다 → 그 판단 자료
+    // 중요도 기준 (11/15 팀 회의, importanceRule.js): 보기 · 미리보기 · 저장 — 관리자만
+    if (req.method === 'GET' && req.url === '/api/admin/importance-rule') {
+      requireAdmin(req)
+      return send(res, 200, { rule: await loadImportanceRule({ fresh: true }), defaults: DEFAULT_RULE, parts: IMPORTANCE_PARTS, history: await ruleHistory() })
+    }
+    if (req.method === 'POST' && req.url === '/api/admin/importance-rule/preview') {
+      requireAdmin(req)
+      const rule = checkRule(await readJson(req))
+      await loadImportanceRule({ fresh: true })
+      return send(res, 200, previewRule((await listArticles()).articles, rule))
+    }
+    if (req.method === 'PUT' && req.url === '/api/admin/importance-rule') {
+      const admin = requireAdmin(req)
+      const before = await loadImportanceRule({ fresh: true })
+      const rule = await saveImportanceRule(await readJson(req), admin?.name)
+      await logChange(admin, '중요도 기준', `${describeRule(before)} → ${describeRule(rule)}`)
+      return send(res, 200, { rule, history: await ruleHistory() })
+    }
     if (req.method === 'GET' && req.url.startsWith('/api/admin/search-terms')) {
       requireAdmin(req)
       const days = Math.min(90, Math.max(1, Number(new URL(req.url, 'http://x').searchParams.get('days')) || 14))

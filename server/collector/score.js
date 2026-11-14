@@ -3,10 +3,11 @@
 import { findMention } from './lists.js'
 import { EXPERT_SOURCES } from './normalize.js'
 import { offTopicOf } from './relevance.js'
+import { DEFAULT_RULE, importanceRule } from '../importanceRule.js'
 
 // 이 점수 이상이면 "중요도 높음". 11/09 재설계 뒤 실제 데이터(모은 이슈 421개)로 다시 맞춤:
 // 새 점수는 보도량이 10점으로 줄어 최고점이 60 근처 → 예전(60점 이상 8건, 약 2%)과 비슷한 비율이 되도록 45점 (약 4%)
-export const HIGH_THRESHOLD = 45
+export const HIGH_THRESHOLD = 45 // 기본값. 실제 기준은 관리 페이지 「중요도 기준」(importanceRule.js, 11/15)
 const RECENCY_HOURS = 168
 const RISING_FRESH_DAYS = 30
 const NOISE_WEIGHT = 0.3
@@ -90,13 +91,17 @@ export function scoreArticle(article, groupSize, competitors = [], { relevance =
   // 11/11: −15점 대신 ×0.3 (점수가 높은 시황 · 홍보 기사도 확실히 내려가게)
   const noise = NOISE_WORDS.some((w) => title.includes(w)) || STOCK_PATTERN.test(title) || offTopic ? NOISE_WEIGHT : 1
   const weight = RELEVANCE_WEIGHT[relevance] ?? 1
-  const raw = novelty + business + source + recency + coverage
-  const score = Math.max(0, Math.min(100, Math.round(raw * weight * noise)))
+  // 관리 페이지 배점 (11/15): 칸마다 「새 배점 ÷ 기본 배점」만큼. 기본값이면 그대로
+  const rule = importanceRule()
+  const raw = { novelty, business, source, recency, coverage }
+  const scaled = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, Math.round(((v * rule.weights[k]) / DEFAULT_RULE.weights[k]) * 10) / 10]))
+  const total = Object.values(scaled).reduce((a, b) => a + b, 0)
+  const score = Math.max(0, Math.min(100, Math.round(total * weight * noise)))
   return {
     score,
-    level: score >= HIGH_THRESHOLD ? 'high' : 'normal',
+    level: score >= rule.high ? 'high' : 'normal',
     parts: {
-      novelty, business, source, recency, coverage, noise, weight,
+      ...scaled, noise, weight, raw, max: rule.weights, high: rule.high,
       firstNews: Boolean(firstNews), rerun, newWords, risingName,
       competitorName, interestName, bizWords, ownName, tier,
     },

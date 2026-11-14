@@ -11,6 +11,7 @@ import { BROAD_KEYWORD, relevanceInfo } from './relevance.js'
 import { mentions, scoreArticle } from './score.js'
 import { titleSentiment } from './sentiment.js'
 import { restoreTitles } from './titles.js'
+import { loadImportanceRule } from '../importanceRule.js'
 
 const MAX_KEYWORDS = 10 // API 호출 수를 지키기 위한 한도
 const MAX_PAGES = 10 // 키워드마다 100건씩 최대 10번(1,000건, 네이버 한도)까지 넘겨 받는다
@@ -245,6 +246,7 @@ const RERUN_DAYS = 21
 const CTX_TTL = 10 * 60_000
 let ctxCache = (globalThis.__scoreCtx ??= { at: 0, value: null })
 export async function scoreContext() {
+  await loadImportanceRule() // 관리 페이지 「중요도 기준」 (1분 기억, 11/15)
   ctxCache = globalThis.__scoreCtx
   if (ctxCache.value && Date.now() - ctxCache.at < CTX_TTL) return ctxCache.value
   let rising = []

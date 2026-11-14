@@ -21,7 +21,9 @@ export function reasonOf(a) {
 }
 
 export function pickMaterials(articles, terms = [], opt = AUTO_PICK) {
-  const { min, max, high } = { ...AUTO_PICK, ...opt }
+  // 「중요」 기준은 서버(관리 페이지 「중요도 기준」, 11/15)가 정한 importanceLevel을 따름. 없으면 점수로
+  const high = opt.high ?? articles?.find((a) => a.scoreParts?.high != null)?.scoreParts.high ?? AUTO_PICK.high
+  const { min, max } = { ...AUTO_PICK, ...opt }
   const time = (a) => Date.parse(a.publishedAt ?? '') || 0
   const byScore = (a, b) => (b.importance ?? 0) - (a.importance ?? 0) || time(b) - time(a)
   // 1. 이슈마다 하나
@@ -33,10 +35,11 @@ export function pickMaterials(articles, terms = [], opt = AUTO_PICK) {
     if (!cur || byScore(a, cur) < 0) best.set(k, a)
   }
   const pool = [...best.values()].sort(byScore)
-  const important = pool.filter((a) => (a.importance ?? 0) >= high)
+  const isHigh = (a) => (a.importanceLevel ? a.importanceLevel === 'high' : (a.importance ?? 0) >= high)
+  const important = pool.filter(isHigh)
   // 2 · 3. 중요는 모두(최대 max), 모자라면 min까지 채움
   const n = Math.min(max, Math.max(min, important.length), pool.length)
-  const chosen = pool.slice(0, n).map((a) => ({ article: a, why: (a.importance ?? 0) >= high ? 'important' : 'fill' }))
+  const chosen = pool.slice(0, n).map((a) => ({ article: a, why: isHigh(a) ? 'important' : 'fill' }))
   // 4. 고른 말마다 최소 1건
   for (const t of terms) {
     if (chosen.some((c) => c.article.scopeHits?.includes(t))) continue

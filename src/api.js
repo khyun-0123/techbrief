@@ -537,3 +537,18 @@ export async function fetchTrendVerdicts(terms) {
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
   return data
 }
+
+// ── 중요도 기준 (11/15 팀 회의, 관리 페이지 「중요도 기준」 · server/importanceRule.js) ──
+export async function fetchImportanceRule() {
+  const res = await fetch('/api/admin/importance-rule')
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}
+export const previewImportanceRule = (rule) => postJson('/api/admin/importance-rule/preview', rule)
+export async function saveImportanceRuleApi(rule) {
+  const res = await fetch('/api/admin/importance-rule', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rule) })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}

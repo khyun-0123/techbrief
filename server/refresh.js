@@ -4,7 +4,7 @@
 // - 팀원마다 자기 포트로 앱을 켜도 DB는 같이 쓴다 → DB 잠금으로 한 곳에서만 실행한다
 // - 앱(npm run dev)이 켜져 있을 때만 돈다. 꺼져 있던 동안 지난 예정은 켜진 뒤 한 번 따라잡는다
 import { collect, listArticles } from './collector/index.js'
-import { HIGH_THRESHOLD } from './collector/score.js'
+import { importanceRule } from './importanceRule.js'
 import { db, dbEnabled } from './db/index.js'
 import { getKeywords, getSetting, getSummaries, setSetting } from './db/store.js'
 import { pingModel, PRIORITY, queueStatus } from './llm/client.js'
@@ -111,7 +111,7 @@ function autoSummaryTarget(article) {
 // 「뉴스·논문에서 찾기」 결과 중 「중요」(HIGH_THRESHOLD점 이상, 11/09 재설계 점수: 신규성 · 사업 연관성 · 출처 신뢰도 위주) 뉴스를
 // 중요도 순으로 SEARCH_PICK건까지 자동 요약 대기열에 넣는다. 사람이 누른 요약이 늘 먼저다 (BACKGROUND). 자동 요약이 꺼져 있으면 넣지 않는다
 // 찾기 결과는 DB에 쌓지 않으므로 대기열을 다시 짤 때 사라지지 않게 따로 들고 있다가, 요약되면 뺀다
-const SEARCH_MIN = HIGH_THRESHOLD
+const SEARCH_MIN = () => importanceRule().high // 관리 페이지 「중요도 기준」 (11/15)
 const SEARCH_PICK = 15 // 한 번 찾기에서 넣는 최대 건수
 const SEARCH_QUEUE_MAX = 30 // 들고 있는 최대 건수
 const searchExtras = (globalThis.__searchSummaryExtras ??= new Map()) // id → { article, important: true }
@@ -119,7 +119,7 @@ export async function queueSearchSummaries(articles) {
   const { autoSummary } = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
   if (autoSummary === 'off') return 0
   const picked = articles
-    .filter((a) => !a.paper && !a.summaryId && (a.importance ?? 0) >= SEARCH_MIN && a.relevance !== 'low')
+    .filter((a) => !a.paper && !a.summaryId && (a.importance ?? 0) >= SEARCH_MIN() && a.relevance !== 'low')
     .sort((x, y) => (y.importance ?? 0) - (x.importance ?? 0))
     .slice(0, SEARCH_PICK)
   const done = await getSummaries(picked.map((a) => a.id))

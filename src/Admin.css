@@ -2063,3 +2063,54 @@ a.adm-brand:focus-visible {
 .adm-field-inline .segmented {
   justify-self: start;
 }
+/* 중요도 기준 (11/15, AdminImportance.jsx) */
+.adm-imp-input {
+  width: 72px;
+  height: 36px;
+  padding: 0 8px;
+  text-align: right;
+}
+.adm-imp-sum {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.adm-imp-sum.bad {
+  color: var(--tb-color-danger);
+}
+.adm-imp-preview {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: var(--tb-radius-card);
+  background: var(--tb-color-bg-strong);
+}
+.adm-imp-preview p,
+.adm-imp-preview h3 {
+  margin: 0;
+}
+.adm-imp-preview h3 {
+  font-size: var(--fs-sm);
+}
+.adm-imp-preview ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: var(--fs-sm);
+}
+.adm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 14px;
+}
+.adm-error {
+  margin: 10px 0 0;
+  color: var(--tb-color-danger);
+  font-size: var(--fs-sm);
+}
+.adm-imp-table .muted,
+.adm-actions .muted,
+.adm-imp-preview .muted {
+  color: var(--tb-color-text-faint);
+}
