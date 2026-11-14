@@ -6479,3 +6479,134 @@ a.brand:focus-visible {
   color: var(--tb-color-text-sub);
   font-weight: 500;
 }
+
+/* ── 연관 키워드 맵 (11/14 통합, KeywordMap.jsx — 워드클라우드팀 맵 v2 이식) ──
+   배치 시안 1: 키워드 분석 안에서 맵이 전체 너비, 기술 시계열은 아래 (2단계 · 40개 말은 900px 이상 필요) */
+.ka-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.km {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tb-space-3);
+}
+.km-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tb-space-2) var(--tb-space-3);
+}
+.km-svg {
+  width: 100%;
+  height: auto;
+  max-height: 560px;
+  font-family: inherit;
+}
+.km-edge {
+  stroke: var(--tb-color-line);
+}
+.km-edge.on {
+  stroke: var(--tb-color-text);
+}
+.km-edge2 {
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.km-cross {
+  stroke: var(--tb-color-line-soft);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+.km-center rect {
+  fill: var(--tb-color-text);
+}
+.km-center text {
+  fill: var(--tb-color-text-inverse);
+  font-size: 16px;
+  font-weight: 700;
+}
+.km-node {
+  cursor: pointer;
+}
+.km-node rect {
+  fill: var(--tb-color-surface);
+  stroke: transparent;
+  stroke-width: 1.5;
+}
+.km-node text {
+  fill: var(--tb-color-text);
+  font-size: 13px;
+  pointer-events: none;
+}
+.km-node.km-l2 text {
+  font-size: 11.5px;
+  fill: var(--tb-color-text-sub);
+}
+.km-node .km-sub {
+  fill: var(--tb-color-text-faint);
+  font-size: 10.5px;
+}
+.km-node.km-tech rect {
+  fill: var(--tb-color-bg-strong);
+}
+.km-node.km-company rect {
+  stroke: var(--tb-color-text-sub);
+  stroke-dasharray: 4 3;
+}
+.km-node:hover rect,
+.km-node:focus-visible rect {
+  stroke: var(--tb-color-text);
+  stroke-dasharray: none;
+}
+.km-node:focus-visible {
+  outline: none;
+}
+.km-node.on rect {
+  stroke: var(--tb-color-primary);
+  stroke-width: 2.5;
+  stroke-dasharray: none;
+}
+.km-node.on text,
+.km-node.open text {
+  font-weight: 700;
+}
+.km-cloud-center {
+  fill: var(--tb-color-text);
+  font-weight: 800;
+}
+.km-word {
+  fill: var(--tb-color-text-faint);
+  cursor: pointer;
+}
+.km-word.mid {
+  fill: var(--tb-color-text-sub);
+}
+.km-word.top {
+  fill: var(--tb-color-text);
+  font-weight: 700;
+}
+.km-word.on {
+  fill: var(--tb-color-text);
+  font-weight: 800;
+  text-decoration: underline;
+}
+.km-word:focus-visible {
+  outline: 2px solid var(--tb-color-line-focus);
+}
+/* 휴대폰: 맵은 최소 폭을 두고 옆으로 밀어 봄 (390px에서 글자가 너무 작았음), 워드클라우드는 그대로 */
+.km-scroll {
+  overflow-x: auto;
+}
+@media (max-width: 720px) {
+  .km-scroll .km-svg {
+    min-width: 720px;
+  }
+}
+/* 범위 레버: 브라우저 기본 파랑 대신 토큰 색 (11/14, 배치 시안 검토에서 지적) */
+.ka-controls input[type='range'] {
+  accent-color: var(--tb-color-text);
+}
+.km,
+.km-scroll {
+  min-width: 0;
+  max-width: 100%;
+}

@@ -4,6 +4,7 @@
 //   좁게 / 넓게 · 「자료 찾기 →」는 고른 범위로 자료 현황에서 찾는다 (server/scopeSearch.js)
 // - 오른쪽은 기술 시계열 요약(단계 · 논문 수 · 기업 저자 비율 · 특허 · 새로 늘어난 핵심어). 「자세히 · AI 흐름 정리」는 TechTimeline 창
 // 예전 「추적 중인 키워드 추이」(뉴스 수 · 검색량 · 위키 · GDELT)는 11/10 조장 결정으로 대시보드에서 뺐다 — 키워드 하나를 제대로 분석하는 쪽으로
+import KeywordMap from './KeywordMap.jsx'
 import { useEffect, useState } from 'react'
 import { fetchBundle, fetchRelated, fetchTimeline, fetchTimelineStory } from './api.js'
 import { retryStory, useStory } from './storyJobs.js'
@@ -11,82 +12,7 @@ import { Spark } from './KeywordTrends.jsx'
 import TechTimeline from './TechTimeline.jsx'
 
 const THIS_YEAR = new Date().getFullYear() // 올해는 안 끝나 줄어 보이므로 그래프에서 뺀다
-const W = 520
-const H = 360
-
-// 임시 맵: 가운데 키워드, 안쪽 고리에 연관도 높은 말, 바깥 고리에 나머지. 종류는 색이 아니라 모양(채움 · 점선 · 글자만)으로
-const KIND_LABEL = { tech: '기술', company: '회사', general: '일반' }
-// 노드가 맵에 들어온 까닭 (11/12: 뉴스 · 특허 출원인 · 논문 핵심어 재료, server/mapMaterials.js)
-const nodeWhy = (n) =>
-  [
-    (n.src ?? ['뉴스']).includes('뉴스') && `뉴스에서 함께 나온 이슈 ${n.score}개`,
-    n.patents != null && `특허 출원 ${n.patents}건`,
-    n.papers != null && `논문 ${n.papers}편`,
-  ]
-    .filter(Boolean)
-    .join(' · ')
-const MAP_MAX = 14
-function ScopeMap({ keyword, nodes, isOn, onToggle }) {
-  const shown = nodes.slice(0, MAP_MAX)
-  const max = Math.max(1, ...shown.map((n) => n.score))
-  const cx = W / 2
-  const cy = H / 2
-  const inner = shown.slice(0, 6)
-  const outer = shown.slice(6)
-  const ring = (list, rx, ry, off) =>
-    list.map((n, i) => {
-      const a = (i / Math.max(1, list.length)) * Math.PI * 2 - Math.PI / 2 + off
-      return { ...n, x: cx + Math.cos(a) * rx, y: cy + Math.sin(a) * ry }
-    })
-  const placed = [...ring(inner, 150, 105, 0), ...ring(outer, 225, 158, Math.PI / Math.max(2, outer.length))]
-  const label = (t) => (t.length > 14 ? `${t.slice(0, 13)}…` : t)
-  return (
-    <svg className="ka-map" viewBox={`0 0 ${W} ${H}`} role="group" aria-label={`「${keyword}」 연관 키워드 맵`}>
-      {placed.map((n) => (
-        <line key={`l-${n.word}`} x1={cx} y1={cy} x2={n.x} y2={n.y} className={isOn(n.word) ? 'ka-edge on' : 'ka-edge'} style={{ strokeWidth: 0.6 + 2.4 * (n.score / max) }} />
-      ))}
-      <g className="ka-center">
-        {/* 가운데 말: 길면 칸을 넓히고 그래도 길면 줄임표 (11/11: 「레이저 리프트오프 디스플레이」 양끝이 잘림) */}
-        {(() => {
-          const t = keyword.length > 12 ? `${keyword.slice(0, 11)}…` : keyword
-          const w = Math.min(230, Math.max(140, 36 + [...t].reduce((n, ch) => n + (/[가-힣]/.test(ch) ? 15 : 8.5), 0)))
-          return (
-            <>
-              <rect x={cx - w / 2} y={cy - 18} width={w} height={36} rx={18} />
-              <text x={cx} y={cy + 5} textAnchor="middle">
-                {t}
-              </text>
-              <title>{keyword}</title>
-            </>
-          )
-        })()}
-      </g>
-      {placed.map((n) => {
-        const on = isOn(n.word)
-        const w = Math.min(150, 26 + label(n.word).length * (/[가-힣]/.test(n.word) ? 12 : 7.4))
-        return (
-          <g
-            key={n.word}
-            className={`ka-node ka-${n.kind}${on ? ' on' : ''}`}
-            role="checkbox"
-            tabIndex={0}
-            aria-checked={on}
-            aria-label={`${KIND_LABEL[n.kind]} ${n.word} · ${nodeWhy(n)}`}
-            onClick={() => onToggle(n.word)}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onToggle(n.word))}
-          >
-            <rect x={n.x - w / 2} y={n.y - 14} width={w} height={28} rx={14} />
-            <text x={n.x} y={n.y + 4} textAnchor="middle">
-              {on ? '✓ ' : ''}
-              {label(n.word)}
-            </text>
-            <title>{`${n.word} · ${KIND_LABEL[n.kind]} · ${nodeWhy(n)}`}</title>
-          </g>
-        )
-      })}
-    </svg>
-  )
-}
+// 11/14 통합: 임시 맵(ScopeMap)을 워드클라우드팀 맵 v2 이식본(KeywordMap.jsx: 2단계 · 교차선 · 워드클라우드)으로 바꿈
 
 // 기다리는 동안 1초마다 지금 시각을 새로 받는다 (경과 초)
 function useNow(on) {
@@ -274,12 +200,12 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
         <div className="ka-pane">
           <div className="ka-pane-head">
             <h3>연관 키워드 · 볼 범위</h3>
-            <span className="ka-temp">임시 맵 · 워드클라우드팀 맵이 들어올 자리</span>
+            <span className="ka-temp">워드클라우드팀 맵 v2 · 뉴스에서 함께 나온 말 + 특허 · 논문 재료</span>
           </div>
           {related ? (
             nodes.length ? (
               <>
-                <ScopeMap keyword={keyword} nodes={nodes} isOn={isOn} onToggle={toggle} />
+                <KeywordMap keyword={keyword} nodes={nodes} edges={related.edges} branches={related.children} isOn={isOn} onToggle={toggle} />
                 <div className="ka-controls">
                   <label>
                     자동으로 고를 범위 <b>{Math.min(auto, autoMax)}</b>개
