@@ -7090,117 +7090,6 @@ a.brand:focus-visible {
   flex-direction: column;
   gap: var(--tb-space-3);
 }
-.km-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--tb-space-2) var(--tb-space-3);
-}
-.km-svg {
-  width: 100%;
-  height: auto;
-  max-height: 560px;
-  font-family: inherit;
-}
-.km-edge {
-  stroke: var(--tb-color-line);
-}
-.km-edge.on {
-  stroke: var(--tb-color-text);
-}
-.km-edge2 {
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-}
-.km-cross {
-  stroke: var(--tb-color-line-soft);
-  stroke-width: 1;
-  stroke-dasharray: 2 4;
-}
-.km-center rect {
-  fill: var(--tb-color-text);
-}
-.km-center text {
-  fill: var(--tb-color-text-inverse);
-  font-size: 16px;
-  font-weight: 700;
-}
-.km-node {
-  cursor: pointer;
-}
-.km-node rect {
-  fill: var(--tb-color-surface);
-  stroke: transparent;
-  stroke-width: 1.5;
-}
-.km-node text {
-  fill: var(--tb-color-text);
-  font-size: 13px;
-  pointer-events: none;
-}
-.km-node.km-l2 text {
-  font-size: 11.5px;
-  fill: var(--tb-color-text-sub);
-}
-.km-node .km-sub {
-  fill: var(--tb-color-text-faint);
-  font-size: 10.5px;
-}
-.km-node.km-tech rect {
-  fill: var(--tb-color-bg-strong);
-}
-.km-node.km-company rect {
-  stroke: var(--tb-color-text-sub);
-  stroke-dasharray: 4 3;
-}
-.km-node:hover rect,
-.km-node:focus-visible rect {
-  stroke: var(--tb-color-text);
-  stroke-dasharray: none;
-}
-.km-node:focus-visible {
-  outline: none;
-}
-.km-node.on rect {
-  stroke: var(--tb-color-primary);
-  stroke-width: 2.5;
-  stroke-dasharray: none;
-}
-.km-node.on text,
-.km-node.open text {
-  font-weight: 700;
-}
-.km-cloud-center {
-  fill: var(--tb-color-text);
-  font-weight: 800;
-}
-.km-word {
-  fill: var(--tb-color-text-faint);
-  cursor: pointer;
-}
-.km-word.mid {
-  fill: var(--tb-color-text-sub);
-}
-.km-word.top {
-  fill: var(--tb-color-text);
-  font-weight: 700;
-}
-.km-word.on {
-  fill: var(--tb-color-text);
-  font-weight: 800;
-  text-decoration: underline;
-}
-.km-word:focus-visible {
-  outline: 2px solid var(--tb-color-line-focus);
-}
-/* 휴대폰: 맵은 최소 폭을 두고 옆으로 밀어 봄 (390px에서 글자가 너무 작았음), 워드클라우드는 그대로 */
-.km-scroll {
-  overflow-x: auto;
-}
-@media (max-width: 720px) {
-  .km-scroll .km-svg {
-    min-width: 720px;
-  }
-}
 /* 범위 레버: 브라우저 기본 파랑 대신 토큰 색 (11/14, 배치 시안 검토에서 지적) */
 .ka-controls input[type='range'] {
   accent-color: var(--tb-color-text);
@@ -7278,27 +7167,468 @@ a.brand:focus-visible {
 .km-full-head .trend-drawer-close {
   align-self: center;
 }
+.tech-timeline {
+  width: min(1200px, 100%); /* 크게 보기 (11/14) */
+}
+/* 연관 키워드 맵 (11/14 3차): 마인드맵팀 「키워드 마인드맵 디자인 가이드」 값, 색은 Storybook 토큰
+   그래프 영역 520px(휴대폰 420px), 흰 바탕 · 1px 옅은 테두리 · 둥근 12px. 표시 설정 창은 왼쪽 위(처음엔 접힘), 범례 왼쪽 아래, 단추 오른쪽 아래 */
+.km-stage {
+  position: relative;
+  height: 520px;
+  overflow: hidden;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: 12px;
+  background: var(--tb-color-surface);
+  touch-action: none;
+  user-select: none;
+  word-break: keep-all;
+}
+.km-stage .km-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+.km-stage-svg {
+  cursor: grab;
+}
+.km-stage-svg:active {
+  cursor: grabbing;
+}
+.km-dot {
+  cursor: pointer;
+}
+.km-dot:active {
+  cursor: grabbing;
+}
+.km-dot:focus,
+.km-dot:focus-visible {
+  outline: none; /* 초점 표시는 점 테두리로 (마우스로 누를 때 네모 테두리가 생겼음) */
+}
+.km-dot:focus-visible circle:nth-of-type(2) {
+  stroke: var(--tb-color-line-focus);
+  stroke-width: 2;
+}
+.km-cloud .km-word {
+  cursor: pointer;
+}
+.km-cloud .km-word:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.km-cloud .km-word:focus-visible {
+  outline: 2px solid var(--tb-color-line-focus);
+}
 .km-large {
   flex: 1;
   min-height: 0;
 }
-.km-large .km-svg {
-  flex: 1;
+.km-large .km-stage {
   height: 100%;
-  min-height: 0;
-  max-height: none;
+  min-height: 420px;
 }
-.km-large .km-scroll {
-  flex: 1;
-  min-height: 0;
+/* 보기 칩 (칸 머리 오른쪽): 흰 둥근 칩, 고른 쪽 검정 */
+.km-chips {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.km-chip,
+.km-seg button,
+.km-act {
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.km-chip:hover,
+.km-chip:focus-visible,
+.km-seg button:hover,
+.km-act:hover,
+.km-act:focus-visible {
+  border-color: var(--tb-color-text);
+}
+.km-chip[aria-pressed='true'],
+.km-seg button[aria-pressed='true'] {
+  border-color: var(--tb-color-primary);
+  background: var(--tb-color-primary);
+  color: var(--tb-color-on-primary, #fff);
+}
+.ka-pane-head .km-chips + .pane-zoom {
+  margin-left: 0;
+}
+/* 표시 설정 창 */
+.km-panel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  width: min(300px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: 12px;
+  background: var(--tb-color-surface);
+  box-shadow: 0 8px 24px rgb(17 17 17 / 8%);
+}
+.km-panel[data-collapsed='true'] {
+  width: auto;
+}
+.km-phead {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
-.km-heat {
+.km-phead h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+.km-ptoggle {
+  padding: 3px 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text-sub);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.km-pbody {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+}
+.km-prow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 16px;
+}
+.km-ctl {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.km-lbl {
+  color: var(--tb-color-text-sub);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.km-lbl output {
+  color: var(--tb-color-text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.km-ctl input[type='range'] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--tb-color-primary);
+}
+.km-seg {
+  display: flex;
+  gap: 6px;
+}
+.km-seg button {
+  flex: 1;
+  font-size: 13px;
+}
+/* 점 정보 카드 (가이드 「정보 카드」) */
+.km-card {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  justify-content: start;
+  gap: 4px 6px;
+  min-width: 180px;
+  padding: 9px 12px;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: 10px;
+  background: var(--tb-color-surface);
+  box-shadow: 0 8px 24px rgb(17 17 17 / 14%);
+  font-size: 12.5px;
+  pointer-events: none;
+}
+.km-card b {
+  font-size: 13.5px;
+}
+.km-card-tag {
+  color: var(--tb-color-text-faint);
+  font-size: 11px;
+}
+.km-card-tag.accent {
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: var(--tb-radius-full);
+  color: var(--tb-color-accent);
+}
+.km-card dl {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 2px;
+  margin: 2px 0 0;
+}
+.km-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.km-card dt {
+  color: var(--tb-color-text-sub);
+}
+.km-card dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.km-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 24px;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+  text-align: center;
+  pointer-events: none;
+}
+/* 범례 · 단추 */
+.km-legend {
+  position: absolute;
+  bottom: 10px;
+  left: 12px;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  max-width: calc(100% - 230px);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--tb-color-surface) 88%, transparent);
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+  pointer-events: none;
+}
+.km-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.km-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.km-legend .km-lg-on {
+  padding: 0 7px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-text);
+  color: var(--tb-color-surface);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 16px;
+}
+.km-actions {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.km-savemsg {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+}
+.km-savemsg:empty {
+  display: none;
+}
+@media (max-width: 640px) {
+  .km-stage {
+    height: 420px;
+  }
+}
+/* 휴대폰: 단추는 오른쪽 위로 — 범례가 아래 한 줄을 다 쓰게. PNG 저장은 접힌 설정 창과 겹쳐 숨김(PC에서 저장) */
+@media (max-width: 720px) {
+  .km-actions {
+    top: 12px;
+    bottom: auto;
+  }
+  .km-legend {
+    max-width: calc(100% - 24px);
+  }
+  .km-act-png {
+    display: none;
+  }
+}
+/* 펼치기 배지 (11/14): 검정 점 옆 「+n」 — 점 누르기(범위)와 따로 */
+.km-badge {
+  cursor: pointer;
+}
+.km-badge:hover rect:nth-of-type(2) {
+  stroke: var(--tb-color-text);
+}
+.km-legend .km-lg-badge {
+  padding: 0 5px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface-inverse);
+  color: var(--tb-color-surface);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 15px;
+}
+/* 넣고 뺄 때 「자료 찾기」 옆 알림 (11/14): 2.5초 뒤 사라짐 */
+.ka-flash {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  animation: tb-fade 0.15s ease-out;
+}
+.ka-flash:empty {
+  display: none;
+}
+.km-badge:focus {
+  outline: none;
+}
+/* 빽빽함 안내 (11/14): 글자가 3곳 이상 겹치면 맵 오른쪽 위에 「크게 보기」 */
+.km-crowd {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 200px);
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: 12px;
+  background: var(--tb-color-surface);
+  box-shadow: 0 8px 24px rgb(17 17 17 / 8%);
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+}
+.km-crowd-go {
+  flex: none;
+  min-height: 28px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-primary);
+  color: var(--tb-color-on-primary);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  cursor: pointer;
+}
+.km-crowd-x {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--tb-color-text-faint);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+.km-crowd-x:hover {
   color: var(--tb-color-text);
 }
-.km-heat .km-heat-blobs {
-  mix-blend-mode: multiply;
+@media (max-width: 720px) {
+  .km-crowd {
+    top: auto;
+    right: 12px;
+    bottom: 64px;
+    left: 12px;
+    max-width: none;
+  }
 }
-.tech-timeline {
-  width: min(1200px, 100%); /* 크게 보기 (11/14) */
+/* 범위 레버 (11/14 조장): 왼쪽 끝 = 주제어만, 오른쪽 끝 = 맵의 말 전부. 칸 너비 전체로 길게, 양 끝 이름을 아래에 */
+.ka-controls {
+  display: grid;
+  justify-content: stretch; /* 위쪽 예전 규칙(space-between)이 칸 폭을 글자만큼으로 줄였음 */
+  gap: 2px;
+  width: 100%;
+}
+.ka-controls label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+}
+.ka-controls label input[type='range'] {
+  flex: 1 0 100%;
+}
+.ka-controls input[type='range'] {
+  width: 100%;
+  margin: 0;
+}
+.ka-lever-ends {
+  display: flex;
+  justify-content: space-between;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+}
+/* 범위 레버 직접 그림 (11/14): 브라우저 기본 레버는 맥(Safari · Chrome)에서 채움 끝과 손잡이 위치가 어긋나 「1/24」가 엉뚱한 자리로 보였음
+   채움 = 손잡이 가운데까지 (손잡이 18px: 9px + (폭 - 18px) × 비율) */
+.ka-controls input.ka-lever {
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.ka-lever::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: var(--tb-radius-full);
+  background: linear-gradient(to right, var(--tb-color-text) 0 calc(9px + (100% - 18px) * var(--f, 0)), var(--tb-color-line-soft) 0);
+}
+.ka-lever::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border: 2px solid var(--tb-color-text);
+  border-radius: 50%;
+  background: var(--tb-color-surface);
+  box-shadow: 0 1px 3px rgb(17 17 17 / 20%);
+  -webkit-appearance: none;
+}
+.ka-lever::-moz-range-track {
+  height: 6px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-line-soft);
+}
+.ka-lever::-moz-range-progress {
+  height: 6px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-text);
+}
+.ka-lever::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--tb-color-text);
+  border-radius: 50%;
+  background: var(--tb-color-surface);
+}
+.ka-lever:focus-visible {
+  outline: 2px solid var(--tb-color-line-focus);
+  outline-offset: 4px;
+  border-radius: 4px;
 }

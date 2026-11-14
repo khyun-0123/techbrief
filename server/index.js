@@ -667,8 +667,8 @@ export async function handleApi(req, res) {
     }
     // 범위 찾기 (11/10): 중심 키워드 + 고른 말 (scopeSearch.js)
     if (req.method === 'POST' && req.url === '/api/search/scope') {
-      const { query, terms = [], mode = 'wide', period } = await readJson(req)
-      const out = await scopeSearch({ query, terms: Array.isArray(terms) ? terms.map(String) : [], mode: mode === 'narrow' ? 'narrow' : 'wide', period })
+      const { query, terms = [], period } = await readJson(req) // 11/14: mode(넓게/좁게) 없앰 — 늘 고른 말이 든 자료만
+      const out = await scopeSearch({ query, terms: Array.isArray(terms) ? terms.map(String) : [], period })
       recordSearch(query, clientIp(req)).catch(() => {})
       queueSearchSummaries(out.newsArticles).catch((err) => console.warn(`[search] 자동 요약 넣기 실패: ${err.message}`))
       const { newsArticles, ...body } = out
