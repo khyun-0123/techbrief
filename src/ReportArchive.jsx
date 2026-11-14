@@ -11,7 +11,9 @@
 // - 보고서를 열었을 때 그 보고서에 쓴 기사가 아직 선별 목록에 있으면 정리할지 한 번 묻는다
 // onDelete가 없으면 「지우기」를 숨긴다 (공용 보고서함은 관리자만 지움, 17 문서)
 import { useEffect, useState } from 'react'
-import { exportPptx } from './reportExport.js'
+import { exportPptx, loadReportExtra, printReport } from './reportExport.js'
+import { SlideFrame } from './ReportSlide.jsx'
+import { reportPages } from './reportSlides.js'
 import { copyText, toPlainText } from './reportStore.js'
 import { clientId, track } from './usage.js'
 import ReportView from './ReportView.jsx'
@@ -78,6 +80,40 @@ const pad2 = (n) => String(n).padStart(2, '0')
 const fmtTime = (iso) => {
   const d = new Date(iso)
   return { day: `${d.getFullYear()}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`, time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}` }
+}
+
+// 미리보기 창 (11/14 통합, 보고서팀 4:3 쪽 엔진): PDF · PPT와 같은 쪽을 한 장씩 넘겨 본다
+function SlidePreview({ saved }) {
+  const [extra, setExtra] = useState(null)
+  const [index, setIndex] = useState(0)
+  useEffect(() => {
+    let on = true
+    loadReportExtra()
+      .then((x) => on && setExtra(x))
+      .catch(() => on && setExtra({}))
+    return () => {
+      on = false
+    }
+  }, [saved.id])
+  if (!extra) return <p className="hint">쪽을 만드는 중…</p>
+  const deck = reportPages(saved, extra)
+  const i = Math.min(index, deck.pages.length - 1)
+  return (
+    <div className="mr-slides">
+      <SlideFrame deck={deck} index={i} />
+      <div className="mr-slides-nav">
+        <button type="button" className="mr-act" disabled={i === 0} onClick={() => setIndex(i - 1)} aria-label="이전 쪽">
+          ← 이전
+        </button>
+        <span className="mr-slides-label">
+          {i + 1} / {deck.pages.length} · {deck.pages[i].label}
+        </span>
+        <button type="button" className="mr-act" disabled={i >= deck.pages.length - 1} onClick={() => setIndex(i + 1)} aria-label="다음 쪽">
+          다음 →
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, initialId, selectedIds = [], onCleanup, onOpened, onRestore, onPurge, onStar, tagsFor, trashDays }) {
@@ -460,8 +496,8 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
                                   <button type="button" role="menuitem" disabled={busy} onClick={() => download(r, 'copy')}>
                                     텍스트 복사
                                   </button>
-                                  <button type="button" role="menuitem" onClick={() => setOpenId(r.id)} title="보고서를 열어 PDF로 저장">
-                                    PDF (열어서 저장)
+                                  <button type="button" role="menuitem" onClick={() => printReport(r)} title="인쇄 창에서 「PDF로 저장」 — 미리보기와 같은 4:3 쪽">
+                                    PDF (4:3 가로)
                                   </button>
                                 </span>
                               )}
@@ -530,7 +566,7 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
                 닫기
               </button>
             </div>
-            <ReportView saved={preview} stacked />
+            <SlidePreview saved={preview} />
           </div>
         </div>
       )}

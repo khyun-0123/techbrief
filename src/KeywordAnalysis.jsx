@@ -5,6 +5,7 @@
 // - 오른쪽은 기술 시계열 요약(단계 · 논문 수 · 기업 저자 비율 · 특허 · 새로 늘어난 핵심어). 「자세히 · AI 흐름 정리」는 TechTimeline 창
 // 예전 「추적 중인 키워드 추이」(뉴스 수 · 검색량 · 위키 · GDELT)는 11/10 조장 결정으로 대시보드에서 뺐다 — 키워드 하나를 제대로 분석하는 쪽으로
 import KeywordMap from './KeywordMap.jsx'
+import SplitPanes from './SplitPanes.jsx'
 import { useEffect, useState } from 'react'
 import { fetchBundle, fetchRelated, fetchTimeline, fetchTimelineStory } from './api.js'
 import { retryStory, useStory } from './storyJobs.js'
@@ -12,7 +13,7 @@ import { Spark } from './KeywordTrends.jsx'
 import TechTimeline from './TechTimeline.jsx'
 
 const THIS_YEAR = new Date().getFullYear() // 올해는 안 끝나 줄어 보이므로 그래프에서 뺀다
-// 11/14 통합: 임시 맵(ScopeMap)을 워드클라우드팀 맵 v2 이식본(KeywordMap.jsx: 2단계 · 교차선 · 워드클라우드)으로 바꿈
+// 11/14 통합: 임시 맵(ScopeMap)을 워드클라우드팀 맵 v2 이식본(KeywordMap.jsx)으로 바꿈 — 분할 칸 왼쪽에 들어감
 
 // 기다리는 동안 1초마다 지금 시각을 새로 받는다 (경과 초)
 function useNow(on) {
@@ -124,6 +125,14 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
   const [manual, setManual] = useState({}) // 노드 클릭 예외: { 말: true(켬) | false(끔) }
   const [mode, setMode] = useState('wide')
   const [open, setOpen] = useState(false)
+  const [bigMap, setBigMap] = useState(false) // 맵 크게 보기 판 (11/14 조장)
+  const [mapView, setMapView] = useState('map') // 칸에서 고른 보기(맵 · 워드클라우드 · 열지도)를 크게 보기에도 그대로
+  useEffect(() => {
+    if (!bigMap) return undefined
+    const esc = (e) => e.key === 'Escape' && setBigMap(false)
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [bigMap])
   const [dataStartedAt] = useState(() => Date.now())
   const now = useNow(!data && !error)
   // AI 흐름 정리는 숫자를 받은 뒤 시작 (앱 전체에서 기다림: 이 칸을 닫아도 끝나면 진행 창이 알림, storyJobs.js)
@@ -196,194 +205,231 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
         </div>
       </div>
 
-      <div className="ka-grid">
-        <div className="ka-pane">
-          <div className="ka-pane-head">
-            <h3>연관 키워드 · 볼 범위</h3>
-            <span className="ka-temp">워드클라우드팀 맵 v2 · 뉴스에서 함께 나온 말 + 특허 · 논문 재료</span>
-          </div>
-          {related ? (
-            nodes.length ? (
-              <>
-                <KeywordMap keyword={keyword} nodes={nodes} edges={related.edges} branches={related.children} isOn={isOn} onToggle={toggle} />
-                <div className="ka-controls">
-                  <label>
-                    자동으로 고를 범위 <b>{Math.min(auto, autoMax)}</b>개
-                    <input type="range" min={0} max={Math.max(1, Math.min(8, autoMax))} value={Math.min(auto, autoMax)} onChange={(e) => setAuto(Number(e.target.value))} aria-describedby="ka-auto-help" />
-                  </label>
-                  <div className="ka-mode" role="radiogroup" aria-label="범위로 찾는 방식">
-                    {[
-                      ['wide', '넓게', `「${keyword}」 자료 전부 + 고른 말 자료`],
-                      ['narrow', '좁게', '고른 말이 하나 이상 함께 나온 자료만'],
-                    ].map(([v, l, tip]) => (
-                      <button key={v} type="button" role="radio" aria-checked={mode === v} title={tip} onClick={() => setMode(v)}>
-                        {l}
-                      </button>
+      {/* 11/14 조장: 맵 | 기술 시계열 비율을 끌어서 조절, 좁아지면 접힘 · × 로 닫기 · 탭 누르면 반반 (SplitPanes.jsx) */}
+      <SplitPanes
+        storageKey="techbrief.kaSplit"
+        left={{
+          title: '연관 키워드 맵',
+          render: (closeBtn) => (
+            <div className="ka-pane">
+              <div className="ka-pane-head">
+                <h3>연관 키워드 · 볼 범위</h3>
+                <span className="ka-temp">워드클라우드팀 맵 v2 · 뉴스 + 특허 · 논문 재료</span>
+                {related && nodes.length > 0 && (
+                  <button type="button" className="pane-zoom" onClick={() => setBigMap(true)} title="맵 · 워드클라우드 · 열지도를 한 화면 크게">
+                    <span aria-hidden="true">⤢</span> 크게 보기
+                  </button>
+                )}
+                {closeBtn}
+              </div>
+              {related ? (
+                nodes.length ? (
+                  <>
+                    <KeywordMap keyword={keyword} nodes={nodes} edges={related.edges} branches={related.children} isOn={isOn} onToggle={toggle} initialView={mapView} onView={setMapView} />
+                    <div className="ka-controls">
+                      <label>
+                        자동으로 고를 범위 <b>{Math.min(auto, autoMax)}</b>개
+                        <input type="range" min={0} max={Math.max(1, Math.min(8, autoMax))} value={Math.min(auto, autoMax)} onChange={(e) => setAuto(Number(e.target.value))} aria-describedby="ka-auto-help" />
+                      </label>
+                      <div className="ka-mode" role="radiogroup" aria-label="범위로 찾는 방식">
+                        {[
+                          ['wide', '넓게', `「${keyword}」 자료 전부 + 고른 말 자료`],
+                          ['narrow', '좁게', '고른 말이 하나 이상 함께 나온 자료만'],
+                        ].map(([v, l, tip]) => (
+                          <button key={v} type="button" role="radio" aria-checked={mode === v} title={tip} onClick={() => setMode(v)}>
+                            {l}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <p id="ka-auto-help" className="hint">
+                      레버는 연관도(함께 나온 이슈 수) 순으로 기술 · 회사 말을 골라요 (PC · TV처럼 너무 넓은 말은 빼고). 노드를 눌러 더하거나 빼면 그건 레버를 움직여도 그대로예요.
+                    </p>
+                    <div className="ka-picked" aria-live="polite">
+                      {picked.length ? (
+                        <>
+                          <span className="ka-picked-label">고른 범위 ({mode === 'narrow' ? '좁게' : '넓게'})</span>
+                          {picked.map((w) => (
+                            <button key={w} type="button" className="chip" onClick={() => toggle(w)} aria-label={`${w} 빼기`}>
+                              {w} ×
+                            </button>
+                          ))}
+                          {Object.keys(manual).length > 0 && (
+                            <button type="button" className="link-btn ka-reset" onClick={() => setManual({})}>
+                              손으로 고른 것 되돌리기
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <span className="hint">고른 말이 없어요. 「{keyword}」만으로 찾아요.</span>
+                      )}
+                    </div>
+                    <span className="ka-legend">
+                      <span className="ka-key ka-key-tech" aria-hidden="true" /> 기술 <span className="ka-key ka-key-firm" aria-hidden="true" /> 회사 <span className="ka-key ka-key-general" aria-hidden="true" /> 일반 · 재료: 뉴스(함께 나온 말, {related.issues}개 이슈) · 특허 출원인 · 논문 핵심어 (노드에 마우스를 올리면 출처)
+                    </span>
+                  </>
+                ) : (
+                  <p className="hint">함께 나온 말이 충분하지 않아요 (이슈 {related.issues}개). 「{keyword}」만으로 찾아요.</p>
+                )
+              ) : (
+                <p className="hint">{relatedError || '함께 나온 말을 세는 중…'}</p>
+              )}
+            </div>
+          ),
+        }}
+        right={{
+          title: '기술 시계열',
+          render: (closeBtn) => (
+            <div className="ka-pane">
+              <div className="ka-pane-head">
+                <h3>기술 시계열</h3>
+                {data && (
+                  <button type="button" className="pane-zoom" onClick={() => setOpen(true)} title="기술 시계열 전체 · AI 흐름 정리를 한 페이지로">
+                    <span aria-hidden="true">⤢</span> 크게 보기 · AI 흐름 정리
+                  </button>
+                )}
+                {closeBtn}
+              </div>
+              {error && (
+                <p className="ai-error" role="alert">
+                  {error}
+                </p>
+              )}
+              {!data && !error && (
+                <>
+                  <WaitSteps
+                    steps={[
+                      ['now', `논문 · 특허 숫자 받기 · ${secs(dataStartedAt, now)}초째 (처음 보는 말은 10초 안팎)`],
+                      ['next', 'AI가 흐름 정리 (보통 30초 안팎)'],
+                    ]}
+                  />
+                  <div className="ka-sparks ka-skeleton" aria-hidden="true">
+                    {['논문 수', '기업 저자 비율', '특허 공개 수'].map((t) => (
+                      <div key={t} className="ka-spark-wait">
+                        <h4>{t}</h4>
+                        <span className="ka-bar ka-bar-chart" />
+                      </div>
                     ))}
                   </div>
-                </div>
-                <p id="ka-auto-help" className="hint">
-                  레버는 연관도(함께 나온 이슈 수) 순으로 기술 · 회사 말을 골라요 (PC · TV처럼 너무 넓은 말은 빼고). 노드를 눌러 더하거나 빼면 그건 레버를 움직여도 그대로예요.
-                </p>
-                <div className="ka-picked" aria-live="polite">
-                  {picked.length ? (
-                    <>
-                      <span className="ka-picked-label">고른 범위 ({mode === 'narrow' ? '좁게' : '넓게'})</span>
-                      {picked.map((w) => (
-                        <button key={w} type="button" className="chip" onClick={() => toggle(w)} aria-label={`${w} 빼기`}>
-                          {w} ×
-                        </button>
-                      ))}
-                      {Object.keys(manual).length > 0 && (
-                        <button type="button" className="link-btn ka-reset" onClick={() => setManual({})}>
-                          손으로 고른 것 되돌리기
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <span className="hint">고른 말이 없어요. 「{keyword}」만으로 찾아요.</span>
-                  )}
-                </div>
-                <span className="ka-legend">
-                  <span className="ka-key ka-key-tech" aria-hidden="true" /> 기술 <span className="ka-key ka-key-firm" aria-hidden="true" /> 회사 <span className="ka-key ka-key-general" aria-hidden="true" /> 일반 · 재료: 뉴스(함께 나온 말, {related.issues}개 이슈) · 특허 출원인 · 논문 핵심어 (노드에 마우스를 올리면 출처)
-                </span>
-              </>
-            ) : (
-              <p className="hint">함께 나온 말이 충분하지 않아요 (이슈 {related.issues}개). 「{keyword}」만으로 찾아요.</p>
-            )
-          ) : (
-            <p className="hint">{relatedError || '함께 나온 말을 세는 중…'}</p>
-          )}
-        </div>
-
-        <div className="ka-pane">
-          <div className="ka-pane-head">
-            <h3>기술 시계열</h3>
-            {data && (
-              <button type="button" className="btn" onClick={() => setOpen(true)}>
-                자세히 · AI 흐름 정리
-              </button>
-            )}
-          </div>
-          {error && (
-            <p className="ai-error" role="alert">
-              {error}
-            </p>
-          )}
-          {!data && !error && (
-            <>
-              <WaitSteps
-                steps={[
-                  ['now', `논문 · 특허 숫자 받기 · ${secs(dataStartedAt, now)}초째 (처음 보는 말은 10초 안팎)`],
-                  ['next', 'AI가 흐름 정리 (보통 30초 안팎)'],
-                ]}
-              />
-              <div className="ka-sparks ka-skeleton" aria-hidden="true">
-                {['논문 수', '기업 저자 비율', '특허 공개 수'].map((t) => (
-                  <div key={t} className="ka-spark-wait">
-                    <h4>{t}</h4>
-                    <span className="ka-bar ka-bar-chart" />
+                </>
+              )}
+              {data && (
+                <>
+                  <div className="tl-stage">
+                    <span className="tl-stage-badge">{data.stage.stage}</span>
+                    <span>{data.stage.why}</span>
                   </div>
-                ))}
-              </div>
-            </>
-          )}
-          {data && (
-            <>
-              <div className="tl-stage">
-                <span className="tl-stage-badge">{data.stage.stage}</span>
-                <span>{data.stage.why}</span>
-              </div>
-              {data.stage.attention?.label && (
-                <p className="hint" title={data.stage.attention.basis}>
-                  관심 대 실질: {data.stage.attention.label} <span className="muted">({data.stage.attention.basis})</span>
-                </p>
+                  {data.stage.attention?.label && (
+                    <p className="hint" title={data.stage.attention.basis}>
+                      관심 대 실질: {data.stage.attention.label} <span className="muted">({data.stage.attention.basis})</span>
+                    </p>
+                  )}
+                  {data.thin && (
+                    <p className="hint" role="note">
+                      참고: {data.thin}
+                    </p>
+                  )}
+                  <div className="ka-sparks">
+                    <Spark title="논문 수" unit="편" monthly="year" series={full(data.long).map((x) => ({ t: `${x.y}-01-01`, v: x.n }))} source="OpenAlex" note={data.longError ?? '논문이 없어요.'} />
+                    <Spark
+                      title="기업 저자 비율"
+                      unit="%"
+                      monthly="year"
+                      series={full(data.corpus?.years).map((x) => ({ t: `${x.y}-01-01`, v: Math.round(x.companyShare * 100) }))}
+                      source="논문 DB · 2018년~"
+                      note="맞는 논문이 없어요."
+                    />
+                    <Spark
+                      title="특허 공개 수"
+                      unit="건"
+                      monthly="year"
+                      series={data.patents.status === 'ok' ? full(data.patents.years).map((x) => ({ t: `${x.y}-01-01`, v: x.n })) : []}
+                      source="Google Patents · 제목"
+                      note="특허가 없거나 받지 못했어요."
+                    />
+                  </div>
+                  <Glance job={job} stage={data.stage.stage} keyword={keyword} />
+                  <dl className="ka-facts">
+                    {(() => {
+                      const last = data.corpus?.periods?.[2]
+                      const firms = (last?.companies ?? []).slice(0, 4).map((c) => c.name)
+                      const owners = data.patents.status === 'ok' ? data.patents.topOwners.slice(0, 3).map((o) => o.name) : []
+                      const origin = data.origins?.[0]
+                      return (
+                        <>
+                          {firms.length > 0 && (
+                            <div>
+                              <dt>논문 낸 회사 (2024~)</dt>
+                              <dd>{firms.join(', ')}</dd>
+                            </div>
+                          )}
+                          {data.stage?.patentRecent != null && data.stage.patentRecent >= 10 && data.stage.patentGrowth != null && (
+                            <div>
+                              <dt>특허 (같은 발명 한 번)</dt>
+                              <dd>
+                                최근 3년 {data.stage.patentRecent.toLocaleString()}건 · {data.stage.patentFieldGrowth != null ? `특허 분야 대비 ${data.stage.patentGrowth}배` : `앞 3년의 ${data.stage.patentGrowth}배`}
+                              </dd>
+                            </div>
+                          )}
+                          {bundle?.quotes?.length > 0 && (
+                            <div>
+                              <dt>상용화 시점 언급 {bundle.quotes.length}건</dt>
+                              <dd title={bundle.quotes.map((x) => `「${x.text}」 — ${x.source ?? ''}`).join('\n')}>
+                                「{bundle.quotes[0].text.slice(0, 70)}{bundle.quotes[0].text.length > 70 ? '…' : ''}」 — {bundle.quotes[0].source}
+                              </dd>
+                            </div>
+                          )}
+                          {owners.length > 0 && (
+                            <div>
+                              <dt>특허 많은 출원인</dt>
+                              <dd>{owners.join(', ')}</dd>
+                            </div>
+                          )}
+                          {data.corpus?.rising?.length > 0 && (
+                            <div>
+                              <dt>새로 늘어난 핵심어</dt>
+                              <dd>{data.corpus.rising.slice(0, 6).map((r) => r.name).join(', ')}</dd>
+                            </div>
+                          )}
+                          {origin && (
+                            <div>
+                              <dt>출발점 논문</dt>
+                              <dd>
+                                {origin.year} · {origin.title}
+                                {origin.companies?.length ? ` (${origin.companies.join(', ')})` : ''}
+                              </dd>
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </dl>
+                </>
               )}
-              {data.thin && (
-                <p className="hint" role="note">
-                  참고: {data.thin}
-                </p>
-              )}
-              <div className="ka-sparks">
-                <Spark title="논문 수" unit="편" monthly="year" series={full(data.long).map((x) => ({ t: `${x.y}-01-01`, v: x.n }))} source="OpenAlex" note={data.longError ?? '논문이 없어요.'} />
-                <Spark
-                  title="기업 저자 비율"
-                  unit="%"
-                  monthly="year"
-                  series={full(data.corpus?.years).map((x) => ({ t: `${x.y}-01-01`, v: Math.round(x.companyShare * 100) }))}
-                  source="논문 DB · 2018년~"
-                  note="맞는 논문이 없어요."
-                />
-                <Spark
-                  title="특허 공개 수"
-                  unit="건"
-                  monthly="year"
-                  series={data.patents.status === 'ok' ? full(data.patents.years).map((x) => ({ t: `${x.y}-01-01`, v: x.n })) : []}
-                  source="Google Patents · 제목"
-                  note="특허가 없거나 받지 못했어요."
-                />
-              </div>
-              <Glance job={job} stage={data.stage.stage} keyword={keyword} />
-              <dl className="ka-facts">
-                {(() => {
-                  const last = data.corpus?.periods?.[2]
-                  const firms = (last?.companies ?? []).slice(0, 4).map((c) => c.name)
-                  const owners = data.patents.status === 'ok' ? data.patents.topOwners.slice(0, 3).map((o) => o.name) : []
-                  const origin = data.origins?.[0]
-                  return (
-                    <>
-                      {firms.length > 0 && (
-                        <div>
-                          <dt>논문 낸 회사 (2024~)</dt>
-                          <dd>{firms.join(', ')}</dd>
-                        </div>
-                      )}
-                      {data.stage?.patentRecent != null && data.stage.patentRecent >= 10 && data.stage.patentGrowth != null && (
-                        <div>
-                          <dt>특허 (같은 발명 한 번)</dt>
-                          <dd>
-                            최근 3년 {data.stage.patentRecent.toLocaleString()}건 · {data.stage.patentFieldGrowth != null ? `특허 분야 대비 ${data.stage.patentGrowth}배` : `앞 3년의 ${data.stage.patentGrowth}배`}
-                          </dd>
-                        </div>
-                      )}
-                      {bundle?.quotes?.length > 0 && (
-                        <div>
-                          <dt>상용화 시점 언급 {bundle.quotes.length}건</dt>
-                          <dd title={bundle.quotes.map((x) => `「${x.text}」 — ${x.source ?? ''}`).join('\n')}>
-                            「{bundle.quotes[0].text.slice(0, 70)}{bundle.quotes[0].text.length > 70 ? '…' : ''}」 — {bundle.quotes[0].source}
-                          </dd>
-                        </div>
-                      )}
-                      {owners.length > 0 && (
-                        <div>
-                          <dt>특허 많은 출원인</dt>
-                          <dd>{owners.join(', ')}</dd>
-                        </div>
-                      )}
-                      {data.corpus?.rising?.length > 0 && (
-                        <div>
-                          <dt>새로 늘어난 핵심어</dt>
-                          <dd>{data.corpus.rising.slice(0, 6).map((r) => r.name).join(', ')}</dd>
-                        </div>
-                      )}
-                      {origin && (
-                        <div>
-                          <dt>출발점 논문</dt>
-                          <dd>
-                            {origin.year} · {origin.title}
-                            {origin.companies?.length ? ` (${origin.companies.join(', ')})` : ''}
-                          </dd>
-                        </div>
-                      )}
-                    </>
-                  )
-                })()}
-              </dl>
-            </>
-          )}
-        </div>
-      </div>
+            </div>
+          ),
+        }}
+      />
       {open && <TechTimeline query={keyword} initialData={data} job={job} onClose={() => setOpen(false)} />}
+      {/* 맵 크게 보기 (11/14 조장): 워드클라우드팀 맵 v2처럼 한 화면 크게 — 맵 · 워드클라우드 · 열지도, 고른 범위는 대시보드와 같음 */}
+      {bigMap && related && (
+        <div className="km-full-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && setBigMap(false)}>
+          <div className="km-full" role="dialog" aria-modal="true" aria-label={`「${keyword}」 연관 키워드 맵 크게 보기`}>
+            <div className="km-full-head">
+              <h2>
+                연관 키워드 맵 <span className="km-full-kw">{keyword}</span>
+              </h2>
+              <span className="km-full-sub">
+                고른 범위 {picked.length}개{picked.length ? ` · ${picked.slice(0, 6).join(', ')}${picked.length > 6 ? ' 외' : ''}` : ''} — 닫으면 대시보드에 그대로 남아요
+              </span>
+              <button type="button" className="trend-drawer-close" onClick={() => setBigMap(false)} autoFocus>
+                작게 보기 <span aria-hidden="true">⤡</span>
+              </button>
+            </div>
+            <KeywordMap keyword={keyword} nodes={nodes} edges={related.edges} branches={related.children} isOn={isOn} onToggle={toggle} large initialView={mapView} onView={setMapView} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -6480,11 +6480,611 @@ a.brand:focus-visible {
   font-weight: 500;
 }
 
-/* ── 연관 키워드 맵 (11/14 통합, KeywordMap.jsx — 워드클라우드팀 맵 v2 이식) ──
-   배치 시안 1: 키워드 분석 안에서 맵이 전체 너비, 기술 시계열은 아래 (2단계 · 40개 말은 900px 이상 필요) */
-.ka-grid {
-  grid-template-columns: minmax(0, 1fr);
+/* ══ 대시보드 11/14 조장: 왼쪽 「요즘 뜨는 기술」 막대 · 펼쳐 보기 판 · 맵 | 시계열 비율 조절 · 위협/기회 설명 창 ══ */
+.dash-layout {
+  display: grid;
+  grid-template-columns: var(--tb-rail-w) minmax(0, 1fr);
+  gap: var(--tb-card-gap);
+  align-items: start;
 }
+.dash-layout > .dash-search {
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .dash-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dash-layout > .trend-rail {
+    order: 2;
+  }
+}
+
+/* 막대: 내 보고서 왼쪽 막대와 같은 폭 · 안쪽 12 (20 문서 6장) */
+.trend-rail.panel {
+  position: sticky;
+  top: 84px; /* 위 메뉴 막대 64 + 20 */
+  display: flex;
+  flex-direction: column;
+  gap: var(--tb-space-2);
+  padding: var(--tb-space-3);
+}
+.tr-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--tb-space-1) var(--tb-space-1) var(--tb-space-2);
+  border-bottom: 1px solid var(--tb-color-line-soft);
+}
+.tr-head h2 {
+  margin: 0;
+  font-size: var(--fs-md);
+}
+.tr-sub,
+.tr-empty {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+}
+.tr-empty {
+  margin: 0;
+  padding: var(--tb-space-2) var(--tb-space-1);
+}
+.tr-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tr-list li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: baseline;
+  padding: 6px var(--tb-space-1);
+  border-radius: var(--tb-radius-input);
+}
+.tr-list li:hover {
+  background: var(--tb-color-bg);
+}
+.tr-rank {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.tr-rank.top {
+  color: var(--tb-color-text);
+  font-weight: 800;
+}
+.tr-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tr-name {
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tr-name:hover {
+  text-decoration: underline;
+}
+.tr-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+}
+.tr-score {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+/* 자사 위협 · 기회: 위협만 레드(강조), 기회는 검정 테두리 — 특허 표와 같은 규칙 */
+.tr-verdict {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--tb-radius-full);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tr-threat {
+  background: var(--tb-color-danger-soft);
+  color: var(--tb-color-danger);
+}
+.tr-chance {
+  border-color: var(--tb-color-text);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+}
+.tt-table .tr-verdict {
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+.tr-open {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 34px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.tr-open:hover {
+  border-color: var(--tb-color-text);
+}
+
+/* 펼쳐 보기 판: 큰 칠판에서 왼쪽 판을 꺼내듯 왼쪽에서 미끄러져 나옴 */
+.trend-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgb(0 0 0 / 28%);
+  animation: tb-fade 0.2s ease-out;
+}
+.trend-drawer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--tb-space-3);
+  width: min(1120px, calc(100vw - 48px));
+  padding: var(--tb-card-pad);
+  overflow-y: auto;
+  background: var(--tb-color-bg);
+  box-shadow: var(--tb-shadow-pop);
+  animation: tb-slide-from-left 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.trend-drawer > .tt {
+  margin: 0;
+}
+.trend-drawer-close {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+@keyframes tb-slide-from-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes tb-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trend-drawer,
+  .trend-drawer-backdrop {
+    animation: none;
+  }
+}
+
+/* 맵 | 기술 시계열 두 칸 (SplitPanes.jsx) */
+.split {
+  --split-handle: 16px;
+  --split-tab: 40px;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--split-cols);
+  align-items: stretch;
+}
+.split-pane {
+  display: grid;
+  min-width: 0;
+  overflow: hidden; /* 끄는 동안 좁아진 칸의 글자가 옆 칸으로 넘치지 않게 */
+  container-type: inline-size;
+  transition: opacity 0.15s;
+}
+.split-pane.will-close {
+  opacity: 0.4;
+}
+.split-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+}
+.split-handle:focus-visible {
+  outline: none;
+}
+.split-grip {
+  width: 4px;
+  height: 40px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-line);
+  transition: height 0.15s, background 0.15s;
+}
+.split-handle:hover .split-grip,
+.split-handle:focus-visible .split-grip,
+.split.dragging .split-grip {
+  height: 72px;
+  background: var(--tb-color-text);
+}
+.split.dragging {
+  cursor: col-resize;
+  user-select: none;
+}
+.split-close {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border: 0;
+  border-radius: var(--tb-radius-input);
+  background: none;
+  color: var(--tb-color-text-sub);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.split-close:hover,
+.split-close:focus-visible {
+  background: var(--tb-color-bg-strong);
+  color: var(--tb-color-text);
+}
+.split-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-bg);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.split-tab:hover {
+  border-color: var(--tb-color-text);
+}
+.split-tab-text {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.04em;
+}
+.split-tab-icon {
+  font-size: 16px;
+}
+.split.closed-left .split-tab {
+  margin-right: var(--tb-space-3);
+}
+.split.closed-right .split-tab {
+  margin-left: var(--tb-space-3);
+}
+.split-hint {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 2;
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-text);
+  color: var(--tb-color-text-inverse);
+  font-size: var(--fs-xs);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+/* 칸이 좁을 때 모양 (비율에 따라): 시계열 사실 목록은 위아래로, 그래프는 두 칸 */
+@container (max-width: 460px) {
+  .ka-facts div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .ka-sparks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ka-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--tb-space-3);
+  }
+  .split-handle,
+  .split > span[aria-hidden='true'] {
+    display: none;
+  }
+  .split-tab {
+    flex-direction: row;
+    justify-content: flex-start;
+    padding: 10px 14px;
+  }
+  .split-tab-text {
+    writing-mode: horizontal-tb;
+  }
+  .split.closed-left .split-tab,
+  .split.closed-right .split-tab {
+    margin: 0;
+  }
+}
+
+/* 위협 · 기회 설명 창 */
+.verdict-modal {
+  width: min(560px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--tb-space-3);
+}
+.vm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vm-head h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+.vm-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--tb-radius-full);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.vm-threat {
+  background: var(--tb-color-danger-soft);
+  color: var(--tb-color-danger);
+}
+.vm-chance {
+  border-color: var(--tb-color-text);
+}
+.vm-why {
+  margin: 0;
+  font-size: var(--fs-base);
+}
+.vm-sub,
+.vm-note {
+  margin: 0;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+}
+.vm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.vm-table th,
+.vm-table td {
+  padding: 8px;
+  border-top: 1px solid var(--tb-color-bg-strong);
+  text-align: left;
+}
+.vm-table thead th {
+  border-top: 0;
+  color: var(--tb-color-text-sub);
+  font-weight: 500;
+}
+.vm-table th:first-child {
+  padding-left: 0;
+}
+.vm-table tr > :last-child {
+  padding-right: 0;
+}
+.vm-table .vm-own {
+  background: var(--tb-color-bg);
+}
+.vm-table .vm-field {
+  color: var(--tb-color-text-sub);
+}
+.vm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--tb-space-2);
+}
+
+/* 넓은 칸(맵을 크게 끌었을 때)은 맵도 크게 — 비율에 따라 모양이 바뀜 */
+@container (min-width: 700px) {
+  .ka-map {
+    max-height: 540px;
+  }
+}
+/* 유료 논문 배지 (11/14): 논문 배지와 같은 모양, 글자만 회색 */
+.badge-material.badge-paid {
+  color: var(--tb-color-text-sub);
+}
+
+/* ══ (11/14 통합, 보고서팀 작업 이식) 보고서 4:3 가로형 쪽 (ReportSlide.jsx) — 화면 미리보기 · PDF 인쇄 공용. 960×720px = 10×7.5in ══ */
+.rs-frame-wrap {
+  width: 100%;
+}
+
+.rs-frame {
+  overflow: hidden;
+  border: 1px solid var(--tb-color-line);
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 8px 30px -16px rgb(0 0 0 / 30%);
+}
+
+/* 쪽 안의 글 상자 · 표는 reportSlides.js가 정한 자리(인치 × 96px)에 놓는다. 흰 바탕 · 진한 글자 · 강조색 1개 (11/12 양식) */
+.rs-slide {
+  position: relative;
+  box-sizing: border-box;
+  width: 960px;
+  height: 720px;
+  overflow: hidden;
+  background: #fff;
+  color: #111;
+  /* 영문 · 숫자는 Arial Narrow, 한글은 LG 스마트체 (없는 PC는 다음 글꼴) */
+  font-family: 'Arial Narrow', 'LG 스마트체', 'LG Smart', 'LG Smart UI', 'Pretendard Variable', Pretendard, sans-serif;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.rs-text {
+  position: absolute;
+  margin: 0;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+
+.rs-line {
+  position: absolute;
+  height: 0;
+  border-top: 1px solid #bbb;
+}
+
+.rs-rect {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.rs-check {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #a50034;
+  color: #fff;
+  font-size: 10pt;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.rs-pageno {
+  white-space: nowrap;
+}
+
+.rs-table-info th {
+  width: auto;
+  background: #f2f2f3;
+}
+
+.rs-table {
+  position: absolute;
+  border-collapse: collapse;
+  table-layout: fixed;
+  line-height: 1.35;
+}
+
+.rs-table th,
+.rs-table td {
+  overflow: hidden;
+  padding: 3px 5px;
+  border: 1px solid #bbb;
+  text-align: left;
+  vertical-align: top;
+}
+
+.rs-table th {
+  background: #f2f2f2;
+  font-weight: 700;
+}
+
+.rs-table a {
+  color: #111;
+}
+
+/* PDF 인쇄: 보고서 쪽만, 쪽마다 10×7.5in 가로 */
+.print-slides {
+  display: none;
+}
+
+@page slides {
+  size: 10in 7.5in;
+  margin: 0;
+}
+
+@media print {
+  body.printing-slides > *:not(.print-slides) {
+    display: none !important;
+  }
+  body.printing-slides .print-slides {
+    display: block;
+  }
+  body.printing-slides .print-slides .rs-slide {
+    page: slides;
+    break-after: page;
+  }
+}
+
+.rs-frame-wrap:fullscreen {
+  display: grid;
+  place-items: center;
+  width: min(100vw, 133.33vh);
+  margin: auto;
+  background: #111;
+}
+
+/* 내 보고서 미리보기 창: 4:3 쪽 + 쪽 넘김 (11/14) */
+.mr-slides {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tb-space-3);
+}
+.mr-slides-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--tb-space-3);
+}
+.mr-slides-label {
+  min-width: 200px;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* ── 연관 키워드 맵 (11/14 통합, KeywordMap.jsx — 워드클라우드팀 맵 v2 이식) ──
+   11/14 조장: 대시보드 분할 칸(SplitPanes) 왼쪽에 들어감 — 시안 1(맵 전체 너비)은 쓰지 않음 */
 .km {
   display: flex;
   flex-direction: column;
@@ -6609,4 +7209,96 @@ a.brand:focus-visible {
 .km-scroll {
   min-width: 0;
   max-width: 100%;
+}
+/* 크게 보기 (11/14 조장): 칸 제목줄의 확대 버튼, 맵 한 화면 판 */
+.pane-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pane-zoom:hover {
+  border-color: var(--tb-color-text);
+}
+.km-full-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  display: grid;
+  place-items: center;
+  padding: var(--tb-space-4);
+  background: rgb(0 0 0 / 35%);
+  animation: tb-fade 0.15s ease-out;
+}
+.km-full {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tb-space-3);
+  width: min(1600px, 100%);
+  height: 100%;
+  padding: var(--tb-card-pad);
+  overflow: auto;
+  border-radius: var(--tb-radius-card);
+  background: var(--tb-color-surface);
+  box-shadow: var(--tb-shadow-pop);
+}
+.km-full-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+}
+.km-full-head h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+.km-full-kw {
+  margin-left: 6px;
+  padding: 2px 10px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-text);
+  color: var(--tb-color-text-inverse);
+  font-size: var(--fs-md);
+}
+.km-full-sub {
+  flex: 1;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+}
+.km-full-head .trend-drawer-close {
+  align-self: center;
+}
+.km-large {
+  flex: 1;
+  min-height: 0;
+}
+.km-large .km-svg {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+.km-large .km-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.km-heat {
+  color: var(--tb-color-text);
+}
+.km-heat .km-heat-blobs {
+  mix-blend-mode: multiply;
+}
+.tech-timeline {
+  width: min(1200px, 100%); /* 크게 보기 (11/14) */
 }

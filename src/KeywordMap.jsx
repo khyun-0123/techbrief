@@ -3,25 +3,30 @@
 // - 클릭: 「범위 고르기」(main 11/12 흐름: 고른 말로 자료 찾기)와 「펼치기」(팀 맵) 중 고른다 — 회의 안건 「노드 클릭의 뜻」
 // - 팀 맵은 force-graph(캔버스)였지만, 키보드로 고르기(체크박스 역할)와 토큰 색을 지키려고 SVG로 같은 배치 규칙을 다시 그림
 // - 종류는 색이 아니라 모양: 기술 = 채움, 회사 = 점선, 일반 = 글자만. 레드는 쓰지 않음(20 문서 원칙 1)
-import { useMemo, useState } from 'react'
+// - 11/14 2차: 열지도(팀 v2 drawHeat — 맵과 같은 자리에 함께 나온 이슈 수만큼 번짐, 빨강 대신 먹색), large(크게 보기 판: 1단계 20개)
+import { useEffect, useMemo, useRef, useState } from 'react'
 
-const W = 960
-const H = 560
-const RING1 = 14 // 1단계로 그리는 말 수
+// 그림판 크기 (11/14 2차): 칸 폭에 맞춰 고른다 — 960px 그림을 반 칸(약 480px)에 줄이면 글자가 6px로 작아졌음
+const GEO = {
+  compact: { W: 640, H: 440, rx: 230, ry: 150, ring: 12 }, // 칸 720px 미만
+  normal: { W: 960, H: 560, rx: 300, ry: 175, ring: 14 },
+  large: { W: 1280, H: 720, rx: 470, ry: 270, ring: 20 }, // 크게 보기 판
+}
+const RING1 = 14 // 1단계로 그리는 말 수 (보통)
 const KIND_LABEL = { tech: '기술', company: '회사', general: '일반' }
 const short = (t, n = 14) => (t.length > n ? `${t.slice(0, n - 1)}…` : t)
 const textW = (t, px) => [...t].reduce((n, ch) => n + (/[가-힣]/.test(ch) ? px : px * 0.6), 0)
 
-function MapView({ keyword, nodes, edges, branches, isOn, onPick, clickMode, expanded, onExpand }) {
-  const cx = W / 2
-  const cy = H / 2
-  const first = nodes.slice(0, RING1)
+function MapView({ g, keyword, nodes, edges, branches, isOn, onPick, clickMode, expanded, onExpand, ring = RING1 }) {
+  const cx = g.W / 2
+  const cy = g.H / 2
+  const first = nodes.slice(0, ring)
   const max = Math.max(1, ...first.map((n) => n.score))
   // 1단계: 타원 고리 하나, 연관도 높은 말이 위쪽부터
   const pos = new Map()
   first.forEach((n, i) => {
     const a = (i / first.length) * Math.PI * 2 - Math.PI / 2
-    pos.set(n.word, { x: cx + Math.cos(a) * 300, y: cy + Math.sin(a) * 175, a })
+    pos.set(n.word, { x: cx + Math.cos(a) * g.rx, y: cy + Math.sin(a) * g.ry, a })
   })
   // 2단계: 펼친 말의 바깥쪽으로 부채꼴 (화면 안으로 자름)
   const kids = []
@@ -33,8 +38,8 @@ function MapView({ keyword, nodes, edges, branches, isOn, onPick, clickMode, exp
       // 부채꼴: 말 사이 0.32라디안, 바깥으로 갈수록 반지름을 조금씩 늘려 글자가 겹치지 않게. 화면 가장자리 안으로
       const a = p.a + (j - (list.length - 1) / 2) * 0.32
       const r = 120 + (j % 2) * 26
-      const x = Math.min(W - 70, Math.max(70, p.x + Math.cos(a) * r))
-      const y = Math.min(H - 22, Math.max(22, p.y + Math.sin(a) * r * 0.8))
+      const x = Math.min(g.W - 70, Math.max(70, p.x + Math.cos(a) * r))
+      const y = Math.min(g.H - 22, Math.max(22, p.y + Math.sin(a) * r * 0.8))
       kids.push({ ...c, x, y, parent: w })
     })
   }
@@ -45,7 +50,7 @@ function MapView({ keyword, nodes, edges, branches, isOn, onPick, clickMode, exp
       const prev = row[i - 1]
       const k = row[i]
       const need = (textW(short(prev.word, 10), 11.5) + textW(short(k.word, 10), 11.5)) / 2 + 30
-      if (Math.abs(k.y - prev.y) < 22 && k.x - prev.x < need) k.x = Math.min(W - 40, prev.x + need)
+      if (Math.abs(k.y - prev.y) < 22 && k.x - prev.x < need) k.x = Math.min(g.W - 40, prev.x + need)
     }
   }
   // 교차선: 그린 1단계 말끼리, 가장 강한 것부터 16개
@@ -86,7 +91,7 @@ function MapView({ keyword, nodes, edges, branches, isOn, onPick, clickMode, exp
     )
   }
   return (
-    <svg className="km-svg" viewBox={`0 0 ${W} ${H}`} role="group" aria-label={`「${keyword}」 연관 키워드 맵`}>
+    <svg className="km-svg" viewBox={`0 0 ${g.W} ${g.H}`} role="group" aria-label={`「${keyword}」 연관 키워드 맵`}>
       {cross.map((e) => {
         const a = pos.get(e.a)
         const b = pos.get(e.b)
@@ -120,8 +125,72 @@ function MapView({ keyword, nodes, edges, branches, isOn, onPick, clickMode, exp
   )
 }
 
+// 열지도 (팀 v2 drawHeat): 맵과 같은 자리(고리)에 말마다 함께 나온 이슈 수만큼 크고 진한 번짐을 겹쳐 칠함 — 겹칠수록 진해짐
+// 펼친 2단계 말도 함께 칠한다. 색은 먹색(토큰 글자색), 글자를 누르면 범위에 넣고 빼기
+function HeatView({ g, keyword, nodes, branches, isOn, onPick, ring = RING1 }) {
+  const cx = g.W / 2
+  const cy = g.H / 2
+  const first = nodes.slice(0, ring)
+  const spots = []
+  const seen = new Set(first.map((n) => n.word.toLowerCase())) // 같은 2단계 말이 여러 부모 아래 반복되지 않게
+  first.forEach((n, i) => {
+    const a = (i / first.length) * Math.PI * 2 - Math.PI / 2
+    const x = cx + Math.cos(a) * g.rx
+    const y = cy + Math.sin(a) * g.ry
+    spots.push({ ...n, x, y, level: 1 })
+    const kids = (branches?.[n.word] ?? []).filter((c) => !seen.has(c.word.toLowerCase())).slice(0, 3) // 부모마다 3개까지
+    kids.forEach((c) => seen.add(c.word.toLowerCase()))
+    kids.forEach((c, j, list) => {
+      const b = a + (j - (list.length - 1) / 2) * 0.32
+      spots.push({ ...c, x: Math.min(g.W - 60, Math.max(60, x + Math.cos(b) * 110)), y: Math.min(g.H - 20, Math.max(20, y + Math.sin(b) * 88)), level: 2 })
+    })
+  })
+  const max = Math.max(1, ...spots.map((s) => s.score))
+  return (
+    <svg className="km-svg km-heat" viewBox={`0 0 ${g.W} ${g.H}`} role="group" aria-label={`「${keyword}」 열지도 — 진할수록 함께 나온 이슈가 많음`}>
+      <defs>
+        <radialGradient id="km-heat-g">
+          <stop offset="0%" stopColor="currentColor" stopOpacity="0.38" />
+          <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <g className="km-heat-blobs">
+        <circle cx={cx} cy={cy} r={150} fill="url(#km-heat-g)" />
+        {spots.map((s) => (
+          <circle key={`h-${s.level}-${s.word}`} cx={s.x} cy={s.y} r={(s.level === 1 ? 46 : 30) + 70 * Math.sqrt(s.score / max)} fill="url(#km-heat-g)" opacity={0.35 + 0.65 * (s.score / max)} />
+        ))}
+      </g>
+      <text className="km-cloud-center" x={cx} y={cy + 8} textAnchor="middle" style={{ fontSize: 22 }}>
+        {keyword}
+      </text>
+      {spots.map((s) => {
+        const on = isOn(s.word)
+        return (
+          <text
+            key={`t-${s.level}-${s.word}`}
+            className={`km-word${s.level === 1 ? ' top' : ' mid'}${on ? ' on' : ''}`}
+            x={s.x}
+            y={s.y + 4}
+            textAnchor="middle"
+            style={{ fontSize: s.level === 1 ? 13 : 11 }}
+            role="checkbox"
+            aria-checked={on}
+            tabIndex={0}
+            onClick={() => onPick(s.word)}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onPick(s.word))}
+          >
+            {on ? '✓' : ''}
+            {short(s.word, 12)}
+            <title>{`${s.word} · 함께 나온 이슈 ${s.score}개${s.level === 2 ? ' · 2단계' : ''}`}</title>
+          </text>
+        )
+      })}
+    </svg>
+  )
+}
+
 // 워드클라우드 (팀 layoutCloud 규칙): 큰 말부터 가운데에서 나선을 따라 겹치지 않는 첫 자리. 글자 크기 ∝ √(값/최댓값)
-function CloudView({ keyword, nodes, branches, isOn, onPick }) {
+function CloudView({ g, keyword, nodes, branches, isOn, onPick }) {
   const words = useMemo(() => {
     const all = new Map()
     for (const n of nodes) all.set(n.word, { word: n.word, score: n.score, kind: n.kind })
@@ -132,8 +201,8 @@ function CloudView({ keyword, nodes, branches, isOn, onPick }) {
     const max = Math.max(1, ...words.map((w) => w.score))
     const boxes = []
     const out = []
-    const cx = W / 2
-    const cy = H / 2
+    const cx = g.W / 2
+    const cy = g.H / 2
     const hit = (b) => boxes.some((o) => b.x < o.x + o.w && b.x + b.w > o.x && b.y < o.y + o.h && b.y + b.h > o.y)
     const centerSize = 40
     const cw = textW(keyword, centerSize) + 12
@@ -148,17 +217,17 @@ function CloudView({ keyword, nodes, branches, isOn, onPick }) {
         const x = cx + Math.cos(a) * r * 1.55 - bw / 2
         const y = cy + Math.sin(a) * r * 0.85 - bh / 2
         const b = { x, y, w: bw, h: bh }
-        if (x < 8 || y < 8 || x + bw > W - 8 || y + bh > H - 8 || hit(b)) continue
+        if (x < 8 || y < 8 || x + bw > g.W - 8 || y + bh > g.H - 8 || hit(b)) continue
         boxes.push(b)
         out.push({ ...w, size, x: x + bw / 2, y: y + bh * 0.8, rank: i })
         break
       }
     })
     return out
-  }, [words, keyword])
+  }, [words, keyword, g.W, g.H])
   return (
-    <svg className="km-svg km-cloud" viewBox={`0 0 ${W} ${H}`} role="group" aria-label={`「${keyword}」 워드클라우드`}>
-      <text className="km-cloud-center" x={W / 2} y={H / 2 + 14} textAnchor="middle" style={{ fontSize: 40 }}>
+    <svg className="km-svg km-cloud" viewBox={`0 0 ${g.W} ${g.H}`} role="group" aria-label={`「${keyword}」 워드클라우드`}>
+      <text className="km-cloud-center" x={g.W / 2} y={g.H / 2 + 14} textAnchor="middle" style={{ fontSize: 40 }}>
         {keyword}
       </text>
       {placed.map((w) => {
@@ -187,8 +256,23 @@ function CloudView({ keyword, nodes, branches, isOn, onPick }) {
   )
 }
 
-export default function KeywordMap({ keyword, nodes, edges, branches, isOn, onToggle }) {
-  const [view, setView] = useState('map')
+export default function KeywordMap({ keyword, nodes, edges, branches, isOn, onToggle, large = false, initialView = 'map', onView }) {
+  const box = useRef(null)
+  const [width, setWidth] = useState(960)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return undefined
+    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const g = large ? GEO.large : width < 720 ? GEO.compact : GEO.normal
+  const ring = g.ring
+  const [view, setViewState] = useState(initialView)
+  const setView = (v) => {
+    setViewState(v)
+    onView?.(v)
+  }
   const [clickMode, setClickMode] = useState('scope')
   const [expanded, setExpanded] = useState(() => new Set())
   const onExpand = (w) =>
@@ -200,7 +284,7 @@ export default function KeywordMap({ keyword, nodes, edges, branches, isOn, onTo
     })
   const hasKids = Object.values(branches ?? {}).some((l) => l.length)
   return (
-    <div className="km">
+    <div ref={box} className={large ? 'km km-large' : 'km'}>
       <div className="km-bar">
         <div className="segmented" role="radiogroup" aria-label="보기">
           <button type="button" role="radio" aria-checked={view === 'map'} onClick={() => setView('map')}>
@@ -208,6 +292,9 @@ export default function KeywordMap({ keyword, nodes, edges, branches, isOn, onTo
           </button>
           <button type="button" role="radio" aria-checked={view === 'cloud'} onClick={() => setView('cloud')}>
             워드클라우드
+          </button>
+          <button type="button" role="radio" aria-checked={view === 'heat'} onClick={() => setView('heat')}>
+            열지도
           </button>
         </div>
         {view === 'map' && hasKids && (
@@ -223,10 +310,12 @@ export default function KeywordMap({ keyword, nodes, edges, branches, isOn, onTo
       </div>
       {view === 'map' ? (
         <div className="km-scroll">
-        <MapView keyword={keyword} nodes={nodes} edges={edges} branches={branches} isOn={isOn} onPick={onToggle} clickMode={clickMode} expanded={expanded} onExpand={onExpand} />
+          <MapView g={g} keyword={keyword} nodes={nodes} edges={edges} branches={branches} isOn={isOn} onPick={onToggle} clickMode={clickMode} expanded={expanded} onExpand={onExpand} ring={ring} />
         </div>
+      ) : view === 'heat' ? (
+        <HeatView g={g} keyword={keyword} nodes={nodes} branches={branches} isOn={isOn} onPick={onToggle} ring={ring} />
       ) : (
-        <CloudView keyword={keyword} nodes={nodes} branches={branches} isOn={isOn} onPick={onToggle} />
+        <CloudView g={g} keyword={keyword} nodes={nodes} branches={branches} isOn={isOn} onPick={onToggle} />
       )}
     </div>
   )

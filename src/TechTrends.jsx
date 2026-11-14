@@ -103,7 +103,7 @@ function TopThree({ rows, cols, onPick }) {
   )
 }
 
-function Composite({ data, onPick }) {
+function Composite({ data, onPick, verdicts, onVerdict }) {
   const [more, setMore] = useState(false)
   // 종합에 들어가는 출처만 (특허는 공개가 약 18개월 늦어 종합에서 뺐다, 11/11)
   const cols = data.sources.filter((s) => COMPOSITE_SOURCES.includes(s.id) && s.ranking.length >= 2)
@@ -142,6 +142,12 @@ function Composite({ data, onPick }) {
                   {r.name}
                 </button>
                 <span className="tt-cat">{r.category}</span>
+                {/* 자사 위협 · 기회 (11/14): 누르면 설명 창 */}
+                {verdicts?.[r.name]?.verdict && (
+                  <button type="button" className={`tr-verdict tr-${verdicts[r.name].verdict === '위협' ? 'threat' : 'chance'}`} onClick={() => onVerdict?.(r.name, verdicts[r.name])}>
+                    자사 {verdicts[r.name].verdict}
+                  </button>
+                )}
                 <From from={r.from} />
               </td>
               <td>
@@ -244,7 +250,7 @@ function SourceList({ src, win, onPick }) {
   )
 }
 
-function TechTrends({ onPick }) {
+function TechTrends({ onPick, verdicts, onVerdict }) {
   const [period, setPeriod] = useState('week')
   const [range, setRange] = useState({ from: '', to: '' })
   const [applied, setApplied] = useState(null)
@@ -338,7 +344,7 @@ function TechTrends({ onPick }) {
       {data && (data.terms === 0 ? (
         <p className="tt-empty">{data.status.running ? `기사에서 기술 용어를 찾는 중이에요 (${data.status.phase}). 처음 한 번은 30분쯤 걸려요.` : '아직 찾은 기술 용어가 없어요.'}</p>
       ) : tab === 'composite' ? (
-        <Composite data={data} onPick={onPick} />
+        <Composite data={data} onPick={onPick} verdicts={verdicts} onVerdict={onVerdict} />
       ) : (
         src && <SourceList src={src} win={win} onPick={onPick} />
       ))}
