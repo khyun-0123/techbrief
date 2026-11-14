@@ -115,7 +115,7 @@ function Glance({ job, stage, keyword }) {
 }
 
 // 대시보드 「키워드 분석」 패널 안(검색창 아래)에 펼쳐진다. 기간은 「자료 찾기 →」로 자료 현황에서 찾을 때만 쓴다
-const MAX_SCOPE_TERMS = 6 // server/scopeSearch.js MAX_TERMS와 같게 (고른 말 하나에 네이버 1번)
+const MAX_SCOPE_TERMS = 30 // server/scopeSearch.js MAX_TERMS와 같게 (거르기용, 네이버는 앞 6개만 따로 부름)
 
 function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], period, onPeriod }) {
   const [data, setData] = useState(null)
@@ -125,7 +125,8 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
   const [bundle, setBundle] = useState(null) // 11/12 분석 묶음 (상용화 시점 문장 등, 보고서에 자동으로 들어가는 것과 같음)
   // 고른 말 (11/14 조장): 순서 있는 목록 하나. 레버 값 = 고른 개수. 처음엔 1개
   // - 레버를 올리면 연관도 순 다음 후보(기술 · 회사, 직접 뺀 말은 건너뜀)를 뒤에 붙이고, 내리면 뒤에서부터 뺌
-  // - 맵 · 칩을 눌러 빼면 개수(레버)도 같이 줄고, 눌러 넣으면 늘어남. 서버가 6개까지 찾으므로 6개가 끝
+  // - 맵 · 칩을 눌러 빼면 개수(레버)도 같이 줄고, 눌러 넣으면 늘어남
+  // - 레버 왼쪽 끝 = 주제어만, 오른쪽 끝 = 맵의 1단계 말 전부(직접 뺀 말도 다시 넣음). 11/14 조장
   const [picks, setPicks] = useState(null) // null = 아직 안 건드림(처음 1개)
   const [skip, setSkip] = useState({}) // 직접 뺀 말 — 레버를 올려도 다시 안 넣음
   const [flash, setFlash] = useState(null) // 넣고 뺄 때 「자료 찾기」 옆에 잠깐: { text, at }
@@ -199,15 +200,18 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
   const picked = picks ?? autoable.slice(0, 1).map((n) => n.word) // 1단계 · 2단계 · 워드클라우드 말 모두 (11/14: 2단계도 개수에 넣음)
   const pickedSet = new Set(picked)
   const isOn = (w) => pickedSet.has(w)
-  const candidates = autoable.map((n) => n.word).filter((w) => !pickedSet.has(w) && !skip[w]) // 레버를 올리면 붙을 다음 말
-  const leverMax = Math.min(MAX_SCOPE_TERMS, picked.length + candidates.length)
+  // 레버를 올리면 붙을 다음 말: 기술 · 회사 말 먼저, 그다음 나머지 1단계 말 (연관도 순)
+  const order = [...autoable, ...nodes.filter((n) => !autoable.includes(n))].map((n) => n.word)
+  const candidates = order.filter((w) => !pickedSet.has(w) && !skip[w])
+  const everything = [...new Set([...picked, ...order])].slice(0, MAX_SCOPE_TERMS)
+  const leverMax = everything.length
   const toggle = (w) => {
     if (pickedSet.has(w)) {
       setPicks(picked.filter((x) => x !== w))
       setSkip((m) => ({ ...m, [w]: true }))
       setFlash({ text: `− 「${w}」 · 지금 ${picked.length - 1}개`, at: Date.now() })
     } else if (picked.length >= MAX_SCOPE_TERMS) {
-      setFlash({ text: `한 번에 ${MAX_SCOPE_TERMS}개까지 찾아요 — 하나를 빼고 넣어 주세요`, at: Date.now() })
+      setFlash({ text: `한 번에 ${MAX_SCOPE_TERMS}개까지 골라요 — 하나를 빼고 넣어 주세요`, at: Date.now() })
     } else {
       setPicks([...picked, w])
       setSkip((m) => {
@@ -218,7 +222,12 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
       setFlash({ text: `+ 「${w}」 · 지금 ${picked.length + 1}개`, at: Date.now() })
     }
   }
-  const setCount = (n) => setPicks(n >= picked.length ? [...picked, ...candidates.slice(0, n - picked.length)] : picked.slice(0, n))
+  const setCount = (n) => {
+    if (n >= leverMax) {
+      setPicks(everything) // 오른쪽 끝 = 전부 (직접 뺀 말까지)
+      setSkip({})
+    } else setPicks(n >= picked.length ? [...picked, ...candidates.slice(0, n - picked.length)] : picked.slice(0, n))
+  }
   function findScope() {
     if (picked.length && onScopeSearch) onScopeSearch({ query: keyword, terms: picked })
     else onSearch(keyword)
@@ -272,13 +281,17 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
                     <KeywordMap keyword={keyword} issues={related.issues} nodes={nodes} edges={related.edges} branches={related.children} isOn={isOn} onToggle={toggle} view={mapView} onView={setMapView} onEnlarge={() => setBigMap(true)} />
                     <div className="ka-controls">
                       <label>
-                        자동으로 고를 범위 <b>{picked.length}</b>개
-                        <input type="range" min={0} max={Math.max(1, leverMax)} value={picked.length} onChange={(e) => setCount(Number(e.target.value))} aria-describedby="ka-auto-help" aria-valuetext={`${picked.length}개${picked.length ? ` · ${picked.join(', ')}` : ''}`} />
+                        자동으로 고를 범위 <b>{picked.length ? `「${keyword}」 + ${picked.length}개` : `「${keyword}」만`}</b>
+                        <input type="range" min={0} max={Math.max(1, leverMax)} value={Math.min(picked.length, leverMax)} onChange={(e) => setCount(Number(e.target.value))} aria-describedby="ka-auto-help" aria-valuetext={picked.length ? `「${keyword}」 + ${picked.length}개 · ${picked.join(', ')}` : `「${keyword}」만`} />
                       </label>
+                      <span className="ka-lever-ends" aria-hidden="true">
+                        <span>주제어만</span>
+                        <span>전체 {leverMax}개</span>
+                      </span>
                     </div>
                     <p className="hint ka-mode-help">「자료 찾기」는 「{keyword}」 자료 중 고른 말이 하나 이상 든 것만 보여 줘요. 더 넓게 보려면 맵에서 말을 더 고르세요.</p>
                     <p id="ka-auto-help" className="hint">
-                      처음엔 연관도(함께 나온 이슈 수)가 가장 높은 기술 · 회사 말 1개를 골라 둬요. 레버를 올리면 다음 말을 하나씩 더하고, 내리면 마지막에 더한 말부터 빼요. 맵의 점이나 글자를 눌러 넣고 빼면 개수도 같이 바뀌어요 (직접 뺀 말은 레버를 올려도 다시 안 들어가요). 최대 {MAX_SCOPE_TERMS}개 · 검정 점 옆 「+n」은 그 가지를 펼쳐요.
+                      레버 왼쪽 끝은 주제어만, 오른쪽 끝은 맵의 말 전부예요. 처음엔 연관도(함께 나온 이슈 수)가 가장 높은 기술 · 회사 말 1개를 골라 둬요. 레버를 올리면 다음 말을 하나씩 더하고(기술 · 회사 말 먼저), 내리면 마지막에 더한 말부터 빼요. 맵의 점이나 글자를 눌러 넣고 빼면 개수도 같이 바뀌어요 (직접 뺀 말은 오른쪽 끝이 아니면 다시 안 들어가요). 검정 점 옆 「+n」은 그 가지를 펼쳐요.
                     </p>
                     <div className="ka-picked" aria-live="polite">
                       {picked.length ? (

@@ -9,7 +9,8 @@ import { searchArticles, searchCollected } from './collector/index.js'
 import { searchPaperArticles } from './searchPapers.js'
 import { englishTerms } from './queryTerms.js'
 
-const MAX_TERMS = 6
+const MAX_TERMS = 30 // 거르기에 쓰는 고른 말 (11/14: 레버 끝 = 맵의 말 전부)
+const MAX_SEARCH = 6 // 그중 네이버를 따로 부르고 영문 표기를 찾는 말 — 앞에서부터 (고른 말 하나에 네이버 1번)
 const squash = (s) => String(s ?? '').toLowerCase().replace(/\s+/g, '')
 
 export async function scopeSearch({ query, terms = [], period = 'all' } = {}) {
@@ -17,12 +18,12 @@ export async function scopeSearch({ query, terms = [], period = 'all' } = {}) {
   if (!center) throw Object.assign(new Error('찾을 말을 입력해 주세요.'), { status: 400 })
   const picked = [...new Set(terms.map((t) => String(t).trim()).filter((t) => t && squash(t) !== squash(center)))].slice(0, MAX_TERMS)
   // 고른 말의 영문 표기 (논문 · 영문 출처에 표시하려고). 영문 말은 그대로, 한글은 저장된 표기 · Google 번역
-  const [centerTerms, ...pickedTerms] = await Promise.all([englishTerms(center), ...picked.map((t) => englishTerms(t, { waitMs: 8_000 }))])
+  const [centerTerms, ...pickedTerms] = await Promise.all([englishTerms(center), ...picked.map((t, i) => (i < MAX_SEARCH ? englishTerms(t, { waitMs: 8_000 }) : { terms: [] }))])
   const variants = picked.map((t, i) => [t, ...(pickedTerms[i]?.terms ?? [])].map(squash))
 
   const [news, ...more] = await Promise.all([
     searchArticles(center, { period }),
-    ...picked.map((t) => searchArticles(`${center} ${t}`, { period }).catch(() => ({ articles: [] }))),
+    ...picked.slice(0, MAX_SEARCH).map((t) => searchArticles(`${center} ${t}`, { period }).catch(() => ({ articles: [] }))),
   ])
   const [collected, papers] = await Promise.all([
     searchCollected(center, centerTerms.terms, { period }).catch(() => ({ articles: [] })),

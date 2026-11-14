@@ -7559,3 +7559,29 @@ a.brand:focus-visible {
     max-width: none;
   }
 }
+/* 범위 레버 (11/14 조장): 왼쪽 끝 = 주제어만, 오른쪽 끝 = 맵의 말 전부. 칸 너비 전체로 길게, 양 끝 이름을 아래에 */
+.ka-controls {
+  display: grid;
+  justify-content: stretch; /* 위쪽 예전 규칙(space-between)이 칸 폭을 글자만큼으로 줄였음 */
+  gap: 2px;
+  width: 100%;
+}
+.ka-controls label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+}
+.ka-controls label input[type='range'] {
+  flex: 1 0 100%;
+}
+.ka-controls input[type='range'] {
+  width: 100%;
+  margin: 0;
+}
+.ka-lever-ends {
+  display: flex;
+  justify-content: space-between;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+}
