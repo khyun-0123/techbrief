@@ -197,7 +197,8 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
   const full = (list) => (list ?? []).filter((x) => x.y < THIS_YEAR)
   const nodes = related?.nodes ?? []
   // 자동으로 고를 수 있는 말: 기술 · 회사이고 너무 넓지 않은 말 (PC · TV · LG 같은 두 글자 영문은 직접 눌러야)
-  const autoable = nodes.filter((n) => n.kind !== 'general' && !n.broad)
+  // 11/15: 서버가 정한 auto(너무 넓지 않고 기술 · 회사이거나, 일반이라도 주제어 이슈 15% 이상 · 논문 · 특허 재료 점은 제외)를 따름 — 자동 개수 계산과 같은 순서
+  const autoable = nodes.filter((n) => n.auto ?? (n.kind !== 'general' && !n.broad))
   // 처음 개수 = 서버의 자동 개수 (11/15: 고른 말이 주제어 이슈를 새로 5% 이상 덮는 동안 더함, server/related.js suggestCount). 없으면 1개
   const autoN = Math.min(autoable.length, related?.autoPick?.n ?? 1)
   const autoWords = autoable.slice(0, autoN).map((n) => n.word)
@@ -339,7 +340,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
                       )}
                     </div>
                     <span className="ka-legend">
-                      점이 클수록 「{keyword}」와 함께 나온 이슈가 많음 · 재료: 뉴스(함께 나온 말, {related.issues}개 이슈) · 특허 출원인 · 논문 핵심어 (점에 마우스를 올리면 수)
+                      점이 클수록 「{keyword}」와 함께 나온 이슈가 많음 · 재료: 뉴스 · 모은 기사(전체 기간) · AI 요약 문장 {related.issues}개 이슈{related.words === 'kiwi' ? ' (형태소 분석으로 명사만)' : ''} · 특허 출원인 · 논문 핵심어 (점에 마우스를 올리면 수)
                     </span>
                   </>
                 ) : (

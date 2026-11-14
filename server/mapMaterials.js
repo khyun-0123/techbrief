@@ -109,7 +109,7 @@ export function fillMap(baseNodes = [], m = null, { max = 24 } = {}) {
         hit[srcName === '특허' ? 'patents' : 'papers'] = x.count
         return
       }
-      const node = { word: x.word, kind: x.kind, score: Math.max(1, Math.round(top * (0.8 - 0.08 * rank))), src: [srcName], [srcName === '특허' ? 'patents' : 'papers']: x.count, broad: false }
+      const node = { word: x.word, kind: x.kind, score: Math.max(1, Math.round(top * (0.8 - 0.08 * rank))), src: [srcName], [srcName === '특허' ? 'patents' : 'papers']: x.count, broad: false, auto: false } // 11/15: 재료 점은 레버 자동 고르기에서 뺌(점수가 순위로 흉내 낸 값) — 직접 누르면 들어감
       index.set(squash(x.word), node)
       fresh[srcName].push(node)
     })

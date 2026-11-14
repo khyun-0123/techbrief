@@ -1,5 +1,6 @@
 // 연관 키워드 맵 (11/14 통합 → 11/14 3차: 마인드맵팀 「키워드 마인드맵 디자인 가이드」 값 그대로)
-// - 데이터: server/related.js의 nodes(1단계, score = 함께 나온 이슈 수) · edges(NPMI 0.15 초과) · children(1단계 말마다 2단계, 부품 속성 이름은 branches) · subcats(사업 6분류)
+// - 데이터: server/related.js의 nodes(1단계, score = 함께 나온 이슈 수) · edges(NPMI 0.15 초과) · children(1단계 말마다 2단계, 2단계 말마다 3단계 — 11/15, 부품 속성 이름은 branches) · subcats(사업 6분류)
+// - 3단계(11/15): 2단계 회색 점 옆 「+n」을 누르면 펼침(옅은 점). 처음엔 접힘
 // - 점 · 선 (가이드 「점과 선」): 검색어 = 레드 점 11px · 15px 600 글자, 1단계 = 짙은 점 · 12.5px 600, 2단계 = 회색 점 · 11px 400,
 //   점 반지름 3 + 9·√(수/최댓값), 가지 굵기 min(6, 0.6 + 수/8), 가지 사이 = 0.6px 점선(3, 3). 글자는 확대해도 같은 크기, 흰 3px 테두리
 // - 움직임 (가이드 「움직임」, force-graph 값을 같은 식으로): 밀어내기 -140, 가지 길이 55 + 30/(1 + 수/10) · 세기 .6, 점선 120 · .03,
@@ -55,9 +56,18 @@ function pickGraph(nodes, branches, edges, branchN, totalN, minCo, extra = []) {
       const key = c.word.toLowerCase()
       if (seen.has(key)) continue
       seen.add(key)
-      l2.push({ ...c, parent: l1[i].word })
+      l2.push({ ...c, parent: l1[i].word, lv: 2 })
     }
     if (!any) break
+  }
+  // 3단계 (11/15): 2단계 말마다 함께 나온 말 4개까지 (함께 나온 이슈 2개 이상). 키워드 수와 따로 — 「+n」을 눌러 펼칠 때만 보임
+  for (const n of l2.filter((x) => x.lv === 2)) {
+    for (const c of (branches?.[n.word] ?? []).filter((x) => x.score >= 2).slice(0, 4)) {
+      const key = c.word.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      l2.push({ ...c, parent: n.word, lv: 3 })
+    }
   }
   const on = new Set(l1.map((n) => n.word))
   const cross = (edges ?? []).filter((e) => on.has(e.a) && on.has(e.b) && (e.n ?? 3) >= 3).sort((a, b) => b.npmi - a.npmi).slice(0, 16)
@@ -77,7 +87,7 @@ function makeSim(keyword, l1, l2, cross, hidden, seed = null, alpha0 = 1) {
     add(n.word, Math.cos(a) * 30, Math.sin(a) * 30)
   })
   l2.forEach((n, j) => {
-    if (hidden.has(n.parent)) return
+    if (hidden.has(n.parent) || !P.has(n.parent)) return // 3단계는 2단계 부모가 보일 때만
     const p = P.get(n.parent)
     const out = seed ? 1.15 : 1.4 // 새로 펼친 2단계는 부모 바로 바깥에서 나옴
     add(n.word, p.x * out + ((j % 5) - 2) * 6, p.y * out + ((j % 3) - 1) * 6)
@@ -268,21 +278,21 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
     if (!p) return null
     const on = lv > 0 && isOn(n.word)
     const r = lv === 0 ? 11 : radius(n.score, max)
-    const fill = lv === 0 ? colors.accent : lv === 1 ? colors.d1 : colors.d2
+    const fill = lv === 0 ? colors.accent : lv === 1 ? colors.d1 : lv === 2 ? colors.d2 : colors.d3
     const fs = lv === 0 ? 15 : lv === 1 ? 12.5 : 11
-    const folded = lv === 1 && hidden.has(n.word) && kidsOf.get(n.word)
+    const folded = (lv === 1 || lv === 2) && hidden.has(n.word) && kidsOf.get(n.word)
     const label = `${on ? '✓ ' : ''}${short(n.word, lv === 0 ? 18 : lv === 1 ? 14 : 11)}`
     const sub = lv === 1 ? (n.subcats ?? [])[0] : null
     const role = lv === 0 ? undefined : 'checkbox'
-    const info = lv === 0 ? { word: n.word, tag: '검색어', rows: [['함께 나온 이슈', `${issues ?? '-'}개`]] } : { word: n.word, tag: `${lv}단계`, rows: [[lv === 2 ? `「${n.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${n.score}개`], ...((n.subcats ?? []).length ? [['분류', n.subcats.join(' · ')]] : []), ['볼 범위', on ? '넣음' : '안 넣음']] }
+    const info = lv === 0 ? { word: n.word, tag: '검색어', rows: [['함께 나온 이슈', `${issues ?? '-'}개`]] } : { word: n.word, tag: `${lv}단계`, rows: [[lv >= 2 ? `「${n.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${n.score}개`], ...((n.subcats ?? []).length ? [['분류', n.subcats.join(' · ')]] : []), ['볼 범위', on ? '넣음' : '안 넣음']] }
     return (
       <g
         key={`n-${n.word}`}
         className={`km-dot km-d${lv}${on ? ' on' : ''}`}
         role={role}
         aria-checked={role === 'checkbox' ? on : undefined}
-        aria-expanded={lv === 1 && kidsOf.get(n.word) ? !folded : undefined}
-        aria-label={lv === 0 ? `검색어 ${n.word}` : `${n.word} · 함께 나온 이슈 ${n.score}개${sub ? ` · ${sub}` : ''}${lv === 2 ? ` · ${n.parent}의 가지` : ''}`}
+        aria-expanded={(lv === 1 || lv === 2) && kidsOf.get(n.word) ? !folded : undefined}
+        aria-label={lv === 0 ? `검색어 ${n.word}` : `${n.word} · 함께 나온 이슈 ${n.score}개${sub ? ` · ${sub}` : ''}${lv >= 2 ? ` · ${n.parent}의 가지` : ''}`}
         tabIndex={lv === 0 ? -1 : 0}
         onPointerDown={(e) => onDown(e, n.word)}
         onPointerUp={(e) => onUp(e, n.word)}
@@ -294,7 +304,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
             act(n.word)
-          } else if (lv === 1 && kidsOf.get(n.word) && ((e.key === 'ArrowRight' && folded) || (e.key === 'ArrowLeft' && !folded))) {
+          } else if ((lv === 1 || lv === 2) && kidsOf.get(n.word) && ((e.key === 'ArrowRight' && folded) || (e.key === 'ArrowLeft' && !folded))) {
             e.preventDefault()
             onHide(n.word)
           }
@@ -304,7 +314,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
         <circle cx={p.x} cy={p.y} r={r} fill={fill} />
         {/* 고른 말 (11/14): 점 둘레 테두리는 1단계 점과 헷갈려서, 글자를 검정 알약(눌린 칩과 같은 모양)으로. 글자는 알약 가운데(central, 11/15 실측 2.3px 위로 떠 있었음) */}
         {on && <rect x={p.x - (textW(label, fs) + 14) / 2} y={p.y + r + 2} width={textW(label, fs) + 14} height={fs + 7} rx={(fs + 7) / 2} fill={colors.text} />}
-        <text x={p.x} y={on ? p.y + r + 2 + (fs + 7) / 2 : p.y + r + 2 + fs * 0.85} dominantBaseline={on ? 'central' : undefined} textAnchor="middle" fontSize={fs} fontWeight={lv === 2 && !on ? 400 : on ? 700 : 600} fill={on ? colors.surface : lv === 2 ? colors.sub : colors.text} stroke={on ? 'none' : '#fff'} strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
+        <text x={p.x} y={on ? p.y + r + 2 + (fs + 7) / 2 : p.y + r + 2 + fs * 0.85} dominantBaseline={on ? 'central' : undefined} textAnchor="middle" fontSize={fs} fontWeight={lv >= 2 && !on ? 400 : on ? 700 : 600} fill={on ? colors.surface : lv >= 2 ? colors.sub : colors.text} stroke={on ? 'none' : '#fff'} strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
           {label}
         </text>
       </g>
@@ -367,10 +377,13 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
         })}
         {l1.map((n) => edge(keyword, n.word, n.score, `e-${n.word}`))}
         {shown2.map((n) => edge(n.parent, n.word, n.score, `e2-${n.word}`))}
-        {shown2.map((n) => node(n, 2))}
+        {shown2.map((n) => node(n, n.lv ?? 2))}
         {l1.map((n) => node(n, 1))}
         {node({ word: keyword, score: max }, 0)}
-        <g className="km-badges" data-export="skip">{l1.map(badge)}</g>
+        <g className="km-badges" data-export="skip">
+          {l1.map(badge)}
+          {shown2.filter((n) => n.lv === 2).map(badge)}
+        </g>
       </g>
     </svg>
   )
@@ -509,7 +522,7 @@ function countOverlaps(final, view, graph, hidden, keyword, isOn) {
   const items = [
     { word: keyword, fs: 15, r: 11 },
     ...graph.l1.map((n) => ({ word: n.word, fs: 12.5, r: radius(n.score, max), max: 14 })),
-    ...graph.l2.filter((n) => !hidden.has(n.parent)).map((n) => ({ word: n.word, fs: 11, r: radius(n.score, max), max: 11 })),
+    ...graph.l2.filter((n) => !hidden.has(n.parent)).map((n) => ({ word: n.word, fs: 11, r: radius(n.score, max), max: 11, lv: n.lv })),
   ]
   const boxes = []
   for (const it of items) {
@@ -521,7 +534,7 @@ function countOverlaps(final, view, graph, hidden, keyword, isOn) {
     const w = textW(`${on ? '✓ ' : ''}${short(it.word, it.max ?? 18)}`, it.fs) + (on ? 14 : 4) // 고른 말은 알약 폭
     boxes.push({ x0: x - w / 2, x1: x + w / 2, y0: y + it.r + 2, y1: y + it.r + (on ? 9 : 4) + it.fs, dot: { x0: x - it.r, x1: x + it.r, y0: y - it.r, y1: y + it.r } })
     // 펼치기 배지 (검정 점 오른쪽 위)도 글자처럼 센다
-    const kids = it.max === 14 ? graph.l2.filter((c) => c.parent === it.word).length : 0
+    const kids = it.max === 14 || it.lv === 2 ? graph.l2.filter((c) => c.parent === it.word).length : 0
     if (kids) {
       const bw = 12 + (hidden.has(it.word) ? `+${kids}`.length : 1) * 6.5
       const bx = x + it.r * 0.7 + 3
@@ -588,8 +601,16 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
   if (newExtra.length) setKept([...keptList, ...newExtra].join('\u0001'))
   const extraAll = [...keptList, ...newExtra].join('\u0001')
   const graph = useMemo(() => pickGraph(nodes, branches, edges, branchN, totalN, minCo, extraAll ? extraAll.split('\u0001') : []), [nodes, branches, edges, branchN, totalN, minCo, extraAll])
-  const isOpen = useCallback((w) => openSet[w] ?? graph.l1.findIndex((n) => n.word === w) < 3, [openSet, graph])
-  const hidden = useMemo(() => new Set(graph.l1.filter((n) => !isOpen(n.word)).map((n) => n.word)), [graph, isOpen])
+  // 펼침: 1단계는 위 3개만 처음에 펼침, 2단계(3단계를 가진 말)는 처음엔 접힘 — 「+n」으로 펼침
+  const isOpen = useCallback(
+    (w) => {
+      if (openSet[w] != null) return openSet[w]
+      const i = graph.l1.findIndex((n) => n.word === w)
+      return i >= 0 && i < 3
+    },
+    [openSet, graph],
+  )
+  const hidden = useMemo(() => new Set([...graph.l1, ...graph.l2.filter((n) => n.lv === 2)].filter((n) => !isOpen(n.word)).map((n) => n.word)), [graph, isOpen])
   const minK = phone ? 0.75 : 0.3 // 휴대폰은 0.75배 아래로 줄이지 않음 — 다 안 들어오면 끌어서 봄
   // 힘 계산: 말 · 접힘이 바뀌면 새로. 끝 자리를 미리 계산해 화면을 맞춰 두고, 점들은 가운데서 퍼지며 그 자리로 감
   const final = useMemo(() => settled(keyword, graph, hidden), [keyword, graph, hidden])
@@ -658,9 +679,13 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
   }
   // 「전체 보기」: 0.4초 동안 부드럽게 (가이드 zoomToFit(400, 50))
   const anim = useRef(0)
+  const viewRef = useRef(view)
+  useEffect(() => {
+    viewRef.current = view
+  }, [view])
   const fit = () => {
-    const to = fitView(pos, W, H, 50, minK)
-    const from = view
+    const to = fitView(posRef.current, W, H, 50, minK)
+    const from = viewRef.current
     cancelAnimationFrame(anim.current)
     if (reduceMotion()) return setView(to)
     const t0 = performance.now()
@@ -690,7 +715,22 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [mode, W, H])
-  const onHide = (w) => setOpenSet((o) => ({ ...o, [w]: !isOpen(w) }))
+  // 펼치기 · 접기. 펼친 뒤 점이 판 밖(또는 표시 설정 창 밑)으로 나가면 자리를 잡은 뒤 전체 보기로 맞춤 (11/15: 3단계가 위로 펼쳐져 가려졌음)
+  const refitTimer = useRef(0)
+  useEffect(() => () => clearTimeout(refitTimer.current), [])
+  const onHide = (w) => {
+    setOpenSet((o) => ({ ...o, [w]: !isOpen(w) }))
+    clearTimeout(refitTimer.current)
+    refitTimer.current = setTimeout(() => {
+      const v = viewRef.current
+      const out = [...posRef.current.values()].some((p) => {
+        const x = p.x * v.k + v.tx
+        const y = p.y * v.k + v.ty
+        return x < 24 || x > W - 24 || y < 64 || y > H - 48
+      })
+      if (out) fit()
+    }, 1300)
+  }
   const msgTimer = useRef(0)
   const onSave = async () => {
     clearTimeout(msgTimer.current)
@@ -797,6 +837,10 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
               <span>
                 <i style={{ background: colors.d2 }} />
                 2단계
+              </span>
+              <span>
+                <i style={{ background: colors.d3 }} />
+                3단계
               </span>
               <span>
                 <b className="km-lg-on">✓ 고른 말</b>
