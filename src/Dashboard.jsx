@@ -8,8 +8,9 @@ import { useEffect, useRef, useState } from 'react'
 import { fetchReadyTimelines } from './api.js'
 import KeywordAnalysis, { AnalysisPreview } from './KeywordAnalysis.jsx'
 import { consumeOpenRequest, useOpenRequest, useStoryJobs } from './storyJobs.js'
-import CategoryGlance from './CategoryGlance.jsx'
 import TechTrends from './TechTrends.jsx'
+import TrendRail from './TrendRail.jsx'
+import VerdictModal from './VerdictModal.jsx'
 import { LAST_ANALYZED_KEY } from './utils.js'
 
 // 칩에 보이는 이름 (11/14 D6): 저장된 검색어가 「ai 안경」 · 「tandem oled」처럼 소문자라 표 · 카드의 「AI 안경」과 달라 보였음
@@ -22,6 +23,19 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
   const [focus, setFocus] = useState(null) // 분석 중인 말 (없으면 검색창 + 미리 분석된 키워드 + 요즘 뜨는 기술)
   const [ready, setReady] = useState([]) // 미리 분석해 둔 말 (11/10): 검색 전에도 분석이 어떤 모양인지 보이게
   const [allReady, setAllReady] = useState(false)
+  // 요즘 뜨는 기술 (11/14 조장): 왼쪽 작은 막대 + 「펼쳐 보기」로 왼쪽에서 나오는 판, 자사 위협 · 기회 설명 창
+  const [drawer, setDrawer] = useState(false)
+  const [verdictData, setVerdictData] = useState(null)
+  const [verdictView, setVerdictView] = useState(null) // { term, info }
+  const drawerClose = useRef(null)
+  useEffect(() => {
+    if (!drawer) return undefined
+    drawerClose.current?.focus()
+    const esc = (e) => e.key === 'Escape' && !verdictView && setDrawer(false)
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [drawer, verdictView])
+  const openVerdict = (term, info) => setVerdictView({ term, info })
   useEffect(() => {
     let alive = true
     fetchReadyTimelines()
@@ -90,6 +104,8 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
         </div>
       </header>
 
+      <div className="dash-layout">
+        <TrendRail onPick={analyze} onOpen={() => setDrawer(true)} onVerdicts={setVerdictData} onVerdict={openVerdict} />
       <section ref={panelRef} className={focus ? 'panel dash-search is-open' : 'panel dash-search'} aria-labelledby="dash-search-title">
         <div className="dash-search-head">
           <h2 id="dash-search-title" className="dash-title">
@@ -136,7 +152,8 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
                 </div>
               </div>
             )}
-            <details className="dash-more">
+            {/* 11/14 조장: 예시는 처음부터 펼쳐 둠 */}
+            <details className="dash-more" open>
               <summary>분석하면 이렇게 보여요 · 예시</summary>
               {/* 예시: AI 정리까지 있는 미리 분석 중 흐름이 잘 보이는 것(「연구 지속」이 아닌 단계)을 먼저 */}
               <AnalysisPreview example={(ready.find((r) => r.story && r.stage && r.stage !== '연구 지속') ?? ready.find((r) => r.story))?.query ?? null} onOpen={analyze} />
@@ -218,9 +235,39 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
         {/* key: 키워드가 바뀌면 새로 그린다 (고른 범위 · 받은 값 초기화) */}
         {focus && <KeywordAnalysis key={focus} keyword={focus} onSearch={onSearch} onScopeSearch={onScopeSearch} periods={periods} period={period} onPeriod={onPeriod} />}
       </section>
+      </div>
 
-      <CategoryGlance />
-      <TechTrends onPick={analyze} />
+      {/* 「세부 기술 × 경쟁사 특허」는 대시보드에서 뺌 (11/14 조장: 계속 볼 자료가 아님) — 보고서 분석 자료 · 위협 · 기회 설명 창에서 씀 */}
+      {drawer && (
+        <div className="trend-drawer-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && setDrawer(false)}>
+          <div className="trend-drawer" role="dialog" aria-modal="true" aria-label="요즘 뜨는 기술 전체">
+            <button ref={drawerClose} type="button" className="trend-drawer-close" onClick={() => setDrawer(false)}>
+              <span aria-hidden="true">‹</span> 접기
+            </button>
+            <TechTrends
+              onPick={(t) => {
+                setDrawer(false)
+                analyze(t)
+              }}
+              verdicts={verdictData?.verdicts}
+              onVerdict={openVerdict}
+            />
+          </div>
+        </div>
+      )}
+      {verdictView && (
+        <VerdictModal
+          term={verdictView.term}
+          info={verdictView.info}
+          threatFactor={verdictData?.threatFactor}
+          onClose={() => setVerdictView(null)}
+          onAnalyze={(t) => {
+            setVerdictView(null)
+            setDrawer(false)
+            analyze(t)
+          }}
+        />
+      )}
     </main>
   )
 }
