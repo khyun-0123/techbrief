@@ -12,6 +12,7 @@ import { searchNews } from './collector/naver.js'
 import { cleanText } from './collector/normalize.js'
 import { cacheGet, cachePut } from './papers/index.js'
 import { queryKey } from './queryTerms.js'
+import { isException, isStop, subcatsOf } from './wordFilter.js'
 
 const TTL = 6 * 3600_000
 const MAX_NODES = 24
@@ -56,14 +57,20 @@ export function wordsOf(text) {
   for (const m of t.matchAll(/\b(?:\d{2,4}\s?(?:Hz|hz|인치)|[A-Za-z][A-Za-z0-9]*(?:[-+][A-Za-z0-9]+)*)\b/g)) {
     const w = m[0].replace(/\s+/g, '')
     if (w.length < 2 || /^\d+$/.test(w) || EN_STOP.has(w.toLowerCase())) continue
+    if (!isException(w) && isStop(w)) continue // 워드클라우드팀 불용어 · 예외 (11/14, wordFilter.js)
     out.add(/^[a-z]+$/.test(w) && w.length <= 3 ? w.toUpperCase() : w)
   }
   // 한글 (영문이 붙은 말 포함: LG디스플레이, OLED패널)
   for (const m of t.matchAll(/[A-Za-z0-9]*[가-힣]+[A-Za-z0-9가-힣]*/g)) {
     let w = stripJosa(m[0])
+    // 디스플레이 · 반도체 예외어(응답속도 · 양자점 …)는 다른 거르기를 건너뛴다 (11/14, 워드클라우드팀 예외 v3)
+    if (w.length >= 2 && w.length <= 12 && isException(w)) {
+      out.add(w)
+      continue
+    }
     if (VERB_END.test(w) || (w.length >= 3 && /[혔했됐었였렸켰웠졌봤왔갔냈썼섰났쳤]다$|[가-힣]다$/.test(w) && !TECH_WORD.test(w))) continue // 「밝혔다」 같은 서술어
     w = w.replace(/(들|적|화)$/, (x) => (w.length > 3 ? '' : x))
-    if (w.length < 2 || w.length > 12 || STOP.has(w)) continue
+    if (w.length < 2 || w.length > 12 || STOP.has(w) || isStop(w)) continue // + 워드클라우드팀 불용어 v3 (1차 검수본)
     out.add(w)
   }
   return out
@@ -101,7 +108,7 @@ async function collectedDocs(center) {
 export async function relatedWords(rawCenter, { refresh = false } = {}) {
   const center = String(rawCenter ?? '').trim().slice(0, 50)
   if (!center) throw Object.assign(new Error('키워드를 입력해 주세요.'), { status: 400 })
-  const key = `related:v2:${queryKey(center)}` // v2: 영어 기능어를 빼기 전(11/11) 기억한 값은 쓰지 않는다
+  const key = `related:v3:${queryKey(center)}` // v2: 영어 기능어(11/11) · v3: 워드클라우드팀 불용어 · 예외 · 사업 분류(11/14)
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return { ...hit, cached: true }
@@ -142,7 +149,7 @@ export async function relatedWords(rawCenter, { refresh = false } = {}) {
     .filter((x) => x.n >= min && x.n < issues.length * 0.9) // 너무 드문 말 · 거의 모든 글에 나오는 말은 뺀다
     .sort((a, b) => b.n - a.n)
     .slice(0, MAX_NODES)
-    .map((x) => ({ word: x.w, kind: kindOf(x.w, lists), score: x.n, share: Math.round((x.n / Math.max(1, issues.length)) * 100) / 100, broad: tooBroad(x.w) }))
+    .map((x) => ({ word: x.w, kind: kindOf(x.w, lists), score: x.n, share: Math.round((x.n / Math.max(1, issues.length)) * 100) / 100, broad: tooBroad(x.w), subcats: subcatsOf(x.w) }))
   const out = { center, docs: docs.length, issues: issues.length, nodes, at: new Date().toISOString() }
   await cachePut(key, out, TTL).catch(() => {})
   return { ...out, cached: false }
