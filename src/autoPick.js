@@ -24,6 +24,7 @@ export function pickMaterials(articles, terms = [], opt = AUTO_PICK) {
   // 「중요」 기준은 서버(관리 페이지 「중요도 기준」, 11/15)가 정한 importanceLevel을 따름. 없으면 점수로
   const high = opt.high ?? articles?.find((a) => a.scoreParts?.high != null)?.scoreParts.high ?? AUTO_PICK.high
   const { min, max } = { ...AUTO_PICK, ...opt }
+  const isHigh = (a) => (a.importanceLevel ? a.importanceLevel === 'high' : (a.importance ?? 0) >= high)
   const time = (a) => Date.parse(a.publishedAt ?? '') || 0
   const byScore = (a, b) => (b.importance ?? 0) - (a.importance ?? 0) || time(b) - time(a)
   // 1. 이슈마다 하나
@@ -34,8 +35,8 @@ export function pickMaterials(articles, terms = [], opt = AUTO_PICK) {
     const cur = best.get(k)
     if (!cur || byScore(a, cur) < 0) best.set(k, a)
   }
-  const pool = [...best.values()].sort(byScore)
-  const isHigh = (a) => (a.importanceLevel ? a.importanceLevel === 'high' : (a.importance ?? 0) >= high)
+  // 「중요」 표시가 붙은 자료 먼저, 그다음 점수 순 (논문은 「중요」 기준이 60점으로 달라 점수만으로 줄 세우면 50점대 논문이 「중요」 뉴스를 앞섬)
+  const pool = [...best.values()].sort((a, b) => Number(isHigh(b)) - Number(isHigh(a)) || byScore(a, b))
   const important = pool.filter(isHigh)
   // 2 · 3. 중요는 모두(최대 max), 모자라면 min까지 채움
   const n = Math.min(max, Math.max(min, important.length), pool.length)
