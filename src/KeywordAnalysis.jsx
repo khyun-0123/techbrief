@@ -126,7 +126,20 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
   const [mode, setMode] = useState('wide')
   const [open, setOpen] = useState(false)
   const [bigMap, setBigMap] = useState(false) // 맵 크게 보기 판 (11/14 조장)
-  const [mapView, setMapView] = useState('map') // 칸에서 고른 보기(맵 · 워드클라우드 · 열지도)를 크게 보기에도 그대로
+  const [mapView, setMapView] = useState('map') // 칸에서 고른 보기(마인드맵 · 워드클라우드)를 크게 보기에도 그대로
+  // 보기 칩 (마인드맵팀 디자인 가이드: 칸 머리 오른쪽 칩 2개, 표시 설정 창의 「보기」와 같은 값)
+  const viewChips = (
+    <span className="km-chips" role="group" aria-label="보기">
+      {[
+        ['map', '마인드맵'],
+        ['cloud', '워드클라우드'],
+      ].map(([v, t]) => (
+        <button key={v} type="button" className="km-chip" aria-pressed={mapView === v} onClick={() => setMapView(v)}>
+          {t}
+        </button>
+      ))}
+    </span>
+  )
   useEffect(() => {
     if (!bigMap) return undefined
     const esc = (e) => e.key === 'Escape' && setBigMap(false)
@@ -214,9 +227,9 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
             <div className="ka-pane">
               <div className="ka-pane-head">
                 <h3>연관 키워드 · 볼 범위</h3>
-                <span className="ka-temp">워드클라우드팀 맵 v2 · 뉴스 + 특허 · 논문 재료</span>
+                {related && nodes.length > 0 && viewChips}
                 {related && nodes.length > 0 && (
-                  <button type="button" className="pane-zoom" onClick={() => setBigMap(true)} title="맵 · 워드클라우드 · 열지도를 한 화면 크게">
+                  <button type="button" className="pane-zoom" onClick={() => setBigMap(true)} title="마인드맵 · 워드클라우드를 한 화면 크게">
                     <span aria-hidden="true">⤢</span> 크게 보기
                   </button>
                 )}
@@ -225,7 +238,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
               {related ? (
                 nodes.length ? (
                   <>
-                    <KeywordMap keyword={keyword} nodes={nodes} edges={related.edges} branches={related.children} isOn={isOn} onToggle={toggle} initialView={mapView} onView={setMapView} />
+                    <KeywordMap keyword={keyword} issues={related.issues} nodes={nodes} edges={related.edges} branches={related.children} isOn={isOn} onToggle={toggle} view={mapView} onView={setMapView} />
                     <div className="ka-controls">
                       <label>
                         자동으로 고를 범위 <b>{Math.min(auto, autoMax)}</b>개
@@ -411,7 +424,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
         }}
       />
       {open && <TechTimeline query={keyword} initialData={data} job={job} onClose={() => setOpen(false)} />}
-      {/* 맵 크게 보기 (11/14 조장): 워드클라우드팀 맵 v2처럼 한 화면 크게 — 맵 · 워드클라우드 · 열지도, 고른 범위는 대시보드와 같음 */}
+      {/* 맵 크게 보기 (11/14 조장): 워드클라우드팀 맵 v2처럼 한 화면 크게 — 마인드맵 · 워드클라우드, 고른 범위는 대시보드와 같음 */}
       {bigMap && related && (
         <div className="km-full-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && setBigMap(false)}>
           <div className="km-full" role="dialog" aria-modal="true" aria-label={`「${keyword}」 연관 키워드 맵 크게 보기`}>
@@ -422,11 +435,12 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
               <span className="km-full-sub">
                 고른 범위 {picked.length}개{picked.length ? ` · ${picked.slice(0, 6).join(', ')}${picked.length > 6 ? ' 외' : ''}` : ''} — 닫으면 대시보드에 그대로 남아요
               </span>
+              {viewChips}
               <button type="button" className="trend-drawer-close" onClick={() => setBigMap(false)} autoFocus>
                 작게 보기 <span aria-hidden="true">⤡</span>
               </button>
             </div>
-            <KeywordMap keyword={keyword} nodes={nodes} edges={related.edges} branches={related.children} isOn={isOn} onToggle={toggle} large initialView={mapView} onView={setMapView} />
+            <KeywordMap keyword={keyword} issues={related.issues} nodes={nodes} edges={related.edges} branches={related.children} isOn={isOn} onToggle={toggle} large view={mapView} onView={setMapView} />
           </div>
         </div>
       )}
