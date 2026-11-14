@@ -42,7 +42,7 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
             <>
               {' '}
               + {scope.terms.map((t) => (
-                <span key={t} className="chip ar-term">
+                <span key={t} className="ar-term">
                   {t}
                 </span>
               ))}

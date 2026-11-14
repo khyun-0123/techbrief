@@ -301,9 +301,9 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
       >
         <circle cx={p.x} cy={p.y} r={r + 3} fill="transparent" />
         <circle cx={p.x} cy={p.y} r={r} fill={fill} />
-        {/* 고른 말 (11/14): 점 둘레 테두리는 1단계 점과 헷갈려서, 글자를 검정 알약(눌린 칩과 같은 모양)으로 */}
+        {/* 고른 말 (11/14): 점 둘레 테두리는 1단계 점과 헷갈려서, 글자를 검정 알약(눌린 칩과 같은 모양)으로. 글자는 알약 가운데(central, 11/15 실측 2.3px 위로 떠 있었음) */}
         {on && <rect x={p.x - (textW(label, fs) + 14) / 2} y={p.y + r + 2} width={textW(label, fs) + 14} height={fs + 7} rx={(fs + 7) / 2} fill={colors.text} />}
-        <text x={p.x} y={p.y + r + 2 + fs * 0.85 + (on ? 2.5 : 0)} textAnchor="middle" fontSize={fs} fontWeight={lv === 2 && !on ? 400 : on ? 700 : 600} fill={on ? colors.surface : lv === 2 ? colors.sub : colors.text} stroke={on ? 'none' : '#fff'} strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
+        <text x={p.x} y={on ? p.y + r + 2 + (fs + 7) / 2 : p.y + r + 2 + fs * 0.85} dominantBaseline={on ? 'central' : undefined} textAnchor="middle" fontSize={fs} fontWeight={lv === 2 && !on ? 400 : on ? 700 : 600} fill={on ? colors.surface : lv === 2 ? colors.sub : colors.text} stroke={on ? 'none' : '#fff'} strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
           {label}
         </text>
       </g>

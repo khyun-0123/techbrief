@@ -7758,3 +7758,36 @@ button.ka-auto-note {
   height: 8px;
   accent-color: var(--tb-color-text);
 }
+/* 알약 · 칩 글자 가운데 맞춤 (11/15 점검: 3038에서 글자 상자와 테두리 여백을 재 보니 32px 칩은 글자가 1.8px 위, 확인 창 말 칩은 6px 오른쪽)
+   높이는 고정하고 글자는 flex로 가운데 — min-height + padding이면 남는 높이가 아래로만 감 */
+.km-chip,
+.km-seg button,
+.km-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  min-height: 0;
+  padding: 0 12px;
+  line-height: 1;
+}
+.pane-zoom {
+  height: 32px;
+  line-height: 1;
+}
+.pane-zoom > span[aria-hidden] {
+  display: inline-flex;
+  line-height: 1;
+}
+/* 확인 창 고른 말: 지우기(×) 자리가 있는 .chip 대신 양쪽 여백이 같은 알약 */
+.ar-scope .ar-term {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  font-size: var(--fs-sm);
+  line-height: 1;
+}
