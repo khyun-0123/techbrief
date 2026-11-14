@@ -9,6 +9,7 @@
 //   키보드: Enter = 넣기/빼기, → = 펼치기, ← = 접기. 펼치거나 접어도 다른 점은 제자리에서 조금만 움직임
 // - 가이드에서 아직 안 옮긴 것: 보고서에 넣기(초안 6장), 키워드 편집, 불용어 · 예외 단어 관리(지금은 서버 CSV), 고르는 기준 「중요도」(맵 데이터에 중요도 합이 없음), 관련 기사 칸
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Seg } from './Dropdown.jsx'
 
 const short = (t, n = 14) => (t.length > n ? `${t.slice(0, n - 1)}…` : t)
 const textW = (t, px) => [...t].reduce((n, ch) => n + (/[가-힣]/.test(ch) ? px : px * 0.6), 0)
@@ -739,13 +740,7 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
             <div className="km-pbody">
               <div className="km-ctl">
                 <span className="km-lbl">보기</span>
-                <div className="km-seg" role="group" aria-label="보기">
-                  {MAP_VIEWS.map(([v, t]) => (
-                    <button key={v} type="button" aria-pressed={mode === v} onClick={() => onView?.(v)}>
-                      {t}
-                    </button>
-                  ))}
-                </div>
+                <Seg value={mode} onChange={(v) => onView?.(v)} label="보기" size="md" options={MAP_VIEWS.map(([value, label]) => ({ value, label }))} />
               </div>
               <div className="km-prow">
                 <label className="km-ctl">

@@ -7972,3 +7972,116 @@ button.ka-auto-note {
 .add-material-form .dd-btn {
   height: 43px;
 }
+
+/* ════ 버튼 체계 (11/15 조장: 「버튼 사이즈 통일 · 요소마다 모양이 제각각」) ════
+   크기 2단계: 큰 = --tb-control-lg 40px (쪽 머리 · 도구줄 · 입력칸과 한 줄), 작은 = --tb-control-md 32px (카드 · 목록 · 칸 안)
+   모양은 역할마다 하나:
+   - 행동 버튼(누르면 무언가 일어남) = 박스 8px      .btn(큰) · .act-btn .sel-toggle .pager-btn .pane-zoom .km-act .mr-act .tr-open(작은)
+   - 하나 고르기(기간 · 정렬 · 보기) = 분리형 버튼    .segmented (Seg · PeriodSeg), 큰/작은
+   - 많거나 바뀌는 목록에서 고르기 = 드롭다운         .dd (Dropdown), 큰/작은
+   - 값 칩(고른 말 · 폴더 · 거르기, 켜고 빼기) = 알약  .chip .pill .folder-chip .scope-chip, 작은
+   - 아이콘 버튼(×) = 정사각 박스 32
+   docs/20 8장 · Storybook 「Components → 버튼 체계」 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--tb-control-lg);
+  padding: 0 16px;
+  line-height: 1.2;
+}
+.act-btn,
+.sel-toggle,
+.pager-btn,
+.pane-zoom,
+.km-act,
+.mr-act,
+.tr-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--tb-control-md);
+  min-height: 0;
+  border-radius: var(--tb-radius-input);
+  line-height: 1;
+}
+.pager-btn {
+  min-width: var(--tb-control-md);
+}
+.segmented {
+  box-sizing: border-box;
+  align-items: stretch;
+  height: var(--tb-control-lg);
+  padding: 3px;
+}
+.segmented button,
+.segmented.seg-md button,
+.segmented.seg-sm button,
+.ka-actions .segmented button {
+  height: auto;
+  padding: 0 12px;
+  font-size: var(--fs-sm);
+}
+.segmented.seg-md,
+.segmented.seg-sm {
+  height: var(--tb-control-md);
+}
+.segmented.seg-md button,
+.segmented.seg-sm button {
+  padding: 0 10px;
+  font-size: 13px;
+}
+.period-seg {
+  display: inline-flex;
+  flex: none;
+}
+.period-seg.full,
+.period-seg.full .segmented {
+  display: flex;
+  width: 100%;
+}
+.period-seg.full .segmented button {
+  flex: 1;
+  padding: 0 4px;
+}
+.dd-btn,
+.filters .dd-btn,
+.add-material-form .dd-btn {
+  height: var(--tb-control-lg);
+  min-height: 0;
+}
+.dd-md .dd-btn,
+.dd-sm .dd-btn {
+  height: var(--tb-control-md);
+}
+.filters .dd {
+  align-self: center;
+}
+.chip,
+.pill,
+.folder-chip,
+.scope-chip {
+  display: inline-flex;
+  align-items: center;
+  height: var(--tb-control-md);
+  min-height: 0;
+  line-height: 1;
+}
+.split-close {
+  display: inline-grid;
+  place-items: center;
+  width: var(--tb-control-md);
+  height: var(--tb-control-md);
+}
+/* 한 줄 입력칸 = 큰 크기 (도구줄 단추 · 기간 · 드롭다운과 같은 높이) */
+.page input[type='search'],
+.page input[type='text'],
+.page input[type='url'],
+.page input:not([type]) {
+  box-sizing: border-box;
+  height: var(--tb-control-lg);
+}
+.filters {
+  align-items: center;
+}

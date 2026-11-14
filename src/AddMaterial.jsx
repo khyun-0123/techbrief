@@ -135,6 +135,7 @@ function AddMaterial({ folders, defaultFolder, selectByDefault = false, onAdded,
             <Dropdown
               value={tier}
               onChange={setTier}
+              size="lg"
               label="출처 단계"
               options={[
                 { value: '', label: '자동 (논문 1차 · 나머지 2차)' },
@@ -158,7 +159,7 @@ function AddMaterial({ folders, defaultFolder, selectByDefault = false, onAdded,
           {folders && select && (
             <label>
               담을 폴더
-              <Dropdown value={folderId} onChange={setFolderId} label="담을 폴더" options={folders.map((f) => ({ value: f.id, label: f.name }))} />
+              <Dropdown value={folderId} onChange={setFolderId} size="lg" label="담을 폴더" options={folders.map((f) => ({ value: f.id, label: f.name }))} />
             </label>
           )}
         </div>

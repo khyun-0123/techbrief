@@ -200,7 +200,7 @@ function SelectSummary({
                 value={sort}
                 onChange={setSort}
                 label="정렬"
-                size="sm"
+                size="md"
                 options={[
                   { value: 'importance', label: '중요도순' },
                   { value: 'latest', label: '최신순' },

@@ -1,7 +1,7 @@
 // 기본 부품 (src/ui). 각 스토리는 상태별 모양을 한 화면에 모아 보여 준다
 import { useState } from 'react'
 import { Alert, Badge, Button, Card, Chip, Dialog, Pills, SaveBar, Segmented, StatTile, Switch, Tabs, TextField } from '../ui/index.jsx'
-import Dropdown from '../Dropdown.jsx'
+import Dropdown, { PeriodSeg, Seg } from '../Dropdown.jsx'
 
 const row = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }
 const col = { display: 'grid', gap: 20, maxWidth: 720 }
@@ -193,3 +193,130 @@ export const 저장_막대와_확인_창 = {
     </div>
   ),
 }
+
+// 버튼 체계 (11/15 조장: 「버튼 사이즈 통일 · 요소마다 모양이 제각각 · 기간 버튼셋」) — 앱이 실제로 쓰는 클래스 · 부품 그대로
+// 크기 2단계(큰 40 · 작은 32, tokens.css --tb-control-lg/md) × 모양은 역할마다 하나. docs/20 8장
+function ButtonSystem() {
+  const [p1, setP1] = useState('week')
+  const [p2, setP2] = useState('all')
+  const [sort, setSort] = useState('importance')
+  const [view, setView] = useState('map')
+  const [src, setSrc] = useState('all')
+  const [size, setSize] = useState(20)
+  const periods = [
+    { value: 'today', label: '오늘' },
+    { value: 'week', label: '최근 7일' },
+    { value: 'all', label: '전체' },
+  ]
+  const th = { textAlign: 'left', padding: '8px 12px', fontSize: 'var(--fs-sm)', color: 'var(--tb-color-text-sub)', borderBottom: '1px solid var(--tb-color-line-soft)' }
+  const td = { padding: '12px', borderBottom: '1px solid var(--tb-color-line-soft)', verticalAlign: 'middle' }
+  const cell = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }
+  return (
+    <div style={{ display: 'grid', gap: 16, maxWidth: 1000 }}>
+      <p style={{ margin: 0, color: 'var(--tb-color-text-sub)' }}>
+        크기는 두 단계예요 — <b>큰 40px</b>(쪽 머리 · 도구줄 · 입력칸과 한 줄), <b>작은 32px</b>(카드 · 목록 · 칸 안). 모양은 역할마다 하나라서, 모양만 보고 「누르면 일어나는 것 / 하나 고르는 것 / 켜고 빼는 값」을 알 수 있어요.
+      </p>
+      <table style={{ borderCollapse: 'collapse', background: 'var(--tb-color-surface)', borderRadius: 12 }}>
+        <thead>
+          <tr>
+            <th style={th}>역할 · 모양</th>
+            <th style={th}>큰 40 (쪽 머리 · 도구줄)</th>
+            <th style={th}>작은 32 (카드 · 목록 · 칸 안)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={td}>
+              <b>행동 버튼</b> · 박스 8
+            </td>
+            <td style={td}>
+              <div style={cell}>
+                <button type="button" className="btn primary">
+                  자료 찾기 →
+                </button>
+                <button type="button" className="btn">
+                  자동으로 보고서 만들기
+                </button>
+              </div>
+            </td>
+            <td style={td}>
+              <div style={cell}>
+                <button type="button" className="act-btn">
+                  요약 보기
+                </button>
+                <button type="button" className="pane-zoom">
+                  ⤢ 크게 보기
+                </button>
+                <button type="button" className="km-act">
+                  PNG 저장
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style={td}>
+              <b>하나 고르기</b> · 분리형 (2~4개 · 짧은 글자)
+            </td>
+            <td style={td}>
+              <div style={cell}>
+                <PeriodSeg value={p1} onChange={setP1} options={periods} />
+                <Seg size="lg" value={sort} onChange={setSort} label="정렬" options={[{ value: 'importance', label: '중요도순' }, { value: 'latest', label: '최신순' }]} />
+              </div>
+            </td>
+            <td style={td}>
+              <div style={cell}>
+                <Seg value={view} onChange={setView} label="보기" options={[{ value: 'map', label: '마인드맵' }, { value: 'cloud', label: '워드클라우드' }]} />
+                <div style={{ width: 172 }}>
+                  <PeriodSeg size="md" full value={p2} onChange={setP2} label="생성 기간" options={[{ value: 'all', label: '전체' }, { value: 'today', label: '오늘' }, { value: '7', label: '7일' }, { value: '30', label: '30일' }, { value: '90', label: '90일' }]} />
+                </div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style={td}>
+              <b>목록에서 고르기</b> · 드롭다운 (많음 · 김 · 개수가 바뀜)
+            </td>
+            <td style={td}>
+              <Dropdown size="lg" label="출처" value={src} onChange={setSrc} options={[{ value: 'all', label: '모든 출처' }, { group: '출처 단계', options: [{ value: 't1', label: '1차 · 기업 발표·학회·논문' }, { value: 't2', label: '2차 · 전문매체' }] }]} />
+            </td>
+            <td style={td}>
+              <Dropdown size="sm" label="페이지당 개수" value={size} onChange={setSize} options={[10, 20, 50].map((n) => ({ value: n, label: `${n}개씩` }))} />
+            </td>
+          </tr>
+          <tr>
+            <td style={td}>
+              <b>값 칩</b> · 알약 (고른 말 · 폴더 · 거르기, 켜고 빼기)
+            </td>
+            <td style={td}>—</td>
+            <td style={td}>
+              <div style={cell}>
+                <button type="button" className="chip">
+                  LG디스플레이 ×
+                </button>
+                <button type="button" className="folder-chip">
+                  ▤ 미분류 17
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style={td}>
+              <b>아이콘 버튼</b> · 정사각 32
+            </td>
+            <td style={td}>—</td>
+            <td style={td}>
+              <button type="button" className="split-close" aria-label="닫기">
+                ×
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p style={{ margin: 0, color: 'var(--tb-color-text-faint)', fontSize: 'var(--fs-sm)' }}>
+        고르는 칸 배정 — 분리형: 기간(대시보드 · 자료 현황 · 내 보고서 생성 기간) · 정렬 · 마인드맵/워드클라우드 · 보고서 조사 수준 · 자동 최신화 주기 · 자동 요약 기간 / 드롭다운: 출처 · 폴더 · 출처 단계 · 긍정·부정 · 최신화 간격 · 페이지당 개수(자주 안 바꿈)
+      </p>
+    </div>
+  )
+}
+
+export const 버튼_체계 = { name: '버튼 체계', render: () => <ButtonSystem /> }

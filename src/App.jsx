@@ -32,7 +32,7 @@ import {
   createReportJob,
 } from './api.js'
 import AutoReportDialog from './AutoReportDialog.jsx'
-import Dropdown, { Seg } from './Dropdown.jsx'
+import Dropdown, { PeriodSeg, Seg } from './Dropdown.jsx'
 import { pickMaterials, periodLabelOf } from './autoPick.js'
 import { buildTagDict, tagsOf } from './hashtags.js'
 import SettingsMenu from './SettingsMenu.jsx'
@@ -1314,11 +1314,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                     {search?.loading ? '찾는 중…' : '뉴스·논문에서 찾기'}
                   </button>
                 </form>
-                <Seg value={period} onChange={changePeriod} options={PERIODS} label="기간" title={search ? '바꾸면 이 기간으로 다시 찾아요' : undefined} />
+                <PeriodSeg value={period} onChange={changePeriod} options={PERIODS} title={search ? '바꾸면 이 기간으로 다시 찾아요' : undefined} />
                 <Dropdown
                   value={source}
                   onChange={setSource}
                   label="출처"
+                  size="lg"
                   className="dd-source"
                   options={[
                     { value: 'all', label: '모든 출처' },
@@ -1337,6 +1338,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 <Seg
                   value={sort}
                   onChange={setSort}
+                  size="lg"
                   label="정렬"
                   options={[
                     { value: 'importance', label: '중요도순' },
@@ -1412,6 +1414,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 {features.has('sentiment') && (
                 <Dropdown
                   className="sentiment-filter"
+                  size="lg"
                   value={sentimentFilter}
                   onChange={setSentimentFilter}
                   label="긍정·중립·부정 거르기"

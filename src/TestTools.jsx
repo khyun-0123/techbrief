@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import { searchNewsApi, testSummaryApi } from './api.js'
 import SummaryItems from './SummaryItems.jsx'
-import { Seg } from './Dropdown.jsx'
+import { PeriodSeg } from './Dropdown.jsx'
 
 const PERIODS = [
   ['today', '최근 24시간'],
@@ -72,7 +72,7 @@ function TestTools({ providers }) {
         <h2>1. 수집 시험</h2>
         <form className="tools-row" onSubmit={runSearch}>
           <input type="search" placeholder="검색어 (예: 마이크로LED)" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="검색어" />
-          <Seg value={period} onChange={setPeriod} label="기간" options={PERIODS.map(([value, label]) => ({ value, label }))} />
+          <PeriodSeg value={period} onChange={setPeriod} options={PERIODS.map(([value, label]) => ({ value, label }))} />
           <button type="submit" className="btn primary" disabled={!query.trim() || search?.loading}>
             {search?.loading ? '찾는 중…' : '네이버에서 찾기'}
           </button>

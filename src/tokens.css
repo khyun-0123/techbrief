@@ -67,6 +67,9 @@
   /* ── 모서리 (LG radius-semantic) ── */
   --tb-radius-button: var(--semantic-radius-button-m); /* 8 */
   --tb-radius-input: var(--semantic-radius-button-m); /* 8 */
+  /* 버튼 · 고르는 칸 크기 (11/15 조장: 「버튼 사이즈 통일」) — 큰 = 쪽 머리 · 도구줄(입력칸과 한 줄), 작은 = 카드 · 목록 · 칸 안 */
+  --tb-control-lg: 40px;
+  --tb-control-md: 32px;
   --tb-radius-card: var(--semantic-radius-card-l); /* 16 */
   --tb-radius-card-s: var(--semantic-radius-card-m); /* 12 */
   --tb-radius-dialog: var(--semantic-radius-dialog-popup-s); /* 16 */

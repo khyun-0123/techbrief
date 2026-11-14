@@ -63,7 +63,7 @@ function RefreshPanel({ status, error, starting, disabled, onRun, onSave, canEdi
           {settings.mode === 'interval' && (
             <>
               <span className="refresh-label">간격</span>
-              <Dropdown value={settings.hours} onChange={(v) => change({ hours: Number(v) })} label="간격" disabled={locked} options={status.hourOptions.map((h) => ({ value: h, label: `${h}시간마다` }))} />
+              <Dropdown size="lg" value={settings.hours} onChange={(v) => change({ hours: Number(v) })} label="간격" disabled={locked} options={status.hourOptions.map((h) => ({ value: h, label: `${h}시간마다` }))} />
             </>
           )}
           {/* 자동 요약 켜기/끄기. 개발 중에는 끄고, 시연·테스트 때 켠다 (켜면 관련도 낮음을 뺀 기사 전부, 중요도 순) */}

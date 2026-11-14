@@ -11,7 +11,7 @@ import { fetchBundle, fetchRelated, fetchTimeline, fetchTimelineStory } from './
 import { retryStory, useStory } from './storyJobs.js'
 import { Spark } from './KeywordTrends.jsx'
 import TechTimeline from './TechTimeline.jsx'
-import { Seg } from './Dropdown.jsx'
+import { PeriodSeg, Seg } from './Dropdown.jsx'
 
 const THIS_YEAR = new Date().getFullYear() // 올해는 안 끝나 줄어 보이므로 그래프에서 뺀다
 // 11/14 통합: 임시 맵(ScopeMap)을 워드클라우드팀 맵 v2 이식본(KeywordMap.jsx)으로 바꿈 — 분할 칸 왼쪽에 들어감
@@ -141,16 +141,16 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
   const [mapView, setMapView] = useState('map') // 칸에서 고른 보기(마인드맵 · 워드클라우드)를 크게 보기에도 그대로
   // 보기 칩 (마인드맵팀 디자인 가이드: 칸 머리 오른쪽 칩 2개, 표시 설정 창의 「보기」와 같은 값)
   const viewChips = (
-    <span className="km-chips" role="group" aria-label="보기">
-      {[
-        ['map', '마인드맵'],
-        ['cloud', '워드클라우드'],
-      ].map(([v, t]) => (
-        <button key={v} type="button" className="km-chip" aria-pressed={mapView === v} onClick={() => setMapView(v)}>
-          {t}
-        </button>
-      ))}
-    </span>
+    <Seg
+      value={mapView}
+      onChange={setMapView}
+      label="보기"
+      size="md"
+      options={[
+        { value: 'map', label: '마인드맵' },
+        { value: 'cloud', label: '워드클라우드' },
+      ]}
+    />
   )
   useEffect(() => {
     if (!bigMap) return undefined
@@ -246,7 +246,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
         </p>
         <div className="ka-actions">
           {periods.length > 0 && (
-            <Seg value={period} onChange={(v) => onPeriod?.(v)} label="자료 찾을 기간" options={periods} />
+            <PeriodSeg value={period} onChange={(v) => onPeriod?.(v)} label="자료 찾을 기간" options={periods} />
           )}
           {onAutoReport && related && (
             <button type="button" className="btn" onClick={() => onAutoReport({ query: keyword, terms: picked })} title="고른 범위의 자료를 중요도로 자동으로 골라 보고서까지 — 만들기 전에 확인 창이 떠요">

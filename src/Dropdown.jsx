@@ -167,3 +167,13 @@ export function Seg({ value, onChange, options, label, title, size = 'md', disab
     </div>
   )
 }
+
+// 기간 버튼 세트 (11/15 조장: 「오늘 · 최근 7일 · 전체 고르는 버튼셋 만들고 사이즈 통일」) — 모든 화면의 기간 고르기는 이것
+// options: [{ value, label }]. 쪽 도구줄은 size="lg"(40), 칸 · 왼쪽 막대 안은 "md"(32). full = 칸 너비 전체로 나눔
+export function PeriodSeg({ value, onChange, options, size = 'lg', full = false, label = '기간', title }) {
+  return (
+    <div className={full ? 'period-seg full' : 'period-seg'}>
+      <Seg value={value} onChange={onChange} options={options} label={label} size={size} title={title} />
+    </div>
+  )
+}

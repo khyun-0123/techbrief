@@ -7,7 +7,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--tb-space-2);
-  height: 40px;
+  height: var(--tb-control-lg); /* 40 — 앱 .btn과 같은 토큰 (11/15) */
   padding: 0 var(--tb-space-4);
   border: 1px solid transparent;
   border-radius: var(--tb-radius-button);
@@ -33,13 +33,13 @@
 }
 
 .tb-btn-sm {
-  height: 32px;
+  height: var(--tb-control-md); /* 32 */
   padding: 0 var(--tb-space-3);
   font-size: var(--fs-sm);
 }
 
 .tb-btn-lg {
-  height: 48px;
+  height: 48px; /* 앱에서는 쓰지 않음 (11/15 버튼 체계: 큰 40 · 작은 32 두 단계) */
   padding: 0 var(--tb-space-6);
   font-size: var(--fs-base);
 }

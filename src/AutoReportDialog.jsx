@@ -3,6 +3,7 @@
 // → 「이대로 만들기」: 고른 자료를 선별(폴더 「키워드 · 자동」)에 담고 요약 대기열에 넣음 → 다 요약되면 보고서 작업을 자동으로 넣음 (App.jsx)
 import { useEffect, useRef, useState } from 'react'
 import { AUTO_PICK, reasonOf } from './autoPick.js'
+import { Seg } from './Dropdown.jsx'
 
 const LEVELS = [
   ['selected', '선택한 자료만', '가장 빨라요'],
@@ -92,13 +93,7 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
                 보고서 제목
                 <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} />
               </label>
-              <div className="ar-levels" role="radiogroup" aria-label="자료 조사 수준">
-                {LEVELS.map(([v, l, tip]) => (
-                  <button key={v} type="button" role="radio" aria-checked={level === v} className="km-chip" aria-pressed={level === v} title={tip} onClick={() => setLevel(v)}>
-                    {l}
-                  </button>
-                ))}
-              </div>
+              <Seg value={level} onChange={setLevel} label="자료 조사 수준" size="md" options={LEVELS.map(([value, label]) => ({ value, label }))} />
             </div>
             <div className="ar-foot">
               <span className="hint">
