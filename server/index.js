@@ -12,7 +12,7 @@ import { buildTimeline, timelineStory } from './timeline.js'
 import { readyTimelines, runPrecompute, startPrecompute } from './timelineJobs.js'
 import { relatedWords } from './related.js'
 import { fillMap, mapMaterials } from './mapMaterials.js'
-import { allCategoryCompetitors, bundleFacts, headlineSeeds, prepareBundle, THREAT_FACTOR } from './keywordBundle.js'
+import { allCategoryCompetitors, bundleFacts, categoryCompetitors, headlineSeeds, prepareBundle, THREAT_FACTOR } from './keywordBundle.js'
 import { scopeSearch } from './scopeSearch.js'
 import { popularPapers } from './papers/journals.js'
 import { getTechTrends, startTechTrends } from './techtrends.js'
@@ -623,6 +623,19 @@ export async function handleApi(req, res) {
       return send(res, 200, (await prepareBundle(q)) ?? {})
     }
     // 세부 카테고리 × 경쟁사 특허 (11/12, 대시보드 「이번 주 한눈에」 · keywordBundle.js). 7일 기억, 특허 DB를 다시 받으면 다시 셈
+    // 요즘 뜨는 기술 옆 자사 위협 · 기회 (11/14 조장): 기술 용어 → 그 말이 든 특허가 가장 많은 세부 기술(CPC) → 경쟁사 특허 판정
+    // 특허 10건 미만이면 연결이 약해 판정하지 않음. 값은 mapMaterials(24시간) · categoryCompetitors(7일) 기억을 그대로 씀
+    if (req.method === 'GET' && req.url.startsWith('/api/trend-verdicts?')) {
+      const terms = (new URL(req.url, 'http://x').searchParams.get('terms') ?? '').split('|').map((t) => t.trim()).filter(Boolean).slice(0, 20)
+      const one = async (term) => {
+        const m = await Promise.race([mapMaterials(term), new Promise((res) => setTimeout(() => res(null), 8_000))]).catch(() => null)
+        const cat = m?.categories?.[0]
+        if (!cat || cat.count < 10) return [term, null]
+        const comp = await categoryCompetitors(cat.id).catch(() => null)
+        return [term, comp ? { category: { id: cat.id, name: cat.name, patents: cat.count }, verdict: comp.verdict, competitors: comp } : null]
+      }
+      return send(res, 200, { verdicts: Object.fromEntries(await Promise.all(terms.map(one))), threatFactor: THREAT_FACTOR })
+    }
     if (req.method === 'GET' && req.url === '/api/category-competitors') {
       return send(res, 200, { categories: await allCategoryCompetitors(), rule: `위협: 경쟁사 중 하나가 분야 증가의 ${THREAT_FACTOR}배 이상 · 자사는 분야보다 느림 / 기회: 자사가 경쟁사 모두보다 빠르고 분야 이상` })
     }

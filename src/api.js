@@ -525,3 +525,11 @@ export async function fetchBundle(q) {
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
   return data
 }
+
+// 요즘 뜨는 기술 옆 자사 위협 · 기회 (11/14): { verdicts: { [기술]: { category, verdict, competitors } | null } }
+export async function fetchTrendVerdicts(terms) {
+  const res = await fetch(`/api/trend-verdicts?terms=${encodeURIComponent(terms.join('|'))}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}
