@@ -19,11 +19,16 @@ function readCsv(file) {
   for (let i = 0; i < text.length; i++) {
     const c = text[i]
     if (q) {
-      if (c === '"' && text[i + 1] === '"') (cell += '"'), i++
-      else if (c === '"') q = false
+      if (c === '"' && text[i + 1] === '"') {
+        cell += '"'
+        i++
+      } else if (c === '"') q = false
       else cell += c
     } else if (c === '"') q = true
-    else if (c === ',') row.push(cell), (cell = '')
+    else if (c === ',') {
+      row.push(cell)
+      cell = ''
+    }
     else if (c === '\n' || c === '\r') {
       if (c === '\r' && text[i + 1] === '\n') i++
       row.push(cell)
@@ -99,7 +104,7 @@ export function subcatsOf(word) {
   const w = squash(word)
   const out = new Set()
   for (const c of load().cats) {
-    const hit = c.names.some((n) => (/^[\x00-\x7f]+$/.test(n) && n.length <= 3 ? w === n : w.includes(n)))
+    const hit = c.names.some((n) => (/^[!-~]+$/.test(n) && n.length <= 3 ? w === n : w.includes(n)))
     if (hit && !c.not.some((x) => w.includes(x))) {
       out.add(c.cat)
       for (const a of c.also) out.add(a)
