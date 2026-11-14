@@ -13,6 +13,7 @@ import AddMaterial from './AddMaterial.jsx'
 import FolderBar from './FolderBar.jsx'
 import ReportComposer from './ReportComposer.jsx'
 import { INBOX } from './folders.js'
+import Dropdown, { Seg } from './Dropdown.jsx'
 
 const IMPORTANCE_LABEL = { high: '중요', normal: '' }
 const JOB_LABEL = { queued: '요약 대기', running: '요약 중', error: '요약 오류' }
@@ -93,13 +94,7 @@ function SelectSummary({
         <div className="candidate-detail-tools">
           <label className="folder-move">
             폴더
-            <select value={folderIdOf(a.id)} onChange={(e) => onMove(a.id, e.target.value)}>
-              {folders.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
+            <Dropdown value={folderIdOf(a.id)} onChange={(v) => onMove(a.id, v)} label="폴더" size="sm" options={folders.map((f) => ({ value: f.id, label: f.name }))} />
           </label>
           {a.url && (
             <a href={a.url} target="_blank" rel="noreferrer">
@@ -201,10 +196,16 @@ function SelectSummary({
           <section className="panel panel-flush select-list" aria-label="선별 기사">
             <div className="select-list-head">
               <h2>선별 기사</h2>
-              <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="정렬">
-                <option value="importance">중요도순</option>
-                <option value="latest">최신순</option>
-              </select>
+              <Seg
+                value={sort}
+                onChange={setSort}
+                label="정렬"
+                size="sm"
+                options={[
+                  { value: 'importance', label: '중요도순' },
+                  { value: 'latest', label: '최신순' },
+                ]}
+              />
             </div>
             <FolderBar
               folders={folders}

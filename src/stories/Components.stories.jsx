@@ -1,6 +1,7 @@
 // 기본 부품 (src/ui). 각 스토리는 상태별 모양을 한 화면에 모아 보여 준다
 import { useState } from 'react'
 import { Alert, Badge, Button, Card, Chip, Dialog, Pills, SaveBar, Segmented, StatTile, Switch, Tabs, TextField } from '../ui/index.jsx'
+import Dropdown from '../Dropdown.jsx'
 
 const row = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }
 const col = { display: 'grid', gap: 20, maxWidth: 720 }
@@ -87,8 +88,30 @@ function Selection() {
     const [hours, setHours] = useState(2)
     const [tab, setTab] = useState('info')
     const [on, setOn] = useState(true)
+    const [src, setSrc] = useState('all')
+    const [folder, setFolder] = useState('inbox')
     return (
       <div style={col}>
+        <p style={{ margin: 0, color: 'var(--tb-color-text-sub)' }}>
+          고르는 칸 규칙 (11/15): 브라우저 기본 선택 칸(select)은 쓰지 않아요. 선택지가 2~3개이고 짧으면 분리형 버튼(Segmented), 많거나 길거나 개수가 바뀌면 드롭다운(Dropdown).
+        </p>
+        <div>
+          <p style={label}>드롭다운 (Dropdown) — 출처처럼 묶음이 있는 목록 · 폴더처럼 개수가 바뀌는 목록</p>
+          <div style={row}>
+            <Dropdown
+              label="출처"
+              value={src}
+              onChange={setSrc}
+              options={[
+                { value: 'all', label: '모든 출처' },
+                { group: '출처 단계', options: [{ value: 'tier:1', label: '1차 · 기업 발표·학회·논문' }, { value: 'tier:2', label: '2차 · 전문매체' }, { value: 'tier:3', label: '3차 · 일반 뉴스' }] },
+                { group: '매체', options: ['디일렉', 'ZDNet Korea', '전자신문', 'DIGITIMES'].map((x) => ({ value: x, label: x })) },
+              ]}
+            />
+            <Dropdown size="sm" label="폴더" value={folder} onChange={setFolder} options={[{ value: 'inbox', label: '미분류' }, { value: 'f1', label: '탠덤 OLED · 자동' }, { value: 'f2', label: 'LED' }]} />
+            <Dropdown label="비활성" value="x" disabled options={[{ value: 'x', label: '관리자가 정해요' }]} />
+          </div>
+        </div>
         <div>
           <p style={label}>세 칸 버튼 (Segmented)</p>
           <Segmented label="주기" options={[['off', '꺼짐'], ['daily', '매일'], ['interval', '몇 시간마다']]} value={mode} onChange={setMode} />

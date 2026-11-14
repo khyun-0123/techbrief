@@ -2060,3 +2060,6 @@ a.adm-brand:focus-visible {
 .adm-sub {
   color: var(--adm-muted);
 }
+.adm-field-inline .segmented {
+  justify-self: start;
+}

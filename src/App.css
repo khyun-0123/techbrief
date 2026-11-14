@@ -7791,3 +7791,184 @@ button.ka-auto-note {
   font-size: var(--fs-sm);
   line-height: 1;
 }
+/* ── 맞춤 드롭다운 · 분리형 버튼 (11/15 조장: 브라우저 기본 선택 칸을 쓰지 않음, src/Dropdown.jsx) ──
+   단추: 칩과 같은 높이(md 36 · sm 32), 흰 바탕 · 1px 선 · 둥근 8px, 오른쪽 ▾. 목록: 떠 있는 판(표시 설정 창과 같은 그림자), 고른 항목 ✓ */
+.dd {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  min-width: 0;
+  vertical-align: middle;
+}
+.dd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1;
+  text-align: left;
+  cursor: pointer;
+}
+.dd-sm .dd-btn {
+  height: 32px;
+}
+.dd-btn:hover:not(:disabled),
+.dd-btn[aria-expanded='true'] {
+  border-color: var(--tb-color-text);
+}
+.dd-btn:focus-visible {
+  outline: 2px solid var(--tb-color-line-focus);
+  outline-offset: 2px;
+}
+.dd-btn:disabled {
+  color: var(--tb-color-text-faint);
+  background: var(--tb-color-bg-strong);
+  cursor: not-allowed;
+}
+.dd-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dd-caret {
+  flex: none;
+  color: var(--tb-color-text-sub);
+  transition: transform 0.15s;
+}
+.dd-btn[aria-expanded='true'] .dd-caret {
+  transform: rotate(180deg);
+}
+.dd-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 60;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 32px));
+  max-height: 320px;
+  margin: 0;
+  padding: 6px;
+  overflow: auto;
+  list-style: none;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: 12px;
+  background: var(--tb-color-surface);
+  box-shadow: 0 8px 24px rgb(17 17 17 / 12%);
+  outline: none;
+  animation: tb-fade 0.12s ease-out;
+}
+.dd-list.up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+.dd-group {
+  padding: 8px 10px 4px;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.dd-opt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px 6px 6px;
+  border-radius: 8px;
+  font-size: var(--fs-sm);
+  line-height: 1.35;
+  cursor: pointer;
+}
+.dd-opt.active {
+  background: var(--tb-color-bg-strong);
+}
+.dd-opt.on {
+  font-weight: 700;
+}
+.dd-opt[aria-disabled='true'] {
+  color: var(--tb-color-text-faint);
+  cursor: not-allowed;
+}
+.dd-check {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  color: var(--tb-color-text);
+}
+.dd-text {
+  display: grid;
+  min-width: 0;
+}
+.dd-text small {
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+}
+.segmented.seg-sm button {
+  height: 28px;
+  padding: 0 10px;
+  font-size: var(--fs-xs);
+}
+.segmented button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.segmented button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+/* 드롭다운 · 분리형 버튼이 들어간 자리 (11/15, 예전 select 자리) */
+.filters .dd {
+  max-width: 100%;
+}
+.filters .dd-source {
+  max-width: 240px;
+}
+.refresh-settings .refresh-label {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.refresh-settings .segmented,
+.refresh-settings .dd,
+.add-material-form .dd {
+  display: flex;
+  width: 100%;
+}
+.refresh-settings .segmented button {
+  flex: 1;
+}
+.add-material-form .dd-btn {
+  height: 40px;
+}
+/* 같은 줄 높이 맞춤 (11/15 실측: 자료 현황 도구줄 43px 중 드롭다운만 36px, 대시보드 분리형 38px · 버튼 40px) */
+.filters .dd {
+  align-self: stretch;
+}
+.filters .dd-btn {
+  height: auto;
+  min-height: 36px;
+}
+.ka-actions .segmented button {
+  height: 34px;
+}
+/* 자료 추가: 같은 줄 두 칸의 아래(입력칸)를 맞춤, 드롭다운 높이 = 입력칸 (11/15 실측 43px) */
+.add-material-row {
+  align-items: end;
+}
+.add-material-form .dd-btn {
+  height: 43px;
+}

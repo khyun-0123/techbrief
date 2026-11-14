@@ -32,6 +32,7 @@ import {
   createReportJob,
 } from './api.js'
 import AutoReportDialog from './AutoReportDialog.jsx'
+import Dropdown, { Seg } from './Dropdown.jsx'
 import { pickMaterials, periodLabelOf } from './autoPick.js'
 import { buildTagDict, tagsOf } from './hashtags.js'
 import SettingsMenu from './SettingsMenu.jsx'
@@ -1313,38 +1314,35 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                     {search?.loading ? '찾는 중…' : '뉴스·논문에서 찾기'}
                   </button>
                 </form>
-                <select
-                  value={period}
-                  onChange={(e) => changePeriod(e.target.value)}
-                  aria-label="기간"
-                  title={search ? '바꾸면 이 기간으로 다시 찾아요' : undefined}
-                >
-                  {PERIODS.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-                <select value={source} onChange={(e) => setSource(e.target.value)} aria-label="출처">
-                  <option value="all">모든 출처</option>
-                  <optgroup label="출처 단계">
-                    <option value="tier:1">1차 · 기업 발표·학회·논문</option>
-                    <option value="tier:2">2차 · 전문매체</option>
-                    <option value="tier:3">3차 · 일반 뉴스</option>
-                  </optgroup>
-                  <option value="material">직접 추가한 자료 ({materials.length})</option>
-                  <optgroup label="매체">
-                    {sources.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
-                <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="정렬">
-                  <option value="importance">중요도순</option>
-                  <option value="latest">최신순</option>
-                </select>
+                <Seg value={period} onChange={changePeriod} options={PERIODS} label="기간" title={search ? '바꾸면 이 기간으로 다시 찾아요' : undefined} />
+                <Dropdown
+                  value={source}
+                  onChange={setSource}
+                  label="출처"
+                  className="dd-source"
+                  options={[
+                    { value: 'all', label: '모든 출처' },
+                    { value: 'material', label: `직접 추가한 자료 (${materials.length})` },
+                    {
+                      group: '출처 단계',
+                      options: [
+                        { value: 'tier:1', label: '1차 · 기업 발표·학회·논문' },
+                        { value: 'tier:2', label: '2차 · 전문매체' },
+                        { value: 'tier:3', label: '3차 · 일반 뉴스' },
+                      ],
+                    },
+                    { group: '매체', options: sources.map((x) => ({ value: x, label: x })) },
+                  ]}
+                />
+                <Seg
+                  value={sort}
+                  onChange={setSort}
+                  label="정렬"
+                  options={[
+                    { value: 'importance', label: '중요도순' },
+                    { value: 'latest', label: '최신순' },
+                  ]}
+                />
               </div>
               {search ? (
                 <div className="search-banner">
@@ -1412,18 +1410,19 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   관련도 낮은 기사도 보기 <span className="own-count">{lowCount}건</span>
                 </label>
                 {features.has('sentiment') && (
-                <select
+                <Dropdown
                   className="sentiment-filter"
                   value={sentimentFilter}
-                  onChange={(e) => setSentimentFilter(e.target.value)}
-                  aria-label="긍정·중립·부정 거르기"
+                  onChange={setSentimentFilter}
+                  label="긍정·중립·부정 거르기"
                   title="기사 속 소식 자체의 성격이에요. 요약 전에는 제목 기준, 요약 후에는 요약 기준이에요 (투자 판단용 아님)"
-                >
-                  <option value="all">긍정·부정 전체</option>
-                  <option value="긍정">○ 긍정만</option>
-                  <option value="중립">△ 중립만</option>
-                  <option value="부정">✕ 부정만</option>
-                </select>
+                  options={[
+                    { value: 'all', label: '긍정·부정 전체' },
+                    { value: '긍정', label: '○ 긍정만' },
+                    { value: '중립', label: '△ 중립만' },
+                    { value: '부정', label: '✕ 부정만' },
+                  ]}
+                />
                 )}
                 <label className="own-toggle" title="자사·자회사만 나온 기사를 숨겨요. 경쟁사도 함께 나오면 남겨요">
                   <input type="checkbox" checked={excludeOwn} onChange={(e) => toggleExcludeOwn(e.target.checked)} />
