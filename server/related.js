@@ -1,6 +1,7 @@
 // 연관 키워드 (11/10, 대시보드 「키워드 분석」 맵의 재료): 키워드와 같은 기사에 함께 나온 말을 규칙으로 센다 (AI 안 씀)
 // - 워드클라우드팀 맵이 들어오기 전 임시 재료. 워드클라우드팀 맵과 같은 성격(뉴스에서 함께 나온 한글 단어)으로 맞췄다 (32 문서)
-// - 재료: 네이버 정확도순 100건(1번) + 우리가 모은 기사 중 그 키워드가 든 것(최근 60일, 1·2차 출처 포함)
+// - 재료: 네이버 정확도순 100건(1번) + 우리가 모은 기사 중 그 키워드가 든 것(11/15: 기간 제한 없이 최근 1,000건, 1·2차 출처 포함) + 그 기사의 AI 요약 문장
+// - 낱말 뽑기 (11/15): 한글은 형태소 분석기 Kiwi로 명사만(server/kiwi.js, 붙어 있던 조각은 이음), 모델이 없으면 예전 규칙(조사 · 어미 떼기)
 //   네이버 결과는 제목 · 요약에서 낱말 수만 세고 저장하지 않는다 (약관 23 문서: 저장 · AI 입력 아님)
 // - 같은 소식(제목이 비슷한 기사)은 한 번만 센다 → 「함께 나온 이슈 수」. 기사 수가 아니라 이슈 수라 보도량에 덜 휘둘린다
 // - 종류: 회사(경쟁사 · 자사 목록, 알려진 회사 이름) / 기술(영문 · 숫자 용어, 기술 낱말이 든 말, 관심 기술) / 일반(나머지)
@@ -13,6 +14,7 @@ import { cleanText } from './collector/normalize.js'
 import { cacheGet, cachePut } from './papers/index.js'
 import { queryKey } from './queryTerms.js'
 import { isException, isStop, subcatsOf } from './wordFilter.js'
+import { loadKiwi, nounsOf } from './kiwi.js'
 
 const TTL = 6 * 3600_000
 const MAX_NODES = 24
@@ -49,8 +51,11 @@ function stripJosa(w) {
   return w
 }
 
-// 한 글에서 후보 낱말 (겹치지 않게)
-export function wordsOf(text) {
+// Kiwi 명사 중 뉴스에 흔하고 뜻이 약한 말 (11/15 실측: 3단계에 자주 나옴). 「하다 · 되다」가 붙은 쓰임은 kiwi.js가 이미 뺌 — 여기는 명사로 쓰인 경우
+const KIWI_STOP = new Set('얘기 인터뷰 향상 증가 감소 개선 도입 부분 의심 언론 평균 전화 관련 이용 사용 경우 정도 가능성 필요성 측면 상태 내용 사실 생각 모습 이야기 질문 답변 발언 설명 보도 취재 기사 매체 업계 관계자'.split(' '))
+
+// 한 글에서 후보 낱말 (겹치지 않게). kiwi가 있으면 한글은 Kiwi 명사로 (11/15)
+export function wordsOf(text, kiwi = null) {
   const out = new Set()
   const t = cleanText(text)
   // 영문 · 숫자 용어: QD-OLED, OLED, 240Hz, 4K, HKC
@@ -60,7 +65,23 @@ export function wordsOf(text) {
     if (!isException(w) && isStop(w)) continue // 워드클라우드팀 불용어 · 예외 (11/14, wordFilter.js)
     out.add(/^[a-z]+$/.test(w) && w.length <= 3 ? w.toUpperCase() : w)
   }
-  // 한글 (영문이 붙은 말 포함: LG디스플레이, OLED패널)
+  // 한글 — Kiwi 명사 (영문만인 조각은 위에서 이미 셈). 예외어는 다른 거르기를 건너뜀
+  const nouns = nounsOf(kiwi, t)
+  if (nouns) {
+    for (const raw of nouns) {
+      if (!/[가-힣]/.test(raw)) continue
+      const w = raw
+      if (w.length >= 2 && w.length <= 14 && isException(w)) {
+        out.add(w)
+        continue
+      }
+      if (w.length < 2 || w.length > 14 || STOP.has(w) || KIWI_STOP.has(w) || isStop(w)) continue
+      if (/^[A-Z가-힣]{1,2}씨$/.test(w) || /^\d[\d.,]*(점|명|건|곳|개|원|%)$/.test(w)) continue // 「A씨 · 한씨」(익명) · 「30.18점 · 100점」(숫자) — 11/15 3단계 실측
+      out.add(w)
+    }
+    return out
+  }
+  // (Kiwi가 없을 때) 한글 (영문이 붙은 말 포함: LG디스플레이, OLED패널)
   for (const m of t.matchAll(/[A-Za-z0-9]*[가-힣]+[A-Za-z0-9가-힣]*/g)) {
     let w = stripJosa(m[0])
     // 디스플레이 · 반도체 예외어(응답속도 · 양자점 …)는 다른 거르기를 건너뛴다 (11/14, 워드클라우드팀 예외 v3)
@@ -94,11 +115,14 @@ const kindOf = (w, lists) => {
 async function collectedDocs(center) {
   if (!dbEnabled()) return []
   const k = `%${center.toLowerCase().replace(/\s+/g, '').replace(/[%_\\]/g, '\\$&')}%`
+  // 11/15: 기간 제한(60일 · 300건)을 풀고 최근 1,000건 + 그 기사의 AI 요약 문장(개념 · 원리 · 효과 …)을 같이 센다
   const { rows } = await query(
-    `SELECT coalesce(full_title, title) AS title, coalesce(description, '') AS description FROM articles
-      WHERE published_at > now() - interval '60 days'
-        AND lower(regexp_replace(coalesce(full_title, title) || ' ' || coalesce(description, ''), '\\s+', '', 'g')) LIKE $1
-      ORDER BY published_at DESC LIMIT 300`,
+    `SELECT coalesce(a.full_title, a.title) AS title,
+            coalesce(a.description, '') || ' ' || coalesce((SELECT string_agg(v->>'text', ' ') FROM jsonb_each(s.content->'items') AS e(key, v)), '') AS description
+       FROM articles a
+       LEFT JOIN summaries s ON s.article_id = a.id
+      WHERE lower(regexp_replace(coalesce(a.full_title, a.title) || ' ' || coalesce(a.description, '') || ' ' || coalesce(s.content::text, ''), '\\s+', '', 'g')) LIKE $1
+      ORDER BY a.published_at DESC LIMIT 1000`,
     [k],
   )
   return rows
@@ -109,6 +133,7 @@ async function collectedDocs(center) {
 // - 2단계: 1단계 말(상위 14개)마다, 그 말이 든 이슈에서 함께 나온 다른 말 상위 5개 (2개 이슈 이상, 키워드 · 1단계 말 제외)
 const CHILD_FOR = 14
 const CHILD_MAX = 5
+const GRAND_MAX = 4 // 3단계 (11/15): 2단계 말마다, 그 말이 든 이슈에서 함께 나온 다른 말 상위 4개 (2개 이슈 이상, 키워드 · 1단계 · 부모 · 형제 제외)
 function linksOf(nodes, issueWords, merged) {
   const N = issueWords.length
   const lows = nodes.map((n) => n.word.toLowerCase())
@@ -139,17 +164,40 @@ function linksOf(nodes, issueWords, merged) {
       .slice(0, CHILD_MAX)
       .map(([w, n]) => ({ word: merged.get(w)?.w ?? w, score: n, subcats: subcatsOf(merged.get(w)?.w ?? w) }))
   })
+  // 3단계: children 열쇠에 2단계 말도 넣는다 (화면은 같은 branches[말]로 다음 단계를 찾음)
+  for (const [parent, kids] of Object.entries(children)) {
+    const skip = new Set([...first, parent.toLowerCase(), ...kids.map((k) => k.word.toLowerCase())])
+    for (const kid of kids) {
+      const kw = kid.word.toLowerCase()
+      if (children[kid.word]) continue
+      const c = new Map()
+      for (const s of issueWords) {
+        if (!s.has(kw)) continue
+        for (const w of s) if (!skip.has(w) && w !== kw) c.set(w, (c.get(w) ?? 0) + 1)
+      }
+      const list = [...c]
+        .filter(([, n]) => n >= 2)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, GRAND_MAX)
+        .map(([w, n]) => ({ word: merged.get(w)?.w ?? w, score: n, subcats: subcatsOf(merged.get(w)?.w ?? w) }))
+      if (list.length) children[kid.word] = list
+    }
+  }
   return { edges, children }
 }
 
-// 자동 개수 (11/15 조장: 「골라 주는 개수 자체도 자동으로」): 화면 레버와 같은 순서(기술 · 회사이고 너무 넓지 않은 말, 연관도 순)로 하나씩 더하며
+// 자동으로 고를 수 있는 말 (11/15): 너무 넓지 않고, 기술 · 회사이거나 「일반」이라도 주제어 이슈의 15% 이상에 나오는 말
+// (「ai 안경」의 시험 · 부정행위처럼 주제와 직결된 말을 「일반」이라 건너뛰고 8위 아래 영문 논문 말을 고르던 문제). 화면 레버도 이 표시를 씀
+const AUTO_SHARE = 0.15
+const autoOk = (n) => !n.broad && (n.kind !== 'general' || n.share >= AUTO_SHARE)
+// 자동 개수 (11/15 조장: 「골라 주는 개수 자체도 자동으로」): 화면 레버와 같은 순서(auto 표시 말, 연관도 순)로 하나씩 더하며
 // 주제어 이슈 중 고른 말이 하나라도 든 이슈의 몫(덮는 비율)을 센다. 새로 덮는 몫이 5% 미만이면 멈춤. 1 ~ 6개
 // 돌려주는 값: { n, coverage(0~1), steps: [{ word, coverage }] } — AI 안 씀
 const PICK_GAIN = 0.05
 const PICK_MAX = 6
 function suggestCount(nodes, issueWords) {
   const N = issueWords.length
-  const order = nodes.filter((n) => n.kind !== 'general' && !n.broad)
+  const order = nodes.filter((n) => n.auto)
   if (!N || !order.length) return { n: 0, coverage: 0, steps: [] }
   const covered = new Array(N).fill(false)
   let count = 0
@@ -175,15 +223,16 @@ function suggestCount(nodes, issueWords) {
 export async function relatedWords(rawCenter, { refresh = false } = {}) {
   const center = String(rawCenter ?? '').trim().slice(0, 50)
   if (!center) throw Object.assign(new Error('키워드를 입력해 주세요.'), { status: 400 })
-  const key = `related:v5:${queryKey(center)}` // v2: 영어 기능어(11/11) · v3: 워드클라우드팀 불용어 · 예외 · 사업 분류 · v4: 교차선 · 2단계(11/14) · v5: 자동 개수(11/15)
+  const key = `related:v8:${queryKey(center)}` // v2: 영어 기능어(11/11) · v3: 워드클라우드팀 불용어 · 예외 · 사업 분류 · v4: 교차선 · 2단계(11/14) · v5: 자동 개수(11/15) · v6~7: Kiwi 명사(동사로 쓰인 명사 뺌) · 전체 기간 + AI 요약 · 3단계 · auto(11/15)
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return { ...hit, cached: true }
   }
-  const [naver, mine, lists] = await Promise.all([
+  const [naver, mine, lists, kiwi] = await Promise.all([
     searchNews(center, { sort: 'sim' }).catch(() => []),
     collectedDocs(center).catch(() => []),
     getLists(),
+    loadKiwi(),
   ])
   const docs = [...naver.map((i) => ({ title: cleanText(i.title), description: cleanText(i.description) })), ...mine]
   // 같은 소식 한 번만: 제목이 많이 비슷하면 같은 이슈
@@ -194,13 +243,13 @@ export async function relatedWords(rawCenter, { refresh = false } = {}) {
     if (same) same.text += ` ${d.description}`
     else issues.push({ title: d.title, text: `${d.title} ${d.description}` })
   }
-  const own = wordsOf(center)
+  const own = wordsOf(center, kiwi)
   const ownSquash = center.toLowerCase().replace(/\s+/g, '')
   const count = new Map()
   const issueWords = [] // 이슈마다 든 말 (소문자) — 교차선 · 2단계 계산용 (11/14)
   for (const is of issues) {
     const set = new Set()
-    for (const raw of new Set([...wordsOf(is.text)].map((x) => SAME[x] ?? x))) {
+    for (const raw of new Set([...wordsOf(is.text, kiwi)].map((x) => SAME[x] ?? x))) {
       const w = raw
       const low = w.toLowerCase()
       if (own.has(w) || ownSquash.includes(low) || low.includes(ownSquash)) continue // 키워드 자신과 그 조각
@@ -223,9 +272,10 @@ export async function relatedWords(rawCenter, { refresh = false } = {}) {
     .sort((a, b) => b.n - a.n)
     .slice(0, MAX_NODES)
     .map((x) => ({ word: x.w, kind: kindOf(x.w, lists), score: x.n, share: Math.round((x.n / Math.max(1, issues.length)) * 100) / 100, broad: tooBroad(x.w), subcats: subcatsOf(x.w) }))
+    .map((n) => ({ ...n, auto: autoOk(n) }))
   const { edges, children } = linksOf(nodes, issueWords, merged)
   const autoPick = suggestCount(nodes, issueWords)
-  const out = { center, docs: docs.length, issues: issues.length, nodes, edges, children, autoPick, at: new Date().toISOString() }
+  const out = { center, docs: docs.length, issues: issues.length, nodes, edges, children, autoPick, words: kiwi ? 'kiwi' : 'rules', at: new Date().toISOString() }
   await cachePut(key, out, TTL).catch(() => {})
   return { ...out, cached: false }
 }

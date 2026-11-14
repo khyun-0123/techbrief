@@ -113,6 +113,17 @@ export function subcatsOf(word) {
   return [...out]
 }
 
+// Kiwi 사용자 사전에 넣을 말 (11/15): 예외어(디스플레이 · 반도체 용어) · 기술 하위분류 키워드의 원래 표기 — 띄어쓰기 없는 한글이 든 말만
+// 이 말들은 형태소 분석에서 쪼개지지 않고 한 낱말로 나온다 (예: 응답속도 · 잉크젯프린팅)
+export function userDictWords() {
+  try {
+    const raw = [...readCsv('exceptions.csv').map((r) => r['단어']), ...readCsv('subcategories.csv').filter((r) => !String(r['분류']).startsWith('(')).map((r) => r['키워드'])]
+    return [...new Set(raw.map((w) => String(w ?? '').trim()).filter((w) => w.length >= 2 && w.length <= 20 && /[가-힣]/.test(w) && !/\s/.test(w)))]
+  } catch {
+    return []
+  }
+}
+
 export function filterStats() {
   const L = load()
   return { exact: L.exact.size, contains: L.contains.length, exceptions: L.exceptions.length, subcategoryKeywords: L.cats.length }
