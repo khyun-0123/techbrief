@@ -6934,3 +6934,7 @@ a.brand:focus-visible {
     max-height: 540px;
   }
 }
+/* 유료 논문 배지 (11/14): 논문 배지와 같은 모양, 글자만 회색 */
+.badge-material.badge-paid {
+  color: var(--tb-color-text-sub);
+}

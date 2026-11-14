@@ -88,6 +88,9 @@ export async function searchPaperArticles(query, period = 'all', terms = null) {
       abstract: (w.abstract ?? '').slice(0, ABSTRACT_MAX),
       ...(w.abstractFrom ? { abstractFrom: w.abstractFrom } : {}),
       ...(w.oaUrl ? { oaUrl: w.oaUrl } : {}),
+      // 유료 여부 (11/14, 보고서팀 작업 이식): open · paid · unknown. 논문 DB · OpenAlex는 무료 원문 주소가 없으면 paid(OpenAlex가 열린 사본을 못 찾음)
+      access: w.access ?? (w.oaUrl || w.provider === 'arxiv' ? 'open' : provider === 'corpus' || w.provider === 'openalex' ? 'paid' : 'unknown'),
+      ...(w.authors?.length ? { authors: w.authors } : {}),
       ...(w.doi ? { doi: w.doi } : {}),
       source: w.journal || '논문',
       keyword: String(query).trim(),
