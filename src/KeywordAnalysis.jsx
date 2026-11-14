@@ -265,7 +265,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
                       )}
                     </div>
                     <span className="ka-legend">
-                      <span className="ka-key ka-key-tech" aria-hidden="true" /> 기술 <span className="ka-key ka-key-firm" aria-hidden="true" /> 회사 <span className="ka-key ka-key-general" aria-hidden="true" /> 일반 · 재료: 뉴스(함께 나온 말, {related.issues}개 이슈) · 특허 출원인 · 논문 핵심어 (노드에 마우스를 올리면 출처)
+                      점이 클수록 「{keyword}」와 함께 나온 이슈가 많음 · 재료: 뉴스(함께 나온 말, {related.issues}개 이슈) · 특허 출원인 · 논문 핵심어 (점에 마우스를 올리면 수)
                     </span>
                   </>
                 ) : (

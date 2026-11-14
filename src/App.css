@@ -7090,87 +7090,8 @@ a.brand:focus-visible {
   flex-direction: column;
   gap: var(--tb-space-3);
 }
-.km-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--tb-space-2) var(--tb-space-3);
-}
-.km-svg {
-  width: 100%;
-  height: auto;
-  max-height: 560px;
-  font-family: inherit;
-}
-.km-edge {
-  stroke: var(--tb-color-line);
-}
-.km-edge.on {
-  stroke: var(--tb-color-text);
-}
-.km-edge2 {
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-}
-.km-cross {
-  stroke: var(--tb-color-line-soft);
-  stroke-width: 1;
-  stroke-dasharray: 2 4;
-}
-.km-center rect {
-  fill: var(--tb-color-text);
-}
-.km-center text {
-  fill: var(--tb-color-text-inverse);
-  font-size: 16px;
-  font-weight: 700;
-}
-.km-node {
-  cursor: pointer;
-}
-.km-node rect {
-  fill: var(--tb-color-surface);
-  stroke: transparent;
-  stroke-width: 1.5;
-}
-.km-node text {
-  fill: var(--tb-color-text);
-  font-size: 13px;
-  pointer-events: none;
-}
-.km-node.km-l2 text {
-  font-size: 11.5px;
-  fill: var(--tb-color-text-sub);
-}
-.km-node .km-sub {
-  fill: var(--tb-color-text-faint);
-  font-size: 10.5px;
-}
-.km-node.km-tech rect {
-  fill: var(--tb-color-bg-strong);
-}
-.km-node.km-company rect {
-  stroke: var(--tb-color-text-sub);
-  stroke-dasharray: 4 3;
-}
-.km-node:hover rect,
-.km-node:focus-visible rect {
-  stroke: var(--tb-color-text);
-  stroke-dasharray: none;
-}
-.km-node:focus-visible {
-  outline: none;
-}
-.km-node.on rect {
-  stroke: var(--tb-color-primary);
-  stroke-width: 2.5;
-  stroke-dasharray: none;
-}
-.km-node.on text,
-.km-node.open text {
-  font-weight: 700;
-}
 .km-cloud-center {
-  fill: var(--tb-color-text);
+  fill: var(--tb-color-accent); /* 팀 v2: 가운데 검색어만 레드 */
   font-weight: 800;
 }
 .km-word {
@@ -7191,15 +7112,6 @@ a.brand:focus-visible {
 }
 .km-word:focus-visible {
   outline: 2px solid var(--tb-color-line-focus);
-}
-/* 휴대폰: 맵은 최소 폭을 두고 옆으로 밀어 봄 (390px에서 글자가 너무 작았음), 워드클라우드는 그대로 */
-.km-scroll {
-  overflow-x: auto;
-}
-@media (max-width: 720px) {
-  .km-scroll .km-svg {
-    min-width: 720px;
-  }
 }
 /* 범위 레버: 브라우저 기본 파랑 대신 토큰 색 (11/14, 배치 시안 검토에서 지적) */
 .ka-controls input[type='range'] {
@@ -7278,27 +7190,210 @@ a.brand:focus-visible {
 .km-full-head .trend-drawer-close {
   align-self: center;
 }
+.tech-timeline {
+  width: min(1200px, 100%); /* 크게 보기 (11/14) */
+}
+/* 연관 키워드 맵 모양 교체 (11/14 3차, 워드클라우드팀 v2 모양): 판 하나 + 떠 있는 표시 설정 · 안내 · 범례 · 버튼
+   판 높이: 칸 안 460px(휴대폰 380px), 크게 보기는 남은 높이 전부 */
+.km-stage {
+  position: relative;
+  height: 460px;
+  overflow: hidden;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: var(--tb-radius-card);
+  background: var(--tb-color-surface);
+  touch-action: none;
+  user-select: none;
+}
+.km-stage .km-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+.km-stage-svg {
+  cursor: grab;
+}
+.km-stage-svg:active {
+  cursor: grabbing;
+}
+.km-dot {
+  cursor: pointer;
+}
+.km-dot:focus-visible {
+  outline: none;
+}
+.km-dot:focus-visible circle:first-of-type {
+  stroke: var(--tb-color-line-focus);
+  stroke-width: 2;
+}
 .km-large {
   flex: 1;
   min-height: 0;
 }
-.km-large .km-svg {
-  flex: 1;
+.km-large .km-stage {
   height: 100%;
-  min-height: 0;
-  max-height: none;
+  min-height: 420px;
 }
-.km-large .km-scroll {
-  flex: 1;
-  min-height: 0;
+.km-panel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  width: min(300px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--tb-color-line-soft);
+  border-radius: 12px;
+  background: var(--tb-color-surface);
+  box-shadow: 0 8px 24px rgb(17 17 17 / 8%);
+}
+.km-panel[data-collapsed='true'] {
+  width: auto;
+}
+.km-phead {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
-.km-heat {
+.km-phead h3 {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.km-ptoggle {
+  padding: 3px 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text-sub);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.km-pbody {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+.km-prow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.km-ctl {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.km-lbl {
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+}
+.km-lbl output {
   color: var(--tb-color-text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
-.km-heat .km-heat-blobs {
-  mix-blend-mode: multiply;
+.km-ctl input[type='range'] {
+  width: 100%;
+  accent-color: var(--tb-color-text);
 }
-.tech-timeline {
-  width: min(1200px, 100%); /* 크게 보기 (11/14) */
+.km-panel .segmented {
+  flex-wrap: wrap;
+}
+.km-hint {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  margin: 0;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+  pointer-events: none;
+}
+.km-legend {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  max-width: calc(100% - 200px);
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+  pointer-events: none;
+}
+.km-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.km-lg {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.km-lg0 {
+  background: var(--tb-color-accent);
+}
+.km-lg1 {
+  background: var(--tb-color-surface-inverse);
+}
+.km-lg2 {
+  background: var(--tb-color-text-faint);
+}
+.km-lg-on {
+  border: 2px solid var(--tb-color-text);
+}
+.km-actions {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1;
+  display: flex;
+  gap: 6px;
+}
+.km-act {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+.km-act:hover {
+  border-color: var(--tb-color-text);
+}
+/* 좁은 칸 · 휴대폰: 안내 문구는 숨기고(설정 판과 겹침) 범례는 위로 버튼과 나눔 */
+@container (max-width: 520px) {
+  .km-hint {
+    display: none;
+  }
+}
+@media (max-width: 720px) {
+  .km-stage {
+    height: 380px;
+  }
+  .km-hint {
+    display: none;
+  }
+  /* 버튼은 오른쪽 위로 — 범례가 아래 한 줄을 다 쓰게 */
+  .km-actions {
+    top: 12px;
+    bottom: auto;
+  }
+  .km-legend {
+    max-width: calc(100% - 24px);
+  }
+  .km-act-png {
+    display: none; /* 휴대폰은 접힌 설정 판과 겹쳐 PNG 저장을 숨김 (PC에서 저장) */
+  }
 }
