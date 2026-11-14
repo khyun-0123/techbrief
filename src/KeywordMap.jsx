@@ -5,7 +5,8 @@
 // - 움직임 (가이드 「움직임」, force-graph 값을 같은 식으로): 밀어내기 -140, 가지 길이 55 + 30/(1 + 수/10) · 세기 .6, 점선 120 · .03,
 //   계산 150번 뒤 멈춤. 점을 끌면 이어진 점이 따라오고(세기 유지 .3), 놓으면 고정 없이 다시 자리 잡음. 화면은 그래프 가장자리 20% 밖으로 못 나감. 확대 0.3~6배
 // - 색은 가이드 대신 Storybook 토큰(CLAUDE.md 디자인 기준) — 값이 거의 같음. SVG 속성으로 넣어 PNG에도 같은 색
-// - 누르기: 「범위 고르기」(main 11/12 흐름: 고른 말로 자료 찾기)가 기본, 「펼치기 · 접기」(팀 맵)로 바꿀 수 있음 — 회의 안건 「노드 클릭의 뜻」
+// - 누르기 (11/14 조장): 점 · 글자 = 볼 범위에 넣기/빼기, 검정 점 옆 「+n」 배지 = 그 가지 펼치기/접기 (모드 전환 없앰). 처음엔 위 3개 가지만 펼침
+//   키보드: Enter = 넣기/빼기, → = 펼치기, ← = 접기. 펼치거나 접어도 다른 점은 제자리에서 조금만 움직임
 // - 가이드에서 아직 안 옮긴 것: 보고서에 넣기(초안 6장), 키워드 편집, 불용어 · 예외 단어 관리(지금은 서버 CSV), 고르는 기준 「중요도」(맵 데이터에 중요도 합이 없음), 관련 기사 칸
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -61,9 +62,12 @@ function pickGraph(nodes, branches, edges, branchN, totalN, minCo) {
 }
 
 // 힘 계산 (d3-force 식: manyBody · link(차수로 나눔) · center, 속도 감쇠 .4, alpha 감쇠 .0228)
-function makeSim(keyword, l1, l2, cross, hidden) {
+function makeSim(keyword, l1, l2, cross, hidden, seed = null, alpha0 = 1) {
   const P = new Map()
-  const add = (w, x, y) => P.set(w, { w, x, y, vx: 0, vy: 0, fx: null, fy: null })
+  const add = (w, x, y) => {
+    const q = seed?.get(w) // 펼치기 · 접기: 있던 점은 있던 자리에서 시작
+    P.set(w, { w, x: q ? q.x : x, y: q ? q.y : y, vx: 0, vy: 0, fx: null, fy: null })
+  }
   add(keyword, 0, 0)
   l1.forEach((n, i) => {
     const a = (i / Math.max(1, l1.length)) * Math.PI * 2 - Math.PI / 2
@@ -72,7 +76,8 @@ function makeSim(keyword, l1, l2, cross, hidden) {
   l2.forEach((n, j) => {
     if (hidden.has(n.parent)) return
     const p = P.get(n.parent)
-    add(n.word, p.x * 1.4 + ((j % 5) - 2) * 4, p.y * 1.4 + ((j % 3) - 1) * 4)
+    const out = seed ? 1.15 : 1.4 // 새로 펼친 2단계는 부모 바로 바깥에서 나옴
+    add(n.word, p.x * out + ((j % 5) - 2) * 6, p.y * out + ((j % 3) - 1) * 6)
   })
   const links = [
     ...l1.map((n) => ({ s: keyword, t: n.word, d: 55 + 30 / (1 + n.score / 10), k: 0.6 })),
@@ -85,7 +90,7 @@ function makeSim(keyword, l1, l2, cross, hidden) {
     deg.set(l.t, (deg.get(l.t) ?? 0) + 1)
   }
   const pts = [...P.values()]
-  const sim = { P, pts, alpha: 1, target: 0, left: 150 }
+  const sim = { P, pts, alpha: alpha0, target: 0, left: 150 }
   sim.tick = () => {
     sim.alpha += (sim.target - sim.alpha) * 0.0228
     const alpha = sim.alpha
@@ -192,7 +197,7 @@ function clampView(v, pos, W, H) {
 
 const radius = (score, max) => 3 + 9 * Math.sqrt(score / max)
 
-function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, isOn, onPick, clickMode, hidden, onHide, svgRef, onDragNode, onHover }) {
+function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, isOn, onPick, hidden, onHide, svgRef, onDragNode, onHover }) {
   const { l1, l2, cross } = graph
   const kidsOf = useMemo(() => {
     const m = new Map()
@@ -210,11 +215,8 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
     const r = svgRef.current.getBoundingClientRect()
     return { x: e.clientX - r.left, y: e.clientY - r.top }
   }
-  const level = (w) => (w === keyword ? 0 : l1.some((n) => n.word === w) ? 1 : 2)
   const act = (w) => {
-    if (w === keyword) return
-    if (clickMode === 'expand' && level(w) === 1 && kidsOf.get(w)) onHide(w)
-    else onPick(w)
+    if (w !== keyword) onPick(w)
   }
   const onDown = (e, word) => {
     if (e.button !== 0) return
@@ -260,7 +262,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
     const folded = lv === 1 && hidden.has(n.word) && kidsOf.get(n.word)
     const label = `${on ? '✓ ' : ''}${short(n.word, lv === 0 ? 18 : lv === 1 ? 14 : 11)}`
     const sub = lv === 1 ? (n.subcats ?? [])[0] : null
-    const role = lv === 0 ? undefined : clickMode === 'expand' && lv === 1 && kidsOf.get(n.word) ? 'button' : 'checkbox'
+    const role = lv === 0 ? undefined : 'checkbox'
     const info = lv === 0 ? { word: n.word, tag: '검색어', rows: [['함께 나온 이슈', `${issues ?? '-'}개`]] } : { word: n.word, tag: `${lv}단계`, rows: [[lv === 2 ? `「${n.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${n.score}개`], ...((n.subcats ?? []).length ? [['분류', n.subcats.join(' · ')]] : []), ['볼 범위', on ? '넣음' : '안 넣음']] }
     return (
       <g
@@ -268,7 +270,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
         className={`km-dot km-d${lv}${on ? ' on' : ''}`}
         role={role}
         aria-checked={role === 'checkbox' ? on : undefined}
-        aria-expanded={role === 'button' ? !folded : undefined}
+        aria-expanded={lv === 1 && kidsOf.get(n.word) ? !folded : undefined}
         aria-label={lv === 0 ? `검색어 ${n.word}` : `${n.word} · 함께 나온 이슈 ${n.score}개${sub ? ` · ${sub}` : ''}${lv === 2 ? ` · ${n.parent}의 가지` : ''}`}
         tabIndex={lv === 0 ? -1 : 0}
         onPointerDown={(e) => onDown(e, n.word)}
@@ -277,18 +279,56 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
         onPointerLeave={() => onHover(null)}
         onFocus={() => onHover({ ...info, x: p.x, y: p.y + r })}
         onBlur={() => onHover(null)}
-        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), act(n.word))}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            act(n.word)
+          } else if (lv === 1 && kidsOf.get(n.word) && ((e.key === 'ArrowRight' && folded) || (e.key === 'ArrowLeft' && !folded))) {
+            e.preventDefault()
+            onHide(n.word)
+          }
+        }}
       >
         <circle cx={p.x} cy={p.y} r={r + 3} fill="transparent" />
         <circle cx={p.x} cy={p.y} r={r} fill={fill} />
         {on && <circle cx={p.x} cy={p.y} r={r + 3.5} fill="none" stroke={colors.text} strokeWidth="2" />}
-        {folded && (
-          <text x={p.x} y={p.y + 3.8} textAnchor="middle" fill="#fff" fontSize={Math.max(9, r * 1.1)} fontWeight="700">
-            +
-          </text>
-        )}
         <text x={p.x} y={p.y + r + 2 + fs * 0.85} textAnchor="middle" fontSize={fs} fontWeight={lv === 2 && !on ? 400 : on ? 700 : 600} fill={lv === 2 && !on ? colors.sub : colors.text} stroke="#fff" strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
           {label}
+        </text>
+      </g>
+    )
+  }
+  // 펼치기 배지: 검정 점 오른쪽 위 「+n」(접힘) · 「−」(펼침). 점과 따로 누름 (점 누르기 = 범위)
+  const badge = (n) => {
+    const kids = kidsOf.get(n.word)
+    const p = S(n.word)
+    if (!kids || !p) return null
+    const r = radius(n.score, max)
+    const folded = hidden.has(n.word)
+    const t = folded ? `+${kids}` : '−'
+    const w = 12 + t.length * 6.5
+    const x = p.x + r * 0.7 + 3
+    const y = p.y - r * 0.7 - 15
+    const stop = (e) => e.stopPropagation()
+    return (
+      <g
+        key={`b-${n.word}`}
+        className="km-badge"
+        role="button"
+        tabIndex={-1}
+        aria-label={`${n.word} 가지 ${folded ? `펼치기 (${kids}개)` : '접기'}`}
+        onPointerDown={stop}
+        onPointerUp={stop}
+        onClick={(e) => {
+          e.stopPropagation()
+          onHide(n.word)
+        }}
+      >
+        <title>{folded ? `「${n.word}」와 함께 나온 말 ${kids}개 펼치기` : '접기'}</title>
+        <rect x={x - 3} y={y - 3} width={w + 6} height={22} fill="transparent" />
+        <rect x={x} y={y} width={w} height={16} rx={8} fill={folded ? colors.d1 : colors.surface} stroke={folded ? colors.d1 : colors.d3} />
+        <text x={x + w / 2} y={y + 11.5} textAnchor="middle" fontSize="10.5" fontWeight="700" fill={folded ? colors.surface : colors.sub}>
+          {t}
         </text>
       </g>
     )
@@ -318,6 +358,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
         {shown2.map((n) => node(n, 2))}
         {l1.map((n) => node(n, 1))}
         {node({ word: keyword, score: max }, 0)}
+        <g className="km-badges" data-export="skip">{l1.map(badge)}</g>
       </g>
     </svg>
   )
@@ -418,6 +459,7 @@ function savePng(svg, name, colors) {
     const w = Math.ceil(box.width + pad * 2)
     const h = Math.ceil(box.height + pad * 2)
     const clone = svg.cloneNode(true)
+    clone.querySelectorAll('[data-export="skip"]').forEach((el) => el.remove()) // 펼치기 배지는 그림에 안 넣음
     clone.setAttribute('viewBox', `${x} ${y} ${w} ${h}`)
     clone.setAttribute('width', w)
     clone.setAttribute('height', h)
@@ -475,23 +517,30 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
   const [branchN, setBranchN] = useState(Math.min(phone ? 6 : 7, maxBranch))
   const [totalN, setTotalN] = useState(phone ? 18 : 40)
   const [minCo, setMinCo] = useState(6)
-  const [clickMode, setClickMode] = useState('scope')
   const [panelOpen, setPanelOpen] = useState(false) // 가이드: 처음엔 접힘
-  const [hidden, setHidden] = useState(() => new Set())
+  const [openSet, setOpenSet] = useState({}) // 손으로 펼치거나 접은 가지 { 말: true | false }. 없으면 위 3개만 펼침
   const [hover, setHover] = useState(null)
   const [saveMsg, setSaveMsg] = useState('')
   const graph = useMemo(() => pickGraph(nodes, branches, edges, branchN, totalN, minCo), [nodes, branches, edges, branchN, totalN, minCo])
+  const isOpen = useCallback((w) => openSet[w] ?? graph.l1.findIndex((n) => n.word === w) < 3, [openSet, graph])
+  const hidden = useMemo(() => new Set(graph.l1.filter((n) => !isOpen(n.word)).map((n) => n.word)), [graph, isOpen])
   const minK = phone ? 0.75 : 0.3 // 휴대폰은 0.75배 아래로 줄이지 않음 — 다 안 들어오면 끌어서 봄
   // 힘 계산: 말 · 접힘이 바뀌면 새로. 끝 자리를 미리 계산해 화면을 맞춰 두고, 점들은 가운데서 퍼지며 그 자리로 감
   const final = useMemo(() => settled(keyword, graph, hidden), [keyword, graph, hidden])
   const [pos, setPos] = useState(final)
   const [view, setView] = useState(() => fitView(final, W, H, 40, minK))
-  const [seen, setSeen] = useState({ final, W, H })
-  if (seen.final !== final || seen.W !== W || seen.H !== H) {
-    setSeen({ final, W, H })
+  // 화면 맞춤은 말이 바뀌거나 판 크기가 바뀔 때만 (펼치기 · 접기로는 화면이 움직이지 않게)
+  const [seen, setSeen] = useState({ graph, W, H })
+  if (seen.graph !== graph || seen.W !== W || seen.H !== H) {
+    setSeen({ graph, W, H })
     setView(fitView(final, W, H, 40, minK))
   }
+  const posRef = useRef(pos)
+  useEffect(() => {
+    posRef.current = pos
+  }, [pos])
   const simRef = useRef(null)
+  const lastSim = useRef({ graph: null, keyword: null })
   const raf = useRef(0)
   const run = useCallback(() => {
     cancelAnimationFrame(raf.current)
@@ -510,7 +559,10 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
       simRef.current = null
       raf.current = requestAnimationFrame(() => setPos(final))
     } else {
-      simRef.current = makeSim(keyword, graph.l1, graph.l2, graph.cross, hidden)
+      // 같은 말에서 펼치기 · 접기만 바뀌었으면 지금 자리에서 약하게(.5) 다시 자리 잡음
+      const keep = lastSim.current.graph === graph && lastSim.current.keyword === keyword
+      simRef.current = makeSim(keyword, graph.l1, graph.l2, graph.cross, hidden, keep ? posRef.current : null, keep ? 0.5 : 1)
+      lastSim.current = { graph, keyword }
       run()
     }
     return () => cancelAnimationFrame(raf.current)
@@ -554,10 +606,6 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
     }
     anim.current = requestAnimationFrame(step)
   }
-  const posRef = useRef(pos)
-  useEffect(() => {
-    posRef.current = pos
-  }, [pos])
   // 휠 확대 (0.3~6배, 마우스 자리 중심). 페이지가 같이 굴러가지 않게 passive 끔
   useEffect(() => {
     const el = box.current
@@ -576,18 +624,7 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [mode, W, H])
-  const onHide = (w) =>
-    setHidden((s) => {
-      const n = new Set(s)
-      if (n.has(w)) n.delete(w)
-      else n.add(w)
-      return n
-    })
-  const toggleClickMode = (m) => {
-    setClickMode(m)
-    // 펼치기 모드는 가이드처럼 1단계를 접고 시작(「+」), 범위 모드는 모두 펼침
-    setHidden(m === 'expand' ? new Set(graph.l1.slice(1).map((n) => n.word)) : new Set())
-  }
+  const onHide = (w) => setOpenSet((o) => ({ ...o, [w]: !isOpen(w) }))
   const msgTimer = useRef(0)
   const onSave = async () => {
     clearTimeout(msgTimer.current)
@@ -601,7 +638,6 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
   useEffect(() => () => clearTimeout(msgTimer.current), [])
   // 워드클라우드는 표시 설정 창 자리를 피해 놓는다 (창 크기는 대략값: 접힘 170×56, 펼침 324×330)
   const cloudAvoid = useMemo(() => (panelOpen ? { x: 0, y: 0, w: Math.min(330, W), h: 330 } : { x: 0, y: 0, w: 180, h: 60 }), [panelOpen, W])
-  const hasKids = graph.l2.length > 0
   const cardLeft = hover ? Math.max(8, Math.min(W - 200, hover.x - 90)) : 0
   const cardTop = hover ? (hover.y + 120 > H ? Math.max(8, hover.y - 130) : hover.y + 22) : 0
   return (
@@ -610,7 +646,7 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
         {mode === 'cloud' ? (
           <CloudView W={W} H={H} keyword={keyword} nodes={nodes} branches={branches} isOn={isOn} onPick={onToggle} total={totalN} avoid={cloudAvoid} colors={colors} svgRef={svgRef} onHover={setHover} />
         ) : (
-          <MapStage W={W} H={H} keyword={keyword} issues={issues} graph={graph} pos={pos} view={view} setView={setView} colors={colors} isOn={isOn} onPick={onToggle} clickMode={clickMode} hidden={hidden} onHide={onHide} svgRef={svgRef} onDragNode={onDragNode} onHover={setHover} />
+          <MapStage W={W} H={H} keyword={keyword} issues={issues} graph={graph} pos={pos} view={view} setView={setView} colors={colors} isOn={isOn} onPick={onToggle} hidden={hidden} onHide={onHide} svgRef={svgRef} onDragNode={onDragNode} onHover={setHover} />
         )}
         {hover && (
           <div className="km-card" role="note" style={{ left: cardLeft, top: cardTop }}>
@@ -667,19 +703,6 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
                   <input type="range" min="1" max="20" value={minCo} onChange={(e) => setMinCo(Number(e.target.value))} />
                 </label>
               )}
-              {mode === 'map' && hasKids && (
-                <div className="km-ctl">
-                  <span className="km-lbl">점을 누르면</span>
-                  <div className="km-seg" role="group" aria-label="점을 누르면">
-                    <button type="button" aria-pressed={clickMode === 'scope'} onClick={() => toggleClickMode('scope')}>
-                      범위 고르기
-                    </button>
-                    <button type="button" aria-pressed={clickMode === 'expand'} onClick={() => toggleClickMode('expand')}>
-                      펼치기 · 접기
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </section>
@@ -704,6 +727,10 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
               <span>
                 <i className="km-lg-on" />
                 고른 범위
+              </span>
+              <span>
+                <b className="km-lg-badge">+n</b>
+                펼치기
               </span>
             </>
           )}

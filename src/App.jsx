@@ -1272,7 +1272,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               {search?.scope?.terms?.length > 0 && search.articles ? (
                 // 범위 칩 (11/10): 고른 말이 든 자료만 보기 · 이 범위로 폴더 만들기
                 <div className="scope-bar" role="group" aria-label="고른 범위로 거르기">
-                  <span className="scope-bar-label">범위 ({search.scope.mode === 'narrow' ? '좁게' : '넓게'})</span>
+                  <span className="scope-bar-label">고른 말이 든 자료</span>
                   <button type="button" className={scopeTerm ? 'scope-chip' : 'scope-chip on'} aria-pressed={!scopeTerm} onClick={() => setScopeTerm(null)}>
                     전체 {search.articles.length}
                   </button>

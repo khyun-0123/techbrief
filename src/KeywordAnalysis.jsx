@@ -1,7 +1,7 @@
 // 대시보드 「키워드 분석」 (11/10 조장): 키워드로 찾으면 → 연관 키워드 맵 + 기술 시계열 요약 → 범위를 골라 자료 현황에서 선별
 // - 왼쪽 맵은 **임시 맵**이다 (뉴스에서 함께 나온 말, server/related.js). 워드클라우드팀 맵이 오면 그림만 바꾸고 범위 고르기는 그대로 (32 문서)
 //   범위 고르기: 레버 = 연관도 순으로 몇 개까지 자동으로 고를지(「일반」 말은 건너뜀) · 노드 클릭 = 예외(손으로 켜고 끈 것은 레버를 움직여도 유지)
-//   좁게 / 넓게 · 「자료 찾기 →」는 고른 범위로 자료 현황에서 찾는다 (server/scopeSearch.js)
+//   「자료 찾기 →」는 고른 말이 하나 이상 든 자료만 자료 현황에 보여 준다 (11/14: 넓게/좁게 없앰, server/scopeSearch.js)
 // - 오른쪽은 기술 시계열 요약(단계 · 논문 수 · 기업 저자 비율 · 특허 · 새로 늘어난 핵심어). 「자세히 · AI 흐름 정리」는 TechTimeline 창
 // 예전 「추적 중인 키워드 추이」(뉴스 수 · 검색량 · 위키 · GDELT)는 11/10 조장 결정으로 대시보드에서 뺐다 — 키워드 하나를 제대로 분석하는 쪽으로
 import KeywordMap from './KeywordMap.jsx'
@@ -125,7 +125,12 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
   const [bundle, setBundle] = useState(null) // 11/12 분석 묶음 (상용화 시점 문장 등, 보고서에 자동으로 들어가는 것과 같음)
   const [auto, setAuto] = useState(3) // 레버: 연관도 순으로 자동으로 고를 개수 (「일반」 말은 건너뜀)
   const [manual, setManual] = useState({}) // 노드 클릭 예외: { 말: true(켬) | false(끔) }
-  const [mode, setMode] = useState('wide')
+  const [flash, setFlash] = useState(null) // 넣고 뺄 때 「자료 찾기」 옆에 잠깐: { text, at }
+  useEffect(() => {
+    if (!flash) return undefined
+    const t = setTimeout(() => setFlash(null), 2500)
+    return () => clearTimeout(t)
+  }, [flash])
   const [open, setOpen] = useState(false)
   const [bigMap, setBigMap] = useState(false) // 맵 크게 보기 판 (11/14 조장)
   const [mapView, setMapView] = useState('map') // 칸에서 고른 보기(마인드맵 · 워드클라우드)를 크게 보기에도 그대로
@@ -195,10 +200,15 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
   const pickedAll = [...nodes.filter((n) => isOn(n.word)).map((n) => n.word), ...Object.keys(manual).filter((w) => manual[w] && !firstWords.has(w))]
   const picked = pickedAll.slice(0, MAX_SCOPE_TERMS) // 서버(scopeSearch.js MAX_TERMS)가 6개까지만 찾음 — 화면도 같은 수로
   const overflow = pickedAll.slice(MAX_SCOPE_TERMS)
-  const toggle = (w) => setManual((m) => ({ ...m, [w]: !isOn(w) }))
+  const toggle = (w) => {
+    const on = !isOn(w)
+    setManual((m) => ({ ...m, [w]: on }))
+    const n = Math.min(MAX_SCOPE_TERMS, pickedAll.length + (on ? 1 : -1))
+    setFlash({ text: on ? (pickedAll.length >= MAX_SCOPE_TERMS ? `「${w}」 — 6개가 넘어 빠져요` : `+ 「${w}」 · 지금 ${n}개`) : `− 「${w}」 · 지금 ${n}개`, at: Date.now() })
+  }
   const autoMax = autoable.length
   function findScope() {
-    if (picked.length && onScopeSearch) onScopeSearch({ query: keyword, terms: picked, mode })
+    if (picked.length && onScopeSearch) onScopeSearch({ query: keyword, terms: picked })
     else onSearch(keyword)
   }
 
@@ -218,7 +228,10 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
               ))}
             </select>
           )}
-          <button type="button" className="btn primary" onClick={findScope} title={picked.length ? `「${keyword}」 + ${picked.join(' · ')} (${mode === 'narrow' ? '좁게' : '넓게'})` : `「${keyword}」만`}>
+          <span className="ka-flash" aria-live="polite" key={flash?.at}>
+            {flash?.text}
+          </span>
+          <button type="button" className="btn primary" onClick={findScope} title={picked.length ? `「${keyword}」 자료 중 ${picked.join(' · ')}이(가) 든 것만` : `「${keyword}」 자료 전부`}>
             {picked.length ? `「${keyword}」 + ${picked.length}개로 자료 찾기 →` : `「${keyword}」 자료 찾기 →`}
           </button>
         </div>
@@ -250,30 +263,15 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, periods = [], perio
                         자동으로 고를 범위 <b>{Math.min(auto, autoMax)}</b>개
                         <input type="range" min={0} max={Math.max(1, Math.min(8, autoMax))} value={Math.min(auto, autoMax)} onChange={(e) => setAuto(Number(e.target.value))} aria-describedby="ka-auto-help" />
                       </label>
-                      <div className="ka-mode" role="radiogroup" aria-label="범위로 찾는 방식">
-                        {[
-                          ['wide', '넓게', `「${keyword}」 자료 전부 + 고른 말 자료`],
-                          ['narrow', '좁게', '고른 말이 하나 이상 함께 나온 자료만'],
-                        ].map(([v, l, tip]) => (
-                          <button key={v} type="button" role="radio" aria-checked={mode === v} title={tip} onClick={() => setMode(v)}>
-                            {l}
-                          </button>
-                        ))}
-                      </div>
                     </div>
-                    <p className="hint ka-mode-help" aria-live="polite">
-                      {mode === 'narrow'
-                        ? `좁게: 「${keyword}」 자료 중 고른 말이 하나 이상 함께 나온 것만 자료 현황에 보여요.`
-                        : `넓게: 「${keyword}」 자료 전부에 고른 말과 함께 찾은 자료를 더해 자료 현황에 보여요.`}{' '}
-                      「자료 찾기」를 누르면 적용돼요{picked.length ? '' : ' (고른 말이 없으면 둘이 같아요)'}.
-                    </p>
+                    <p className="hint ka-mode-help">「자료 찾기」는 「{keyword}」 자료 중 고른 말이 하나 이상 든 것만 보여 줘요. 더 넓게 보려면 맵에서 말을 더 고르세요.</p>
                     <p id="ka-auto-help" className="hint">
-                      레버는 연관도(함께 나온 이슈 수) 순으로 기술 · 회사 말을 골라요 (PC · TV처럼 너무 넓은 말은 빼고). 맵의 점(검정 · 회색)이나 워드클라우드 글자를 눌러 더하거나 빼면 그건 레버를 움직여도 그대로예요.
+                      레버는 연관도(함께 나온 이슈 수) 순으로 기술 · 회사 말을 골라요 (PC · TV처럼 너무 넓은 말은 빼고). 맵의 점이나 워드클라우드 글자를 눌러 더하거나 빼면 그건 레버를 움직여도 그대로예요. 검정 점 옆 「+n」은 그 가지를 펼쳐요.
                     </p>
                     <div className="ka-picked" aria-live="polite">
                       {picked.length ? (
                         <>
-                          <span className="ka-picked-label">고른 범위 ({mode === 'narrow' ? '좁게' : '넓게'})</span>
+                          <span className="ka-picked-label">고른 범위</span>
                           {picked.map((w) => (
                             <button key={w} type="button" className="chip" onClick={() => toggle(w)} aria-label={`${w} 빼기`}>
                               {w} ×
