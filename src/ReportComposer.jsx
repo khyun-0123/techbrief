@@ -110,9 +110,16 @@ function MaterialsPreview({ articles, aiSummaries, title, direction, jobs }) {
   )
 }
 
+const GENERIC_TITLE = '테크 동향 브리핑'
+const autoTitleOf = (topic) => {
+  const d = new Date()
+  return `${topic ? `${topic} ` : '테크 '}동향 브리핑 · ${d.getMonth() + 1}/${d.getDate()}`
+}
+
 function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderSummary, reportJobs = [], onJobAdded, onOpenReport }) {
   const [saved0] = useState(() => load(DRAFT_INPUT_KEY, {}))
-  const [title, setTitle] = useState(saved0.title ?? '테크 동향 브리핑')
+  // 제목 (11/14): 비워 두면 「주제 키워드 동향 브리핑 · 월/일」 — 예전 기본값 「테크 동향 브리핑」 하나로 17건 중 11건이 같은 제목이었음
+  const [title, setTitle] = useState(saved0.title && saved0.title !== GENERIC_TITLE ? saved0.title : '')
   const [direction, setDirection] = useState(saved0.direction ?? '')
   const [lastScope] = useState(() => load(LAST_SCOPE_KEY, null))
   const scopeText = scopeLine(lastScope)
@@ -123,6 +130,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
     const fresh = a?.query && Date.now() - (a.at ?? 0) < 7 * 86_400_000 ? a.query : null
     return lastScope?.query ?? fresh
   })
+  const autoTitle = autoTitleOf(topic)
   const [level, setLevel] = useState(saved0.level ?? 'owned')
   const [mode, setMode] = useState('top')
   const [sending, setSending] = useState(false)
@@ -158,7 +166,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
     setSending(true)
     setError('')
     try {
-      const job = await createReportJob({ articles, aiSummaries, title, direction, topics: topic ? [topic] : [], level, periodLabel: periodOf(articles), mode: useAll ? 'all' : undefined, clientId: clientId() })
+      const job = await createReportJob({ articles, aiSummaries, title: title.trim() || autoTitle, direction, topics: topic ? [topic] : [], level, periodLabel: periodOf(articles), mode: useAll ? 'all' : undefined, clientId: clientId() })
       track('report')
       onJobAdded?.(job)
     } catch (err) {
@@ -217,6 +225,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
                   setTitle(e.target.value)
                   remember({ title: e.target.value })
                 }}
+                placeholder={`비워 두면 「${autoTitle}」`}
                 maxLength={80}
               />
             </label>

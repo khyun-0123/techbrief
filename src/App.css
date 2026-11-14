@@ -6475,3 +6475,7 @@ a.brand:focus-visible {
 .mr-preview-bar .hint {
   margin-right: auto;
 }
+.mr-title-kw {
+  color: var(--tb-color-text-sub);
+  font-weight: 500;
+}

@@ -255,7 +255,7 @@ async function buildReportEntry(body) {
   const all = body.mode === 'all'
   const picked = readReportArticles(body, all ? MAX_REPORT_ALL : MAX_REPORT_ARTICLES)
   for (const a of picked) if (await materialBlocksAi(String(a.id ?? ''))) throw Object.assign(new Error(`AI 입력을 허용하지 않은 자료가 있어요: ${a.title}`), { status: 403 })
-  const title = body.title?.trim() || '테크 동향 브리핑'
+  const title = body.title?.trim() || `${String(body.topics?.[0] ?? '').trim() || '테크'} 동향 브리핑` // 11/14: 주제 키워드를 제목에
   const direction = String(body.direction ?? '').trim().slice(0, 300)
   // 11/12 조장: 대시보드에서 분석한 키워드는 보고서에 「당연히」 들어간다 — 주제 키워드의 분석 묶음(keywordBundle.js)을 [분석] 근거로 자동으로 붙인다
   // 주제 키워드: 화면이 보낸 topics(대시보드에서 고른 범위의 중심 키워드). 묶음이 없으면 20초까지 만들어 보고, 못 만들면 없이 쓴다

@@ -415,6 +415,8 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
                               </span>
                             )}
                             <Mark text={r.report.title} q={q.trim()} />
+                            {/* 예전 기본 제목은 모두 같아 구분이 안 됨 → 첫 키워드를 흐리게 덧붙임 (11/14) */}
+                            {r.report.title === '테크 동향 브리핑' && kws[0] && <span className="mr-title-kw"> · {kws[0]}</span>}
                           </button>
                           {isMine(r) && <span className="mine-badge">내가 만듦</span>}
                           {line && (
