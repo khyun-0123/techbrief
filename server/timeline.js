@@ -379,6 +379,14 @@ function stageOf(long, corpus, pat, base = [], naver = null, breadth = null) {
     const d = patRecent != null && patRecent >= PAT_MIN ? { on: matured, by: 'patent' } : devSignal(patRecent, null, shareNow, { share: 0.25 })
     stage = d.on ? '성숙 · 상용화' : '연구 지속'
     why = `논문이 앞 3년보다 ${growth.toFixed(1)}배로 분야 전체와 비슷${vsBase}${devText(d)}`
+  } else if (patRising) {
+    // 11/14: 분야 대비 0.85 미만(쇠퇴 경로)이어도 특허가 분야 대비 늘면 쇠퇴로 보지 않는다 — 정점 60% 규칙(pastPeak)과 같은 예외.
+    //   예전엔 정점 규칙만 예외라, 특허가 늘어도 이 경로에서 다시 「정체 · 감소」가 됐다 (33 문서 2장 「쇠퇴는 특허도 늘지 않을 때만」).
+    //   연구는 줄고 개발이 이어지는 쪽: 특허가 많이 쌓였으면 성숙 · 상용화, 아니면 연구 지속 (rel 0.85~1.15 칸과 같은 기준).
+    //   11/14 저장된 분석 32개 중 이 경로에 걸린 것 0개라 기억 열쇠(v4)는 그대로 둔다
+    const matured = patRecent + patBefore >= 2 * PAT_MIN * MATURE_PAT_FACTOR
+    stage = matured ? '성숙 · 상용화' : '연구 지속'
+    why = `논문은 앞 3년의 ${growth.toFixed(1)}배${vsBase} — 줄고 있지만 특허가 늘어 쇠퇴로 보지 않음${patText}`
   } else {
     stage = '정체 · 감소'
     why = `논문이 앞 3년의 ${growth.toFixed(1)}배${vsBase}${patText}`
