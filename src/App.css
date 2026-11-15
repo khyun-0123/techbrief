@@ -2263,6 +2263,33 @@ a.btn {
   color: var(--tb-color-accent);
 }
 
+/* 최근 검색어 접기 단추: 넓은 화면(왼쪽 칸)에서는 숨김, 1399px 이하에서만 보임 */
+.fav-fold {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.fav-fold:hover {
+  background: var(--tb-color-surface-hover);
+}
+.fav-fold-count {
+  color: var(--tb-color-text-sub);
+  font-weight: 400;
+}
+.fav-fold-caret {
+  color: var(--tb-color-text-sub);
+  font-size: 11px;
+}
+
 @media (max-width: 1399px) {
   .content.with-favs {
     grid-template-columns: 1fr 280px;
@@ -2296,6 +2323,21 @@ a.btn {
   .fav-list {
     flex-direction: row;
     flex-wrap: wrap;
+  }
+
+  /* 최근 검색어: 기본 접힘, 단추로 펼침 (11/15) */
+  .fav-recent .fav-title-wide {
+    display: none;
+  }
+  .fav-recent .fav-fold {
+    display: inline-flex;
+  }
+  .fav-recent:not(.is-open) > .fav-list,
+  .fav-recent:not(.is-open) > .fav-empty {
+    display: none;
+  }
+  .fav-recent.is-open {
+    flex-basis: 100%;
   }
 
   .fav-item {
@@ -5005,7 +5047,8 @@ a.brand:focus-visible {
 .topbar-stats strong {
   font-weight: 700;
 }
-@media (max-width: 860px) {
+/* 1100px 이하(FHD 절반 등)에서는 숨김 — 탭 줄이 밀려 「내 보고서」가 안 보이던 것 (11/15) */
+@media (max-width: 1100px) {
   .topbar-stats {
     display: none;
   }

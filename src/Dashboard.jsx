@@ -18,7 +18,7 @@ import { LAST_ANALYZED_KEY } from './utils.js'
 const showTerm = (q) => String(q).replace(/\b[a-z]{2,4}\b/g, (w) => w.toUpperCase())
 const READY_SHOWN = 8 // 「바로 볼 수 있는 분석」 처음에 보이는 수 (11/14 D5: 칩 12개 + 예시 4칸 + 접힌 목록이 한 카드에 세 겹)
 
-function Dashboard({ stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onScopeSearch, onAutoReport, onKeyword, onGoCollect, onRemember }) {
+function Dashboard({ resetKey = 0, stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onScopeSearch, onAutoReport, onKeyword, onGoCollect, onRemember }) {
   const [text, setText] = useState('')
   const [focus, setFocus] = useState(null) // 분석 중인 말 (없으면 검색창 + 미리 분석된 키워드 + 요즘 뜨는 기술)
   const [ready, setReady] = useState([]) // 미리 분석해 둔 말 (11/10): 검색 전에도 분석이 어떤 모양인지 보이게
@@ -36,6 +36,15 @@ function Dashboard({ stats, keywords, recommended = [], favorites, recent, perio
     return () => window.removeEventListener('keydown', esc)
   }, [drawer, verdictView])
   const openVerdict = (term, info) => setVerdictView({ term, info })
+  // 대시보드 탭을 한 번 더 누르거나 로고를 누르면 첫 화면으로 (11/15): 분석 · 펼친 목록 · 판정 창을 닫는다
+  const firstReset = useRef(resetKey)
+  useEffect(() => {
+    if (resetKey === firstReset.current) return
+    setFocus(null)
+    setText('')
+    setDrawer(false)
+    setVerdictView(null)
+  }, [resetKey])
   useEffect(() => {
     let alive = true
     fetchReadyTimelines()

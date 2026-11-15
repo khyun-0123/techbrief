@@ -2,6 +2,18 @@
 // - 추천 검색어: 관리자가 관리 페이지에서 고르는 공용 목록. ☆를 누르면 내 즐겨찾기에도 담김
 // - 즐겨찾기 ☆: 나(IP)만 보이는 검색어 (서버). 자동 수집 키워드와 별개
 // - 최근 검색어: 「뉴스·논문에서 찾기」를 하면 자동으로 쌓임 (IP별, 최신 10개). ☆를 누르면 즐겨찾기로
+import { useState } from 'react'
+
+// 화면이 좁아 검색어 칸이 위로 올라가면(1399px 이하) 최근 검색어는 기본으로 접는다 (11/15). 넓은 화면(왼쪽 칸)에서는 늘 보인다
+const RECENT_OPEN_KEY = 'techbrief.recentOpen'
+function readOpen() {
+  try {
+    return localStorage.getItem(RECENT_OPEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 function QueryItem({ q, active, starred, onSearch, onStar, onRemove, removeLabel }) {
   return (
     <li className={q === active ? 'fav-item active' : 'fav-item'}>
@@ -29,6 +41,16 @@ function QueryItem({ q, active, starred, onSearch, onStar, onRemove, removeLabel
 
 function FavoritesRail({ recommended = [], favorites, recent, active, onSearch, onToggleFavorite, onRemoveRecent }) {
   const recentOnly = recent.filter((q) => !favorites.includes(q) && !recommended.includes(q))
+  const [recentOpen, setRecentOpen] = useState(readOpen)
+  function toggleRecent() {
+    const next = !recentOpen
+    setRecentOpen(next)
+    try {
+      localStorage.setItem(RECENT_OPEN_KEY, next ? '1' : '0')
+    } catch {
+      // 저장소를 못 쓰면 이번 화면에서만 기억
+    }
+  }
   return (
     <nav className="panel fav-rail" aria-label="검색어">
       {recommended.length > 0 && (
@@ -53,8 +75,15 @@ function FavoritesRail({ recommended = [], favorites, recent, active, onSearch, 
           </ul>
         )}
       </div>
-      <div className="fav-section">
-        <h2 className="fav-title">최근 검색어</h2>
+      <div className={recentOpen ? 'fav-section fav-recent is-open' : 'fav-section fav-recent'}>
+        <h2 className="fav-title fav-title-wide">최근 검색어</h2>
+        {/* 좁은 화면에서만 보이는 접기 단추 */}
+        <button type="button" className="fav-fold" aria-expanded={recentOpen} onClick={toggleRecent}>
+          최근 검색어{recentOnly.length > 0 && <span className="fav-fold-count">{recentOnly.length}</span>}
+          <span className="fav-fold-caret" aria-hidden="true">
+            {recentOpen ? '▴' : '▾'}
+          </span>
+        </button>
         {recentOnly.length === 0 ? (
           <p className="fav-empty">「뉴스·논문에서 찾기」로 찾은 말이 여기에 쌓여요</p>
         ) : (

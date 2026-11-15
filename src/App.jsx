@@ -226,6 +226,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [showMove, setShowMove] = useState(false) // 내 자료 옮기기 (11/08)
   const [includedIds, setIncludedIds] = useState(() => load(INCLUDED_KEY, []))
   const [screen, setScreen] = useState('dashboard')
+  // 대시보드 첫 화면으로 (11/15): 대시보드에서 대시보드 탭을 한 번 더 누르거나 로고를 누르면 키워드 분석을 닫는다
+  const [dashReset, setDashReset] = useState(0)
   const storyJobs = useStoryJobs() // 기술 흐름 정리 (키워드 분석을 떠나도 끝나면 진행 창이 알림, 11/11)
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState('all') // 기본 「전체」 (11/09 조장). 모은 기사 목록은 서버가 7일치만 보냄 (30 문서 1장)
@@ -1065,6 +1067,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
             e.preventDefault()
             setScreen('dashboard')
+            setDashReset((n) => n + 1)
             closeSearch()
             window.scrollTo({ top: 0 })
           }}
@@ -1077,7 +1080,13 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           type="button"
           className={screen === 'dashboard' ? 'tab active' : 'tab'}
           aria-current={screen === 'dashboard' ? 'page' : undefined}
-          onClick={() => setScreen('dashboard')}
+          onClick={() => {
+            if (screen === 'dashboard') {
+              setDashReset((n) => n + 1)
+              window.scrollTo({ top: 0 })
+            }
+            setScreen('dashboard')
+          }}
         >
           대시보드
         </button>
@@ -1211,6 +1220,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         <TestTools providers={health?.llm?.providers ?? []} />
       ) : screen === 'dashboard' ? (
         <Dashboard
+          resetKey={dashReset}
           stats={{
             todayIssues: todayIssues.length,
             todayArticles: countArticles(todayIssues),
