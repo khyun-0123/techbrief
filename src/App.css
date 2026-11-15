@@ -5606,10 +5606,27 @@ a.brand:focus-visible {
 
 /* 대시보드 검색 전 「바로 볼 수 있는 분석」 (11/10): 미리 분석된 키워드 + 단계, 한 줄로 작게 */
 .dash-ready {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
+}
+/* 11/15: 칩 폭을 재는 보이지 않는 줄 (Dashboard.jsx가 2줄에 몇 개 들어가는지 계산) */
+.dash-ready-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  gap: 8px;
+  width: 0; /* 폭 0 + 넘침 숨김: 안의 칩은 제 폭대로 재지만 페이지를 옆으로 넓히지 않게 */
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+.dash-ready-measure > * {
+  flex: none;
 }
 .dash-ready-list {
   display: flex;
@@ -5636,6 +5653,28 @@ a.brand:focus-visible {
 .dash-ready-stage {
   color: var(--tb-color-text-sub);
   white-space: nowrap;
+}
+/* 휴대폰: 6줄(309px)로 쌓이던 칩을 한 줄로, 옆으로 밀어 봄 */
+@media (max-width: 640px) {
+  .dash-ready-list {
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    min-width: 0;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .dash-ready-list > * {
+    flex: none;
+  }
+  /* 칸 폭이 칩 줄 길이에 끌려 넓어지지 않게 (검색 카드는 grid, 기본 칸 폭이 내용 폭) */
+  .dash-search {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dash-ready {
+    min-width: 0;
+  }
 }
 /* 키워드 분석 오른쪽: 시계열 칸을 조금 넓게, 한눈에 · 사실 칸 */
 .ka-grid {
@@ -8926,4 +8965,46 @@ a.dash-home-t:hover,
     --tb-zoom: 0.9;
     zoom: 0.9;
   }
+}
+
+/* 요즘 뜨는 기술 막대 (11/15): 화면 틀 안에서는 막대 높이를 채우고, 다 들어가는 줄만 보인다 (TrendRail.jsx가 잘리는 줄을 감춤) */
+@media (min-width: 901px) and (min-height: 600px) {
+  .dash-layout > .trend-rail.panel {
+    position: static;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .dash-page.is-home > .dash-layout > .trend-rail,
+  .dash-page:not(.is-home) > .dash-layout > .trend-rail {
+    overflow: hidden;
+  }
+  .trend-rail > * {
+    flex: none;
+  }
+  .trend-rail > .tr-list {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .tr-list li.is-clipped {
+    visibility: hidden;
+  }
+}
+
+/* 자료 현황 「담을 폴더」 (11/15): 범위로 찾을 때마다 「· 자동」 폴더가 늘어 줄이 늘고 표가 줄었음 → 선별·요약처럼 한 줄, 옆으로 밀어 봄 */
+.list-panel > .folder-bar {
+  flex-wrap: nowrap;
+}
+.list-panel > .folder-bar .folder-chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+.list-panel > .folder-bar .folder-chip,
+.list-panel > .folder-bar .folder-new {
+  flex: none;
+}
+.list-panel > .folder-bar .folder-bar-label {
+  flex: none;
 }

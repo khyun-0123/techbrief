@@ -1,10 +1,14 @@
 // 요즘 뜨는 기술 막대 (11/14 조장): 실시간 검색어처럼 대시보드 왼쪽에 작게 — 내 보고서 왼쪽 막대와 같은 폭(--tb-rail-w)
-// - 이번 주 종합 상위 10개: 순위 · 이름(누르면 분석) · 단계 · 자사 위협/기회 표시(누르면 설명 창)
+// - 이번 주 종합 상위: 순위 · 이름(누르면 분석) · 단계 · 자사 위협/기회 표시(누르면 설명 창)
+//   11/15: 10개 고정 → 화면 틀 안에서는 막대 높이에 다 들어가는 만큼(5~20개, QHD는 아래가 500px 비고 노트북은 잘렸음).
+//   20개를 다 그려 두고 잘리는 줄부터 감춘다. 화면 틀 밖(휴대폰)은 10개
 // - 「펼쳐 보기」를 누르면 왼쪽에서 판이 나오듯 지금의 「요즘 뜨는 기술」 전체 화면이 펼쳐진다 (Dashboard.jsx)
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { fetchTechTrends, fetchTrendVerdicts } from './api.js'
 
-const TOP = 10
+const TOP = 10 // 화면 틀 밖
+const MAX = 20 // 자사 위협 · 기회 판정도 20개까지 받음
+const MIN = 5
 
 export default function TrendRail({ onPick, onOpen, onVerdicts, onVerdict }) {
   const [data, setData] = useState(null)
@@ -32,7 +36,29 @@ export default function TrendRail({ onPick, onOpen, onVerdicts, onVerdict }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  const list = (data?.composite ?? []).slice(0, TOP)
+  const listRef = useRef(null)
+  const [framed, setFramed] = useState(false)
+  const [fit, setFit] = useState(MAX)
+  const all = (data?.composite ?? []).slice(0, MAX)
+  useLayoutEffect(() => {
+    const ol = listRef.current
+    if (!ol) return undefined
+    const decide = () => {
+      const clip = getComputedStyle(ol).overflowY === 'hidden' // 화면 틀(App.css)에서만 막대 높이에 맞춤
+      setFramed(clip)
+      if (!clip) return
+      const lis = [...ol.children]
+      const room = ol.clientHeight
+      let n = 0
+      for (const li of lis) if (li.offsetTop - ol.offsetTop + li.offsetHeight <= room + 1) n += 1
+      setFit(Math.max(MIN, n))
+    }
+    decide()
+    const ro = new ResizeObserver(decide)
+    ro.observe(ol)
+    return () => ro.disconnect()
+  }, [all.length])
+  const list = framed ? all : all.slice(0, TOP)
   return (
     <aside className="panel trend-rail" aria-labelledby="tr-title">
       <div className="tr-head">
@@ -42,11 +68,11 @@ export default function TrendRail({ onPick, onOpen, onVerdicts, onVerdict }) {
       {error && <p className="tr-empty">{error}</p>}
       {!data && !error && <p className="tr-empty">불러오는 중…</p>}
       {data && !list.length && <p className="tr-empty">아직 찾은 기술이 없어요</p>}
-      <ol className="tr-list">
+      <ol ref={listRef} className="tr-list">
         {list.map((r, i) => {
           const v = verdicts[r.name]
           return (
-            <li key={r.key ?? r.name}>
+            <li key={r.key ?? r.name} className={framed && i >= fit ? 'is-clipped' : undefined} aria-hidden={framed && i >= fit ? true : undefined}>
               <span className={i < 3 ? 'tr-rank top' : 'tr-rank'}>{i + 1}</span>
               <span className="tr-body">
                 <button type="button" className="tr-name" onClick={() => onPick(r.name)} title={`「${r.name}」 분석 · 종합 ${r.score}점 · ${r.grade}`}>
