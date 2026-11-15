@@ -355,10 +355,17 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
                         <span>전체 {leverMax}개</span>
                       </span>
                     </div>
-                    <p className="hint ka-mode-help">「자료 찾기」는 「{keyword}」 자료 중 고른 말이 하나 이상 든 것만 보여 줘요. 더 넓게 보려면 맵에서 말을 더 고르세요.</p>
-                    <p id="ka-auto-help" className="hint">
-                      레버 왼쪽 끝은 주제어만, 오른쪽 끝은 맵의 말 전부예요. 처음엔 추천 개수만큼 골라 둬요 — 연관도(함께 나온 이슈 수) 순 기술 · 회사 말을 하나씩 더하다가, 「{keyword}」 이슈를 새로 5% 이상 덮지 못하면 멈춘 개수예요. 레버를 올리면 다음 말을 하나씩 더하고(기술 · 회사 말 먼저), 내리면 마지막에 더한 말부터 빼요. 맵의 점이나 글자를 눌러 넣고 빼면 개수도 같이 바뀌어요 (직접 뺀 말은 오른쪽 끝이 아니면 다시 안 들어가요). 검정 점 옆 「+n」은 그 가지를 펼쳐요.
-                    </p>
+                    {/* 11/16 검수: 「글이 너무 많다」 → 레버 · 맵 설명 세 문단을 접어 둠 (aria-describedby는 접혀도 읽힘) */}
+                    <details className="ka-help">
+                      <summary>레버 · 맵 읽는 법</summary>
+                      <p className="hint">「자료 찾기」는 「{keyword}」 자료 중 고른 말이 하나 이상 든 것만 보여 줘요. 더 넓게 보려면 맵에서 말을 더 고르세요.</p>
+                      <p id="ka-auto-help" className="hint">
+                        레버 왼쪽 끝은 주제어만, 오른쪽 끝은 맵의 말 전부예요. 처음엔 추천 개수만큼 골라 둬요 — 연관도(함께 나온 이슈 수) 순 기술 · 회사 말을 하나씩 더하다가, 「{keyword}」 이슈를 새로 5% 이상 덮지 못하면 멈춘 개수예요. 레버를 올리면 다음 말을 하나씩 더하고(기술 · 회사 말 먼저), 내리면 마지막에 더한 말부터 빼요. 맵의 점이나 글자를 눌러 넣고 빼면 개수도 같이 바뀌어요 (직접 뺀 말은 오른쪽 끝이 아니면 다시 안 들어가요). 점 옆 「+n」은 그 가지를 펼쳐요.
+                      </p>
+                      <p className="hint">
+                        점이 클수록 「{keyword}」와 함께 나온 이슈가 많음 · 재료: 뉴스 · 모은 기사(전체 기간) · AI 요약 문장 {related.issues}개 이슈{related.words === 'kiwi' ? ' (형태소 분석으로 명사만)' : ''} · 특허 출원인 · 논문 핵심어 (점에 마우스를 올리면 수)
+                      </p>
+                    </details>
                     <div className="ka-picked" aria-live="polite">
                       {picked.length ? (
                         <>
@@ -385,9 +392,6 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
                         <span className="hint">고른 말이 없어요. 「{keyword}」만으로 찾아요.</span>
                       )}
                     </div>
-                    <span className="ka-legend">
-                      점이 클수록 「{keyword}」와 함께 나온 이슈가 많음 · 재료: 뉴스 · 모은 기사(전체 기간) · AI 요약 문장 {related.issues}개 이슈{related.words === 'kiwi' ? ' (형태소 분석으로 명사만)' : ''} · 특허 출원인 · 논문 핵심어 (점에 마우스를 올리면 수)
-                    </span>
                   </>
                 ) : (
                   <p className="hint">함께 나온 말이 충분하지 않아요 (이슈 {related.issues}개). 「{keyword}」만으로 찾아요.</p>

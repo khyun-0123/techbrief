@@ -218,6 +218,11 @@ function clampView(v, pos, W, H) {
 }
 
 const radius = (score, max) => 3 + 9 * Math.sqrt(score / max)
+// 글자 크기 (11/16 검수: 「어디를 봐야 할지 모르겠다」): 토큰 단계에 맞춤 — 검색어 17(--fs-lg) · 1단계 13(--fs-sm) · 2 · 3단계와 배지 12(--fs-xs).
+// 가이드 값(검색어 11px · 1단계 12.5 · 2단계 11)에서 바꿈 — 검색어가 가장 먼저 보이게 (32 문서)
+const FS = [17, 13, 12, 12]
+const BADGE_FS = 12
+const CENTER_R = 13
 
 function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, isOn, onPick, hidden, onHide, svgRef, onDragNode, onHover }) {
   const { l1, l2, cross } = graph
@@ -279,9 +284,9 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
     const p = S(n.word)
     if (!p) return null
     const on = lv > 0 && isOn(n.word)
-    const r = lv === 0 ? 11 : radius(n.score, max)
+    const r = lv === 0 ? CENTER_R : radius(n.score, max)
     const fill = lv === 0 ? colors.accent : lv === 1 ? colors.d1 : lv === 2 ? colors.d2 : colors.d3
-    const fs = lv === 0 ? 15 : lv === 1 ? 12.5 : 11
+    const fs = FS[lv] ?? FS[2]
     const folded = (lv === 1 || lv === 2) && hidden.has(n.word) && kidsOf.get(n.word)
     const label = `${on ? '✓ ' : ''}${short(n.word, lv === 0 ? 18 : lv === 1 ? 14 : 11)}`
     const sub = lv === 1 ? (n.subcats ?? [])[0] : null
@@ -314,9 +319,10 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
       >
         <circle cx={p.x} cy={p.y} r={r + 3} fill="transparent" />
         <circle cx={p.x} cy={p.y} r={r} fill={fill} />
-        {/* 고른 말 (11/14): 점 둘레 테두리는 1단계 점과 헷갈려서, 글자를 검정 알약(눌린 칩과 같은 모양)으로. 글자는 알약 가운데(central, 11/15 실측 2.3px 위로 떠 있었음) */}
-        {on && <rect x={p.x - (textW(label, fs) + 14) / 2} y={p.y + r + 2} width={textW(label, fs) + 14} height={fs + 7} rx={(fs + 7) / 2} fill={colors.text} />}
-        <text x={p.x} y={on ? p.y + r + 2 + (fs + 7) / 2 : p.y + r + 2 + fs * 0.85} dominantBaseline={on ? 'central' : undefined} textAnchor="middle" fontSize={fs} fontWeight={lv >= 2 && !on ? 400 : on ? 700 : 600} fill={on ? colors.surface : lv >= 2 ? colors.sub : colors.text} stroke={on ? 'none' : '#fff'} strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
+        {/* 고른 말 (11/14): 점 둘레 테두리는 1단계 점과 헷갈려서, 글자를 알약으로. 글자는 알약 가운데(central, 11/15 실측 2.3px 위로 떠 있었음)
+            11/16 검수: 검정 알약 6개가 검색어보다 먼저 눈에 들어와 → 흰 바탕 + 진한 테두리 (✓ 표시는 그대로) */}
+        {on && <rect x={p.x - (textW(label, fs) + 14) / 2} y={p.y + r + 2} width={textW(label, fs) + 14} height={fs + 7} rx={(fs + 7) / 2} fill={colors.surface} stroke={colors.text} strokeWidth="1.5" />}
+        <text x={p.x} y={on ? p.y + r + 2 + (fs + 7) / 2 : p.y + r + 2 + fs * 0.85} dominantBaseline={on ? 'central' : undefined} textAnchor="middle" fontSize={fs} fontWeight={lv === 0 || on ? 700 : lv >= 2 ? 400 : 600} fill={lv >= 2 && !on ? colors.sub : colors.text} stroke={on ? 'none' : '#fff'} strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
           {label}
         </text>
       </g>
@@ -330,9 +336,9 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
     const r = radius(n.score, max)
     const folded = hidden.has(n.word)
     const t = folded ? `+${kids}` : '−'
-    const w = 12 + t.length * 6.5
+    const w = 12 + t.length * 7
     const x = p.x + r * 0.7 + 3
-    const y = p.y - r * 0.7 - 15
+    const y = p.y - r * 0.7 - 17
     const stop = (e) => e.stopPropagation()
     return (
       <g
@@ -349,9 +355,10 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
         }}
       >
         <title>{folded ? `「${n.word}」와 함께 나온 말 ${kids}개 펼치기` : '접기'}</title>
-        <rect x={x - 3} y={y - 3} width={w + 6} height={22} fill="transparent" />
-        <rect x={x} y={y} width={w} height={16} rx={8} fill={folded ? colors.d1 : colors.surface} stroke={folded ? colors.d1 : colors.d3} />
-        <text x={x + w / 2} y={y + 11.5} textAnchor="middle" fontSize="10.5" fontWeight="700" fill={folded ? colors.surface : colors.sub}>
+        <rect x={x - 3} y={y - 3} width={w + 6} height={24} fill="transparent" />
+        {/* 11/16 검수: 검정 배지가 눈을 끌어 → 흰 바탕 · 연한 테두리 · 회색 글자 (접힘 · 펼침 같은 모양, 글자로 구분) */}
+        <rect x={x} y={y} width={w} height={18} rx={9} fill={colors.surface} stroke={colors.d3} />
+        <text x={x + w / 2} y={y + 13} textAnchor="middle" fontSize={BADGE_FS} fontWeight="600" fill={colors.sub}>
           {t}
         </text>
       </g>
@@ -522,9 +529,9 @@ function savePng(svg, name, colors) {
 function countOverlaps(final, view, graph, hidden, keyword, isOn) {
   const max = Math.max(1, ...graph.l1.map((n) => n.score), ...graph.l2.map((n) => n.score))
   const items = [
-    { word: keyword, fs: 15, r: 11 },
-    ...graph.l1.map((n) => ({ word: n.word, fs: 12.5, r: radius(n.score, max), max: 14 })),
-    ...graph.l2.filter((n) => !hidden.has(n.parent)).map((n) => ({ word: n.word, fs: 11, r: radius(n.score, max), max: 11, lv: n.lv })),
+    { word: keyword, fs: FS[0], r: CENTER_R },
+    ...graph.l1.map((n) => ({ word: n.word, fs: FS[1], r: radius(n.score, max), max: 14 })),
+    ...graph.l2.filter((n) => !hidden.has(n.parent)).map((n) => ({ word: n.word, fs: FS[2], r: radius(n.score, max), max: 11, lv: n.lv })),
   ]
   const boxes = []
   for (const it of items) {
@@ -538,10 +545,10 @@ function countOverlaps(final, view, graph, hidden, keyword, isOn) {
     // 펼치기 배지 (검정 점 오른쪽 위)도 글자처럼 센다
     const kids = it.max === 14 || it.lv === 2 ? graph.l2.filter((c) => c.parent === it.word).length : 0
     if (kids) {
-      const bw = 12 + (hidden.has(it.word) ? `+${kids}`.length : 1) * 6.5
+      const bw = 12 + (hidden.has(it.word) ? `+${kids}`.length : 1) * 7
       const bx = x + it.r * 0.7 + 3
-      const by = y - it.r * 0.7 - 15
-      boxes.push({ x0: bx, x1: bx + bw, y0: by, y1: by + 16, dot: { x0: 0, x1: 0, y0: 0, y1: 0 } })
+      const by = y - it.r * 0.7 - 17
+      boxes.push({ x0: bx, x1: bx + bw, y0: by, y1: by + 18, dot: { x0: 0, x1: 0, y0: 0, y1: 0 } })
     }
   }
   // 글자 ↔ 글자, 글자 ↔ 다른 점이 겹치는 곳을 센다
@@ -603,15 +610,9 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
   if (newExtra.length) setKept([...keptList, ...newExtra].join('\u0001'))
   const extraAll = [...keptList, ...newExtra].join('\u0001')
   const graph = useMemo(() => pickGraph(nodes, branches, edges, branchN, totalN, minCo, extraAll ? extraAll.split('\u0001') : []), [nodes, branches, edges, branchN, totalN, minCo, extraAll])
-  // 펼침: 1단계는 위 3개만 처음에 펼침, 2단계(3단계를 가진 말)는 처음엔 접힘 — 「+n」으로 펼침
-  const isOpen = useCallback(
-    (w) => {
-      if (openSet[w] != null) return openSet[w]
-      const i = graph.l1.findIndex((n) => n.word === w)
-      return i >= 0 && i < 3
-    },
-    [openSet, graph],
-  )
+  // 펼침: 처음엔 모두 접힘 — 「+n」으로 펼침 (11/16 검수: 「맵에 글이 너무 많다」 → 처음엔 검색어 + 1단계 말만 글자, 24개 → 8개 안팎.
+  // 예전: 1단계 위 3개를 처음부터 펼침)
+  const isOpen = useCallback((w) => openSet[w] ?? false, [openSet])
   const hidden = useMemo(() => new Set([...graph.l1, ...graph.l2.filter((n) => n.lv === 2)].filter((n) => !isOpen(n.word)).map((n) => n.word)), [graph, isOpen])
   const minK = phone ? 0.75 : 0.3 // 휴대폰은 0.75배 아래로 줄이지 않음 — 다 안 들어오면 끌어서 봄
   // 힘 계산: 말 · 접힘이 바뀌면 새로. 끝 자리를 미리 계산해 화면을 맞춰 두고, 점들은 가운데서 퍼지며 그 자리로 감
@@ -833,20 +834,14 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
                 <i style={{ background: colors.accent }} />
                 검색어
               </span>
+              {/* 11/16 검수: 범례 6칸 → 4칸 (1 · 2 · 3단계는 「진할수록 가까움」 한 칸) */}
               <span>
                 <i style={{ background: colors.d1 }} />
-                1단계
-              </span>
-              <span>
                 <i style={{ background: colors.d2 }} />
-                2단계
+                함께 나온 말 · 진할수록 가까움
               </span>
               <span>
-                <i style={{ background: colors.d3 }} />
-                3단계
-              </span>
-              <span>
-                <b className="km-lg-on">✓ 고른 말</b>
+                <b className="km-lg-on">✓ 볼 범위</b>
               </span>
               <span>
                 <b className="km-lg-badge">+n</b>
