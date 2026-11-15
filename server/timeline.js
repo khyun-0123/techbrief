@@ -563,6 +563,7 @@ async function makeTimelineStory(rawQuery, { refresh = false, background = false
   const { text, papers } = storyInput(tl)
   const { data, model } = await chatJson({
     kind: 'timeline',
+    label: tl.query,
     priority: background ? PRIORITY.BACKGROUND : PRIORITY.USER, // 미리 분석은 사람 요청에 자리를 내준다
     timeoutMs: 240_000,
     schema: STORY_SCHEMA,

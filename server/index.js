@@ -44,10 +44,10 @@ import {
 } from './db/store.js'
 import { reinforceBullet } from './reinforce.js'
 import { searchPaperArticles } from './searchPapers.js'
-import { addJob, answerJob, cancelJob, listJobs, setDraftBuilder } from './reportJobs.js'
+import { activeJobs, addJob, answerJob, cancelJob, listJobs, setDraftBuilder } from './reportJobs.js'
 import { sourceStatus } from './sourceGuard.js'
 import { patentDbStatus } from './patentDb.js'
-import { chatJson, llmProviders, modelName, pingModel, providerLabel, selectProvider } from './llm/client.js'
+import { chatJson, llmProviders, modelName, pingModel, providerLabel, queueList, selectProvider, withQueueContext } from './llm/client.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
   buildMergeMessages,
@@ -58,8 +58,8 @@ import {
   SECTION_KEYS,
   SECTION_SCHEMA,
 } from './llm/reportPrompts.js'
-import { adminConfigured, adminHere, adminOf, changeLog, clientIp, diffWords, login, logChange, logout, requireAdmin } from './admin.js'
-import { queueSearchSummaries, refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
+import { adminConfigured, adminHere, adminOf, changeLog, clientIp, diffWords, logChange, login, logout, readCookie, requireAdmin } from './admin.js'
+import { backlogBrief, queueSearchSummaries, refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
 import { featureList, FEATURES, getFeatures, saveFeatures } from './features.js'
 import { summarizeArticle, summarizeOnly } from './summarize.js'
 import { pruneUsage, recordClientEvent, usageStats } from './usage.js'
@@ -422,7 +422,15 @@ function crossOrigin(req) {
 }
 
 // /api 요청을 처리한다. Vite 개발 서버와 단독 서버가 같이 쓴다
-export async function handleApi(req, res) {
+// 브라우저 번호 (11/15 대기열 보기): 화면이 쿠키 tb_client로 보낸다 (src/usage.js). 「내 작업」 표시에만 쓰고 저장하지 않는다
+const clientOf = (req) => String(readCookie(req, 'tb_client') ?? '').replace(/[^\w-]/g, '').slice(0, 64) || null
+
+// 요청 하나를 처리하는 동안 AI 호출이 누구의 요청인지 알 수 있게 맥락을 넣는다 (llm/client.js withQueueContext)
+export function handleApi(req, res) {
+  return withQueueContext({ client: clientOf(req), label: null }, () => handleApiInner(req, res))
+}
+
+async function handleApiInner(req, res) {
   try {
     if (crossOrigin(req)) return send(res, 403, { error: '다른 사이트에서 보낸 요청은 받지 않아요.' })
     // 운영 상태(점검 중 · AI 정지)면 일반 사용자의 요청을 막는다. 관리 페이지에서 보낸 관리자 요청만 그대로 (19 문서 6장, 11/08 원칙)
@@ -566,6 +574,11 @@ export async function handleApi(req, res) {
       requireAdmin(req)
       const { keywords = [] } = await readJson(req)
       return send(res, 200, await collect(keywords))
+    }
+    // AI 대기열 (11/15): 지금 처리 중 · 기다리는 AI 요청, 보고서 작업, 자동 요약 대기 — 오른쪽 아래 창과 관리 페이지 「운영」
+    if (req.method === 'GET' && req.url === '/api/queue') {
+      const viewer = clientOf(req)
+      return send(res, 200, { ...queueList(viewer), reports: activeJobs(viewer), backlog: backlogBrief(), at: new Date().toISOString() })
     }
     if (req.method === 'GET' && req.url === '/api/refresh') {
       return send(res, 200, await refreshStatus())

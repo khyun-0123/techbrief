@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchReadyTimelines } from './api.js'
 import KeywordAnalysis, { AnalysisPreview } from './KeywordAnalysis.jsx'
+import DashHome from './DashHome.jsx'
 import { consumeOpenRequest, useOpenRequest, useStoryJobs } from './storyJobs.js'
 import TechTrends from './TechTrends.jsx'
 import TrendRail from './TrendRail.jsx'
@@ -18,11 +19,12 @@ import { LAST_ANALYZED_KEY } from './utils.js'
 const showTerm = (q) => String(q).replace(/\b[a-z]{2,4}\b/g, (w) => w.toUpperCase())
 const READY_SHOWN = 8 // 「바로 볼 수 있는 분석」 처음에 보이는 수 (11/14 D5: 칩 12개 + 예시 4칸 + 접힌 목록이 한 카드에 세 겹)
 
-function Dashboard({ resetKey = 0, stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onScopeSearch, onAutoReport, onKeyword, onGoCollect, onRemember }) {
+function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, onGoReports, stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onScopeSearch, onAutoReport, onKeyword, onGoCollect, onRemember }) {
   const [text, setText] = useState('')
   const [focus, setFocus] = useState(null) // 분석 중인 말 (없으면 검색창 + 미리 분석된 키워드 + 요즘 뜨는 기술)
   const [ready, setReady] = useState([]) // 미리 분석해 둔 말 (11/10): 검색 전에도 분석이 어떤 모양인지 보이게
   const [allReady, setAllReady] = useState(false)
+  const [tallScreen] = useState(() => window.innerHeight >= 1100)
   // 요즘 뜨는 기술 (11/14 조장): 왼쪽 작은 막대 + 「펼쳐 보기」로 왼쪽에서 나오는 판, 자사 위협 · 기회 설명 창
   const [drawer, setDrawer] = useState(false)
   const [verdictData, setVerdictData] = useState(null)
@@ -99,7 +101,7 @@ function Dashboard({ resetKey = 0, stats, keywords, recommended = [], favorites,
   }
 
   return (
-    <main className="page page-wide">
+    <main className={focus ? 'page page-wide dash-page' : 'page page-wide dash-page is-home'}>
       <header className="page-header with-actions">
         <div>
           <h1>대시보드</h1>
@@ -115,6 +117,7 @@ function Dashboard({ resetKey = 0, stats, keywords, recommended = [], favorites,
 
       <div className="dash-layout">
         <TrendRail onPick={analyze} onOpen={() => setDrawer(true)} onVerdicts={setVerdictData} onVerdict={openVerdict} />
+      <div className="dash-main">
       <section ref={panelRef} className={focus ? 'panel dash-search is-open' : 'panel dash-search'} aria-labelledby="dash-search-title">
         <div className="dash-search-head">
           <h2 id="dash-search-title" className="dash-title">
@@ -161,8 +164,8 @@ function Dashboard({ resetKey = 0, stats, keywords, recommended = [], favorites,
                 </div>
               </div>
             )}
-            {/* 11/14 조장: 예시는 처음부터 펼쳐 둠 */}
-            <details className="dash-more" open>
+            {/* 11/14 조장: 예시는 처음부터 펼쳐 둠. 11/15: 높이가 낮은 화면(1100px 미만, FHD 등)은 접어서 아래 「최근 중요 기사」 자리를 남긴다 */}
+            <details className="dash-more" open={tallScreen}>
               <summary>분석하면 이렇게 보여요 · 예시</summary>
               {/* 예시: AI 정리까지 있는 미리 분석 중 흐름이 잘 보이는 것(「연구 지속」이 아닌 단계)을 먼저 */}
               <AnalysisPreview example={(ready.find((r) => r.story && r.stage && r.stage !== '연구 지속') ?? ready.find((r) => r.story))?.query ?? null} onOpen={analyze} />
@@ -244,6 +247,9 @@ function Dashboard({ resetKey = 0, stats, keywords, recommended = [], favorites,
         {/* key: 키워드가 바뀌면 새로 그린다 (고른 범위 · 받은 값 초기화) */}
         {focus && <KeywordAnalysis key={focus} keyword={focus} onSearch={onSearch} onScopeSearch={onScopeSearch} onAutoReport={onAutoReport} periods={periods} period={period} onPeriod={onPeriod} />}
       </section>
+      {/* 첫 화면(분석 전)에만: 최근 중요 기사 · 최근 내 보고서 (11/15 시안 A) */}
+      {!focus && <DashHome issues={homeIssues} reports={reports} onOpenReport={onOpenReport} onGoReports={onGoReports} onGoCollect={onGoCollect} />}
+      </div>
       </div>
 
       {/* 「세부 기술 × 경쟁사 특허」는 대시보드에서 뺌 (11/14 조장: 계속 볼 자료가 아님) — 보고서 분석 자료 · 위협 · 기회 설명 창에서 씀 */}

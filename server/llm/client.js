@@ -3,6 +3,7 @@
 // AI 서버는 세 곳(맥미니·OpenRouter·EXAONE API)이고 관리 화면에서 고른다. 고른 값은 이 서버 메모리에만 둔다 (팀원 서버와 별개)
 // EXAONE API(11/11, K-EXAONE 2.5 무료 API)는 외부 서버 + 비상업 약관 → 공개 기사로 시험할 때만 (23 문서 3-2)
 
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { recordAiCall } from '../usage.js'
 
 const TIMEOUT_MS = 120_000 // 요약 기본값. 보고서처럼 긴 출력은 호출할 때 늘린다
@@ -132,12 +133,22 @@ export class PreemptedError extends Error {
 const waiting = []
 let running = null // 지금 처리 중인 요청의 우선순위
 let runningAbort = null // 지금 처리 중인 요청을 끊는 스위치 (AbortController)
+let runningMeta = null // 지금 처리 중인 요청의 보이는 정보 { kind, label, client, priority, enqueuedAt, startedAt }
 let seq = 0
 
+// ── 대기열 보기 (11/15): 누가 · 무엇을 기다리는지 ──
+// 요청마다 { client(브라우저 번호), label(무슨 작업) }을 함께 들고 다닌다. API 요청 하나가 시작될 때 server/index.js가 넣고,
+// 보고서 작업 · 자동 요약처럼 요청과 떨어져 도는 일은 그 일을 시작할 때 withQueueContext로 다시 넣는다
+const queueContext = new AsyncLocalStorage()
+export function withQueueContext(ctx, fn) {
+  return queueContext.run({ ...(queueContext.getStore() ?? {}), ...ctx }, fn)
+}
+const KIND_LABEL = { summary: '기사 요약', report: '보고서 쓰기', translate: '검색어 영문 표기', timeline: '기술 흐름 정리', reinforce: '보고서 근거 보충', section: '보고서 섹션 다시 쓰기', terms: '요즘 뜨는 기술 용어', test: '모델 시험' }
+
 // task(signal): signal이 끊기면 AI 서버 요청도 끊는다
-function enqueue(task, priority = PRIORITY.USER) {
+function enqueue(task, priority = PRIORITY.USER, meta = {}) {
   return new Promise((resolve, reject) => {
-    waiting.push({ priority, order: seq++, task, resolve, reject })
+    waiting.push({ priority, order: seq++, task, resolve, reject, meta: { ...meta, priority, enqueuedAt: Date.now() } })
     if (running === PRIORITY.BACKGROUND && priority < PRIORITY.BACKGROUND && runningAbort) {
       console.log('[llm] 사람 요청이 와서 자동 요약을 멈추고 뒤로 보냄')
       runningAbort.abort(new PreemptedError())
@@ -156,6 +167,7 @@ async function pump() {
   }
   const job = waiting.splice(next, 1)[0]
   running = job.priority
+  runningMeta = { ...job.meta, startedAt: Date.now() }
   const controller = new AbortController()
   runningAbort = controller
   try {
@@ -168,8 +180,29 @@ async function pump() {
   } finally {
     running = null
     runningAbort = null
+    runningMeta = null
     pump()
   }
+}
+
+// 대기열 목록 (오른쪽 아래 「AI 대기열」 · 관리 페이지). viewer: 보는 브라우저 번호 → 「내 작업」 표시. 남의 브라우저 번호는 보내지 않는다
+// who: mine(내가 시킨 것) · auto(자동 — 자동 요약 · 미리 분석 등 우선순위가 가장 낮은 일, 또는 브라우저 번호가 없는 일) · other(다른 사람)
+function publicMeta(m, viewer) {
+  if (!m) return null
+  const auto = m.priority === PRIORITY.BACKGROUND || !m.client
+  return {
+    kind: m.kind,
+    kindLabel: KIND_LABEL[m.kind] ?? 'AI 작업',
+    label: m.label ?? null,
+    who: auto ? 'auto' : viewer && m.client === viewer ? 'mine' : 'other',
+    priority: m.priority,
+    waitedMs: (m.startedAt ?? Date.now()) - m.enqueuedAt,
+    runningMs: m.startedAt ? Date.now() - m.startedAt : null,
+  }
+}
+export function queueList(viewer) {
+  const order = [...waiting].sort((a, b) => a.priority - b.priority || a.order - b.order)
+  return { running: publicMeta(runningMeta, viewer), waiting: order.map((j) => publicMeta(j.meta, viewer)) }
 }
 
 // 대기 상황 (자동 최신화 화면에 "사용자 요청 먼저 처리 중"을 보여 줄 때 쓴다)
@@ -260,13 +293,16 @@ async function callChat(cfg, { messages, schema, schemaName, report = false, tim
 // 질문 하나를 보내고 JSON으로 받는다
 // report·timeoutMs는 선택 (보고서는 *_REPORT_MODEL과 더 긴 시간), priority는 PRIORITY 중 하나 (기본: 사람 요청)
 // AI 서버는 요청한 순간에 고른 곳을 쓴다 (기다리는 동안 상단에서 바꿔도 그대로)
-export async function chatJson({ messages, schema, schemaName = 'result', report, timeoutMs, priority = PRIORITY.USER, provider, kind: callKind }) {
+// label: 대기열에 보일 작업 이름 (기사 제목 · 키워드 등, 선택). 없으면 요청 맥락(withQueueContext)의 label
+export async function chatJson({ messages, schema, schemaName = 'result', report, timeoutMs, priority = PRIORITY.USER, provider, kind: callKind, label }) {
   let cfg = config(provider)
+  // callKind: 요약 · 보고서가 아닌 호출의 이름 (translate 검색어 영문 표기 · timeline 흐름 정리 · reinforce 근거 보충 · section 섹션 다시 쓰기 · terms 뜨는 기술, 11/11)
+  const kind = provider ? 'test' : callKind ?? (report ? 'report' : 'summary')
+  const ctx = queueContext.getStore() ?? {}
+  const meta = { kind, label: String(label ?? ctx.label ?? '').slice(0, 120) || null, client: ctx.client ?? null }
   return enqueue(async (signal) => {
     // 사용 현황(17 문서 4장)에 AI 호출 수·실패·걸린 시간을 남긴다. 대기열에서 기다린 시간은 빼고 잰다
     const startedAt = Date.now()
-    // callKind: 요약 · 보고서가 아닌 호출의 이름 (translate 검색어 영문 표기 · timeline 흐름 정리 · reinforce 근거 보충 · section 섹션 다시 쓰기 · terms 뜨는 기술, 11/11)
-    const kind = provider ? 'test' : callKind ?? (report ? 'report' : 'summary')
     try {
       let result
       try {
@@ -295,7 +331,7 @@ export async function chatJson({ messages, schema, schemaName = 'result', report
       if (!signal.aborted) recordAiCall(kind, false, Date.now() - startedAt, { provider: cfg.id, model: (report && cfg.reportModel) || cfg.model })
       throw err
     }
-  }, priority)
+  }, priority, meta)
 }
 
 export function modelName() {

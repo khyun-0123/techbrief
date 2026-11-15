@@ -2140,6 +2140,14 @@ a.btn {
 .page.page-wide {
   max-width: 1600px;
 }
+/* QHD 등 아주 넓은 화면 (11/15): 1600px에 묶여 양옆이 480px씩 비던 것 → 2240px까지 */
+@media (min-width: 2000px) {
+  .page.page-wide {
+    max-width: 2240px;
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+}
 
 .content.with-favs {
   grid-template-columns: var(--tb-rail-w) minmax(0, 1fr) 280px;
@@ -8277,4 +8285,322 @@ button.ka-auto-note {
 .ka-rel-meta {
   color: var(--tb-color-text-faint);
   font-size: var(--fs-xs);
+}
+
+/* ── AI 대기열 (11/15): 오른쪽 아래 늘 떠 있는 단추 · 창, 관리 페이지 「운영」 ── */
+.queue-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 6px 18px rgba(28, 37, 51, 0.14);
+  cursor: pointer;
+}
+.queue-fab:hover {
+  background: var(--tb-color-surface-hover);
+}
+.queue-fab-n {
+  color: var(--tb-color-text-sub);
+  font-weight: 400;
+}
+.queue-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tb-color-text-faint);
+}
+.queue-dot.is-busy {
+  background: var(--tb-color-success);
+}
+.queue-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0;
+}
+.queue-filter button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text-sub);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.queue-filter button[aria-pressed='true'] {
+  border-color: var(--tb-color-text);
+  background: var(--tb-color-text);
+  color: var(--tb-color-text-inverse);
+}
+.queue-filter-n {
+  font-weight: 700;
+}
+.queue-empty {
+  margin: 8px 0;
+  color: var(--tb-color-text-sub);
+  font-size: 13px;
+}
+.queue-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  min-height: 0;
+}
+.queue-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: center;
+  padding: 7px 0;
+  border-top: 1px solid var(--tb-color-line-soft);
+  font-size: 13px;
+}
+.queue-row:first-child {
+  border-top: none;
+}
+.queue-who {
+  grid-row: 1 / span 2;
+  padding: 1px 7px;
+  border-radius: var(--tb-radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.who-mine {
+  background: var(--tb-color-accent-soft);
+  color: var(--tb-color-accent);
+}
+.who-auto {
+  background: var(--tb-color-bg-strong);
+  color: var(--tb-color-text-sub);
+}
+.who-other {
+  background: var(--tb-color-warning-soft);
+  color: var(--tb-color-text);
+}
+.queue-title {
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.queue-kind {
+  color: var(--tb-color-text-faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.queue-state {
+  grid-column: 2 / span 2;
+  overflow: hidden;
+  color: var(--tb-color-text-sub);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.queue-row.is-busy .queue-state {
+  color: var(--tb-color-success);
+}
+.progress-panel .queue-view,
+.progress-panel > .queue-list {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ── 페이지 제목 한 줄 (11/15): 제목 · 설명 · 다음 단계 단추를 한 줄에. 설명이 길면 말줄임, 좁은 화면(760 이하)은 설명 숨김 ── */
+.page {
+  padding-top: var(--tb-space-5);
+}
+.page-header:not(.with-actions),
+.page-header.with-actions > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+.page-header h1 {
+  margin: 0;
+  white-space: nowrap;
+}
+.page-header p {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.page-header.with-actions {
+  align-items: center;
+}
+.page > .page-header + * {
+  margin-top: var(--tb-space-4);
+}
+@media (max-width: 760px) {
+  .page-header p {
+    display: none;
+  }
+}
+
+/* ── 대시보드 첫 화면 화면 틀 (11/15): 화면 높이를 채우고, 칸 안에서 스크롤 ──
+   폭 901px 이상(FHD 절반 포함) · 높이 700 이상에서만. 그보다 작으면(휴대폰 등) 지금처럼 페이지 스크롤 */
+.dash-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tb-card-gap);
+  min-width: 0;
+}
+.dash-home {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: var(--tb-card-gap);
+}
+.dash-home-box {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.dash-home-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.dash-home-head .dash-title {
+  margin: 0;
+  white-space: nowrap;
+}
+.dash-home-sub {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tb-color-text-sub);
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dash-home-actions {
+  display: inline-flex;
+  gap: 12px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.dash-home-body {
+  max-height: 360px; /* 화면 틀 밖(좁은 화면)에서는 이 높이에 맞춰 개수를 정한다 */
+  overflow: hidden;
+}
+.dash-home-body.is-scroll {
+  overflow-y: auto;
+}
+.dash-home-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dash-home-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: center;
+  padding: 7px 0;
+  border-top: 1px solid var(--tb-color-line-soft);
+}
+.dash-home-list li:first-child {
+  border-top: none;
+}
+.dash-home-hi {
+  grid-row: 1;
+  grid-column: 1;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--tb-color-danger-soft);
+  color: var(--tb-color-danger);
+  font-size: 12px;
+  font-weight: 700;
+}
+.dash-home-t {
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--tb-color-text);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+a.dash-home-t:hover,
+.dash-home-open:hover {
+  text-decoration: underline;
+}
+.dash-home-open {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.dash-home-m {
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--tb-color-text-sub);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dash-home-empty {
+  margin: 0;
+  color: var(--tb-color-text-sub);
+  font-size: 13px;
+}
+@media (max-width: 900px) {
+  .dash-home {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (min-width: 901px) and (min-height: 700px) {
+  .dash-page.is-home {
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - var(--topbar-h, 88px));
+    padding-bottom: var(--tb-space-5);
+  }
+  .dash-page.is-home > .dash-layout {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
+  .dash-page.is-home > .dash-layout > :first-child {
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .dash-page.is-home .dash-main {
+    min-height: 0;
+  }
+  .dash-page.is-home .dash-home {
+    flex: 1;
+    min-height: 200px;
+  }
+  .dash-page.is-home .dash-home-body {
+    flex: 1;
+    max-height: none;
+  }
+  /* 화면 틀을 쓰는 화면은 진행 창 몫의 아래 여백(140px)이 필요 없다 */
+  .app:has(.dash-page.is-home) {
+    padding-bottom: 0;
+  }
 }

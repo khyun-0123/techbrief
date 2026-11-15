@@ -14,7 +14,7 @@ import { searchPapers } from './papers/index.js'
 import { bestPassage, dbCandidates, inputCandidates, rewriteWithPassages, termsOf } from './reinforce.js'
 import { dbEnabled } from './db/index.js'
 import { saveReport } from './db/store.js'
-import { PRIORITY } from './llm/client.js'
+import { PRIORITY, withQueueContext } from './llm/client.js'
 import { summarizeArticle } from './summarize.js'
 import { lookupWiki } from './wiki.js'
 import { kindOfBullet } from './reportShared.js'
@@ -49,6 +49,13 @@ export function listJobs(clientId) {
   const now = Date.now()
   for (const [id, j] of jobs) if (j.finishedAt && now - Date.parse(j.finishedAt) > KEEP_MS) jobs.delete(id)
   return [...jobs.values()].filter((j) => !clientId || j.clientId === clientId).map(pub)
+}
+
+// 대기열 보기 (11/15): 아직 끝나지 않은 보고서 작업 전체. 남의 브라우저 번호 대신 mine만 보낸다
+export function activeJobs(viewer) {
+  return [...jobs.values()]
+    .filter((j) => ['queued', 'running', 'need_confirm'].includes(j.status))
+    .map((j) => ({ title: j.title, status: j.status, step: j.step, progress: j.progress, count: j.count, levelLabel: j.levelLabel, who: viewer && j.clientId === viewer ? 'mine' : 'other', createdAt: j.createdAt }))
 }
 
 function step(job, label, progress) {
@@ -114,7 +121,8 @@ async function pump() {
   if (!next) return
   G.running = next
   try {
-    await run(next)
+    // 대기열 보기: 이 보고서 작업의 AI 호출은 만든 브라우저 · 보고서 제목으로 보인다 (pump를 부른 다른 요청의 브라우저가 아니라)
+    await withQueueContext({ client: next.clientId, label: next.title }, () => run(next))
   } catch (err) {
     next.status = err.cancelled ? 'cancelled' : 'error'
     next.error = err.cancelled ? null : err.message

@@ -228,6 +228,16 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [screen, setScreen] = useState('dashboard')
   // 대시보드 첫 화면으로 (11/15): 대시보드에서 대시보드 탭을 한 번 더 누르거나 로고를 누르면 키워드 분석을 닫는다
   const [dashReset, setDashReset] = useState(0)
+  // 화면 틀 (11/15): 상단 메뉴 높이를 CSS 변수(--topbar-h)로 → 본문 칸이 「화면 높이 − 메뉴」를 채우고 넘치면 칸 안에서 스크롤
+  useEffect(() => {
+    const bar = document.querySelector('.topbar')
+    if (!bar) return undefined
+    const set = () => document.documentElement.style.setProperty('--topbar-h', `${Math.round(bar.getBoundingClientRect().height)}px`)
+    set()
+    const ro = new ResizeObserver(set)
+    ro.observe(bar)
+    return () => ro.disconnect()
+  }, [])
   const storyJobs = useStoryJobs() // 기술 흐름 정리 (키워드 분석을 떠나도 끝나면 진행 창이 알림, 11/11)
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState('all') // 기본 「전체」 (11/09 조장). 모은 기사 목록은 서버가 7일치만 보냄 (30 문서 1장)
@@ -657,6 +667,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const gathered = isSample ? SAMPLE_ARTICLES : fetched.map(toView).filter((a) => keywords.includes(a.keyword) || a.keyword === '1·2차 출처')
   // 오늘 이슈 수: 키워드에 안 맞은 1·2차 출처 글 중 관련 낮음(기본 숨김)은 세지 않는다
   const todayIssues = gathered.filter((a) => a.hoursAgo < 24 && !(a.keyword === '1·2차 출처' && a.relevance === 'low'))
+  // 대시보드 첫 화면 「최근 중요 기사」 (11/15): 최근 48시간, 관련도 낮음 빼고 중요도 순
+  const homeIssues = gathered.filter((a) => a.hoursAgo < 48 && a.relevance !== 'low').sort((x, y) => (y.importance ?? 0) - (x.importance ?? 0))
   // 자료 현황 목록: 모은 기사 + 직접 추가한 자료
   const collected = [...gathered, ...materials.map(materialView)]
   const countArticles = (list) => list.reduce((n, a) => n + 1 + (a.sameIssue ?? 0), 0)
@@ -1221,6 +1233,18 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       ) : screen === 'dashboard' ? (
         <Dashboard
           resetKey={dashReset}
+          homeIssues={homeIssues}
+          reports={reports}
+          onOpenReport={(id) => {
+            setArchiveTarget(id)
+            setScreen('archive')
+            window.scrollTo({ top: 0 })
+          }}
+          onGoReports={() => {
+            setArchiveTarget(null)
+            setScreen('archive')
+            window.scrollTo({ top: 0 })
+          }}
           stats={{
             todayIssues: todayIssues.length,
             todayArticles: countArticles(todayIssues),

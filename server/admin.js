@@ -47,7 +47,7 @@ function samePassword(input, expected) {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
-function readCookie(req, name) {
+export function readCookie(req, name) {
   for (const part of (req.headers.cookie ?? '').split(';')) {
     const [k, ...v] = part.trim().split('=')
     if (k === name) return decodeURIComponent(v.join('='))

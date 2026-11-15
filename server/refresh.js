@@ -7,7 +7,7 @@ import { collect, listArticles } from './collector/index.js'
 import { importanceRule } from './importanceRule.js'
 import { db, dbEnabled } from './db/index.js'
 import { getKeywords, getSetting, getSummaries, setSetting } from './db/store.js'
-import { pingModel, PRIORITY, queueStatus } from './llm/client.js'
+import { pingModel, PRIORITY, queueStatus, withQueueContext } from './llm/client.js'
 import { summarizeArticle } from './summarize.js'
 import { aiPaused } from './ops.js'
 import { execFileSync } from 'node:child_process'
@@ -135,6 +135,11 @@ async function loadState() {
   return getSetting(STATE_KEY, {})
 }
 
+// 대기열 보기: 자동 요약 대기열 요약 (남은 수 · 지금 요약 중인 기사)
+export function backlogBrief() {
+  return { remaining: backlog.length, important: backlog.filter((b) => b.important).length, current: stats.current, next: backlog.slice(0, 5).map((b) => b.article.title) }
+}
+
 export async function refreshStatus() {
   const settings = normalizeSettings(await getSetting(SETTINGS_KEY, {}))
   const state = await loadState()
@@ -258,7 +263,8 @@ function saveBacklogStatus() {
 async function setBacklog(list) {
   backlog = list
   await saveBacklogStatus()
-  if (!worker && backlog.length) worker = runWorker().finally(() => (worker = null))
+  // 찾기 · 설정 저장 같은 사람 요청에서 시작돼도 자동 작업으로 보이게 맥락을 비운다 (대기열 보기)
+  if (!worker && backlog.length) worker = withQueueContext({ client: null, label: null }, runWorker).finally(() => (worker = null))
   return backlog.length
 }
 
