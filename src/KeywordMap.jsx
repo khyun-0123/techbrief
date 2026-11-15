@@ -8,9 +8,10 @@
 // - 색은 가이드 대신 Storybook 토큰(CLAUDE.md 디자인 기준) — 값이 거의 같음. SVG 속성으로 넣어 PNG에도 같은 색
 // - 누르기 (11/14 조장): 점 · 글자 = 볼 범위에 넣기/빼기, 검정 점 옆 「+n」 배지 = 그 가지 펼치기/접기 (모드 전환 없앰). 처음엔 위 3개 가지만 펼침
 //   키보드: Enter = 넣기/빼기, → = 펼치기, ← = 접기. 펼치거나 접어도 다른 점은 제자리에서 조금만 움직임
-// - 가이드에서 아직 안 옮긴 것: 보고서에 넣기(초안 6장), 키워드 편집, 불용어 · 예외 단어 관리(지금은 서버 CSV), 고르는 기준 「중요도」(맵 데이터에 중요도 합이 없음), 관련 기사 칸
+// - 가이드에서 아직 안 옮긴 것: 보고서에 넣기(초안 6장), 키워드 편집, 불용어 · 예외 단어 관리(지금은 서버 CSV), 고르는 기준 「중요도」(11/16 보류: 중요도는 자료 현황 7일 목록에서만 계산돼 맵 기사 대부분이 0점), 관련 기사 칸
+// - 기술 분류 (11/15 맵팀 요청): 표시 설정에서 사업 6분류(subcats) 하나를 고르면 1 · 2 · 3단계 모두 그 분류 말만 남김. 처음엔 「전체」
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Seg } from './Dropdown.jsx'
+import Dropdown, { Seg } from './Dropdown.jsx'
 import { pageZoom } from './utils.js'
 
 const short = (t, n = 14) => (t.length > n ? `${t.slice(0, n - 1)}…` : t)
@@ -401,6 +402,8 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
 // 워드클라우드 (가이드 「워드클라우드」): 굵기 700, 검색어 레드 · 1~10위 검정 · 11~26위 회색 · 그 아래 옅은 회색.
 // 가장 큰 글자 = min(46, 폭/11) × min(1.15, √(40/단어 수)), 가장 작은 글자 = max(11, 큰 글자 × 0.3), 그 사이는 값의 제곱근,
 // 검색어 = min(60, 큰 글자 × 1.3). 큰 말부터 가운데에서 나선을 따라 겹치지 않는 첫 자리. 표시 설정 창 자리 · 아래 36px는 비움
+// 11/15: 비우는 자리는 접힌 창 크기만. 창을 펼쳐도 단어를 다시 놓지 않음 (펼친 창은 그림 위에 떠서 가려도 됨)
+const CLOUD_AVOID = { x: 0, y: 0, w: 180, h: 60 }
 function CloudView({ W, H, keyword, nodes, branches, isOn, onPick, total, avoid, colors, svgRef, onHover }) {
   const words = useMemo(() => {
     const all = new Map()
@@ -466,6 +469,7 @@ function CloudView({ W, H, keyword, nodes, branches, isOn, onPick, total, avoid,
               aria-checked={on}
               aria-label={`${w.word} · 함께 나온 이슈 ${w.score}개`}
               tabIndex={0}
+              onMouseDown={(e) => e.preventDefault()} // 11/15: 마우스로 누를 때는 초점이 안 가게 (네모 테두리가 생기던 문제). 키보드 Tab · Enter는 그대로
               onClick={() => onPick(w.word)}
               onPointerEnter={() => onHover({ word: w.word, tag: w.parent ? '2단계' : '1단계', rows: [[w.parent ? `「${w.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${w.score}개`], ['볼 범위', on ? '넣음' : '안 넣음']], x: w.x, y: w.y + 4 })}
               onPointerLeave={() => onHover(null)}
@@ -564,7 +568,7 @@ function countOverlaps(final, view, graph, hidden, keyword, isOn) {
 }
 const CROWDED = 6 // 글자 · 알약 · 배지 겹침이 이만큼 이상이면 안내 (11/14 3038 실측: 1440 반 칸 ai 안경 10 · 탠덤 OLED 4 · QD-OLED 2, 크게 보기 ai 안경 4)
 
-export default function KeywordMap({ keyword, issues, nodes, edges, branches, isOn, onToggle, large = false, view: mode = 'map', onView, onEnlarge }) {
+export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, branches: rawBranches, isOn, onToggle, large = false, view: mode = 'map', onView, onEnlarge }) {
   const box = useRef(null)
   const svgRef = useRef(null)
   const [size, setSize] = useState({ W: 640, H: 520 })
@@ -584,6 +588,21 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
   }, [])
   const { W, H } = size
   const colors = useMemo(() => readColors(), [])
+  // 기술 분류 (11/15): 서버가 붙인 사업 6분류(subcats)로 1 · 2 · 3단계를 모두 거름. 분류별 수 = 1~3단계의 서로 다른 말 수
+  const catCounts = useMemo(() => {
+    const seen = new Map()
+    for (const n of rawNodes) seen.set(n.word, n.subcats ?? [])
+    for (const list of Object.values(rawBranches ?? {})) for (const c of list) if (!seen.has(c.word)) seen.set(c.word, c.subcats ?? [])
+    const count = new Map()
+    for (const subs of seen.values()) for (const s of subs) count.set(s, (count.get(s) ?? 0) + 1)
+    return [...count.entries()].sort((a, b) => b[1] - a[1])
+  }, [rawNodes, rawBranches])
+  const [catPick, setCatPick] = useState('all')
+  const cat = catCounts.some(([c]) => c === catPick) ? catPick : 'all' // 검색어가 바뀌어 그 분류가 없으면 「전체」
+  const inCat = useCallback((n) => cat === 'all' || (n.subcats ?? []).includes(cat), [cat])
+  const nodes = useMemo(() => (cat === 'all' ? rawNodes : rawNodes.filter(inCat)), [cat, rawNodes, inCat])
+  const branches = useMemo(() => (cat === 'all' ? rawBranches : Object.fromEntries(Object.entries(rawBranches ?? {}).map(([p, list]) => [p, list.filter(inCat)]))), [cat, rawBranches, inCat])
+  const cloudEmpty = nodes.length === 0 && !Object.values(branches ?? {}).some((l) => l.length)
   // 처음 값 (가이드): 가지 7 · 키워드 40 · 함께 나온 이슈 6개 이상. 휴대폰(720px 미만)은 가지 6 · 키워드 18 (390px에서 글자가 겹쳤음, 11/14 실측)
   const phone = typeof window !== 'undefined' && window.innerWidth < 720
   const maxBranch = Math.max(3, Math.min(15, nodes.length))
@@ -746,8 +765,6 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
     msgTimer.current = setTimeout(() => setSaveMsg(''), 4500)
   }
   useEffect(() => () => clearTimeout(msgTimer.current), [])
-  // 워드클라우드는 표시 설정 창 자리를 피해 놓는다 (창 크기는 대략값: 접힘 170×56, 펼침 324×330)
-  const cloudAvoid = useMemo(() => (panelOpen ? { x: 0, y: 0, w: Math.min(330, W), h: 330 } : { x: 0, y: 0, w: 180, h: 60 }), [panelOpen, W])
   const cardLeft = hover ? Math.max(8, Math.min(W - 200, hover.x - 90)) : 0
   const cardTop = hover ? (hover.y + 120 > H ? Math.max(8, hover.y - 130) : hover.y + 22) : 0
   const overlaps = useMemo(() => (mode === 'map' ? countOverlaps(final, view, graph, hidden, keyword, isOn) : 0), [mode, final, view, graph, hidden, keyword, isOn])
@@ -755,7 +772,7 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
     <div className={large ? 'km km-large' : 'km'}>
       <div ref={box} className="km-stage" data-overlaps={overlaps}>
         {mode === 'cloud' ? (
-          <CloudView W={W} H={H} keyword={keyword} nodes={nodes} branches={branches} isOn={isOn} onPick={onToggle} total={totalN} avoid={cloudAvoid} colors={colors} svgRef={svgRef} onHover={setHover} />
+          <CloudView W={W} H={H} keyword={keyword} nodes={nodes} branches={branches} isOn={isOn} onPick={onToggle} total={totalN} avoid={CLOUD_AVOID} colors={colors} svgRef={svgRef} onHover={setHover} />
         ) : (
           <MapStage W={W} H={H} keyword={keyword} issues={issues} graph={graph} pos={pos} view={view} setView={setView} colors={colors} isOn={isOn} onPick={onToggle} hidden={hidden} onHide={onHide} svgRef={svgRef} onDragNode={onDragNode} onHover={setHover} />
         )}
@@ -808,6 +825,12 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
                   <input type="range" min="1" max="20" value={minCo} onChange={(e) => setMinCo(Number(e.target.value))} />
                 </label>
               )}
+              {catCounts.length > 0 && (
+                <div className="km-ctl">
+                  <span className="km-lbl">기술 분류</span>
+                  <Dropdown value={cat} onChange={setCatPick} label="기술 분류" size="md" options={[{ value: 'all', label: '전체' }, ...catCounts.map(([c, n]) => ({ value: c, label: `${c} (${n})` }))]} />
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -824,7 +847,10 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
             </button>
           </div>
         )}
-        {mode === 'map' && graph.l1.length === 0 && <p className="km-empty">함께 나온 이슈가 {minCo}개 이상인 말이 없어요. 「함께 나온 이슈」 기준을 낮춰 보세요.</p>}
+        {mode === 'map' && graph.l1.length === 0 && (
+          <p className="km-empty">{cat !== 'all' ? `「${cat}」에 드는 말이 없어요. 기술 분류를 「전체」로 바꿔 보세요.` : `함께 나온 이슈가 ${minCo}개 이상인 말이 없어요. 「함께 나온 이슈」 기준을 낮춰 보세요.`}</p>
+        )}
+        {mode === 'cloud' && cat !== 'all' && cloudEmpty && <p className="km-empty">「{cat}」에 드는 말이 없어요. 기술 분류를 「전체」로 바꿔 보세요.</p>}
         <div className="km-legend">
           {mode === 'cloud' ? (
             <span>「{keyword}」와 함께 나온 말 · 누르면 볼 범위에 넣기</span>
