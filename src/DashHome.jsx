@@ -1,10 +1,8 @@
 // 대시보드 첫 화면 아래 두 칸 (11/15 시안 A): 최근 중요 기사 · 최근 내 보고서
-// - 화면 높이를 채우고, 기사 수는 칸 높이에 들어가는 만큼만 보여 준다 (FHD · QHD · 절반 화면마다 다름)
-// - 「펼쳐 보기」를 누르면 나머지도 칸 안에서 스크롤해 본다
+// - 화면 높이를 채우고, 넘치는 기사 · 보고서는 늘 칸 안에서 스크롤 (11/15 조장: 「펼쳐 보기」 없이)
 // - 보고서를 누르면 내 보고서에서 그 보고서를 연다
-import { useLayoutEffect, useRef, useState } from 'react'
+// - 칸에 기사가 몇 줄 들어가는지는 대시보드가 재서 「분석하면 이렇게 보여요 · 예시」를 펼칠지 정한다 (Dashboard.jsx)
 
-const ROW_FALLBACK = 52 // 줄 높이를 아직 못 쟀을 때
 const ARTICLE_MAX = 30
 
 function when(iso) {
@@ -12,29 +10,7 @@ function when(iso) {
   return new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 }
 
-// 칸 높이에 몇 줄 들어가는지 잰다 (창 크기를 바꾸면 다시)
-function useFitCount(total) {
-  const bodyRef = useRef(null)
-  const [fit, setFit] = useState(total)
-  useLayoutEffect(() => {
-    const el = bodyRef.current
-    if (!el) return undefined
-    const measure = () => {
-      const row = el.querySelector('li')?.getBoundingClientRect().height || ROW_FALLBACK
-      // 화면 틀 안에서는 칸 높이, 밖(휴대폰 등)에서는 CSS의 최대 높이로 센다 (지금 그린 줄 수에 끌려가지 않게)
-      const maxH = parseFloat(getComputedStyle(el).maxHeight)
-      const avail = Number.isFinite(maxH) ? maxH : el.clientHeight
-      setFit(Math.max(1, Math.floor(avail / row)))
-    }
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [total])
-  return [bodyRef, fit]
-}
-
-function HomeBox({ title, sub, action, children, bodyRef, scroll }) {
+function HomeBox({ title, sub, action, children, className = '' }) {
   return (
     <section className="panel dash-home-box">
       <div className="dash-home-head">
@@ -42,7 +18,7 @@ function HomeBox({ title, sub, action, children, bodyRef, scroll }) {
         {sub && <span className="dash-home-sub">{sub}</span>}
         {action}
       </div>
-      <div ref={bodyRef} className={scroll ? 'dash-home-body is-scroll' : 'dash-home-body'}>
+      <div className={`dash-home-body ${className}`}>
         {children}
       </div>
     </section>
@@ -50,28 +26,17 @@ function HomeBox({ title, sub, action, children, bodyRef, scroll }) {
 }
 
 function DashHome({ issues, reports, onOpenReport, onGoReports, onGoCollect }) {
-  const [open, setOpen] = useState(false)
   const list = issues.slice(0, ARTICLE_MAX)
-  const [bodyRef, fit] = useFitCount(list.length)
-  const shown = open ? list : list.slice(0, fit)
-  const more = list.length - shown.length
   const recent = [...reports].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 12)
-  const [repRef, repFit] = useFitCount(recent.length)
 
   return (
     <div className="dash-home">
       <HomeBox
         title="최근 중요 기사"
-        sub="최근 48시간 · 중요도 순"
-        bodyRef={bodyRef}
-        scroll={open}
+        sub={list.length > 0 ? `최근 48시간 · 중요도 순 ${list.length}건` : '최근 48시간 · 중요도 순'}
+        className="is-articles"
         action={
           <span className="dash-home-actions">
-            {(more > 0 || open) && (
-              <button type="button" className="link-btn" onClick={() => setOpen(!open)} aria-expanded={open}>
-                {open ? '접기' : `펼쳐 보기 +${more}`}
-              </button>
-            )}
             <button type="button" className="link-btn" onClick={onGoCollect}>
               자료 현황 →
             </button>
@@ -82,7 +47,7 @@ function DashHome({ issues, reports, onOpenReport, onGoReports, onGoCollect }) {
           <p className="dash-home-empty">최근 48시간에 모은 기사가 없어요. 자동 최신화가 켜져 있는지 확인해 주세요.</p>
         ) : (
           <ul className="dash-home-list">
-            {shown.map((a) => (
+            {list.map((a) => (
               <li key={a.id}>
                 {a.importanceLevel === 'high' && <span className="dash-home-hi">중요</span>}
                 <a className="dash-home-t" href={a.url} target="_blank" rel="noreferrer" title={a.title}>
@@ -101,7 +66,6 @@ function DashHome({ issues, reports, onOpenReport, onGoReports, onGoCollect }) {
       <HomeBox
         title="최근 내 보고서"
         sub={`전체 ${reports.length}건`}
-        bodyRef={repRef}
         action={
           <span className="dash-home-actions">
             <button type="button" className="link-btn" onClick={onGoReports}>
@@ -114,7 +78,7 @@ function DashHome({ issues, reports, onOpenReport, onGoReports, onGoCollect }) {
           <p className="dash-home-empty">아직 만든 보고서가 없어요. 선별·요약에서 보고서를 만들면 여기에 보여요.</p>
         ) : (
           <ul className="dash-home-list">
-            {recent.slice(0, repFit).map((r) => (
+            {recent.map((r) => (
               <li key={r.id}>
                 <button type="button" className="dash-home-t dash-home-open" onClick={() => onOpenReport(r.id)} title={`「${r.report?.title ?? '보고서'}」 내 보고서에서 열기`}>
                   {r.report?.title ?? '보고서'}

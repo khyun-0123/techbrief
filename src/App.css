@@ -8499,11 +8499,9 @@ button.ka-auto-note {
   white-space: nowrap;
 }
 .dash-home-body {
-  max-height: 360px; /* 화면 틀 밖(좁은 화면)에서는 이 높이에 맞춰 개수를 정한다 */
-  overflow: hidden;
-}
-.dash-home-body.is-scroll {
+  max-height: 360px; /* 화면 틀 밖(좁은 화면)에서는 이 높이까지, 넘치면 칸 안 스크롤 */
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .dash-home-list {
   margin: 0;
@@ -8591,6 +8589,7 @@ a.dash-home-t:hover,
   }
   .dash-page.is-home .dash-main {
     min-height: 0;
+    overflow-y: auto; /* 낮은 화면에서 예시를 손으로 펴면 페이지 대신 이 칸이 스크롤 */
   }
   .dash-page.is-home .dash-home {
     flex: 1;

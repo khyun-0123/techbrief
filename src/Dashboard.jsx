@@ -4,7 +4,7 @@
 //   「자료 찾기 →」(기간과 함께)를 눌러야 자료 현황에서 뉴스 · 논문을 찾는다. 「닫기」로 처음 모양으로
 // - 자동 수집 키워드 칩은 지금처럼 자료 현황에서 모은 기사를 그 키워드로 걸러 보여 준다
 // - 예전 「추적 중인 키워드 추이」는 11/10 조장 결정으로 뺐다 (KeywordTrends.jsx는 그래프 부품 Spark만 씀)
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { fetchReadyTimelines } from './api.js'
 import KeywordAnalysis, { AnalysisPreview } from './KeywordAnalysis.jsx'
 import DashHome from './DashHome.jsx'
@@ -24,7 +24,12 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
   const [focus, setFocus] = useState(null) // 분석 중인 말 (없으면 검색창 + 미리 분석된 키워드 + 요즘 뜨는 기술)
   const [ready, setReady] = useState([]) // 미리 분석해 둔 말 (11/10): 검색 전에도 분석이 어떤 모양인지 보이게
   const [allReady, setAllReady] = useState(false)
-  const [tallScreen] = useState(() => window.innerHeight >= 1100)
+  // 「분석하면 이렇게 보여요 · 예시」 (11/15 조장): 펼친 채로 아래 「최근 중요 기사」가 4건 이상 보이면 펼침, 그보다 적으면 접음.
+  // 창 크기를 바꾸면 다시 정하고, 사람이 직접 펴거나 접으면 그때부터는 손대지 않는다. 화면 틀 밖(휴대폰)은 11/14 결정대로 펼침
+  const [exampleOpen, setExampleOpen] = useState(true)
+  const exampleRef = useRef(null)
+  const exampleManual = useRef(false)
+  const exampleExtra = useRef(null) // 펼쳤을 때 늘어나는 높이 (펼쳐 있을 때 잼)
   // 요즘 뜨는 기술 (11/14 조장): 왼쪽 작은 막대 + 「펼쳐 보기」로 왼쪽에서 나오는 판, 자사 위협 · 기회 설명 창
   const [drawer, setDrawer] = useState(false)
   const [verdictData, setVerdictData] = useState(null)
@@ -47,6 +52,27 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     setDrawer(false)
     setVerdictView(null)
   }, [resetKey])
+  useLayoutEffect(() => {
+    if (focus) return undefined
+    const det = exampleRef.current
+    const body = document.querySelector('.dash-home-body.is-articles')
+    if (!det || !body) return undefined
+    const MIN_ROWS = 4
+    const decide = () => {
+      if (exampleManual.current) return
+      if (getComputedStyle(body).maxHeight !== 'none') return setExampleOpen(true)
+      const row = body.querySelector('li')?.getBoundingClientRect().height || 52
+      const summaryH = det.querySelector('summary')?.getBoundingClientRect().height ?? 0
+      if (det.open) exampleExtra.current = det.getBoundingClientRect().height - summaryH
+      const room = det.open ? body.clientHeight : body.clientHeight - (exampleExtra.current ?? Infinity)
+      setExampleOpen(Math.floor(room / row) >= MIN_ROWS)
+    }
+    decide()
+    const ro = new ResizeObserver(decide)
+    ro.observe(body)
+    ro.observe(det)
+    return () => ro.disconnect()
+  }, [focus])
   useEffect(() => {
     let alive = true
     fetchReadyTimelines()
@@ -164,8 +190,17 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
                 </div>
               </div>
             )}
-            {/* 11/14 조장: 예시는 처음부터 펼쳐 둠. 11/15: 높이가 낮은 화면(1100px 미만, FHD 등)은 접어서 아래 「최근 중요 기사」 자리를 남긴다 */}
-            <details className="dash-more" open={tallScreen}>
+            {/* 11/14 조장: 예시는 처음부터 펼쳐 둠. 11/15 조장: 아래 「최근 중요 기사」가 4건보다 적게 보이면 접는다 (위 exampleOpen) */}
+            <details
+              ref={exampleRef}
+              className="dash-more"
+              open={exampleOpen}
+              onToggle={(e) => {
+                if (e.currentTarget.open === exampleOpen) return
+                exampleManual.current = true
+                setExampleOpen(e.currentTarget.open)
+              }}
+            >
               <summary>분석하면 이렇게 보여요 · 예시</summary>
               {/* 예시: AI 정리까지 있는 미리 분석 중 흐름이 잘 보이는 것(「연구 지속」이 아닌 단계)을 먼저 */}
               <AnalysisPreview example={(ready.find((r) => r.story && r.stage && r.stage !== '연구 지속') ?? ready.find((r) => r.story))?.query ?? null} onOpen={analyze} />
