@@ -63,6 +63,8 @@ function TechTimeline({ query, onClose, initialData = null, job = null }) {
   const yearly = (list) => (list ?? []).map((x) => ({ t: `${x.y}-01-01`, v: x.n }))
   // 올해는 아직 안 끝나 줄어 보이므로 그래프에서 뺀다
   const full = (list) => (list ?? []).filter((x) => x.y < THIS_YEAR)
+  // 「예상 밖 급증」 (TimesFM, 11/16 · server/timesfm.js): 네이버 관심도 그래프에 예상 범위 띠와 레드 점
+  const surge = data?.naver?.surge?.status === 'ok' ? data.naver.surge : null
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -135,14 +137,28 @@ function TechTimeline({ query, onClose, initialData = null, job = null }) {
                 }
                 note={data.patents.status === 'no_key' ? 'Google Cloud 키가 없어요.' : data.patents.error ?? '특허가 없어요.'}
               />
-              <Spark
-                title="네이버 검색 관심도"
-                unit=""
-                monthly
-                series={data.naver.status === 'ok' ? data.naver.months.map((m) => ({ t: `${m.t}-01`, v: m.v })) : []}
-                source="네이버 데이터랩 · 월별 · 기간 최대 100"
-                note={data.naver.status === 'not_enabled' ? '네이버 「검색어 트렌드」가 꺼져 있어요.' : '검색량이 적거나 받지 못했어요.'}
-              />
+              <div className="tl-naver">
+                <Spark
+                  title="네이버 검색 관심도"
+                  unit=""
+                  monthly
+                  series={data.naver.status === 'ok' ? data.naver.months.map((m) => ({ t: `${m.t}-01`, v: m.v })) : []}
+                  band={surge?.range.map((r) => ({ ...r, t: `${r.t}-01` }))}
+                  marks={surge?.surges.map((m) => ({ ...m, t: `${m.t}-01` }))}
+                  source={`네이버 데이터랩 · 월별 · 기간 최대 100${surge ? ` · 회색 띠: 구글 ${surge.model} 1달 앞 예상 범위(10~90%)` : ''}`}
+                  note={data.naver.status === 'not_enabled' ? '네이버 「검색어 트렌드」가 꺼져 있어요.' : '검색량이 적거나 받지 못했어요.'}
+                />
+                {surge && (
+                  <p className="tl-surge">
+                    <b>예상 밖 급증</b>{' '}
+                    {surge.surges.length
+                      ? [...surge.surges].reverse().slice(0, 4).map((m) => `${m.t.slice(2, 4)}년 ${Number(m.t.slice(5))}월 (예상 ${m.hi} → ${m.v})`).join(' · ')
+                      : '최근 2년 동안 없어요'}
+                    <span className="tl-surge-why">그 전 달까지만 보고 구글 시계열 모델이 예상한 범위를 넘은 달이에요. 단계 판정에는 쓰지 않아요.</span>
+                  </p>
+                )}
+                {data.naver.surge?.status === 'pending' && <p className="tl-surge is-wait">예상 범위 계산 중이에요. 다시 열면 보여요.</p>}
+              </div>
             </div>
 
             {c?.periods?.length > 0 && (

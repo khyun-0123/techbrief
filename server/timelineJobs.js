@@ -9,6 +9,7 @@ import { getKeywords, getSetting, setSetting } from './db/store.js'
 import { frequentSearches, queryKey, rememberTerms } from './queryTerms.js'
 import { getTechTrends } from './techtrends.js'
 import { buildTimeline, cachedTimeline, timelineStory } from './timeline.js'
+import { surgeMonths } from './timesfm.js'
 import { patentDbReady, titlesReady } from './patentDb.js'
 
 const STATE_KEY = 'timeline_precompute'
@@ -55,6 +56,8 @@ export async function runPrecompute() {
       const toDb = timeline && Boolean(await patentDbReady()) && (!['family', 'family-all'].includes(timeline.patents?.basis) || (timeline.patents?.inDisplay && Boolean(await titlesReady())))
       if (timeline && story && Date.now() - Date.parse(story.at) < FRESH_MS && !toDb) {
         skipped += 1
+        // 「예상 밖 급증」(TimesFM, 11/16)만 없으면 채워 둔다 (기억해 둔 값이 있으면 바로 끝남)
+        if (timeline.naver?.status === 'ok') await surgeMonths(timeline.naver.months).catch((err) => console.warn(`[timesfm] ${err.message}`))
         continue
       }
       try {

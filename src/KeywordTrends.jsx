@@ -22,22 +22,32 @@ const fmtNum = (v) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}천
 export const axisFloor = (unit) => (unit === '%' ? 50 : ['편', '건', '회'].includes(unit) ? 10 : 1)
 
 // monthly: false(일별) · true(월별) · 'year'(해마다, 기술 시계열 11/10). 기술 시계열(TechTimeline.jsx)도 같이 쓴다
-export function Spark({ title, unit, series, note, source, asOf, monthly = false }) {
+// band: [{ t, lo, hi }] 예상 범위(회색 띠), marks: [{ t, hi }] 「예상 밖 급증」 점 (레드) — 기술 시계열 네이버 관심도의 TimesFM (11/16)
+export function Spark({ title, unit, series, note, source, asOf, monthly = false, band = null, marks = null, markLabel = '예상 밖 급증' }) {
   const [hover, setHover] = useState(null)
   const floor = axisFloor(unit)
   const dataMax = series?.length ? Math.max(...series.map((p) => p.v)) : 0
   const floored = dataMax > 0 && dataMax < floor
   const pts = useMemo(() => {
     if (!series?.length) return []
-    const max = Math.max(...series.map((p) => p.v), axisFloor(unit))
+    const bandBy = new Map((band ?? []).map((b) => [b.t, b]))
+    const markBy = new Map((marks ?? []).map((m) => [m.t, m]))
+    const max = Math.max(...series.map((p) => p.v), ...(band ?? []).map((b) => b.hi), axisFloor(unit))
     const step = series.length > 1 ? (W - PAD.l - PAD.r) / (series.length - 1) : 0
-    return series.map((p, i) => ({ ...p, x: PAD.l + i * step, y: PAD.t + (H - PAD.t - PAD.b) * (1 - p.v / max) }))
-  }, [series, unit])
+    const yOf = (v) => PAD.t + (H - PAD.t - PAD.b) * (1 - v / max)
+    return series.map((p, i) => {
+      const b = bandBy.get(p.t)
+      return { ...p, x: PAD.l + i * step, y: yOf(p.v), band: b ? { lo: yOf(b.lo), hi: yOf(b.hi), loV: b.lo, hiV: b.hi } : null, mark: markBy.get(p.t) ?? null }
+    })
+  }, [series, unit, band, marks])
 
   const last = pts.at(-1)
   const shown = hover ?? last
   const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('')
   const area = pts.length ? `${line}L${last.x.toFixed(1)},${H - PAD.b}L${pts[0].x.toFixed(1)},${H - PAD.b}Z` : ''
+  const banded = pts.filter((p) => p.band)
+  const bandPath = banded.length > 1 ? `${banded.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.band.hi.toFixed(1)}`).join('')}${[...banded].reverse().map((p) => `L${p.x.toFixed(1)},${p.band.lo.toFixed(1)}`).join('')}Z` : ''
+  const marked = pts.filter((p) => p.mark)
 
   function onMove(e) {
     const box = e.currentTarget.getBoundingClientRect()
@@ -58,6 +68,12 @@ export function Spark({ title, unit, series, note, source, asOf, monthly = false
           </span>
         )}
       </figcaption>
+      {/* 예상 범위: 제목 줄이 좁아 따로 한 줄 (자리를 늘 잡아 두어 마우스를 움직여도 그래프가 흔들리지 않게) */}
+      {banded.length > 0 && (
+        <span className={shown?.mark ? 'trend-spark-band is-over' : 'trend-spark-band'}>
+          {shown?.band ? `${shown.mark ? `${markLabel} · ` : ''}예상 범위 ${fmtNum(shown.band.loV)}~${fmtNum(shown.band.hiV)}` : '회색 띠 위로 마우스를 올리면 예상 범위'}
+        </span>
+      )}
       {pts.length > 1 ? (
         <div className="trend-plot">
         <svg
@@ -69,10 +85,14 @@ export function Spark({ title, unit, series, note, source, asOf, monthly = false
           onMouseLeave={() => setHover(null)}
         >
           <path d={area} className="trend-area" />
+          {bandPath && <path d={bandPath} className="trend-band" />}
           <path d={line} className="trend-line" vectorEffect="non-scaling-stroke" />
           {hover && <line x1={hover.x} x2={hover.x} y1={PAD.t} y2={H - PAD.b} className="trend-cross" vectorEffect="non-scaling-stroke" />}
         </svg>
         {/* 점은 그래프가 늘어나도 동그랗게: SVG 밖에 겹쳐 그림 */}
+        {marked.map((p) => (
+          <span key={p.t} className="trend-mark" style={{ left: `${(p.x / W) * 100}%`, top: `${(p.y / H) * 100}%` }} aria-hidden="true" />
+        ))}
         <span className="trend-dot" style={{ left: `${(shown.x / W) * 100}%`, top: `${(shown.y / H) * 100}%` }} aria-hidden="true" />
         </div>
       ) : (

@@ -18,6 +18,7 @@ import { corpusReady, DISPLAY_MAKERS } from './papers/corpus.js'
 import { patentHistory, patternFromTerms } from './patents.js'
 import { localPatentHistory, patentDbReady, titlePatentHistory, titlesReady } from './patentDb.js'
 import { englishTerms, openAlexQuery, queryKey } from './queryTerms.js'
+import { surgeMonths } from './timesfm.js'
 
 const DAY = 86_400_000
 // 기억 열쇠. 단계 기준이 바뀌면 올린다 (v2 11/11 분야 대비, v3 11/12 특허 · 관심 대 실질, v4 11/12 기관 수 · FWCI · 성숙 규칙): 예전 단계 · 그 단계로 쓴 AI 정리는 다시 만든다 (열 때 또는 미리 분석 때)
@@ -428,14 +429,14 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
     const hit = await cacheGet(key).catch(() => null)
     // 11/12 D3: 디스플레이 특허 DB가 생긴 뒤에는 디스플레이 기술의 예전 특허 숫자(BigQuery 공보)를 특허 DB 숫자로 바꾼다 (단계도 다시)
     const toDb = hit && Boolean(await patentDbReady()) && (!['family', 'family-all'].includes(hit.patents?.basis) || (hit.patents?.inDisplay && Boolean(await titlesReady())))
-    if (hit && !(hit.patents?.status === 'later' && !background) && !toDb) return { ...withThin(hit), cached: true }
+    if (hit && !(hit.patents?.status === 'later' && !background) && !toDb) return { ...withThin(await withSurge(hit, { wait: background })), cached: true }
     if (hit) {
       // 미리 분석해 둔 값에 특허만 채운다
       const pat = await patents(hit.terms, { display: hit.display, cacheOnly: background }).catch((err) => ({ status: 'error', error: err.message }))
       const out = { ...hit, patents: pat }
       out.stage = stageOf(out.long.length ? out.long : (out.corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n })), out.corpus, stagePatents(pat), out.base ?? [], out.naver, out.breadth)
       await cachePut(key, out, pat.status === 'error' ? 10 * 60_000 : TTL).catch(() => {})
-      return { ...withThin(out), cached: false }
+      return { ...withThin(await withSurge(out, { wait: background })), cached: false }
     }
   }
   const t = await englishTerms(q, { waitMs: 60_000 })
@@ -475,7 +476,7 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
   // 일부 출처가 실패했으면 10분만 기억 (다음에 다시 받음)
   const failed = out.longError || out.patents.status === 'error'
   await cachePut(key, out, failed ? 10 * 60_000 : out.corpusPartial ? 3600_000 : TTL).catch(() => {})
-  return { ...out, cached: false }
+  return { ...(await withSurge(out, { wait: background })), cached: false }
 }
 
 // ── AI 글: 배경 · 성장 · 적용 · 전망 · 연구 제안 ──
@@ -522,6 +523,14 @@ function storyInput(tl) {
   lines.push('\n근거 논문 목록 (refs에는 이 번호만):')
   papers.forEach((p, i) => lines.push(`[${i + 1}] ${p.year} · ${p.title} · ${p.journal || '-'} · 인용 ${p.cited}${p.companies?.length ? ` · 기업: ${p.companies.join(', ')}` : ''}${p.origin ? ' · (초기 대표 논문)' : ''}\n    ${String(p.abstract ?? '').slice(0, 300)}`))
   return { text: lines.join('\n'), papers }
+}
+
+// 네이버 관심도의 「예상 밖 급증」(TimesFM, 11/16)은 기억해 둔 시계열과 따로 기억한다 (timesfm.js).
+// 화면에서 열 때는 기다리지 않고(없으면 뒤에서 계산 → 다음에 열 때 보임), 미리 분석 · 새로 만들 때는 기다린다
+async function withSurge(tl, { wait = false } = {}) {
+  if (tl.naver?.status !== 'ok') return tl
+  const surge = await surgeMonths(tl.naver.months, { wait }).catch((err) => ({ status: 'error', error: err.message }))
+  return { ...tl, naver: { ...tl.naver, surge } }
 }
 
 // 디스플레이 근거가 적은 이유 (화면 · AI 흐름 정리 공통)
