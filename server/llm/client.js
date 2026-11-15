@@ -213,10 +213,21 @@ export function queueStatus() {
 
 // Ollama는 OpenAI 호환 주소(/v1)로 부르면 입력을 약 2,000토큰까지만 읽는다 (실측: 더 긴 입력은 앞부분이 잘림).
 // LLM_NUM_CTX(예: 16384)가 있으면 Ollama 원래 API(/api/chat)로 불러 문맥 크기를 넘긴다. 상용 API는 비워 둔다
+// 맥미니 모델을 메모리에 얼마나 올려 둘지 (11/16). 요청에 넣으면 맥미니 설정(OLLAMA_KEEP_ALIVE)보다 우선한다.
+// 맥미니를 재부팅하면 launchctl 설정이 사라져 5분 뒤 모델이 내려가던 문제를 서버 쪽에서 막는다.
+// 처음 값 -1(계속 올려 둠). LLM_KEEP_ALIVE에 "30m" 같은 값을 주면 그 값, 빈 값이면 맥미니 설정을 따른다
+function keepAliveValue() {
+  const raw = process.env.LLM_KEEP_ALIVE ?? '-1'
+  if (raw.trim() === '') return null
+  return /^-?\d+$/.test(raw.trim()) ? Number(raw) : raw.trim()
+}
+
 async function callOllama({ baseUrl, apiKey, model, messages, schema, timeoutMs, numCtx, signal }) {
   const root = baseUrl.replace(/\/v1$/, '')
   const body = { model, messages, stream: false, think: false, options: { num_ctx: numCtx, temperature: 0.2 } }
   if (schema) body.format = schema
+  const keepAlive = keepAliveValue()
+  if (keepAlive !== null) body.keep_alive = keepAlive
   const send = () =>
     fetch(`${root}/api/chat`, {
       method: 'POST',
