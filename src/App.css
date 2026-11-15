@@ -3174,6 +3174,56 @@ a.brand:focus-visible {
   pointer-events: none;
 }
 
+/* 예상 범위 띠 · 「예상 밖 급증」 점 (기술 시계열 네이버 관심도, TimesFM 11/16). 레드는 급증 표시에만 (20 문서) */
+.trend-band {
+  fill: color-mix(in srgb, var(--tb-color-text) 12%, transparent);
+}
+
+.trend-mark {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--tb-color-accent);
+  box-shadow: 0 0 0 2px var(--tb-color-surface);
+  pointer-events: none;
+}
+
+.trend-spark-band {
+  display: block;
+  overflow: hidden;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.trend-spark-band.is-over {
+  color: var(--tb-color-danger);
+  font-weight: 600;
+}
+
+.tl-surge {
+  margin: 6px 0 0;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+
+.tl-surge b {
+  color: var(--tb-color-danger);
+}
+
+.tl-surge-why {
+  display: block;
+  color: var(--tb-color-text-faint);
+}
+
+.tl-surge.is-wait {
+  color: var(--tb-color-text-faint);
+}
+
 .trend-source {
   display: block;
   margin-top: 2px;
