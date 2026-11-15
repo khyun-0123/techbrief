@@ -232,7 +232,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   useEffect(() => {
     const bar = document.querySelector('.topbar')
     if (!bar) return undefined
-    const set = () => document.documentElement.style.setProperty('--topbar-h', `${Math.round(bar.getBoundingClientRect().height)}px`)
+    // offsetHeight = 배율 전 CSS 픽셀 (작은 노트북 zoom 0.9에서도 CSS 계산과 같은 단위)
+    const set = () => document.documentElement.style.setProperty('--topbar-h', `${bar.offsetHeight}px`)
     set()
     const ro = new ResizeObserver(set)
     ro.observe(bar)

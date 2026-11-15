@@ -61,9 +61,10 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     const decide = () => {
       if (exampleManual.current) return
       if (getComputedStyle(body).maxHeight !== 'none') return setExampleOpen(true)
-      const row = body.querySelector('li')?.getBoundingClientRect().height || 52
-      const summaryH = det.querySelector('summary')?.getBoundingClientRect().height ?? 0
-      if (det.open) exampleExtra.current = det.getBoundingClientRect().height - summaryH
+      // 모두 offsetHeight · clientHeight(배율 전 CSS 픽셀)로 잰다 — 작은 노트북 zoom에서도 단위가 같게
+      const row = body.querySelector('li')?.offsetHeight || 52
+      const summaryH = det.querySelector('summary')?.offsetHeight ?? 0
+      if (det.open) exampleExtra.current = det.offsetHeight - summaryH
       const room = det.open ? body.clientHeight : body.clientHeight - (exampleExtra.current ?? Infinity)
       setExampleOpen(Math.floor(room / row) >= MIN_ROWS)
     }

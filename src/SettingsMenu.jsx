@@ -3,6 +3,7 @@
 // - 새 자리로 옮기기 (선별 · 폴더 · 즐겨찾기를 파일로 내보내고 불러오기 → DataMove)
 // - 관리자 페이지
 import { useEffect, useRef, useState } from 'react'
+import { pageZoom } from './utils.js'
 
 function SettingsMenu({ admin, reportCount, selectedCount, onBundle, onMove }) {
   const [open, setOpen] = useState(null) // { top, right } — 메뉴 막대(가로 스크롤)에 잘리지 않게 화면 기준으로 띄움
@@ -48,7 +49,8 @@ function SettingsMenu({ admin, reportCount, selectedCount, onBundle, onMove }) {
         onClick={() => {
           if (open) return setOpen(null)
           const r = btnRef.current.getBoundingClientRect()
-          setOpen({ top: r.bottom + 12, right: Math.max(8, window.innerWidth - r.right) })
+          const z = pageZoom() // 작은 노트북 배율 (utils.js)
+          setOpen({ top: r.bottom / z + 12, right: Math.max(8, (window.innerWidth - r.right) / z) })
         }}
       >
         <span aria-hidden="true">⚙</span> 설정

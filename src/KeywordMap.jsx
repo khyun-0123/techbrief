@@ -11,6 +11,7 @@
 // - 가이드에서 아직 안 옮긴 것: 보고서에 넣기(초안 6장), 키워드 편집, 불용어 · 예외 단어 관리(지금은 서버 CSV), 고르는 기준 「중요도」(맵 데이터에 중요도 합이 없음), 관련 기사 칸
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Seg } from './Dropdown.jsx'
+import { pageZoom } from './utils.js'
 
 const short = (t, n = 14) => (t.length > n ? `${t.slice(0, n - 1)}…` : t)
 const textW = (t, px) => [...t].reduce((n, ch) => n + (/[가-힣]/.test(ch) ? px : px * 0.6), 0)
@@ -234,7 +235,8 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
   const drag = useRef(null)
   const local = (e) => {
     const r = svgRef.current.getBoundingClientRect()
-    return { x: e.clientX - r.left, y: e.clientY - r.top }
+    const z = pageZoom() // 작은 노트북 배율 (utils.js): 화면 픽셀 → 그림 좌표
+    return { x: (e.clientX - r.left) / z, y: (e.clientY - r.top) / z }
   }
   const act = (w) => {
     if (w !== keyword) onPick(w)
@@ -705,8 +707,9 @@ export default function KeywordMap({ keyword, issues, nodes, edges, branches, is
       if (e.target.closest?.('.km-panel')) return
       e.preventDefault()
       const r = el.getBoundingClientRect()
-      const mx = e.clientX - r.left
-      const my = e.clientY - r.top
+      const z = pageZoom()
+      const mx = (e.clientX - r.left) / z
+      const my = (e.clientY - r.top) / z
       setView((v) => {
         const k = Math.max(0.3, Math.min(6, v.k * Math.exp(-e.deltaY * 0.0015)))
         return clampView({ k, tx: mx - ((mx - v.tx) * k) / v.k, ty: my - ((my - v.ty) * k) / v.k }, posRef.current, W, H)

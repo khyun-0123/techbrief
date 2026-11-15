@@ -4,6 +4,7 @@
 // 버튼 폭을 두 상태 모두 같게 두어 줄마다 버튼 위치가 어긋나지 않게 한다.
 // 메뉴는 표의 가로 스크롤 영역에 잘리지 않게 화면 기준(fixed)으로 띄운다
 import { useEffect, useRef, useState } from 'react'
+import { pageZoom } from './utils.js'
 
 function SelectToggle({ selected, folders, folderId, targetName, onToggle, onMove }) {
   const [menu, setMenu] = useState(null) // { top, right }
@@ -47,7 +48,8 @@ function SelectToggle({ selected, folders, folderId, targetName, onToggle, onMov
   function openMenu() {
     if (menu) return setMenu(null)
     const r = btnRef.current.getBoundingClientRect()
-    setMenu({ top: r.bottom + 4, right: window.innerWidth - r.right })
+    const z = pageZoom() // 작은 노트북 배율 (utils.js)
+    setMenu({ top: r.bottom / z + 4, right: (window.innerWidth - r.right) / z })
   }
 
   return (
