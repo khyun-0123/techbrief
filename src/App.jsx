@@ -735,7 +735,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
   function goPage(p) {
     setPage(Math.min(Math.max(1, p), pageCount))
-    document.querySelector('.list-panel')?.scrollIntoView({ block: 'start' })
+    // 화면 틀(칸 안 스크롤)에서는 표 칸을 맨 위로, 휴대폰처럼 페이지가 스크롤되면 목록 카드로
+    const box = document.querySelector('.list-scroll')
+    if (box && getComputedStyle(box).overflowY === 'auto') box.scrollTop = 0
+    else document.querySelector('.list-panel')?.scrollIntoView({ block: 'start' })
   }
 
   // 「뉴스·논문에서 찾기」: 등록 키워드와 상관없이 네이버 뉴스 + 논문(OpenAlex 등)에서 바로 찾는다 (11/08)
@@ -1478,13 +1481,14 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   </button>
                 </div>
               ) : null}
-              {search ? null : (
-                <p className="list-meta">
-                  이슈 {visible.length}개 · 기사 {countArticles(visible)}건
-                  {q && <span className="search-note"> · 모은 기사에서 찾는 중. 없으면 「뉴스·논문에서 찾기」</span>}
-                </p>
-              )}
+              {/* 11/15 화면 틀: 건수 줄과 거르기 줄을 한 줄로 (목록 칸을 한 줄 더 넓게) */}
               <div className="list-tools">
+                {search ? null : (
+                  <span className="list-count">
+                    이슈 {visible.length}개 · 기사 {countArticles(visible)}건
+                    {q && <span className="search-note"> · 모은 기사에서 찾는 중. 없으면 「뉴스·논문에서 찾기」</span>}
+                  </span>
+                )}
                 <label className="own-toggle" title="지금 정렬은 그대로 두고, AI 요약이 있는 기사를 위로 올려요">
                   <input type="checkbox" checked={summarizedFirst} onChange={(e) => toggleSummarizedFirst(e.target.checked)} />
                   요약된 기사 먼저 <span className="own-count">{listed.filter(hasSummary).length}건</span>
@@ -1516,6 +1520,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               </div>
               {search?.error && <p className="ai-error search-error" role="alert">{search.error}</p>}
 
+              {/* 표는 이 칸 안에서 스크롤 (11/15 화면 틀: 거르기 · 페이지 번호는 늘 보임) */}
+              <div className="list-scroll">
               {visible.length === 0 ? (
                 <p className="empty">
                   {search
@@ -1788,6 +1794,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   </tbody>
                 </table>
               )}
+              </div>
               {visible.length > 0 && (
                 <Pager page={currentPage} pageSize={pageSize} total={visible.length} onPage={goPage} onPageSize={changePageSize} />
               )}

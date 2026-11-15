@@ -51,6 +51,8 @@ function SelectSummary({
   const [openId, setOpenId] = useState(null)
   const [folder, setFolder] = useState(null) // 보는 폴더 (null = 전체)
   const [showAdd, setShowAdd] = useState(false)
+  // 폭 901~1100(FHD 절반 등)에서는 두 칸을 나란히 두기 좁아 하나씩 본다 (11/15 화면 틀). 그 밖의 폭에서는 CSS가 단추를 숨기고 둘 다 보인다
+  const [pane, setPane] = useState('list')
   const inFolder = (a) => folder === null || folderIdOf(a.id) === folder
   const checkedByFolder = {}
   for (const a of candidates) if (includedIds.includes(a.id)) checkedByFolder[folderIdOf(a.id)] = (checkedByFolder[folderIdOf(a.id)] ?? 0) + 1
@@ -156,6 +158,16 @@ function SelectSummary({
           <p>기사를 눌러 요약을 보고, 보고서에 넣을 기사를 체크하세요.</p>
         </div>
         <div className="header-actions">
+          {candidates.length > 0 && (
+            <div className="segmented select-pane-switch" role="group" aria-label="보는 칸">
+              <button type="button" aria-pressed={pane === 'list'} onClick={() => setPane('list')}>
+                선별 기사 <span className="select-pane-n">{candidates.length}</span>
+              </button>
+              <button type="button" aria-pressed={pane === 'report'} onClick={() => setPane('report')}>
+                보고서 <span className="select-pane-n">{reportArticles.length}</span>
+              </button>
+            </div>
+          )}
           <button type="button" className={showAdd ? 'btn primary' : 'btn'} aria-expanded={showAdd} onClick={() => setShowAdd((v) => !v)}>
             + 자료 올리기
           </button>
@@ -192,7 +204,7 @@ function SelectSummary({
           </div>
         </section>
       ) : (
-        <div className="select-report">
+        <div className={`select-report show-${pane}`}>
           <section className="panel panel-flush select-list" aria-label="선별 기사">
             <div className="select-list-head">
               <h2>선별 기사</h2>
