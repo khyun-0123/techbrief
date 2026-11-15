@@ -5520,6 +5520,7 @@ a.brand:focus-visible {
 .ka-for {
   margin: 0;
   color: var(--tb-color-text-sub);
+  font-size: var(--fs-md); /* 11/16 검수: 설명(15)이 칸 제목보다 커서 눈이 먼저 갔음 → 14 */
 }
 .ka-for b {
   color: var(--tb-color-text);
@@ -5559,7 +5560,7 @@ a.brand:focus-visible {
 }
 .ka-pane-head h3 {
   margin: 0;
-  font-size: var(--fs-md);
+  font-size: var(--fs-base); /* 11/16 검수: 칸 제목 15 > 설명 14 > 보조 13 */
 }
 .ka-temp {
   color: var(--tb-color-text-sub);
@@ -5628,6 +5629,21 @@ a.brand:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+.ka-help {
+  margin-top: 6px;
+  font-size: var(--fs-sm);
+}
+.ka-help summary {
+  width: max-content;
+  color: var(--tb-color-text-sub);
+  cursor: pointer;
+}
+.ka-help p {
+  margin: 6px 0 0;
+}
+.dash-chips-label small {
+  font-size: var(--fs-xs);
 }
 .ka-legend {
   display: inline-flex;
@@ -7391,7 +7407,7 @@ a.brand:focus-visible {
   background: var(--tb-color-surface);
   color: var(--tb-color-text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
@@ -7580,10 +7596,11 @@ a.brand:focus-visible {
 }
 .km-legend .km-lg-on {
   padding: 0 7px;
+  border: 1.5px solid var(--tb-color-text);
   border-radius: var(--tb-radius-full);
-  background: var(--tb-color-text);
-  color: var(--tb-color-surface);
-  font-size: 10.5px;
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font-size: var(--fs-xs);
   font-weight: 700;
   line-height: 16px;
 }
@@ -7617,8 +7634,8 @@ a.brand:focus-visible {
   .km-legend {
     max-width: calc(100% - 24px);
   }
-  .km-act-png {
-    display: none;
+  .km-actions .km-act-png {
+    display: none; /* 11/16: 아래쪽 .km-act { display: inline-flex }가 덮어써 설정 창 뒤로 비쳐 보였음 → 더 구체적으로 */
   }
 }
 /* 펼치기 배지 (11/14): 검정 점 옆 「+n」 — 점 누르기(범위)와 따로 */
@@ -7630,12 +7647,13 @@ a.brand:focus-visible {
 }
 .km-legend .km-lg-badge {
   padding: 0 5px;
+  border: 1px solid var(--tb-color-line);
   border-radius: var(--tb-radius-full);
-  background: var(--tb-color-surface-inverse);
-  color: var(--tb-color-surface);
-  font-size: 10.5px;
-  font-weight: 700;
-  line-height: 15px;
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 16px;
 }
 /* 넣고 뺄 때 「자료 찾기」 옆 알림 (11/14): 2.5초 뒤 사라짐 */
 .ka-flash {
