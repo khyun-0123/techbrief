@@ -62,6 +62,7 @@ export async function summarizeArticle(article, related = [], { refresh = false,
     schema: SUMMARY_SCHEMA,
     schemaName: 'article_summary',
     priority,
+    label: article.title,
   })
   const summary = checkBasis(data, articles)
   summary.basisSource = body ? 'fulltext' : abstract ? 'abstract' : 'excerpt'

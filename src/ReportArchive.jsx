@@ -11,7 +11,7 @@
 // - 보고서를 열었을 때 그 보고서에 쓴 기사가 아직 선별 목록에 있으면 정리할지 한 번 묻는다
 // onDelete가 없으면 「지우기」를 숨긴다 (공용 보고서함은 관리자만 지움, 17 문서)
 import { useEffect, useState } from 'react'
-import { PeriodSeg, Seg } from './Dropdown.jsx'
+import { Seg } from './Dropdown.jsx'
 import { exportPptx, loadReportExtra, printReport } from './reportExport.js'
 import { SlideFrame } from './ReportSlide.jsx'
 import { reportPages } from './reportSlides.js'
@@ -337,7 +337,14 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
             <h2 id="mr-period-title" className="mr-group-title">
               생성 기간
             </h2>
-            <PeriodSeg value={period} onChange={setPeriod} label="생성 기간" size="md" full options={PERIODS.map(([value, label]) => ({ value, label }))} />
+            {/* 11/15: 좁은 막대에 분리형 버튼 5칸이 끼어 글자가 눌렸음 → 11/14 디자인대로 알약 버튼(줄바꿈) */}
+            <div className="pill-group">
+              {PERIODS.map(([value, label]) => (
+                <button key={value} type="button" role="radio" aria-checked={period === value} className={period === value ? 'pill on' : 'pill'} onClick={() => setPeriod(value)}>
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="mr-group">
             <h2 className="mr-group-title">

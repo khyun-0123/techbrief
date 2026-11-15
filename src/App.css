@@ -1,5 +1,11 @@
+/* 화면 틀 높이 (11/15): 화면 높이 − 상단 막대. 작은 노트북 배율(--tb-zoom)이면 100dvh가 배율만큼 작게 그려지므로 나눠 맞춘다 */
+:root {
+  --tb-zoom: 1;
+  --tb-frame-h: calc(100dvh / var(--tb-zoom) - var(--topbar-h, 64px));
+}
+
 .app {
-  min-height: 100vh;
+  min-height: calc(100vh / var(--tb-zoom));
   padding-bottom: 140px; /* 오른쪽 아래 진행 창에 가려지지 않게 */
   background: var(--tb-color-bg);
   color: var(--tb-color-text);
@@ -517,22 +523,23 @@ tr.row-open td {
   margin: 12px auto 0;
 }
 
-.settings {
+/* 자료 현황 「수집 설정」 카드만 (11/15: .settings만 쓰면 상단 막대 「설정」 메뉴에도 20px 여백이 붙어 막대가 64 → 88px로 커졌음) */
+.panel.settings {
   padding: 20px;
 }
 
-.settings h2 {
+.panel.settings h2 {
   margin: 0 0 16px;
   font-size: 18px;
 }
 
-.settings label {
+.panel.settings label {
   display: block;
   margin-bottom: 6px;
   font-size: 14px;
 }
 
-.settings input {
+.panel.settings input {
   width: 100%;
 }
 
@@ -2140,6 +2147,14 @@ a.btn {
 .page.page-wide {
   max-width: 1600px;
 }
+/* QHD 등 아주 넓은 화면 (11/15): 1600px에 묶여 양옆이 480px씩 비던 것 → 2240px까지 */
+@media (min-width: 2000px) {
+  .page.page-wide {
+    max-width: 2240px;
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+}
 
 .content.with-favs {
   grid-template-columns: var(--tb-rail-w) minmax(0, 1fr) 280px;
@@ -2263,6 +2278,33 @@ a.btn {
   color: var(--tb-color-accent);
 }
 
+/* 최근 검색어 접기 단추: 넓은 화면(왼쪽 칸)에서는 숨김, 1399px 이하에서만 보임 */
+.fav-fold {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.fav-fold:hover {
+  background: var(--tb-color-surface-hover);
+}
+.fav-fold-count {
+  color: var(--tb-color-text-sub);
+  font-weight: 400;
+}
+.fav-fold-caret {
+  color: var(--tb-color-text-sub);
+  font-size: 11px;
+}
+
 @media (max-width: 1399px) {
   .content.with-favs {
     grid-template-columns: 1fr 280px;
@@ -2296,6 +2338,21 @@ a.btn {
   .fav-list {
     flex-direction: row;
     flex-wrap: wrap;
+  }
+
+  /* 최근 검색어: 기본 접힘, 단추로 펼침 (11/15) */
+  .fav-recent .fav-title-wide {
+    display: none;
+  }
+  .fav-recent .fav-fold {
+    display: inline-flex;
+  }
+  .fav-recent:not(.is-open) > .fav-list,
+  .fav-recent:not(.is-open) > .fav-empty {
+    display: none;
+  }
+  .fav-recent.is-open {
+    flex-basis: 100%;
   }
 
   .fav-item {
@@ -4796,11 +4853,11 @@ a.brand:focus-visible {
 
 /* ── 선별·요약: 두 박스를 브라우저 높이에 맞춤 (11/08 조장) ──
    기사를 더 담아도 박스 크기는 그대로, 기사 목록은 왼쪽 박스 안에서 스크롤 */
-@media (min-width: 1101px) {
+@media (min-width: 901px) and (min-height: 600px) {
   .select-page {
     display: flex;
     flex-direction: column;
-    height: calc(100dvh - 64px);
+    height: var(--tb-frame-h); /* 11/15: 64px 고정 → 실제 상단 막대 높이 (23px 넘쳤음) */
     padding-bottom: 20px;
     box-sizing: border-box;
   }
@@ -5005,7 +5062,8 @@ a.brand:focus-visible {
 .topbar-stats strong {
   font-weight: 700;
 }
-@media (max-width: 860px) {
+/* 1100px 이하(FHD 절반 등)에서는 숨김 — 탭 줄이 밀려 「내 보고서」가 안 보이던 것 (11/15) */
+@media (max-width: 1100px) {
   .topbar-stats {
     display: none;
   }
@@ -5124,11 +5182,11 @@ a.brand:focus-visible {
   margin-top: 0;
   grid-template-columns: minmax(0, 1fr) 340px;
 }
-@media (min-width: 1101px) {
+@media (min-width: 901px) and (min-height: 600px) {
   .archive-page {
     display: flex;
     flex-direction: column;
-    height: calc(100dvh - 64px);
+    height: var(--tb-frame-h);
     padding-bottom: 20px;
     box-sizing: border-box;
   }
@@ -5548,10 +5606,27 @@ a.brand:focus-visible {
 
 /* 대시보드 검색 전 「바로 볼 수 있는 분석」 (11/10): 미리 분석된 키워드 + 단계, 한 줄로 작게 */
 .dash-ready {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
+}
+/* 11/15: 칩 폭을 재는 보이지 않는 줄 (Dashboard.jsx가 2줄에 몇 개 들어가는지 계산) */
+.dash-ready-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  gap: 8px;
+  width: 0; /* 폭 0 + 넘침 숨김: 안의 칩은 제 폭대로 재지만 페이지를 옆으로 넓히지 않게 */
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+.dash-ready-measure > * {
+  flex: none;
 }
 .dash-ready-list {
   display: flex;
@@ -5578,6 +5653,28 @@ a.brand:focus-visible {
 .dash-ready-stage {
   color: var(--tb-color-text-sub);
   white-space: nowrap;
+}
+/* 휴대폰: 6줄(309px)로 쌓이던 칩을 한 줄로, 옆으로 밀어 봄 */
+@media (max-width: 640px) {
+  .dash-ready-list {
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    min-width: 0;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .dash-ready-list > * {
+    flex: none;
+  }
+  /* 칸 폭이 칩 줄 길이에 끌려 넓어지지 않게 (검색 카드는 grid, 기본 칸 폭이 내용 폭) */
+  .dash-search {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dash-ready {
+    min-width: 0;
+  }
 }
 /* 키워드 분석 오른쪽: 시계열 칸을 조금 넓게, 한눈에 · 사실 칸 */
 .ka-grid {
@@ -8234,4 +8331,680 @@ button.ka-auto-note {
 .ka-rel-meta {
   color: var(--tb-color-text-faint);
   font-size: var(--fs-xs);
+}
+
+/* ── AI 대기열 (11/15): 오른쪽 아래 늘 떠 있는 단추 · 창, 관리 페이지 「운영」 ── */
+.queue-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 6px 18px rgba(28, 37, 51, 0.14);
+  cursor: pointer;
+}
+.queue-fab:hover {
+  background: var(--tb-color-surface-hover);
+}
+.queue-fab-n {
+  color: var(--tb-color-text-sub);
+  font-weight: 400;
+}
+.queue-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tb-color-text-faint);
+}
+.queue-dot.is-busy {
+  background: var(--tb-color-success);
+}
+.queue-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0;
+}
+.queue-filter button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text-sub);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.queue-filter button[aria-pressed='true'] {
+  border-color: var(--tb-color-text);
+  background: var(--tb-color-text);
+  color: var(--tb-color-text-inverse);
+}
+.queue-filter-n {
+  font-weight: 700;
+}
+.queue-empty {
+  margin: 8px 0;
+  color: var(--tb-color-text-sub);
+  font-size: 13px;
+}
+.queue-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  min-height: 0;
+}
+.queue-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: center;
+  padding: 7px 0;
+  border-top: 1px solid var(--tb-color-line-soft);
+  font-size: 13px;
+}
+.queue-row:first-child {
+  border-top: none;
+}
+.queue-who {
+  grid-row: 1 / span 2;
+  padding: 1px 7px;
+  border-radius: var(--tb-radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.who-mine {
+  background: var(--tb-color-accent-soft);
+  color: var(--tb-color-accent);
+}
+.who-auto {
+  background: var(--tb-color-bg-strong);
+  color: var(--tb-color-text-sub);
+}
+.who-other {
+  background: var(--tb-color-warning-soft);
+  color: var(--tb-color-text);
+}
+.queue-title {
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.queue-kind {
+  color: var(--tb-color-text-faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.queue-state {
+  grid-column: 2 / span 2;
+  overflow: hidden;
+  color: var(--tb-color-text-sub);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.queue-row.is-busy .queue-state {
+  color: var(--tb-color-success);
+}
+.progress-panel .queue-view,
+.progress-panel > .queue-list {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ── 페이지 제목 한 줄 (11/15): 제목 · 설명 · 다음 단계 단추를 한 줄에. 설명이 길면 말줄임, 좁은 화면(760 이하)은 설명 숨김 ── */
+.page {
+  padding-top: var(--tb-space-5);
+}
+.page-header:not(.with-actions),
+.page-header.with-actions > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+.page-header h1 {
+  margin: 0;
+  white-space: nowrap;
+}
+.page-header p {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.page-header.with-actions {
+  align-items: center;
+}
+.page > .page-header + * {
+  margin-top: var(--tb-space-4);
+}
+@media (max-width: 760px) {
+  .page-header p {
+    display: none;
+  }
+}
+
+/* ── 대시보드 첫 화면 화면 틀 (11/15): 화면 높이를 채우고, 칸 안에서 스크롤 ──
+   폭 901px 이상(FHD 절반 포함) · 높이 600 이상 (11/15: 노트북 1366×657도 포함)에서만. 그보다 작으면(휴대폰 등) 지금처럼 페이지 스크롤 */
+.dash-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tb-card-gap);
+  min-width: 0;
+}
+.dash-home {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: var(--tb-card-gap);
+}
+.dash-home-box {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.dash-home-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.dash-home-head .dash-title {
+  margin: 0;
+  white-space: nowrap;
+}
+.dash-home-sub {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tb-color-text-sub);
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dash-home-actions {
+  display: inline-flex;
+  gap: 12px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.dash-home-body {
+  max-height: 360px; /* 화면 틀 밖(좁은 화면)에서는 이 높이까지, 넘치면 칸 안 스크롤 */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.dash-home-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dash-home-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: center;
+  padding: 7px 0;
+  border-top: 1px solid var(--tb-color-line-soft);
+}
+.dash-home-list li:first-child {
+  border-top: none;
+}
+.dash-home-hi {
+  grid-row: 1;
+  grid-column: 1;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--tb-color-danger-soft);
+  color: var(--tb-color-danger);
+  font-size: 12px;
+  font-weight: 700;
+}
+.dash-home-t {
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--tb-color-text);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+a.dash-home-t:hover,
+.dash-home-open:hover {
+  text-decoration: underline;
+}
+.dash-home-open {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.dash-home-m {
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--tb-color-text-sub);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dash-home-empty {
+  margin: 0;
+  color: var(--tb-color-text-sub);
+  font-size: 13px;
+}
+@media (max-width: 900px) {
+  .dash-home {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (min-width: 901px) and (min-height: 600px) {
+  .dash-page.is-home {
+    display: flex;
+    flex-direction: column;
+    height: var(--tb-frame-h);
+    padding-bottom: var(--tb-space-5);
+  }
+  .dash-page.is-home > .dash-layout {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
+  .dash-page.is-home > .dash-layout > :first-child {
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .dash-page.is-home .dash-main {
+    min-height: 0;
+    overflow-y: auto; /* 낮은 화면에서 예시를 손으로 펴면 페이지 대신 이 칸이 스크롤 */
+  }
+  .dash-page.is-home .dash-home {
+    flex: 1;
+    min-height: 200px;
+  }
+  .dash-page.is-home .dash-home-body {
+    flex: 1;
+    max-height: none;
+  }
+  /* 화면 틀을 쓰는 화면은 진행 창 몫의 아래 여백(140px)이 필요 없다 */
+  .app:has(.dash-page.is-home) {
+    padding-bottom: 0;
+  }
+}
+
+/* ── 자료 현황 · 선별·요약 · 내 보고서 화면 틀 (11/15): 페이지는 스크롤하지 않고 칸 안에서 스크롤 ──
+   대시보드 첫 화면과 같은 조건(폭 901 이상 · 높이 600 이상). 그보다 작으면 지금처럼 페이지 스크롤
+   - 높이는 실제 상단 막대 높이(--topbar-h, App.jsx가 잼)를 뺀다 (예전 64px 고정 → 23px 넘쳤음)
+   - 오른쪽 아래 AI 대기열 단추가 표 끝 줄을 가리지 않게 칸 아래쪽에 여백을 둔다 */
+.list-count {
+  margin-right: auto;
+  color: var(--tb-color-text-sub);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.list-tools .list-count + .own-toggle {
+  margin-left: 0;
+}
+.select-pane-switch {
+  display: none;
+}
+
+@media (min-width: 901px) and (min-height: 600px) {
+  .collect-page,
+  .select-page,
+  .mr-page,
+  .archive-page {
+    display: flex;
+    flex-direction: column;
+    height: var(--tb-frame-h);
+    padding-bottom: var(--tb-space-5);
+    box-sizing: border-box;
+  }
+  /* 보고서 열기(archive-page)는 아래 예전 규칙이 archive-body를 늘리므로 빼 둔다 */
+  .collect-page > *,
+  .select-page > *,
+  .mr-page > * {
+    flex: none;
+  }
+  .app:has(.collect-page, .select-page, .mr-page, .archive-page) {
+    padding-bottom: 0;
+  }
+
+  /* 자료 현황: 왼쪽 검색어 막대 · 목록 카드가 남은 높이를 채우고, 표만 칸 안에서 스크롤 */
+  .collect-page > .content {
+    flex: 1;
+    min-height: 0;
+    margin-top: var(--tb-space-4);
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .collect-page > .add-material {
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+  .collect-page .fav-rail,
+  .collect-page .settings {
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .collect-page .list-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .collect-page .list-panel > * {
+    flex: none;
+  }
+  .collect-page .list-panel > .list-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+  .collect-page table.articles thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  /* 찾기 결과 안내가 길면 두 줄까지만 (칸 높이를 너무 먹지 않게) */
+  .collect-page .search-banner > span {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+/* 1399 이하: 검색어 막대가 목록 위 한 줄로 올라가므로 줄을 두 개로 */
+@media (min-width: 901px) and (max-width: 1399px) and (min-height: 600px) {
+  .collect-page > .content {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .collect-page .fav-rail {
+    max-height: 30vh;
+  }
+}
+
+/* 선별·요약 · 보고서 열기: 폭 901~1100(FHD 절반 등)은 두 칸이 좁아 하나씩 */
+.select-pane-switch button[aria-pressed='true'] {
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+}
+.select-pane-n {
+  margin-left: 4px;
+  color: var(--tb-color-text-sub);
+  font-weight: 500;
+}
+@media (min-width: 901px) and (max-width: 1100px) and (min-height: 600px) {
+  .select-pane-switch {
+    display: inline-flex;
+  }
+  .select-page > .select-report {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .select-page .select-report.show-list > .composer,
+  .select-page .select-report.show-report > .select-list {
+    display: none;
+  }
+  .select-page .select-list .candidates {
+    max-height: none;
+  }
+  .select-page .select-report .composer {
+    height: 100%;
+    max-height: none;
+  }
+  /* 보고서 열기: 보고서 위 · 근거 기사 아래, 둘 다 칸 안에서 스크롤 */
+  .archive-body .report-layout {
+    grid-template-rows: minmax(0, 1fr) minmax(140px, 30%);
+  }
+}
+
+/* 내 보고서 목록: 왼쪽 거르기 막대 · 목록 카드가 남은 높이를 채우고, 표만 칸 안에서 스크롤 */
+@media (min-width: 901px) and (min-height: 600px) {
+  .mr-page > .mr-layout {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .mr-page .mr-side.panel {
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .mr-page .mr-main {
+    min-height: 0;
+    overflow: hidden;
+  }
+  .mr-page .mr-main > * {
+    flex: none;
+  }
+  .mr-page .mr-main > .mr-scroll,
+  .mr-page .mr-main > .empty {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    scrollbar-gutter: stable;
+  }
+  .mr-page .mr-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+}
+
+/* 대시보드 분석 중 (키워드를 고른 뒤): 연관 키워드 맵 · 기술 시계열 두 칸이 남은 높이를 채우고, 칸마다 안에서 스크롤
+   맵 그림(km-stage)은 520px 고정 대신 칸 높이에 맞춘다 (KeywordMap이 크기를 재서 다시 그림). 최소 340px */
+@media (min-width: 901px) and (min-height: 600px) {
+  .dash-page:not(.is-home) {
+    display: flex;
+    flex-direction: column;
+    height: var(--tb-frame-h);
+    padding-bottom: var(--tb-space-5);
+    box-sizing: border-box;
+  }
+  .dash-page:not(.is-home) > * {
+    flex: none;
+  }
+  .app:has(.dash-page:not(.is-home)) {
+    padding-bottom: 0;
+  }
+  .dash-page:not(.is-home) > .dash-layout {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
+  .dash-page:not(.is-home) > .dash-layout > :first-child {
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .dash-page:not(.is-home) .dash-main {
+    min-height: 0;
+  }
+  .dash-main > .dash-search.is-open {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .dash-main > .dash-search.is-open > * {
+    flex: none;
+  }
+  .dash-main > .dash-search.is-open > .ka {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .dash-main > .dash-search.is-open > .ka > * {
+    flex: none;
+  }
+  .dash-main > .dash-search.is-open > .ka > .split {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .dash-search.is-open > .ka > .split > .split-pane {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+  .dash-search.is-open > .ka > .split > .split-pane > .ka-pane:has(> .km) {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+  .dash-search.is-open > .ka > .split > .split-pane > .ka-pane > * {
+    flex: none;
+  }
+  .dash-search.is-open > .ka > .split > .split-pane > .ka-pane > .km {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 340px;
+  }
+  .dash-search.is-open > .ka > .split > .split-pane > .ka-pane > .km > * {
+    flex: none;
+  }
+  .dash-search.is-open > .ka > .split > .split-pane > .ka-pane > .km > .km-stage {
+    flex: 1;
+    height: auto;
+    min-height: 340px;
+  }
+}
+
+/* 오른쪽 아래 AI 대기열 단추(약 170px)가 화면 틀 칸의 오른쪽 아래를 덮는다 → 그 자리의 단추가 가리지 않게 */
+@media (min-width: 901px) and (min-height: 600px) {
+  .collect-page .list-panel > .pager {
+    padding-right: 180px;
+  }
+  .mr-page .mr-main > .mr-scroll {
+    padding-bottom: 56px;
+  }
+}
+
+/* 높이가 낮은 노트북 (11/15: 1366×657 · 1280×633 등, 높이 600~759): 화면 틀은 그대로, 위아래 여백만 줄여 칸을 넓힌다 */
+@media (min-width: 901px) and (min-height: 600px) and (max-height: 759px) {
+  .page {
+    padding-top: var(--tb-space-3);
+  }
+  .page > .page-header + * {
+    margin-top: var(--tb-space-3);
+  }
+  .collect-page > .content {
+    margin-top: var(--tb-space-3);
+  }
+  .dash-page.is-home,
+  .dash-page:not(.is-home),
+  .collect-page,
+  .select-page,
+  .mr-page,
+  .archive-page {
+    padding-bottom: var(--tb-space-3);
+  }
+  /* 대시보드 첫 화면: 안내 한 줄을 빼고, 아래 두 칸 최소 높이를 낮춤 */
+  .dash-page.is-home .dash-note {
+    display: none;
+  }
+  .dash-page.is-home .dash-home {
+    min-height: 150px;
+  }
+  /* 자료 현황: 폴더 · 거르기 · 체크 · 페이지 번호 줄의 위아래 여백 */
+  .collect-page .list-panel > .folder-bar {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .collect-page .filters {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .collect-page .list-tools {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  .collect-page .list-panel > .pager {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .collect-page table.articles th {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .collect-page .fav-rail {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+}
+
+/* ── 작은 노트북 배율 (11/15 조장): 1366×657 · 1280×633처럼 폭 1439 이하이면서 높이 760 미만인 화면은 페이지 전체를 90%로 ──
+   보이는 높이가 약 730px처럼 넓어져 칸마다 한두 줄 더 들어간다. 1440 이상 · FHD · QHD · 휴대폰은 그대로.
+   사용자가 브라우저를 직접 줄이면(Ctrl −) 폭이 1440을 넘어 이 규칙이 풀리므로 두 번 작아지지 않는다.
+   화면 좌표를 쓰는 코드(메뉴 위치 · 맵 끌기 · 사용 안내)는 utils.js pageZoom()으로 나눠 맞춘다 */
+@media (min-width: 901px) and (max-width: 1439px) and (min-height: 600px) and (max-height: 759px) {
+  :root {
+    --tb-zoom: 0.9;
+    zoom: 0.9;
+  }
+}
+
+/* 요즘 뜨는 기술 막대 (11/15): 화면 틀 안에서는 막대 높이를 채우고, 다 들어가는 줄만 보인다 (TrendRail.jsx가 잘리는 줄을 감춤) */
+@media (min-width: 901px) and (min-height: 600px) {
+  .dash-layout > .trend-rail.panel {
+    position: static;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .dash-page.is-home > .dash-layout > .trend-rail,
+  .dash-page:not(.is-home) > .dash-layout > .trend-rail {
+    overflow: hidden;
+  }
+  .trend-rail > * {
+    flex: none;
+  }
+  .trend-rail > .tr-list {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .tr-list li.is-clipped {
+    visibility: hidden;
+  }
+}
+
+/* 자료 현황 「담을 폴더」 (11/15): 범위로 찾을 때마다 「· 자동」 폴더가 늘어 줄이 늘고 표가 줄었음 → 선별·요약처럼 한 줄, 옆으로 밀어 봄 */
+.list-panel > .folder-bar {
+  flex-wrap: nowrap;
+}
+.list-panel > .folder-bar .folder-chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+.list-panel > .folder-bar .folder-chip,
+.list-panel > .folder-bar .folder-new {
+  flex: none;
+}
+.list-panel > .folder-bar .folder-bar-label {
+  flex: none;
 }

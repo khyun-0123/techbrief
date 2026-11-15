@@ -17,6 +17,8 @@ export function clientId() {
       id = crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
       localStorage.setItem(CLIENT_KEY, id)
     }
+    // AI 대기열의 「내 작업」 표시용 (11/15): 같은 번호를 쿠키로도 보낸다. 서버는 저장하지 않는다 (server/index.js clientOf)
+    if (!document.cookie.includes(`tb_client=${id}`)) document.cookie = `tb_client=${id}; path=/; max-age=31536000; SameSite=Lax`
     return id
   } catch {
     return null // 저장소를 못 쓰는 브라우저(사생활 보호 모드 등)는 기록하지 않음

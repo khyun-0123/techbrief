@@ -4,6 +4,20 @@
 import { useState } from 'react'
 import { fetchHealth, restartServerApi, saveOpsApi } from './api.js'
 import { OPS_LABEL } from './ops.js'
+import QueueView from './QueueView.jsx'
+import { useQueue } from './queue.js'
+
+// AI 대기열 (11/15): 일반 화면 오른쪽 아래 창과 같은 목록. 관리 페이지에서는 늘 펼쳐 두고 3초마다 받아 온다
+function QueueCard() {
+  const data = useQueue(3000)
+  return (
+    <section className="adm-card">
+      <h2>AI 대기열</h2>
+      <p className="adm-desc">지금 AI가 처리 중인 일과 기다리는 일이에요. 「내 작업」은 이 브라우저에서 시킨 것, 「자동」은 자동 요약 · 미리 분석, 「다른 사람」은 다른 브라우저에서 시킨 것이에요. 사람이 시킨 일이 자동 작업보다 먼저 처리돼요.</p>
+      <QueueView data={data} />
+    </section>
+  )
+}
 
 const MODES = [
   ['normal', '일반 화면을 그대로 써요.'],
@@ -163,6 +177,7 @@ function AdminOps({ ops, onOps, onToast, health, refreshRunning, dirtyCount }) {
 
   return (
     <>
+      <QueueCard />
       <section className="adm-card">
         <div className="adm-ops-head">
           <div>

@@ -1,7 +1,7 @@
 // 선별 폴더 막대 (11/07 결정, 27 문서 2장)
 // - 자료 현황: 「선별 추가」가 담을 폴더를 고르는 줄
 // - 선별·요약: 폴더별로 보기 · 폴더 이름 바꾸기 · 지우기 (기사 옮기기는 기사 펼침의 「폴더」 메뉴)
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { INBOX } from './folders.js'
 
 // counts: { [folderId]: n } · checked: { [folderId]: n } (보고서에 넣을 체크 수, 선별·요약에서만)
@@ -19,11 +19,20 @@ function FolderBar({ label, folders, counts, checked, active, allOption, onPick,
   }
 
   const activeFolder = folders.find((f) => f.id === active)
+  // 폴더 칩은 한 줄로 옆으로 밀어 봄 (11/15: 자료 현황도 선별·요약처럼). 고른 폴더가 가려지지 않게 따라간다
+  const chipsRef = useRef(null)
+  useEffect(() => {
+    const box = chipsRef.current
+    const chip = box?.querySelector('.folder-chip.active')
+    if (!box || !chip || box.scrollWidth <= box.clientWidth) return
+    const left = chip.offsetLeft - box.offsetLeft
+    if (left < box.scrollLeft || left + chip.offsetWidth > box.scrollLeft + box.clientWidth) box.scrollLeft = left - 16
+  }, [active, folders.length])
 
   return (
     <div className="folder-bar" role="group" aria-label={label}>
       {label && <span className="folder-bar-label">{label}</span>}
-      <div className="folder-chips">
+      <div ref={chipsRef} className="folder-chips">
         {allOption && (
           <button type="button" className={active === null ? 'folder-chip active' : 'folder-chip'} aria-pressed={active === null} onClick={() => onPick(null)}>
             전체 <span className="folder-count">{total}</span>

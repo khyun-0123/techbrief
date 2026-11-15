@@ -226,6 +226,19 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [showMove, setShowMove] = useState(false) // 내 자료 옮기기 (11/08)
   const [includedIds, setIncludedIds] = useState(() => load(INCLUDED_KEY, []))
   const [screen, setScreen] = useState('dashboard')
+  // 대시보드 첫 화면으로 (11/15): 대시보드에서 대시보드 탭을 한 번 더 누르거나 로고를 누르면 키워드 분석을 닫는다
+  const [dashReset, setDashReset] = useState(0)
+  // 화면 틀 (11/15): 상단 메뉴 높이를 CSS 변수(--topbar-h)로 → 본문 칸이 「화면 높이 − 메뉴」를 채우고 넘치면 칸 안에서 스크롤
+  useEffect(() => {
+    const bar = document.querySelector('.topbar')
+    if (!bar) return undefined
+    // offsetHeight = 배율 전 CSS 픽셀 (작은 노트북 zoom 0.9에서도 CSS 계산과 같은 단위)
+    const set = () => document.documentElement.style.setProperty('--topbar-h', `${bar.offsetHeight}px`)
+    set()
+    const ro = new ResizeObserver(set)
+    ro.observe(bar)
+    return () => ro.disconnect()
+  }, [])
   const storyJobs = useStoryJobs() // 기술 흐름 정리 (키워드 분석을 떠나도 끝나면 진행 창이 알림, 11/11)
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState('all') // 기본 「전체」 (11/09 조장). 모은 기사 목록은 서버가 7일치만 보냄 (30 문서 1장)
@@ -655,6 +668,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const gathered = isSample ? SAMPLE_ARTICLES : fetched.map(toView).filter((a) => keywords.includes(a.keyword) || a.keyword === '1·2차 출처')
   // 오늘 이슈 수: 키워드에 안 맞은 1·2차 출처 글 중 관련 낮음(기본 숨김)은 세지 않는다
   const todayIssues = gathered.filter((a) => a.hoursAgo < 24 && !(a.keyword === '1·2차 출처' && a.relevance === 'low'))
+  // 대시보드 첫 화면 「최근 중요 기사」 (11/15): 최근 48시간, 관련도 낮음 빼고 중요도 순
+  const homeIssues = gathered.filter((a) => a.hoursAgo < 48 && a.relevance !== 'low').sort((x, y) => (y.importance ?? 0) - (x.importance ?? 0))
   // 자료 현황 목록: 모은 기사 + 직접 추가한 자료
   const collected = [...gathered, ...materials.map(materialView)]
   const countArticles = (list) => list.reduce((n, a) => n + 1 + (a.sameIssue ?? 0), 0)
@@ -721,7 +736,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
   function goPage(p) {
     setPage(Math.min(Math.max(1, p), pageCount))
-    document.querySelector('.list-panel')?.scrollIntoView({ block: 'start' })
+    // 화면 틀(칸 안 스크롤)에서는 표 칸을 맨 위로, 휴대폰처럼 페이지가 스크롤되면 목록 카드로
+    const box = document.querySelector('.list-scroll')
+    if (box && getComputedStyle(box).overflowY === 'auto') box.scrollTop = 0
+    else document.querySelector('.list-panel')?.scrollIntoView({ block: 'start' })
   }
 
   // 「뉴스·논문에서 찾기」: 등록 키워드와 상관없이 네이버 뉴스 + 논문(OpenAlex 등)에서 바로 찾는다 (11/08)
@@ -1065,6 +1083,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
             e.preventDefault()
             setScreen('dashboard')
+            setDashReset((n) => n + 1)
             closeSearch()
             window.scrollTo({ top: 0 })
           }}
@@ -1077,7 +1096,13 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           type="button"
           className={screen === 'dashboard' ? 'tab active' : 'tab'}
           aria-current={screen === 'dashboard' ? 'page' : undefined}
-          onClick={() => setScreen('dashboard')}
+          onClick={() => {
+            if (screen === 'dashboard') {
+              setDashReset((n) => n + 1)
+              window.scrollTo({ top: 0 })
+            }
+            setScreen('dashboard')
+          }}
         >
           대시보드
         </button>
@@ -1211,6 +1236,19 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         <TestTools providers={health?.llm?.providers ?? []} />
       ) : screen === 'dashboard' ? (
         <Dashboard
+          resetKey={dashReset}
+          homeIssues={homeIssues}
+          reports={reports}
+          onOpenReport={(id) => {
+            setArchiveTarget(id)
+            setScreen('archive')
+            window.scrollTo({ top: 0 })
+          }}
+          onGoReports={() => {
+            setArchiveTarget(null)
+            setScreen('archive')
+            window.scrollTo({ top: 0 })
+          }}
           stats={{
             todayIssues: todayIssues.length,
             todayArticles: countArticles(todayIssues),
@@ -1444,13 +1482,14 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   </button>
                 </div>
               ) : null}
-              {search ? null : (
-                <p className="list-meta">
-                  이슈 {visible.length}개 · 기사 {countArticles(visible)}건
-                  {q && <span className="search-note"> · 모은 기사에서 찾는 중. 없으면 「뉴스·논문에서 찾기」</span>}
-                </p>
-              )}
+              {/* 11/15 화면 틀: 건수 줄과 거르기 줄을 한 줄로 (목록 칸을 한 줄 더 넓게) */}
               <div className="list-tools">
+                {search ? null : (
+                  <span className="list-count">
+                    이슈 {visible.length}개 · 기사 {countArticles(visible)}건
+                    {q && <span className="search-note"> · 모은 기사에서 찾는 중. 없으면 「뉴스·논문에서 찾기」</span>}
+                  </span>
+                )}
                 <label className="own-toggle" title="지금 정렬은 그대로 두고, AI 요약이 있는 기사를 위로 올려요">
                   <input type="checkbox" checked={summarizedFirst} onChange={(e) => toggleSummarizedFirst(e.target.checked)} />
                   요약된 기사 먼저 <span className="own-count">{listed.filter(hasSummary).length}건</span>
@@ -1482,6 +1521,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               </div>
               {search?.error && <p className="ai-error search-error" role="alert">{search.error}</p>}
 
+              {/* 표는 이 칸 안에서 스크롤 (11/15 화면 틀: 거르기 · 페이지 번호는 늘 보임) */}
+              <div className="list-scroll">
               {visible.length === 0 ? (
                 <p className="empty">
                   {search
@@ -1754,6 +1795,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   </tbody>
                 </table>
               )}
+              </div>
               {visible.length > 0 && (
                 <Pager page={currentPage} pageSize={pageSize} total={visible.length} onPage={goPage} onPageSize={changePageSize} />
               )}

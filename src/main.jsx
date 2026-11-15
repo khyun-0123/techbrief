@@ -8,6 +8,9 @@ import './tokens.css' // LG UI Kit 기반 디자인 토큰 (Storybook 「Foundat
 import AdminApp from './AdminApp.jsx'
 import OpsGate from './OpsGate.jsx'
 import TestPage from './TestPage.jsx'
+import { clientId } from './usage.js'
+
+clientId() // 브라우저 번호를 쿠키로 맞춰 둔다 (AI 대기열 「내 작업」)
 
 // 페이지 3개 (라우터 없이 주소만 본다)
 // /            일반 접속: 뉴스 수집·선별·보고서

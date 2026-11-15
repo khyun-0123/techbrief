@@ -22,3 +22,11 @@ export function formatPublished(hoursAgo, now = new Date()) {
 
 // 대시보드에서 마지막으로 분석한 키워드 (11/12): 보고서 주제 키워드 → 그 분석 묶음이 보고서 근거로 자동으로 들어간다
 export const LAST_ANALYZED_KEY = 'techbrief.lastAnalyzed'
+
+// 페이지 배율 (11/15): 작은 노트북(1366·1280, 높이 760 미만)은 html에 zoom 0.9를 준다 (App.css 「작은 노트북 배율」).
+// getBoundingClientRect · clientX · innerWidth는 화면 픽셀, style의 top · left 등은 배율 전 CSS 픽셀이라 이 값으로 나눠 맞춘다
+export function pageZoom() {
+  if (typeof document === 'undefined') return 1
+  const z = parseFloat(getComputedStyle(document.documentElement).zoom)
+  return z > 0 ? z : 1
+}

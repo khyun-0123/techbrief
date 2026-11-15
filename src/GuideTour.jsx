@@ -3,6 +3,7 @@
 // - 실제 화면 요소를 차례로 밝혀 주고(나머지는 어둡게) 옆에 설명 카드. 가리킬 요소가 없으면 화면 가운데 카드
 // - 키보드: → · Enter = 다음, ← = 이전, Esc = 닫기
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { pageZoom } from './utils.js'
 
 const TOUR_STEPS = [
   {
@@ -65,7 +66,8 @@ export default function GuideTour({ open, onClose, steps = TOUR_STEPS }) {
     const el = step?.target ? document.querySelector(step.target) : null
     if (!el) return setRect(null)
     const r = el.getBoundingClientRect()
-    setRect(r.width && r.height ? { x: r.left, y: r.top, w: r.width, h: r.height } : null)
+    const z = pageZoom() // 작은 노트북 배율 (utils.js): 화면 픽셀 → CSS 픽셀
+    setRect(r.width && r.height ? { x: r.left / z, y: r.top / z, w: r.width / z, h: r.height / z } : null)
   }, [step])
   useLayoutEffect(() => {
     if (!open) return undefined
@@ -103,8 +105,8 @@ export default function GuideTour({ open, onClose, steps = TOUR_STEPS }) {
   if (!open || !step) return null
 
   // 카드 자리: 밝힌 요소 아래(자리가 없으면 위), 화면 안으로. 요소가 없으면 가운데
-  const vw = window.innerWidth
-  const vh = window.innerHeight
+  const vw = window.innerWidth / pageZoom()
+  const vh = window.innerHeight / pageZoom()
   const cw = Math.min(380, vw - 32)
   let style = { width: cw }
   const phone = vw < 600

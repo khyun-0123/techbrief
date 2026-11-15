@@ -312,7 +312,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
               {folderSummary && <span className="hint">· {folderSummary}</span>}
             </div>
             {picked.length === 0 ? (
-              <p className="hint">왼쪽 목록에서 보고서에 넣을 기사를 체크하세요. 여러 폴더의 기사를 함께 넣을 수 있어요.</p>
+              <p className="hint">선별 기사 목록에서 보고서에 넣을 기사를 체크하세요. 여러 폴더의 기사를 함께 넣을 수 있어요.</p>
             ) : (
               <ol>
                 {articles.map((a, i) => {
