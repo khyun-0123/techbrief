@@ -78,11 +78,14 @@ export async function runPrecompute() {
   }
 }
 
-export function startPrecompute() {
+// allowed: 이 앱이 배경 작업을 해도 되는지 (11/17, refresh.js backgroundAllowed — 수집 담당 앱만)
+export function startPrecompute({ allowed = async () => true } = {}) {
   if (process.env.TIMELINE_PRECOMPUTE === 'off' || !dbEnabled()) return
   clearTimeout(run.timer)
   const tick = () => {
-    runPrecompute()
+    allowed()
+      .catch(() => false)
+      .then((ok) => (ok ? runPrecompute() : null))
       .catch((err) => console.warn(`[timeline-jobs] 실패: ${err.message}`))
       .finally(() => {
         run.timer = setTimeout(tick, 6 * 3600_000)

@@ -5,10 +5,10 @@
 // - 앱(npm run dev)이 켜져 있을 때만 돈다. 꺼져 있던 동안 지난 예정은 켜진 뒤 한 번 따라잡는다
 import { collect, listArticles } from './collector/index.js'
 import { importanceRule } from './importanceRule.js'
-import { db, dbEnabled } from './db/index.js'
+import { db, dbEnabled, query } from './db/index.js'
 import { getKeywords, getSetting, getSummaries, setSetting } from './db/store.js'
 import { pingModel, PRIORITY, queueStatus, withQueueContext } from './llm/client.js'
-import { summarizeArticle } from './summarize.js'
+import { isOutdatedSummary, summarizeArticle } from './summarize.js'
 import { aiPaused } from './ops.js'
 import { execFileSync } from 'node:child_process'
 import { hostname } from 'node:os'
@@ -47,6 +47,19 @@ export function schedulerMode() {
 // Vite가 서버 코드만 다시 읽어도 연결이 남도록 globalThis에 둔다. 연결이 끊기면 PG가 잠금을 풀고, 다음 확인(1분) 때 다시 잡는다
 const leader = (globalThis.__techbriefLeader ??= { client: null, held: false, since: null, error: null, connecting: false })
 export const leaderHolds = () => leader.held && Boolean(leader.client)
+
+// 배경 작업(요즘 뜨는 기술 · 논문 DB · 시계열 미리 분석 · 자동 요약 현황 저장)을 이 앱이 해도 되는지 (11/17, 36 문서 2-2)
+// 예전: 수집만 담당 앱이 하고 나머지는 켜진 앱마다 돌아, 팀원 앱이 AI · OpenAlex 한도를 같이 쓰고 같은 저장값(tech_trends 등)을 덮어쓸 수 있었다
+// - off: 안 함 · leader: 수집 잠금을 쥐었을 때만 · on(팀원 개발 앱): 다른 앱이 수집 잠금을 쥐고 있으면 그 앱에 맡김
+// 관리 페이지에서 사람이 바로 돌리는 것(지금 갱신 · 미리 분석)은 막지 않는다
+export async function backgroundAllowed() {
+  const mode = schedulerMode()
+  if (mode === 'off') return false
+  if (!dbEnabled() || leaderHolds()) return true
+  if (mode === 'leader') return false
+  const { rows } = await query(`SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND classid = 0 AND objid = $1 AND objsubid = 1 AND granted LIMIT 1`, [LOCK_ID]).catch(() => ({ rows: [] }))
+  return rows.length === 0
+}
 
 async function ensureLeaderLock() {
   if (schedulerMode() !== 'leader' || !dbEnabled() || leader.held || leader.connecting) return
@@ -208,10 +221,13 @@ export async function queueSearchSummaries(articles) {
   await setBacklog(sortBacklog([...backlog, ...fresh.map((a) => searchExtras.get(a.id))]))
   return fresh.length
 }
+// 다시 만들 예전 요약(redo)은 아직 요약 안 된 기사 다음에 (11/17)
 const sortBacklog = (list) =>
   list.sort(
     (x, y) =>
-      (y.article.importance ?? 0) - (x.article.importance ?? 0) || y.article.publishedAt.localeCompare(x.article.publishedAt),
+      Number(Boolean(x.redo)) - Number(Boolean(y.redo)) ||
+      (y.article.importance ?? 0) - (x.article.importance ?? 0) ||
+      y.article.publishedAt.localeCompare(x.article.publishedAt),
   )
 
 // ── 자동 요약 대기열 ──
@@ -240,8 +256,10 @@ async function buildBacklog() {
   // 찾기 결과에서 넣어 둔 기사: 이미 요약됐으면 빼고 나머지는 같이 줄 세운다
   for (const id of [...searchExtras.keys()]) if (done[id]) searchExtras.delete(id)
   const ids = new Set(candidates.map((a) => a.id))
+  // 11/17: 예전 모양 요약(11/07 전, 예전 앱이 만든 것)도 다시 만든다 — 새 기사 요약을 다 한 뒤에 (sortBacklog)
+  const redo = (a) => Boolean(done[a.id]) && isOutdatedSummary(done[a.id].summary)
   return sortBacklog([
-    ...candidates.filter((a) => !done[a.id]).map((a) => ({ article: a, important: (a.importance ?? 0) >= cut })),
+    ...candidates.filter((a) => !done[a.id] || redo(a)).map((a) => ({ article: a, important: (a.importance ?? 0) >= cut, ...(redo(a) ? { redo: true } : {}) })),
     ...[...searchExtras.values()].filter((e) => !ids.has(e.article.id)),
   ])
 }
@@ -251,7 +269,8 @@ let worker = null
 // preempted: 사람 요청에 자리를 내주느라 끊겨 대기열에 다시 넣은 횟수 (실패 아님, 저장 안 됨)
 const stats = { done: 0, failed: 0, preempted: 0, current: null, note: null }
 
-function saveBacklogStatus() {
+async function saveBacklogStatus() {
+  if (!(await backgroundAllowed().catch(() => false))) return // 11/17: 담당 앱만 저장 (다른 앱이 패널 숫자를 덮어쓰지 않게)
   return setSetting(BACKLOG_KEY, {
     remaining: backlog.length,
     important: backlog.filter((b) => b.important).length,
@@ -301,7 +320,7 @@ async function runWorker() {
       await saveBacklogStatus()
       try {
         // 사람이 누른 요약이 있으면 그것부터 처리된다 (자동 요약은 가장 낮은 우선순위). 이미 요약됐으면 바로 넘어감
-        const result = await summarizeArticle(article, article.related, { priority: PRIORITY.BACKGROUND })
+        const result = await summarizeArticle(article, article.related, { priority: PRIORITY.BACKGROUND, refresh: Boolean(item.redo) })
         if (!result.cached) {
           stats.done += 1
           summarizedInPass = true
