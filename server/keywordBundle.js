@@ -83,7 +83,7 @@ export async function categoryCompetitors(catId) {
 export async function prepareBundle(raw, { refresh = false } = {}) {
   const keyword = String(raw ?? '').trim().slice(0, 50)
   if (!keyword) return null
-  const key = `bundle:v1:${queryKey(keyword)}`
+  const key = `bundle:v2:${queryKey(keyword)}` // v2 (11/17): 11/15에 「2개국 이상 출원」을 넣고도 v1 그대로라 예전 묶음이 3일 동안 나갔음 (36 문서 2-6)
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return hit

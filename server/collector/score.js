@@ -7,7 +7,7 @@ import { DEFAULT_RULE, importanceRule } from '../importanceRule.js'
 
 // 이 점수 이상이면 "중요도 높음". 11/09 재설계 뒤 실제 데이터(모은 이슈 421개)로 다시 맞춤:
 // 새 점수는 보도량이 10점으로 줄어 최고점이 60 근처 → 예전(60점 이상 8건, 약 2%)과 비슷한 비율이 되도록 45점 (약 4%)
-export const HIGH_THRESHOLD = 45 // 기본값. 실제 기준은 관리 페이지 「중요도 기준」(importanceRule.js, 11/15)
+// 「중요」 기준은 관리 페이지 「중요도 기준」(importanceRule.js, 11/15). 예전 상수 HIGH_THRESHOLD는 쓰는 곳이 없어 11/17 지움
 const RECENCY_HOURS = 168
 const RISING_FRESH_DAYS = 30
 const NOISE_WEIGHT = 0.3

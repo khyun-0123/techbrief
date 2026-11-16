@@ -4,15 +4,17 @@
 // 2. 「중요」(HIGH 45점 이상, server/collector/score.js)는 모두 넣는다 — 단 MAX건까지 (보고서를 한 번에 쓰는 한도, 서버 MAX_REPORT_ARTICLES)
 // 3. 중요 자료가 MIN건보다 적으면 다음으로 점수 높은 자료로 MIN건까지 채운다
 // 4. 고른 말마다 최소 1건: 고른 말이 든 글이 하나도 안 뽑혔으면 그 말이 든 가장 높은 글을 넣는다 (자리가 없으면 가장 낮은 「채움」 글과 바꿈)
-export const AUTO_PICK = { min: 5, max: 10, high: 45 }
+export const AUTO_PICK = { min: 5, max: 10 }
+// 서버가 기준을 안 보냈을 때만 쓰는 값 (11/17: 예전엔 opt 기본값에 high: 45가 있어 관리 페이지 기준을 바꿔도 늘 45였음, 36 문서 1장)
+const FALLBACK_HIGH = 45
 
 const PART_LABEL = { novelty: '신규성', business: '사업 연관', source: '출처', recency: '최신성', coverage: '보도량' }
-const PART_MAX = { novelty: 30, business: 25, source: 20, recency: 15, coverage: 10 }
+const PART_MAX = { novelty: 30, business: 25, source: 20, recency: 15, coverage: 10 } // 서버가 배점(scoreParts.max)을 안 보냈을 때만
 
 // 왜 골랐는지 한 줄: 점수 + 배점 대비 높은 항목 2개 (예: 「50점 · 사업 연관 25/25 · 신규성 10/30」)
 export function reasonOf(a) {
   const parts = Object.entries(PART_LABEL)
-    .map(([k, label]) => ({ label, v: a.scoreParts?.[k] ?? 0, max: PART_MAX[k] }))
+    .map(([k, label]) => ({ label, v: a.scoreParts?.[k] ?? 0, max: a.scoreParts?.max?.[k] ?? PART_MAX[k] }))
     .filter((p) => p.v > 0)
     .sort((x, y) => y.v / y.max - x.v / x.max)
     .slice(0, 2)
@@ -22,7 +24,7 @@ export function reasonOf(a) {
 
 export function pickMaterials(articles, terms = [], opt = AUTO_PICK) {
   // 「중요」 기준은 서버(관리 페이지 「중요도 기준」, 11/15)가 정한 importanceLevel을 따름. 없으면 점수로
-  const high = opt.high ?? articles?.find((a) => a.scoreParts?.high != null)?.scoreParts.high ?? AUTO_PICK.high
+  const high = opt.high ?? articles?.find((a) => a.scoreParts?.high != null)?.scoreParts.high ?? FALLBACK_HIGH
   const { min, max } = { ...AUTO_PICK, ...opt }
   const isHigh = (a) => (a.importanceLevel ? a.importanceLevel === 'high' : (a.importance ?? 0) >= high)
   const time = (a) => Date.parse(a.publishedAt ?? '') || 0

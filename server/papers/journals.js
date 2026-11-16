@@ -115,18 +115,3 @@ export async function keywordPapers(en, { from, to, limit = 100, sort = 'relevan
   return { works: out, provider, display }
 }
 
-// 논문 중요도 0~100 (30 문서 3장 제안을 단순하게, 가중치는 결정 3에서 바꿈)
-// 검색 관련도 35 · 월평균 인용 25 · 분야 보정 인용(FWCI) 20 · 디스플레이 전문지 10 · 최근성 10
-export function paperScore(w, rank, total) {
-  const months = w.date ? Math.max(1, (Date.now() - Date.parse(w.date)) / (30.4 * 86_400_000)) : 12
-  const perMonth = (w.cited ?? 0) / months
-  const parts = {
-    relevance: Math.round(35 * (1 - rank / Math.max(1, total))),
-    citations: Math.round(25 * Math.min(1, perMonth / 3)),
-    fwci: Math.round(20 * Math.min(1, (w.fwci ?? 0) / 3)),
-    journal: w.displayJournal ? 10 : 0,
-    recency: Math.round(10 * Math.max(0, 1 - months / 12)),
-  }
-  const score = Math.min(100, Object.values(parts).reduce((a, b) => a + b, 0))
-  return { score, parts: { ...parts, cited: w.cited ?? 0, fwciValue: w.fwci ?? null, perMonth: Math.round(perMonth * 10) / 10 } }
-}
