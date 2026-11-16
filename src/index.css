@@ -61,3 +61,19 @@ textarea {
     animation-iteration-count: infinite !important;
   }
 }
+
+/* 화면 오류 막이 (11/17, main.jsx Guard) */
+.crash {
+  max-width: 560px;
+  margin: 15vh auto;
+  padding: 0 16px;
+  color: var(--tb-color-text);
+}
+.crash h1 {
+  font-size: var(--fs-lg);
+}
+.crash-detail {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+  word-break: break-all;
+}
