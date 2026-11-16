@@ -3,7 +3,7 @@
 import { dbEnabled, query } from '../db/index.js'
 import { getSetting, setSetting } from '../db/store.js'
 import { findReruns, groupArticles, sameIssue, titleGrams } from './dedupe.js'
-import { collectFeeds, FEEDS, PAPER_KEYWORD_DAYS, tierOf } from './feeds.js'
+import { collectFeeds, FEEDS, fetchFeedAll, PAPER_KEYWORD_DAYS, tierOf } from './feeds.js'
 import { searchNews } from './naver.js'
 import { findMention, getLists } from './lists.js'
 import { EXPERT_SOURCES, toArticle } from './normalize.js'
@@ -161,6 +161,16 @@ export async function saveSources(input = {}) {
   const disabled = [...new Set((input.disabled ?? []).map(String))].filter((id) => FEEDS.some((f) => f.id === id))
   await setSetting(SOURCES_KEY, { disabled })
   return getSources()
+}
+
+// 한 출처를 날짜 기준 없이 한 번 채운다 (11/17, scripts/import-feed.mjs). 이미 있는 글은 건너뜀(saveToDb) → 새로 넣은 수
+export async function importFeedAll(id) {
+  if (!dbEnabled()) throw new Error('DB가 없어요')
+  const { getKeywords } = await import('../db/store.js')
+  const articles = await fetchFeedAll(id, await getKeywords())
+  const added = await saveToDb(articles)
+  if (added) markListStale()
+  return { fetched: articles.length, added }
 }
 
 // 피드 기사 저장 (네이버와 같은 표). 출처마다 새로 넣은 수를 센다
