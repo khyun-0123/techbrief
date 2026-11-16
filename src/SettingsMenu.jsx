@@ -70,7 +70,7 @@ function SettingsMenu({ admin, reportCount, selectedCount, onBundle, onMove }) {
           <hr />
           <a role="menuitem" href="/admin">
             <b>관리자 페이지{admin ? ` (${admin.name})` : ''}</b>
-            <small>수집 키워드 · 추천 검색어 · AI 모델 · 보고서 관리</small>
+            <small>수집 키워드 · AI 모델 · 보고서 관리</small>
           </a>
         </div>
       )}

@@ -264,7 +264,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   // 요약된 기사 먼저: 지금 정렬은 그대로 두고 요약된 기사를 위로 (요약을 먼저 보고 고르게)
   const [summarizedFirst, setSummarizedFirst] = useState(() => load(SUMMARIZED_FIRST_KEY, true))
   const [sentimentFilter, setSentimentFilter] = useState('all') // 긍정·중립·부정 거르기 (F5)
-  const [recommended, setRecommended] = useState([]) // 추천 검색어 (공용, 관리자가 고름)
   const [favorites, setFavorites] = useState([]) // 즐겨찾기 ☆ (IP별, 11/09)
   const [recent, setRecent] = useState(() => load(RECENT_KEY, [])) // 최근 검색어 (IP별, 서버 값이 오기 전엔 브라우저 값)
   const [pageSize, setPageSize] = useState(() => load(PAGE_SIZE_KEY, 20))
@@ -314,7 +313,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     reloadArticles().catch(() => {})
     fetchFavorites()
       .then((d) => {
-        setRecommended(d.recommended ?? [])
         setFavorites(d.favorites ?? [])
         if (Array.isArray(d.recent)) setRecent(d.recent)
         else if (load(RECENT_KEY, []).length) saveFavoritesApi({ recent: load(RECENT_KEY, []) }).catch(() => {}) // 예전 브라우저 값 올리기
@@ -678,8 +676,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const q = query.trim().toLowerCase()
   // 핵심어 해시태그 (hashtags.js): 사전은 목록이 바뀔 때만 다시 만든다
   const tagDict = useMemo(
-    () => buildTagDict([keywords, recommended, lists?.own, lists?.competitors, lists?.interests, techTerms]),
-    [keywords, recommended, lists, techTerms],
+    () => buildTagDict([keywords, lists?.own, lists?.competitors, lists?.interests, techTerms]),
+    [keywords, lists, techTerms],
   )
   const tagsFor = (a) => tagsOf(a, aiSummaries[a.id]?.summary, tagDict)
   const byId = new Map(pool.map((a) => [a.id, a]))
@@ -1256,7 +1254,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             collectedLabel: refreshRunning ? '최신화 중…' : collectedAt ? `마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 수집 전',
           }}
           keywords={keywords}
-          recommended={recommended}
           favorites={favorites}
           recent={recent}
           periods={PERIODS}
@@ -1271,13 +1268,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           }}
           onSearch={(q) => {
             runSearch(q)
-            setScreen('collect')
-            window.scrollTo({ top: 0 })
-          }}
-          onKeyword={(k) => {
-            searchSeq.current++
-            setSearch(null)
-            setQuery(k)
             setScreen('collect')
             window.scrollTo({ top: 0 })
           }}
@@ -1369,7 +1359,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           {/* 오늘 수집 숫자 · 키워드 추이는 대시보드로 옮김 (11/07 팀 회의) */}
           <div className={features.has('collectPanel') ? 'content with-favs' : 'content with-favs no-settings'}>
             <FavoritesRail
-              recommended={recommended}
+              keywords={keywords}
               favorites={favorites}
               recent={recent}
               active={search?.query}

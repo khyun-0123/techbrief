@@ -399,11 +399,6 @@ async function checkRunCooldown(req) {
 // 1) Sec-Fetch-Site가 있으면 same-origin(이 화면) · none(사용자가 직접 연 것)만 받는다 (포트까지 구분)
 // 2) 없으면(오래된 브라우저) Origin의 주소:포트가 Host와 같아야 한다
 // 3) 둘 다 없으면 브라우저가 아닌 요청(curl · 스크립트)이라 통과 — 쿠키를 대신 실어 보내는 공격이 아님
-const RECOMMENDED_SETTING = 'recommended_queries'
-async function recommendedQueries() {
-  const saved = await getSetting(RECOMMENDED_SETTING, null)
-  return saved ?? (await getSetting('favorite_queries', [])) // 처음엔 예전 공용 즐겨찾기
-}
 function cleanQueries(list, max) {
   return [...new Set(list.map((q) => String(q).trim().slice(0, 50)).filter(Boolean))].slice(0, max)
 }
@@ -706,12 +701,12 @@ async function handleApiInner(req, res) {
       ])
       return send(res, 200, { query, collected: collected.articles, papers: papers.articles, paperNote: papers.note, paperTerms: papers.terms ?? [], paperPending: Boolean(papers.pending) })
     }
-    // 검색어 (11/09 조장 결정): 「추천 검색어」는 관리자가 관리 페이지에서 고르는 공용 목록,
-    // 즐겨찾기 ☆ · 최근 검색어는 IP별 (선별 폴더와 같은 방식). 예전 공용 즐겨찾기(favorite_queries)는 추천 검색어의 처음 값으로 쓴다
+    // 검색어: 즐겨찾기 ☆ · 최근 검색어는 IP별 (선별 폴더와 같은 방식)
+    // 11/16 조장: 「추천 검색어」(관리자가 따로 고르던 공용 목록)를 자동 수집 키워드와 합쳤다 — 추천은 자동 수집되는 말만.
+    // 화면은 추천 대신 /api/keywords의 자동 수집 키워드를 보여 준다 (예전 설정값 recommended_queries는 DB에 남아 있지만 읽지 않음)
     if (req.method === 'GET' && req.url === '/api/favorites') {
       const ip = clientIp(req)
       return send(res, 200, {
-        recommended: await recommendedQueries(),
         favorites: await getSetting(`favorite_queries:ip:${ip}`, []),
         recent: await getSetting(`recent_queries:ip:${ip}`, null), // null = 아직 서버에 없음 (브라우저 것을 올림)
       })
@@ -753,7 +748,7 @@ async function handleApiInner(req, res) {
     if (req.method === 'GET' && req.url.startsWith('/api/admin/search-terms')) {
       requireAdmin(req)
       const days = Math.min(90, Math.max(1, Number(new URL(req.url, 'http://x').searchParams.get('days')) || 14))
-      const exclude = [...(await getKeywords().catch(() => [])), ...(await recommendedQueries())]
+      const exclude = await getKeywords().catch(() => []) // 11/16: 추천 검색어를 자동 수집 키워드와 합침
       return send(res, 200, { days, frequent: await frequentSearches({ days, exclude }), translations: await listQueryTerms() })
     }
     if (req.method === 'PUT' && req.url === '/api/admin/query-terms') {
@@ -762,19 +757,6 @@ async function handleApiInner(req, res) {
       const saved = await setQueryTerms(query, terms)
       await logChange(admin, '검색어 영문 표기', saved.terms.length ? `${saved.query} → ${saved.terms.join(' · ')}` : `${saved.query} 지움 (다음 찾기 때 AI가 다시 만듦)`)
       return send(res, 200, saved)
-    }
-    if (req.method === 'GET' && req.url === '/api/admin/recommended-queries') {
-      requireAdmin(req)
-      return send(res, 200, { recommended: await recommendedQueries() })
-    }
-    if (req.method === 'PUT' && req.url === '/api/admin/recommended-queries') {
-      const admin = requireAdmin(req)
-      const before = await recommendedQueries()
-      const { recommended = [] } = await readJson(req)
-      const list = cleanQueries(recommended, 20)
-      await setSetting(RECOMMENDED_SETTING, list)
-      await logChange(admin, '추천 검색어', diffWords(before, list))
-      return send(res, 200, { recommended: list })
     }
     if (req.method === 'GET' && req.url === '/api/lists') {
       return send(res, 200, await getLists())
