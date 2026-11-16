@@ -47,6 +47,7 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
   const [text, setText] = useState('')
   const [focus, setFocus] = useState(null) // 분석 중인 말 (없으면 검색창 + 미리 분석된 키워드 + 요즘 뜨는 기술)
   const [ready, setReady] = useState([]) // 미리 분석해 둔 말 (11/10): 검색 전에도 분석이 어떤 모양인지 보이게
+  const [readyLoading, setReadyLoading] = useState(true) // 11/17: 받는 동안 칩 자리를 그려 둔다
   const [allReady, setAllReady] = useState(false)
   // 「분석하면 이렇게 보여요 · 예시」 (11/15 조장): 펼친 채로 아래 「최근 중요 기사」가 4건 이상 보이면 펼침, 그보다 적으면 접음.
   // 창 크기를 바꾸면 다시 정하고, 사람이 직접 펴거나 접으면 그때부터는 손대지 않는다. 화면 틀 밖(휴대폰)은 11/14 결정대로 펼침
@@ -130,6 +131,7 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     fetchReadyTimelines()
       .then((d) => alive && setReady(d.items ?? []))
       .catch(() => {})
+      .finally(() => alive && setReadyLoading(false))
     return () => {
       alive = false
     }
@@ -224,6 +226,16 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
           <>
             <p className="dash-note">무엇을 찾을지 모르겠으면 아래 「요즘 뜨는 기술」이나 바로 볼 수 있는 분석에서 골라 보세요.</p>
             {/* 11/14 D5: 눈 갈 곳은 「바로 볼 수 있는 분석」 칩 줄 하나. 분석 예시(11/10)는 아래 접힌 줄로 (자동 수집 키워드 목록과 같은 모양) */}
+            {readyLoading && ready.length === 0 && (
+              <div className="dash-ready" aria-label="바로 볼 수 있는 분석을 불러오는 중">
+                <span className="dash-chips-label">바로 볼 수 있는 분석</span>
+                <div className="dash-ready-list" aria-hidden="true">
+                  {[96, 120, 140, 104, 88].map((w, i) => (
+                    <span key={i} className="dash-ready-item is-wait" style={{ width: w }} />
+                  ))}
+                </div>
+              </div>
+            )}
             {ready.length > 0 && (
               <div ref={readyBoxRef} className="dash-ready" aria-label="미리 분석된 키워드">
                 <span className="dash-chips-label">바로 볼 수 있는 분석</span>

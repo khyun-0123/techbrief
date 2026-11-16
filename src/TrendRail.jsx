@@ -66,7 +66,17 @@ export default function TrendRail({ onPick, onOpen, onVerdicts, onVerdict }) {
         <span className="tr-sub">{(data?.window?.label ?? '이번 주').replace(/\s*\(.*\)$/, '')} · 종합 점수</span>
       </div>
       {error && <p className="tr-empty">{error}</p>}
-      {!data && !error && <p className="tr-empty">불러오는 중…</p>}
+      {/* 11/17: 글자 한 줄 대신 목록 자리를 미리 그려 둔다 (빈 화면처럼 보이지 않게). 보통 1초 안 */}
+      {!data && !error && (
+        <ol className="tr-list tr-wait" aria-label="요즘 뜨는 기술을 불러오는 중">
+          {[86, 70, 78, 62, 74, 58].map((w, i) => (
+            <li key={i} aria-hidden="true">
+              <span className="ka-bar" style={{ width: `${w}%` }} />
+              <span className="ka-bar" style={{ width: `${w - 30}%`, height: 8 }} />
+            </li>
+          ))}
+        </ol>
+      )}
       {data && !list.length && <p className="tr-empty">아직 찾은 기술이 없어요</p>}
       <ol ref={listRef} className="tr-list">
         {list.map((r, i) => {

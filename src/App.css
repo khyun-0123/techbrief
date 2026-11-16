@@ -6050,6 +6050,97 @@ a.brand:focus-visible {
   color: var(--tb-color-text-sub);
   font-size: 12px;
 }
+/* 예상 시간 막대 (11/17): 보통 걸리는 시간에 맞춰 차고, 넘으면 끝을 모르는 움직이는 막대 */
+.eta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+}
+.eta-track {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--tb-color-bg-strong);
+}
+.eta-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  border-radius: 2px;
+  background: var(--tb-color-text-sub);
+  transition: width 1s linear;
+}
+.eta.is-over .eta-fill {
+  width: 30%;
+  animation: eta-slide 1.4s ease-in-out infinite;
+}
+@keyframes eta-slide {
+  from { left: -30%; }
+  to { left: 100%; }
+}
+.eta-text {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.eta .ka-wait-note {
+  grid-column: 1 / -1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .eta-fill,
+  .eta.is-over .eta-fill {
+    transition: none;
+    animation: none;
+  }
+}
+/* 맵 기다리는 자리 (11/17) */
+.km-wait {
+  display: grid;
+  gap: 10px;
+}
+.km-wait-art {
+  position: relative;
+  height: 180px;
+  border-radius: 12px;
+  background: var(--tb-color-bg);
+}
+.km-wait-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: var(--tb-color-bg-strong);
+  transform: rotate(var(--a)) translateX(64px);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.km-wait-dot.is-center {
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  transform: none;
+}
+/* 요즘 뜨는 기술 · 바로 볼 수 있는 분석 자리 (11/17) */
+.tr-wait li {
+  padding: 8px 0;
+}
+.dash-ready-item.is-wait {
+  height: 34px;
+  border-color: transparent;
+  background: var(--tb-color-bg-strong);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .km-wait-dot,
+  .dash-ready-item.is-wait {
+    animation: none;
+  }
+}
 .ka-glance.is-waiting {
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
