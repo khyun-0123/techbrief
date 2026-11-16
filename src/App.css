@@ -7380,8 +7380,15 @@ a.brand:focus-visible {
   text-decoration-thickness: 2px;
   text-underline-offset: 4px;
 }
+/* 11/15: 누르면 생기던 네모 테두리 없앰. 키보드 초점은 밑줄로 */
+.km-cloud .km-word:focus,
 .km-cloud .km-word:focus-visible {
-  outline: 2px solid var(--tb-color-line-focus);
+  outline: none;
+}
+.km-cloud .km-word:focus-visible {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
 }
 .km-large {
   flex: 1;
@@ -7566,6 +7573,10 @@ a.brand:focus-visible {
   font-size: var(--fs-sm);
   text-align: center;
   pointer-events: none;
+}
+/* 11/15: 표시 설정 창이 펼쳐져 있으면 안내를 창 오른쪽 빈자리로 (좁은 칸에서는 절반까지만) */
+.km-panel[data-collapsed='false'] ~ .km-empty {
+  padding-left: min(340px, 50%);
 }
 /* 범례 · 단추 */
 .km-legend {
