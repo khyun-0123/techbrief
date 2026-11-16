@@ -63,8 +63,8 @@ export function pickMaterials(articles, terms = [], opt = AUTO_PICK) {
 // 기사 날짜로 기간 글자: 「11. 1. ~ 11. 8. 기사」 (ReportComposer와 같은 규칙)
 export function periodLabelOf(articles) {
   const times = articles.map((a) => Date.parse(a.publishedAt ?? '')).filter(Number.isFinite)
-  if (!times.length) return '기사 기준'
+  if (!times.length) return '자료 기준'
   const f = (t) => new Date(t).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
   const [lo, hi] = [f(Math.min(...times)), f(Math.max(...times))]
-  return lo === hi ? `${lo} 기사` : `${lo} ~ ${hi} 기사`
+  return lo === hi ? `${lo} 자료` : `${lo} ~ ${hi} 자료`
 }

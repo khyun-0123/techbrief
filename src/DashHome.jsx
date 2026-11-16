@@ -32,7 +32,7 @@ function DashHome({ issues, reports, onOpenReport, onGoReports, onGoCollect }) {
   return (
     <div className="dash-home">
       <HomeBox
-        title="최근 중요 기사"
+        title="최근 중요 자료"
         sub={list.length > 0 ? `최근 48시간 · 중요도 순 ${list.length}건` : '최근 48시간 · 중요도 순'}
         className="is-articles"
         action={
@@ -44,7 +44,7 @@ function DashHome({ issues, reports, onOpenReport, onGoReports, onGoCollect }) {
         }
       >
         {list.length === 0 ? (
-          <p className="dash-home-empty">최근 48시간에 모은 기사가 없어요. 자동 최신화가 켜져 있는지 확인해 주세요.</p>
+          <p className="dash-home-empty">최근 48시간에 모은 자료가 없어요. 자동 최신화가 켜져 있는지 확인해 주세요.</p>
         ) : (
           <ul className="dash-home-list">
             {list.map((a) => (

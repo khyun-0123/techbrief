@@ -27,7 +27,7 @@ function CorpusLine({ c }) {
       {c.lastRun && ` · 마지막 ${JOB[c.lastJob] ?? c.lastJob} ${formatAt(c.lastRun)} ${c.lastSaved ?? 0}편`}
       {c.stopped && <span className="adm-state bad"> · {c.stopped}</span>}
       {c.error && <span className="adm-state bad"> · 오류 {c.error}</span>}
-      . 「뉴스·논문에서 찾기」는 이 DB에서 먼저 찾고, 맞는 논문이 적으면 아래 출처로 찾아요.
+      . 「논문 · 뉴스에서 찾기」는 이 DB에서 먼저 찾고, 맞는 논문이 적으면 아래 출처로 찾아요.
     </p>
   )
 }

@@ -257,7 +257,7 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
               {/* 선별에 남은 기사 묻기: 큰 상자 대신 제목 줄 오른쪽 한 줄 (11/09 조장: 보고서 위 자리를 너무 차지함) */}
               {askCleanup && (
                 <div className="cleanup-ask" role="status">
-                  <span title="이 보고서에 쓴 기사가 아직 선별 목록에 있어요">
+                  <span title="이 보고서에 쓴 자료가 아직 선별 목록에 있어요">
                     선별에 남은 기사 <strong>{leftover.length}건</strong>
                   </span>
                   <button type="button" className="cleanup-btn primary" onClick={() => answerCleanup('archive')} title="「보관」 폴더로 옮겨요 (선별에는 남음)">
@@ -381,7 +381,7 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
               {VIEWS.find(([id]) => id === view)?.[1]} <span className="mr-total">{results.length}건</span>
             </h2>
             <div className="field-clear mr-search">
-              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목 · 본문 · 근거 기사에서 찾기" aria-label="보고서 찾기" />
+              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목 · 본문 · 근거 자료에서 찾기" aria-label="보고서 찾기" />
             </div>
             <Seg value={sort} onChange={setSort} label="정렬" size="lg" options={SORTS.map(([value, label]) => ({ value, label }))} />
           </div>

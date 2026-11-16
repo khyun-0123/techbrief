@@ -8,7 +8,7 @@ const ITEM_LABELS = [
   ['effect', '효과성'],
 ]
 const BASIS_LABEL = {
-  article: '기사 근거',
+  article: '자료 근거',
   ai_background: 'AI 보충 · 확인 필요',
   ai_suggestion: 'AI 제안',
 }

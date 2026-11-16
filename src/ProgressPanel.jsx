@@ -91,7 +91,7 @@ function ReportJobs({ jobs, onAnswer, onCancel, onOpenReport, onHide }) {
         <li key={j.id} className={`progress-item status-${j.status}`}>
           <div className="progress-row">
             <span className="progress-title" title={j.title}>
-              보고서 「{j.title}」 <small>· 기사 {j.count}건 · {j.levelLabel}</small>
+              보고서 「{j.title}」 <small>· 자료 {j.count}건 · {j.levelLabel}</small>
             </span>
             <span className="progress-status">
               {REPORT_STATUS[j.status]}
@@ -116,12 +116,12 @@ function ReportJobs({ jobs, onAnswer, onCancel, onOpenReport, onHide }) {
           {j.status === 'need_confirm' && j.question && (
             <div className="job-question">
               <p>
-                보충에 쓸 만한 <strong>요약 안 된 기사 {j.question.count}건</strong>이 있어요. 요약해서 쓸까요? (약 {j.question.minutes}분 더 걸려요)
+                보충에 쓸 만한 <strong>요약 안 된 자료 {j.question.count}건</strong>이 있어요. 요약해서 쓸까요? (약 {j.question.minutes}분 더 걸려요)
               </p>
               <ul>
                 {j.question.items.slice(0, 4).map((it) => (
                   <li key={it.title}>
-                    {it.external === 'news' ? '[새로 찾은 기사] ' : ''}
+                    {it.external === 'news' ? '[새로 찾은 자료] ' : ''}
                     {it.title} <span className="hint">· {it.source}</span>
                   </li>
                 ))}

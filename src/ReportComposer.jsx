@@ -1,7 +1,7 @@
 // 보고서 칸 (선별·요약 오른쪽, 11/08 조장)
 // 작성: ① 보고서 제목 ② 보고서 방향(한 줄, AI 지시문에 들어감) ③ 자료 조사 수준 → 「보고서 만들기」는 서버 대기열에 넣는다
 //       다른 탭에 가도 오른쪽 아래 진행 창에서 진행 상황을 보고, 요약 안 된 기사를 써야 하면 거기서 묻는다
-// 미리보기: 체크한 기사 요약이 섹션별로 어떻게 들어가는지 (재료 미리보기). 만든 보고서는 보고서함에서 본다
+// 미리보기: 체크한 자료 요약이 섹션별로 어떻게 들어가는지 (재료 미리보기). 만든 보고서는 보고서함에서 본다
 // 기간: 예전에는 「오늘 · 이번 주 · 이번 달」을 골랐지만 보고서 머리글에만 붙는 글자였다 → 기사 날짜로 자동 (11/8)
 import { useState } from 'react'
 import { createReportJob } from './api.js'
@@ -19,9 +19,9 @@ const REPORT_MAX_ALL = 40
 const ACTIVE = ['queued', 'running', 'need_confirm']
 
 const LEVELS = [
-  ['selected', '선택한 자료만', '체크한 기사만으로 써요. 가장 빨라요.'],
-  ['owned', '보유 자료까지', '근거가 없는 「AI 해설」 줄을 우리가 모은 기사 · 원문 · 직접 추가 자료 · 위키백과로 보충해요.'],
-  ['research', '추가 자료 조사까지', '보유 자료에 더해 네이버 뉴스 · 논문에서 새로 찾아 요약해 참고자료로 써요. 가장 오래 걸려요.'],
+  ['selected', '선택한 자료만', '체크한 자료만으로 써요. 가장 빨라요.'],
+  ['owned', '보유 자료까지', '근거가 없는 「AI 해설」 줄을 우리가 모은 자료 · 원문 · 직접 추가 자료 · 위키백과로 보충해요.'],
+  ['research', '추가 자료 조사까지', '보유 자료에 더해 논문 · 뉴스에서 새로 찾아 요약해 참고자료로 써요. 가장 오래 걸려요.'],
 ]
 
 function topByImportance(articles, limit) {
@@ -37,10 +37,10 @@ function topByImportance(articles, limit) {
 // 기사 날짜로 기간 글자 만들기: 「11. 1. ~ 11. 8. 기사」
 function periodOf(articles) {
   const times = articles.map((a) => (a.publishedAt ? Date.parse(a.publishedAt) : Date.now() - (a.hoursAgo ?? 0) * 3600_000)).filter(Number.isFinite)
-  if (!times.length) return '기사 기준'
+  if (!times.length) return '자료 기준'
   const f = (t) => new Date(t).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
   const [lo, hi] = [f(Math.min(...times)), f(Math.max(...times))]
-  return lo === hi ? `${lo} 기사` : `${lo} ~ ${hi} 기사`
+  return lo === hi ? `${lo} 자료` : `${lo} ~ ${hi} 자료`
 }
 
 // 재료 미리보기: 보고서를 만들기 전, 체크한 기사의 요약이 섹션마다 어떤 재료로 들어가는지 (예전 보고서 초안 화면의 미리보기)
@@ -50,7 +50,7 @@ const SECTION_PLAN = [
   ['업계 동향', '타사의 개발 · 활용 현황과 장단점', [['competitors', '타사 현황'], ['pros_cons', '장단점']]],
   ['시사점', '우리 회사 활용 방안과 기대 효과', [['application', '활용 방안'], ['effect', '효과성']]],
 ]
-const BASIS_SHORT = { article: '기사 근거', ai_background: 'AI 보충', ai_suggestion: 'AI 제안' }
+const BASIS_SHORT = { article: '자료 근거', ai_background: 'AI 보충', ai_suggestion: 'AI 제안' }
 
 function MaterialsPreview({ articles, aiSummaries, title, direction, jobs }) {
   return (
@@ -183,7 +183,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
         <div className="composer-title">
           <h2>보고서</h2>
           {matching && (
-            <button type="button" className="composer-made" onClick={() => onOpenReport?.(matching.id)} title="지금 체크한 기사로 만든 보고서가 있어요 — 내 보고서에서 열기">
+            <button type="button" className="composer-made" onClick={() => onOpenReport?.(matching.id)} title="지금 체크한 자료로 만든 보고서가 있어요 — 내 보고서에서 열기">
               ✓ 만든 보고서 있음 · 보기
             </button>
           )}
@@ -198,7 +198,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
             aria-selected={view === 'preview'}
             className={view === 'preview' ? 'active' : ''}
             onClick={() => setView('preview')}
-            title="체크한 기사 요약이 섹션별로 어떻게 들어가는지 미리 보기"
+            title="체크한 자료 요약이 섹션별로 어떻게 들어가는지 미리 보기"
           >
             미리보기
           </button>
@@ -288,11 +288,11 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
                   </span>
                 </label>
               ))}
-              <p className="hint">요약이 안 된 기사를 써야 하면 만드는 중에 오른쪽 아래 진행 창에서 물어봐요.</p>
+              <p className="hint">요약이 안 된 자료를 써야 하면 만드는 중에 오른쪽 아래 진행 창에서 물어봐요.</p>
             </fieldset>
 
             {tooMany && (
-              <div className="report-mode-choices" role="radiogroup" aria-label="기사가 많을 때">
+              <div className="report-mode-choices" role="radiogroup" aria-label="자료가 많을 때">
                 <button type="button" role="radio" aria-checked={mode === 'top'} className="report-mode-choice" onClick={() => setMode('top')}>
                   <strong>중요도 높은 {REPORT_LIMIT}건으로</strong>
                   <span>빠름. 나머지 {picked.length - REPORT_LIMIT}건은 빠져요.</span>
@@ -307,12 +307,12 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
 
           <div className="composer-articles">
             <div className="composer-articles-head">
-              <h3>담길 기사 {articles.length}건</h3>
+              <h3>담길 자료 {articles.length}건</h3>
               {articles.length > 0 && <span className="hint">{periodOf(articles)}</span>}
               {folderSummary && <span className="hint">· {folderSummary}</span>}
             </div>
             {picked.length === 0 ? (
-              <p className="hint">선별 기사 목록에서 보고서에 넣을 기사를 체크하세요. 여러 폴더의 기사를 함께 넣을 수 있어요.</p>
+              <p className="hint">선별 목록에서 보고서에 넣을 자료를 체크하세요. 여러 폴더의 자료를 함께 넣을 수 있어요.</p>
             ) : (
               <ol>
                 {articles.map((a, i) => {
@@ -329,7 +329,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
                 })}
               </ol>
             )}
-            {leftOut.length > 0 && <p className="hint">이번 초안에서 빠지는 기사 {leftOut.length}건 (중요도 낮은 순)</p>}
+            {leftOut.length > 0 && <p className="hint">이번 초안에서 빠지는 자료 {leftOut.length}건 (중요도 낮은 순)</p>}
           </div>
 
           <div className="composer-foot">
@@ -353,8 +353,8 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
               </p>
             )}
             {error && <p className="ai-error" role="alert">{error}</p>}
-            <button type="button" className="btn primary composer-go" onClick={handleSend} disabled={!canSend} title={aiBlocked ? AI_BLOCKED_TITLE : picked.length === 0 ? '왼쪽에서 보고서에 넣을 기사를 체크하세요' : undefined}>
-              {sending ? '대기열에 넣는 중…' : `체크한 기사 ${articles.length}건으로 보고서 만들기`}
+            <button type="button" className="btn primary composer-go" onClick={handleSend} disabled={!canSend} title={aiBlocked ? AI_BLOCKED_TITLE : picked.length === 0 ? '왼쪽에서 보고서에 넣을 자료를 체크하세요' : undefined}>
+              {sending ? '대기열에 넣는 중…' : `체크한 자료 ${articles.length}건으로 보고서 만들기`}
             </button>
             <p className="hint composer-go-note">대기열에 들어가요. 다른 탭에 가도 오른쪽 아래 진행 창에서 볼 수 있고, 완성되면 「내 보고서」에 저장돼요.</p>
           </div>
