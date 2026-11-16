@@ -874,16 +874,21 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
                   <span className="km-note">중요도 정보가 아직 없어 함께 나온 순으로 보여요</span>
                 )}
               </div>
-              {catCounts.length > 0 && (
-                <div className="km-ctl">
-                  <span className="km-lbl">기술 분류</span>
-                  <Dropdown value={cat} onChange={setCatPick} label="기술 분류" size="md" options={[{ value: 'all', label: '전체' }, ...catCounts.map(([c, n]) => ({ value: c, label: `${c} (${n})` }))]} />
-                </div>
-              )}
-              {kindCounts.length > 1 && (
-                <div className="km-ctl">
-                  <span className="km-lbl">종류</span>
-                  <Dropdown value={kind} onChange={setKindPick} label="종류" size="md" options={[{ value: 'all', label: '전체' }, ...kindCounts.map(([k, n]) => ({ value: k, label: `${KIND_LABEL[k]} (${n})` }))]} />
+              {/* 11/17: 기술 분류 · 종류는 한 줄에 (창 높이를 줄여 대시보드 칸에서도 아래가 잘리지 않게) */}
+              {(catCounts.length > 0 || kindCounts.length > 1) && (
+                <div className="km-prow">
+                  {catCounts.length > 0 && (
+                    <div className="km-ctl">
+                      <span className="km-lbl">기술 분류</span>
+                      <Dropdown value={cat} onChange={setCatPick} label="기술 분류" size="sm" options={[{ value: 'all', label: '전체' }, ...catCounts.map(([c, n]) => ({ value: c, label: `${c} (${n})` }))]} />
+                    </div>
+                  )}
+                  {kindCounts.length > 1 && (
+                    <div className="km-ctl">
+                      <span className="km-lbl">종류</span>
+                      <Dropdown value={kind} onChange={setKindPick} label="종류" size="sm" options={[{ value: 'all', label: '전체' }, ...kindCounts.map(([k, n]) => ({ value: k, label: `${KIND_LABEL[k]} (${n})` }))]} />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
