@@ -50,19 +50,59 @@ function WaitSteps({ steps, note }) {
   )
 }
 
-function GlanceWait({ startedAt }) {
+// 예상 시간 막대 (11/17 조장: 「빈 화면이면 이상하게 생각할 수 있다 — 시간 예측해서 로딩되는 걸 보여 주자」)
+// 퍼센트 숫자는 쓰지 않는다(서버도 진행률을 모름, 위 11/11 원칙). 대신 「보통 걸리는 시간」을 기준으로 막대가 차고,
+// 그 시간을 넘으면 끝을 모르는 움직이는 막대로 바꾸고 이유를 알린다. 막대 옆 글자는 실제로 지난 초와 보통 시간
+function EtaBar({ startedAt, expect, label = '보통', slowNote }) {
   const s = secs(startedAt, useNow(true))
-  const slow = s >= 60
+  const over = s >= expect
+  const pct = Math.min(92, Math.round((s / expect) * 100))
+  return (
+    <div className={over ? 'eta is-over' : 'eta'}>
+      <span className="eta-track" aria-hidden="true">
+        <span className="eta-fill" style={over ? undefined : { width: `${pct}%` }} />
+      </span>
+      <span className="eta-text">
+        {s}초째 · {label} {expect}초 안팎
+      </span>
+      {over && slowNote && <p className="ka-wait-note">{slowNote}</p>}
+    </div>
+  )
+}
+
+// 맵을 기다리는 자리 (11/17): 글자 한 줄만 있어 빈 화면처럼 보였음 → 단계 · 예상 시간 · 맵 자리
+function MapWait({ startedAt }) {
+  return (
+    <div className="km-wait">
+      <WaitSteps
+        steps={[
+          ['now', '뉴스 · 모은 기사에서 함께 나온 말 세기 (형태소 분석)'],
+          ['next', '볼 범위 추천 개수 고르기'],
+        ]}
+      />
+      <EtaBar startedAt={startedAt} expect={5} label="처음 보는 말은" slowNote="평소보다 오래 걸려요. 네이버 응답을 기다리는 중일 수 있어요. 미리 분석된 말(아래 「바로 볼 수 있는 분석」)은 바로 떠요." />
+      <div className="km-wait-art" aria-hidden="true">
+        <span className="km-wait-dot is-center" />
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <span key={i} className="km-wait-dot" style={{ '--a': `${i * 60}deg` }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function GlanceWait({ startedAt }) {
   return (
     <div className="ka-glance is-waiting">
       <WaitSteps
         steps={[
           ['done', '논문 · 특허 숫자 받기'],
-          ['now', `AI가 근거 논문을 읽고 흐름을 정리하는 중 · ${s}초째 ${slow ? '(평소보다 오래 걸려요. AI 서버에 다른 작업이 있을 수 있어요)' : '(보통 30초 안팎)'}`],
+          ['now', 'AI가 근거 논문을 읽고 흐름을 정리하는 중'],
           ['next', '전망 · 우리가 볼 것'],
         ]}
-        note="기다리지 않아도 돼요. 다른 키워드나 화면을 보고 있으면, 끝났을 때 오른쪽 아래 「AI 작업 진행」 창에서 알려 드려요."
       />
+      <EtaBar startedAt={startedAt} expect={30} slowNote="평소보다 오래 걸려요. AI 서버에 다른 작업이 있을 수 있어요." />
+      <p className="ka-wait-note">기다리지 않아도 돼요. 다른 키워드나 화면을 보고 있으면, 끝났을 때 오른쪽 아래 「AI 작업 진행」 창에서 알려 드려요.</p>
       <div className="ka-skeleton" aria-hidden="true">
         {['전망', '우리가 볼 것'].map((h) => (
           <div key={h}>
@@ -172,7 +212,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
     return () => window.removeEventListener('keydown', esc)
   }, [bigMap])
   const [dataStartedAt] = useState(() => Date.now())
-  const now = useNow(!data && !error)
+  const [relatedStartedAt] = useState(() => Date.now())
   // AI 흐름 정리는 숫자를 받은 뒤 시작 (앱 전체에서 기다림: 이 칸을 닫아도 끝나면 진행 창이 알림, storyJobs.js)
   const job = useStory(keyword, Boolean(data))
 
@@ -397,7 +437,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
                   <p className="hint">함께 나온 말이 충분하지 않아요 (이슈 {related.issues}개). 「{keyword}」만으로 찾아요.</p>
                 )
               ) : (
-                <p className="hint">{relatedError || '함께 나온 말을 세는 중…'}</p>
+                relatedError ? <p className="hint">{relatedError}</p> : <MapWait startedAt={relatedStartedAt} />
               )}
             </div>
           ),
@@ -424,10 +464,11 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
                 <>
                   <WaitSteps
                     steps={[
-                      ['now', `논문 · 특허 숫자 받기 · ${secs(dataStartedAt, now)}초째 (처음 보는 말은 10초 안팎)`],
+                      ['now', '논문 · 특허 숫자 받기'],
                       ['next', 'AI가 흐름 정리 (보통 30초 안팎)'],
                     ]}
                   />
+                  <EtaBar startedAt={dataStartedAt} expect={10} label="처음 보는 말은" slowNote="평소보다 오래 걸려요. 논문 DB(OpenAlex) 응답을 기다리는 중일 수 있어요." />
                   <div className="ka-sparks ka-skeleton" aria-hidden="true">
                     {['논문 수', '기업 저자 비율', '특허 공개 수'].map((t) => (
                       <div key={t} className="ka-spark-wait">
