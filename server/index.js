@@ -399,6 +399,30 @@ async function checkRunCooldown(req) {
 // 1) Sec-Fetch-Site가 있으면 same-origin(이 화면) · none(사용자가 직접 연 것)만 받는다 (포트까지 구분)
 // 2) 없으면(오래된 브라우저) Origin의 주소:포트가 Host와 같아야 한다
 // 3) 둘 다 없으면 브라우저가 아닌 요청(curl · 스크립트)이라 통과 — 쿠키를 대신 실어 보내는 공격이 아님
+// 자료 현황 목록을 화면용으로 가볍게 (11/17, 39 문서 B: 4MB 넘게 받아 브라우저가 무거웠음)
+// - 중요도 세부(scoreParts)에서 서버만 쓰는 원점수(raw)를 빼고, 모든 자료에 같은 배점(max) · 기준(high)은 한 번만(rule)
+// - 비어 있거나 기본값인 칸(false · null · 빈 목록 · 배수 1)은 뺀다 → 화면(App.jsx)이 rule을 다시 붙인다
+const lightCache = new WeakMap()
+function lightParts(p) {
+  if (!p) return p
+  const out = {}
+  for (const [k, v] of Object.entries(p)) {
+    if (k === 'raw' || k === 'max' || k === 'high') continue
+    if (v === null || v === false || v === undefined || (Array.isArray(v) && !v.length)) continue
+    if ((k === 'weight' || k === 'noise') && v === 1) continue
+    out[k] = v
+  }
+  return out
+}
+function lightList(list) {
+  const sample = list.articles.find((a) => a.scoreParts?.max)
+  return {
+    ...list,
+    rule: sample ? { max: sample.scoreParts.max, high: sample.scoreParts.high } : null,
+    articles: list.articles.map((a) => (a.scoreParts && !a.paper ? { ...a, scoreParts: lightParts(a.scoreParts) } : a)),
+  }
+}
+
 function cleanQueries(list, max) {
   return [...new Set(list.map((q) => String(q).trim().slice(0, 50)).filter(Boolean))].slice(0, max)
 }
@@ -775,7 +799,15 @@ async function handleApiInner(req, res) {
       return send(res, 200, saved)
     }
     if (req.method === 'GET' && req.url === '/api/articles') {
-      return send(res, 200, await listArticles())
+      // 11/17 (39 문서 B): 화면용으로 가볍게 — 미리 계산한 목록마다 한 번만 만들어 두고 그대로 보낸다
+      const list = await listArticles()
+      let body = lightCache.get(list)
+      if (!body) {
+        body = JSON.stringify(lightList(list))
+        lightCache.set(list, body)
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
+      return res.end(body)
     }
     if (req.method === 'GET' && req.url === '/api/keywords') {
       return send(res, 200, { stored: dbEnabled(), keywords: dbEnabled() ? await getKeywords() : [] })
