@@ -829,6 +829,25 @@ async function handleApiInner(req, res) {
       const term = new URLSearchParams(req.url.split('?')[1] ?? '').get('q')
       return send(res, 200, await lookupWiki(term))
     }
+    // 담당자(보고서팀) PPT 양식으로 내려받기 (11/17, 39 문서 E): 4:3 · 본문 1장 + 유첨 4장 (templates/report-template.pptx와 같은 칸)
+    // 옮기는 규칙 server/reportToTemplate.js · 그리는 것 scripts/report-template.mjs(보고서팀). 못 채운 칸은 X-Report-Notes 머리글로 알림
+    if (req.method === 'GET' && req.url.startsWith('/api/reports/pptx?')) {
+      const id = new URL(req.url, 'http://x').searchParams.get('id')
+      const list = dbEnabled() ? await listReports(1000, { ip: clientIp(req) }) : []
+      const entry = list.find((e) => String(e.id) === String(id))
+      if (!entry) return send(res, 404, { error: '보고서를 찾지 못했어요.' })
+      const { reportToTemplate } = await import('./reportToTemplate.js')
+      const { renderPptx } = await import('../scripts/report-template.mjs')
+      const data = reportToTemplate(entry)
+      const buf = await renderPptx(data)
+      const name = encodeURIComponent(`${(entry.report?.title ?? '보고서').replace(/[\\/:*?"<>|]/g, '_')}_담당자양식.pptx`)
+      res.writeHead(200, {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'Content-Disposition': `attachment; filename*=UTF-8''${name}`,
+        'X-Report-Notes': encodeURIComponent(JSON.stringify(data._notes ?? [])),
+      })
+      return res.end(buf)
+    }
     if (req.method === 'GET' && req.url === '/api/reports') {
       return send(res, 200, { stored: dbEnabled(), trashDays: await trashDays(), reports: dbEnabled() ? await listReports(200, { ip: clientIp(req) }) : [] })
     }

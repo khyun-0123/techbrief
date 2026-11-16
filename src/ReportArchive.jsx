@@ -489,6 +489,10 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
                                   <button type="button" role="menuitem" disabled={busy} onClick={() => download(r, 'pptx')}>
                                     PPT (4:3 가로)
                                   </button>
+                                  {/* 11/17 (39 문서 E): 보고서팀 담당자 양식 — 본문 1장 + 유첨 4장, 칸 이름이 붙은 PPT (서버가 만듦) */}
+                                  <a role="menuitem" className="mr-menu-link" href={`/api/reports/pptx?id=${encodeURIComponent(r.id)}`} download title="본문 1장 + 유첨 4장(상세 분석 · 트렌드 그래프 · 출처 목록 · 원문 요약), 칸 이름이 붙어 있어 고쳐 쓰기 쉬워요">
+                                    PPT (담당자 양식 · 본문 1장 + 유첨)
+                                  </a>
                                   <button type="button" role="menuitem" disabled={busy} onClick={() => download(r, 'copy')}>
                                     텍스트 복사
                                   </button>
