@@ -2,7 +2,7 @@
 // API만 따로 시험할 때: npm run server. 키는 .env.local에서 읽고 브라우저로 보내지 않는다
 import { createServer } from 'node:http'
 import { pathToFileURL } from 'node:url'
-import { collect, getSources, listArticles, saveSources, searchArticles, searchCollected } from './collector/index.js'
+import { collect, getSources, listArticles, markListStale, saveSources, searchArticles, searchCollected } from './collector/index.js'
 import { englishTerms, frequentSearches, listQueryTerms, pruneSearchCounts, recordSearch, setQueryTerms } from './queryTerms.js'
 import { feedList } from './collector/feeds.js'
 import { getTrends } from './trends.js'
@@ -361,6 +361,7 @@ export function startScheduler() {
     .then((id) => id && selectProvider(id))
     .catch((err) => console.warn(`[llm] 저장된 AI 서버를 쓸 수 없어 기본값으로: ${err.message}`))
   startRefreshScheduler()
+  listArticles().catch(() => {}) // 11/17: 자료 현황 목록을 켜질 때 미리 계산해 둔다 (첫 화면이 계산을 기다리지 않게)
   startTechTrends() // 기술 트렌드: 켜진 뒤 1분, 그 뒤 하루마다 (TECH_TRENDS=off면 안 함)
   startCorpus() // 디스플레이 논문 DB: 켜진 뒤 3분, 그 뒤 6시간마다 (PAPER_CORPUS=off면 안 함, papers/corpus.js)
   startPrecompute() // 기술 시계열 미리 분석: 켜진 뒤 10분, 그 뒤 6시간마다 (TIMELINE_PRECOMPUTE=off면 안 함, timelineJobs.js)
@@ -745,6 +746,7 @@ async function handleApiInner(req, res) {
       const admin = requireAdmin(req)
       const before = await loadImportanceRule({ fresh: true })
       const rule = await saveImportanceRule(await readJson(req), admin?.name)
+      markListStale() // 11/17: 목록 점수를 새 기준으로 다시 계산 (끝날 때까지는 기존 점수)
       await logChange(admin, '중요도 기준', `${describeRule(before)} → ${describeRule(rule)}`)
       return send(res, 200, { rule, history: await ruleHistory() })
     }
@@ -782,6 +784,7 @@ async function handleApiInner(req, res) {
       const admin = requireAdmin(req)
       const before = await getLists()
       const saved = await saveLists(await readJson(req))
+      markListStale() // 경쟁사 · 관심 기술이 바뀌면 중요도도 바뀜
       const names = { own: '자사·자회사', competitors: '경쟁사', interests: '관심 기술' }
       for (const [key, label] of Object.entries(names)) {
         const d = diffWords(before[key], saved[key])

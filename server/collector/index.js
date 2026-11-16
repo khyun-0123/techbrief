@@ -2,7 +2,7 @@
 // 저장: DATABASE_URL이 있으면 PostgreSQL, 없으면 서버 메모리 (서버를 끄면 비워짐)
 import { dbEnabled, query } from '../db/index.js'
 import { getSetting, setSetting } from '../db/store.js'
-import { groupArticles, isRerun, sameIssue, titleGrams } from './dedupe.js'
+import { findReruns, groupArticles, sameIssue, titleGrams } from './dedupe.js'
 import { collectFeeds, FEEDS, PAPER_KEYWORD_DAYS, tierOf } from './feeds.js'
 import { searchNews } from './naver.js'
 import { findMention, getLists } from './lists.js'
@@ -290,7 +290,7 @@ function toIssues(stored, lists, ctx = { rising: [], older: [] }) {
   // 재탕: 이 이슈보다 48시간 넘게 앞서 나온 비슷한 제목(목록 안 다른 이슈 + 그 전 21일) (dedupe.js isRerun)
   const keyed = pairs.map(([rep]) => ({ id: rep.id, time: Date.parse(rep.publishedAt), grams: titleGrams(rep.fullTitle ?? rep.title) }))
   const earlierPool = [...ctx.older, ...keyed]
-  const reruns = new Set(keyed.filter((k) => isRerun(k, earlierPool)).map((k) => k.id))
+  const reruns = findReruns(keyed, earlierPool) // 11/16: 색인으로 (예전 isRerun 이슈마다 → 3.9초, 결과는 같음)
   return pairs
     .map(([groupRep, group]) => {
       // 출처 단계 (14 문서 4-B): 1차 기업·학회·논문 / 2차 전문매체 / 3차 일반 뉴스
@@ -337,10 +337,61 @@ function toIssues(stored, lists, ctx = { rising: [], older: [] }) {
     .sort((x, y) => y.publishedAt.localeCompare(x.publishedAt))
 }
 
+// ── 목록 미리 계산 (11/17 조장: 「통째로 다시 계산하지 말고 미리 점수를 매겨 두고 그걸 보여 주자. 주기적으로 다시 매기고,
+//    새로 매기는 동안에는 기존 점수를 보여 주다가 끝나면 새 값으로 바꾼다」) ──
+// - 화면 목록(7일)은 계산해 둔 값(스냅숏)을 바로 돌려준다. 열 때마다 다시 계산하지 않는다
+// - 다시 계산하는 때: 수집이 끝났을 때(새 기사 · 묶음), 관리 페이지에서 중요도 기준 · 회사 목록을 바꿨을 때(markListStale),
+//   만든 지 SNAP_TTL이 지났을 때(최신성 점수 · 요즘 뜨는 기술 반영). 다시 계산하는 동안에는 기존 값을 그대로 주고, 끝나면 바꾼다
+// - 동시에 여러 요청이 와도 계산은 하나만 돈다 (예전: 화면을 열면 같은 계산이 2번 겹쳐 「요즘 뜨는 기술」까지 8초 늦게 떴음)
+// - 앱마다 메모리에 둔다. 다른 앱이 수집한 것은 SNAP_TTL 안에 반영된다 (3038이 수집 담당)
+// - DB에 점수를 저장하는 일(맵 「중요도순」 등에 쓸 값)은 37 문서 P2-1~P2-3에서 따로 한다
+const SNAP_TTL = 10 * 60_000 // 점수 재료(scoreContext)의 기억 시간과 같게
+const snap = (globalThis.__listSnapshot ??= { value: null, at: 0, gen: 0, running: null })
+
 // 대표 기사 목록 (최근 LIST_DAYS일)
 // regroup: 수집 직후처럼 기사가 바뀌었을 때 묶음을 다시 저장. 묶음이 없는 기사가 있어도 (처음 켰을 때) 다시 묶는다
-// days: 기본은 화면 목록 기간(7일). 자동 요약은 관리자가 정한 기간으로 부른다 (11/08)
-export async function listArticles({ regroup = false, days = LIST_DAYS } = {}) {
+// days: 기본은 화면 목록 기간(7일). 자동 요약은 관리자가 정한 기간으로 부른다 (11/08) — 이때는 미리 계산한 값을 쓰지 않는다
+// fresh: 미리 계산한 값을 쓰지 않고 지금 다시 계산 (계산이 끝나면 미리 계산한 값도 바꾼다)
+export async function listArticles({ regroup = false, days = LIST_DAYS, fresh = false } = {}) {
+  if (days !== LIST_DAYS) return computeList({ regroup, days })
+  if (regroup || fresh) {
+    snap.gen += 1
+    return rebuildList({ regroup })
+  }
+  if (!snap.value) return rebuildList()
+  if (snap.dirty || Date.now() - snap.at > SNAP_TTL) rebuildList().catch((err) => console.warn(`[list] 목록 다시 계산 실패: ${err.message}`))
+  return snap.value
+}
+
+// 기준이 바뀌었을 때 (관리 페이지): 다음 요청부터 뒤에서 다시 계산. 그동안은 기존 값
+export function markListStale() {
+  snap.gen += 1
+  snap.dirty = true
+  rebuildList().catch((err) => console.warn(`[list] 목록 다시 계산 실패: ${err.message}`))
+}
+
+// 하나만 돌린다. 도는 중에 기준이 바뀌었으면(gen) 끝난 뒤 한 번 더
+function rebuildList({ regroup = false } = {}) {
+  if (snap.running && !regroup) return snap.running
+  const gen = snap.gen
+  const run = (snap.running ?? Promise.resolve())
+    .catch(() => {})
+    .then(() => computeList({ regroup }))
+    .then((value) => {
+      snap.value = value
+      snap.at = Date.now()
+      snap.dirty = snap.gen !== gen
+      return value
+    })
+    .finally(() => {
+      if (snap.running === run) snap.running = null
+      if (snap.dirty) rebuildList().catch(() => {})
+    })
+  snap.running = run
+  return run
+}
+
+async function computeList({ regroup = false, days = LIST_DAYS } = {}) {
   let stored = dbEnabled() ? await loadRecentFromDb(days) : [...memory.values()]
   if (dbEnabled() && (regroup || stored.some((a) => !a.groupId))) stored = await regroupDb(stored)
   const articles = toIssues(stored, await getLists(), await scoreContext())

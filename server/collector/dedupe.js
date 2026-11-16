@@ -42,6 +42,44 @@ export function isRerun(item, earlier) {
   return earlier.some((e) => item.time - e.time > MIN_GAP_HOURS * 3600_000 && jaccard(item.grams, e.grams) >= SIMILARITY)
 }
 
+// 재탕인 것들의 id를 한 번에 찾는다 (11/16). isRerun을 이슈마다 부르면 이슈 2,700개 × 제목 4,100개를 모두 견줘 3.9초가 걸렸다
+// (자료 현황 목록이 3초 걸리던 원인). 제목 조각 → 그 조각이 든 제목 목록(색인)을 만들어, 조각을 하나라도 같이 가진 제목만 센다.
+// 겹친 조각 수로 자카드 유사도를 그대로 계산하므로 결과는 isRerun과 같다.
+// items: [{ id, time, grams }] · earlier: [{ time, grams }]
+export function findReruns(items, earlier) {
+  const index = new Map() // 조각 → earlier 안 위치들
+  earlier.forEach((e, i) => {
+    for (const g of e.grams) {
+      const list = index.get(g)
+      if (list) list.push(i)
+      else index.set(g, [i])
+    }
+  })
+  const gap = MIN_GAP_HOURS * 3600_000
+  const common = new Uint16Array(earlier.length)
+  const out = new Set()
+  for (const item of items) {
+    if (item.grams.size === 0) continue
+    const touched = []
+    for (const g of item.grams) {
+      const list = index.get(g)
+      if (!list) continue
+      for (const i of list) {
+        if (common[i] === 0) touched.push(i)
+        common[i] += 1
+      }
+    }
+    for (const i of touched) {
+      const e = earlier[i]
+      const c = common[i]
+      common[i] = 0
+      if (out.has(item.id)) continue
+      if (item.time - e.time > gap && c / (item.grams.size + e.grams.size - c) >= SIMILARITY) out.add(item.id)
+    }
+  }
+  return out
+}
+
 export function similarity(a, b) {
   return jaccard(bigrams(normalizeTitle(a)), bigrams(normalizeTitle(b)))
 }
