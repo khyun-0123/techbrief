@@ -7,7 +7,8 @@
 // - 종류: 회사(경쟁사 · 자사 목록, 알려진 회사 이름) / 기술(영문 · 숫자 용어, 기술 낱말이 든 말, 관심 기술) / 일반(나머지)
 //   레버의 자동 고르기는 「일반」을 건너뛴다 (예: 구매, 게이머)
 import { dbEnabled, query } from './db/index.js'
-import { similarity } from './collector/dedupe.js'
+import { sameIssue, titleGrams } from './collector/dedupe.js'
+import { scoreNaverItems, storedScores } from './collector/index.js'
 import { getLists } from './collector/lists.js'
 import { searchNews } from './collector/naver.js'
 import { cleanText } from './collector/normalize.js'
@@ -118,7 +119,7 @@ async function collectedDocs(center) {
   const k = `%${center.toLowerCase().replace(/\s+/g, '').replace(/[%_\\]/g, '\\$&')}%`
   // 11/15: 기간 제한(60일 · 300건)을 풀고 최근 1,000건 + 그 기사의 AI 요약 문장(개념 · 원리 · 효과 …)을 같이 센다
   const { rows } = await query(
-    `SELECT coalesce(a.full_title, a.title) AS title,
+    `SELECT coalesce(a.full_title, a.title) AS title, a.url, a.published_at, coalesce(a.group_id, a.id) AS g,
             coalesce(a.description, '') || ' ' || coalesce((SELECT string_agg(v->>'text', ' ') FROM jsonb_each(s.content->'items') AS e(key, v)), '') AS description
        FROM articles a
        LEFT JOIN summaries s ON s.article_id = a.id
@@ -135,6 +136,24 @@ async function collectedDocs(center) {
 const CHILD_FOR = 14
 const CHILD_MAX = 5
 const GRAND_MAX = 4 // 3단계 (11/15): 2단계 말마다, 그 말이 든 이슈에서 함께 나온 다른 말 상위 4개 (2개 이슈 이상, 키워드 · 1단계 · 부모 · 형제 제외)
+// 말의 중요도 (11/17 · 37 문서 Q1, 맵팀 확인): 그 말이 든 이슈들의 중요도 **평균**. 점수 있는 이슈가 IMP_MIN개 미만이면 null
+// 합이 아니라 평균인 이유: 합은 이슈가 많은 말일수록 커져 「함께 나온 순」과 순서가 거의 같아졌다(OLED: 디스플레이 · LG · 패널).
+// 평균은 건수와 상관없이 무게 있는 소식에 나온 말(경쟁사 · 구체 기술)이 위로 온다. 1~2건짜리 말이 튀지 않게 3개 이상만 (36 문서 8-2 ①)
+// imp = 평균 점수, impN = 점수를 센 이슈 수
+const IMP_MIN = 3
+function impOf(word, issueWords, issueImp) {
+  const low = String(word).toLowerCase()
+  let sum = 0
+  let n = 0
+  issueWords.forEach((s, k) => {
+    if (s.has(low) && issueImp[k] != null) {
+      sum += issueImp[k]
+      n += 1
+    }
+  })
+  return n >= IMP_MIN ? { imp: Math.round(sum / n), impN: n } : { imp: null, impN: n }
+}
+
 function linksOf(nodes, issueWords, merged) {
   const N = issueWords.length
   const lows = nodes.map((n) => n.word.toLowerCase())
@@ -220,12 +239,12 @@ function suggestCount(nodes, issueWords) {
   return { n, coverage: steps[n - 1].coverage, steps }
 }
 
-// 돌려주는 값: { center, docs, issues, nodes: [{ word, kind, score(함께 나온 이슈 수), share, subcats }], edges, children, autoPick }
+// 돌려주는 값: { center, docs, issues, nodes: [{ word, kind, score(함께 나온 이슈 수), share, subcats, imp(이슈 평균 중요도 · 3개 미만이면 null), impN }], edges, children, autoPick }
 // background: 미리 분석 작업에서 부를 때 — 네이버 하루 한도의 80%에서 멈춘다 (sourceGuard.js)
 export async function relatedWords(rawCenter, { refresh = false, background = false } = {}) {
   const center = String(rawCenter ?? '').trim().slice(0, 50)
   if (!center) throw Object.assign(new Error('키워드를 입력해 주세요.'), { status: 400 })
-  const key = `related:v8:${queryKey(center)}` // v2: 영어 기능어(11/11) · v3: 워드클라우드팀 불용어 · 예외 · 사업 분류 · v4: 교차선 · 2단계(11/14) · v5: 자동 개수(11/15) · v6~7: Kiwi 명사(동사로 쓰인 명사 뺌) · 전체 기간 + AI 요약 · 3단계 · auto(11/15)
+  const key = `related:v9:${queryKey(center)}` // v9(11/17): 이슈 묶기를 자료 현황과 같게 · 말마다 평균 중요도(imp) · v2: 영어 기능어(11/11) · v3: 워드클라우드팀 불용어 · 예외 · 사업 분류 · v4: 교차선 · 2단계(11/14) · v5: 자동 개수(11/15) · v6~7: Kiwi 명사(동사로 쓰인 명사 뺌) · 전체 기간 + AI 요약 · 3단계 · auto(11/15)
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return { ...hit, cached: true }
@@ -236,15 +255,42 @@ export async function relatedWords(rawCenter, { refresh = false, background = fa
     getLists(),
     loadKiwi(),
   ])
-  const docs = [...naver.map((i) => ({ title: cleanText(i.title), description: cleanText(i.description) })), ...mine]
-  // 같은 소식 한 번만: 제목이 많이 비슷하면 같은 이슈
+  const naverDocs = naver.map((i) => ({ title: cleanText(i.title), description: cleanText(i.description), url: i.originallink || i.link, time: Date.parse(i.pubDate) }))
+  const docs = [...naverDocs, ...mine]
+  // 이슈 점수 (11/17 · 37 문서 Q1): DB 기사는 저장해 둔 이슈 점수(article_scores), 네이버 결과는 그 자리에서 같은 규칙으로
+  const [stored, naverImp] = await Promise.all([
+    storedScores([...new Set(mine.map((d) => d.g))]).catch(() => new Map()),
+    scoreNaverItems(naver, center).catch(() => new Map()),
+  ])
+  // 같은 소식 한 번만 (11/17 · 37 문서 Q3, 맵팀 확인): 자료 현황과 같은 기준
+  // - DB 기사: 저장된 묶음 번호(group_id) 그대로 — 자료 현황과 이슈 수가 같아진다
+  // - 네이버 결과: DB에 같은 기사(주소)가 있으면 건너뛰고, 아니면 같은 규칙(제목 유사도 0.35 이상 · 48시간 안, dedupe.js sameIssue)으로 붙인다
+  // 예전: 제목 유사도 0.5 · 기간 제한 없음 → 같은 소식을 10~18% 더 많은 이슈로 셌다 (36 문서 8-2 ③)
   const issues = []
-  for (const d of docs) {
+  const byGroup = new Map()
+  for (const d of mine) {
     if (!d.title) continue
-    const same = issues.find((x) => similarity(x.title, d.title) >= 0.5)
-    if (same) same.text += ` ${d.description}`
-    else issues.push({ title: d.title, text: `${d.title} ${d.description}` })
+    const hit = byGroup.get(d.g)
+    if (hit) {
+      hit.text += ` ${d.description}`
+      continue
+    }
+    const is = { title: d.title, text: `${d.title} ${d.description}`, time: d.published_at ? d.published_at.getTime() : NaN, grams: titleGrams(d.title), imp: stored.get(d.g)?.score ?? null }
+    byGroup.set(d.g, is)
+    issues.push(is)
   }
+  const dbUrls = new Set(mine.map((d) => d.url))
+  for (const d of naverDocs) {
+    if (!d.title || dbUrls.has(d.url)) continue
+    const key = { time: d.time, grams: titleGrams(d.title) }
+    const imp = naverImp.get(d.url) ?? null
+    const same = issues.find((x) => sameIssue(key, x))
+    if (same) {
+      same.text += ` ${d.description}`
+      if (imp != null && (same.imp == null || imp > same.imp)) same.imp = imp
+    } else issues.push({ title: d.title, text: `${d.title} ${d.description}`, ...key, imp })
+  }
+  const issueImp = issues.map((is) => is.imp)
   const own = wordsOf(center, kiwi)
   const ownSquash = center.toLowerCase().replace(/\s+/g, '')
   const count = new Map()
@@ -273,9 +319,11 @@ export async function relatedWords(rawCenter, { refresh = false, background = fa
     .filter((x) => x.n >= min && x.n < issues.length * 0.9) // 너무 드문 말 · 거의 모든 글에 나오는 말은 뺀다
     .sort((a, b) => b.n - a.n)
     .slice(0, MAX_NODES)
-    .map((x) => ({ word: x.w, kind: kindOf(x.w, lists), score: x.n, share: Math.round((x.n / Math.max(1, issues.length)) * 100) / 100, broad: tooBroad(x.w), subcats: subcatsOf(x.w) }))
+    .map((x) => ({ word: x.w, kind: kindOf(x.w, lists), score: x.n, share: Math.round((x.n / Math.max(1, issues.length)) * 100) / 100, broad: tooBroad(x.w), subcats: subcatsOf(x.w), ...impOf(x.w, issueWords, issueImp) }))
     .map((n) => ({ ...n, auto: autoOk(n) }))
   const { edges, children } = linksOf(nodes, issueWords, merged)
+  // 2 · 3단계에도 평균 중요도 · 종류(기술 · 회사 · 일반)를 붙인다 (11/17: 표시 설정 「종류」로 1 · 2 · 3단계를 모두 거르려고, 37 문서 Q2)
+  for (const list of Object.values(children)) for (const c of list) Object.assign(c, impOf(c.word, issueWords, issueImp), { kind: kindOf(c.word, lists) })
   const autoPick = suggestCount(nodes, issueWords)
   const out = { center, docs: docs.length, issues: issues.length, nodes, edges, children, autoPick, words: kiwi ? 'kiwi' : 'rules', at: new Date().toISOString() }
   await cachePut(key, out, MAP_TTL).catch(() => {})

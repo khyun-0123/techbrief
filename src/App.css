@@ -7544,6 +7544,18 @@ a.brand:focus-visible {
 .km-panel[data-collapsed='true'] {
   width: auto;
 }
+/* 11/17: 펼친 창이 칸보다 길면(대시보드 칸) 위 · 아래에 옅은 그림자 — 스크롤하면 기술 분류 · 종류가 더 있다는 표시 (내용 끝에 닿으면 사라짐) */
+.km-panel[data-collapsed='false'] {
+  background:
+    linear-gradient(var(--tb-color-surface) 30%, transparent) center top,
+    linear-gradient(transparent, var(--tb-color-surface) 70%) center bottom,
+    linear-gradient(rgb(17 17 17 / 10%), transparent) center top,
+    linear-gradient(transparent, rgb(17 17 17 / 10%)) center bottom,
+    var(--tb-color-surface);
+  background-repeat: no-repeat;
+  background-size: 100% 28px, 100% 28px, 100% 10px, 100% 10px, auto;
+  background-attachment: local, local, scroll, scroll, scroll;
+}
 .km-phead {
   display: flex;
   align-items: center;
@@ -7567,7 +7579,7 @@ a.brand:focus-visible {
 }
 .km-pbody {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   margin-top: 12px;
 }
 .km-prow {
@@ -7664,6 +7676,13 @@ a.brand:focus-visible {
   font-size: var(--fs-sm);
   text-align: center;
   pointer-events: none;
+}
+/* 표시 설정 작은 안내 (11/17) */
+.km-note {
+  display: block;
+  margin-top: 4px;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
 }
 /* 11/15: 표시 설정 창이 펼쳐져 있으면 안내를 창 오른쪽 빈자리로 (좁은 칸에서는 절반까지만) */
 .km-panel[data-collapsed='false'] ~ .km-empty {

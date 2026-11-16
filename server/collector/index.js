@@ -3,7 +3,7 @@
 import { dbEnabled, query } from '../db/index.js'
 import { getSetting, setSetting } from '../db/store.js'
 import { findReruns, groupArticles, sameIssue, titleGrams } from './dedupe.js'
-import { collectFeeds, FEEDS, PAPER_KEYWORD_DAYS, tierOf } from './feeds.js'
+import { collectFeeds, FEEDS, fetchFeedAll, PAPER_KEYWORD_DAYS, tierOf } from './feeds.js'
 import { searchNews } from './naver.js'
 import { findMention, getLists } from './lists.js'
 import { EXPERT_SOURCES, toArticle } from './normalize.js'
@@ -161,6 +161,29 @@ export async function saveSources(input = {}) {
   const disabled = [...new Set((input.disabled ?? []).map(String))].filter((id) => FEEDS.some((f) => f.id === id))
   await setSetting(SOURCES_KEY, { disabled })
   return getSources()
+}
+
+// 네이버 검색 결과에 바로 중요도를 매긴다 (11/17, 맵 「중요도순」 · 37 문서 Q1): DB에 없는 기사라 저장 점수가 없으므로
+// 「기사 찾기」와 같은 규칙(toIssues: 같은 이슈 묶기 · 관련도 · 재탕)으로 그 자리에서. url → 이슈 점수
+export async function scoreNaverItems(items, keyword) {
+  const arts = (items ?? []).map((i) => toArticle(i, keyword)).filter((a) => a.url && a.title)
+  const out = new Map()
+  if (!arts.length) return out
+  for (const is of toIssues(arts, await getLists(), await scoreContext())) {
+    out.set(is.url, is.importance ?? 0)
+    for (const r of is.related ?? []) out.set(r.url, is.importance ?? 0)
+  }
+  return out
+}
+
+// 한 출처를 날짜 기준 없이 한 번 채운다 (11/17, scripts/import-feed.mjs). 이미 있는 글은 건너뜀(saveToDb) → 새로 넣은 수
+export async function importFeedAll(id) {
+  if (!dbEnabled()) throw new Error('DB가 없어요')
+  const { getKeywords } = await import('../db/store.js')
+  const articles = await fetchFeedAll(id, await getKeywords())
+  const added = await saveToDb(articles)
+  if (added) markListStale()
+  return { fetched: articles.length, added }
 }
 
 // 피드 기사 저장 (네이버와 같은 표). 출처마다 새로 넣은 수를 센다

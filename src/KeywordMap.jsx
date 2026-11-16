@@ -8,8 +8,11 @@
 // - 색은 가이드 대신 Storybook 토큰(CLAUDE.md 디자인 기준) — 값이 거의 같음. SVG 속성으로 넣어 PNG에도 같은 색
 // - 누르기 (11/14 조장): 점 · 글자 = 볼 범위에 넣기/빼기, 검정 점 옆 「+n」 배지 = 그 가지 펼치기/접기 (모드 전환 없앰). 처음엔 위 3개 가지만 펼침
 //   키보드: Enter = 넣기/빼기, → = 펼치기, ← = 접기. 펼치거나 접어도 다른 점은 제자리에서 조금만 움직임
-// - 가이드에서 아직 안 옮긴 것: 보고서에 넣기(초안 6장), 키워드 편집, 불용어 · 예외 단어 관리(지금은 서버 CSV), 고르는 기준 「중요도」(11/16 보류: 중요도는 자료 현황 7일 목록에서만 계산돼 맵 기사 대부분이 0점), 관련 기사 칸
+// - 가이드에서 아직 안 옮긴 것: 보고서에 넣기(초안 6장), 키워드 편집, 불용어 · 예외 단어 관리(지금은 서버 CSV), 관련 기사 칸
 // - 기술 분류 (11/15 맵팀 요청): 표시 설정에서 사업 6분류(subcats) 하나를 고르면 1 · 2 · 3단계 모두 그 분류 말만 남김. 처음엔 「전체」
+// - 종류 (11/17, 37 문서 Q2): 기술 · 회사 · 일반으로도 거름 — 사업 분류가 붙은 말이 11%뿐이라 어떤 검색어에서도 쓸 수 있게 (맵팀 지시문에 없던 것, 32 문서 근거)
+// - 고르는 기준 (11/17, 37 문서 Q1): 함께 나온 순(처음 값) | 중요도순 = 그 말이 든 이슈 중요도의 **평균**(이슈 3개 이상, server/related.js impOf).
+//   중요도순은 말의 순서만 바꾸고 점 · 글자 크기는 그대로 함께 나온 수 (맵팀 제안 「합」과 다름, 32 문서 근거)
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Dropdown, { Seg } from './Dropdown.jsx'
 import { pageZoom } from './utils.js'
@@ -225,7 +228,7 @@ const FS = [17, 13, 12, 12]
 const BADGE_FS = 12
 const CENTER_R = 13
 
-function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, isOn, onPick, hidden, onHide, svgRef, onDragNode, onHover }) {
+function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, isOn, onPick, hidden, onHide, svgRef, onDragNode, onHover, impOn = false }) {
   const { l1, l2, cross } = graph
   const kidsOf = useMemo(() => {
     const m = new Map()
@@ -292,7 +295,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
     const label = `${on ? '✓ ' : ''}${short(n.word, lv === 0 ? 18 : lv === 1 ? 14 : 11)}`
     const sub = lv === 1 ? (n.subcats ?? [])[0] : null
     const role = lv === 0 ? undefined : 'checkbox'
-    const info = lv === 0 ? { word: n.word, tag: '검색어', rows: [['함께 나온 이슈', `${issues ?? '-'}개`]] } : { word: n.word, tag: `${lv}단계`, rows: [[lv >= 2 ? `「${n.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${n.score}개`], ...((n.subcats ?? []).length ? [['분류', n.subcats.join(' · ')]] : []), ['볼 범위', on ? '넣음' : '안 넣음']] }
+    const info = lv === 0 ? { word: n.word, tag: '검색어', rows: [['함께 나온 이슈', `${issues ?? '-'}개`]] } : { word: n.word, tag: `${lv}단계`, rows: [[lv >= 2 ? `「${n.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${n.score}개`], ...(impOn && n.imp != null ? [['평균 중요도', `${n.imp}점 · 이슈 ${n.impN}개`]] : []), ...((n.subcats ?? []).length ? [['분류', n.subcats.join(' · ')]] : []), ['볼 범위', on ? '넣음' : '안 넣음']] }
     return (
       <g
         key={`n-${n.word}`}
@@ -404,13 +407,18 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
 // 검색어 = min(60, 큰 글자 × 1.3). 큰 말부터 가운데에서 나선을 따라 겹치지 않는 첫 자리. 표시 설정 창 자리 · 아래 36px는 비움
 // 11/15: 비우는 자리는 접힌 창 크기만. 창을 펼쳐도 단어를 다시 놓지 않음 (펼친 창은 그림 위에 떠서 가려도 됨)
 const CLOUD_AVOID = { x: 0, y: 0, w: 180, h: 60 }
-function CloudView({ W, H, keyword, nodes, branches, isOn, onPick, total, avoid, colors, svgRef, onHover }) {
+// 종류 이름 (server/related.js kindOf)
+const KIND_LABEL = { tech: '기술', company: '회사', general: '일반' }
+// by (11/17): 'imp'면 평균 중요도 순으로 놓고(가운데 · 진한 색부터), 평균이 없는 말(이슈 3개 미만)은 뺀다. 글자 크기는 늘 함께 나온 수
+function CloudView({ W, H, keyword, nodes, branches, isOn, onPick, total, avoid, colors, svgRef, onHover, by = 'co' }) {
   const words = useMemo(() => {
     const all = new Map()
-    for (const n of nodes) all.set(n.word, { word: n.word, score: n.score, subcats: n.subcats })
-    for (const [p, list] of Object.entries(branches ?? {})) for (const c of list) if (!all.has(c.word)) all.set(c.word, { word: c.word, score: c.score, parent: p })
-    return [...all.values()].sort((a, b) => b.score - a.score).slice(0, total)
-  }, [nodes, branches, total])
+    for (const n of nodes) all.set(n.word, { word: n.word, score: n.score, subcats: n.subcats, imp: n.imp, impN: n.impN })
+    for (const [p, list] of Object.entries(branches ?? {})) for (const c of list) if (!all.has(c.word)) all.set(c.word, { word: c.word, score: c.score, parent: p, imp: c.imp, impN: c.impN })
+    const list = [...all.values()]
+    if (by === 'imp') return list.filter((w) => w.imp != null).sort((a, b) => b.imp - a.imp || b.score - a.score).slice(0, total)
+    return list.sort((a, b) => b.score - a.score).slice(0, total)
+  }, [nodes, branches, total, by])
   const placed = useMemo(() => {
     const max = Math.max(1, ...words.map((w) => w.score))
     const big = Math.min(46, W / 11) * Math.min(1.15, Math.sqrt(40 / Math.max(1, words.length)))
@@ -471,7 +479,7 @@ function CloudView({ W, H, keyword, nodes, branches, isOn, onPick, total, avoid,
               tabIndex={0}
               onMouseDown={(e) => e.preventDefault()} // 11/15: 마우스로 누를 때는 초점이 안 가게 (네모 테두리가 생기던 문제). 키보드 Tab · Enter는 그대로
               onClick={() => onPick(w.word)}
-              onPointerEnter={() => onHover({ word: w.word, tag: w.parent ? '2단계' : '1단계', rows: [[w.parent ? `「${w.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${w.score}개`], ['볼 범위', on ? '넣음' : '안 넣음']], x: w.x, y: w.y + 4 })}
+              onPointerEnter={() => onHover({ word: w.word, tag: w.parent ? '2단계' : '1단계', rows: [[w.parent ? `「${w.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${w.score}개`], ...(by === 'imp' && w.imp != null ? [['평균 중요도', `${w.imp}점 · 이슈 ${w.impN}개`]] : []), ['볼 범위', on ? '넣음' : '안 넣음']], x: w.x, y: w.y + 4 })}
               onPointerLeave={() => onHover(null)}
               onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onPick(w.word))}
             >
@@ -599,9 +607,31 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
   }, [rawNodes, rawBranches])
   const [catPick, setCatPick] = useState('all')
   const cat = catCounts.some(([c]) => c === catPick) ? catPick : 'all' // 검색어가 바뀌어 그 분류가 없으면 「전체」
-  const inCat = useCallback((n) => cat === 'all' || (n.subcats ?? []).includes(cat), [cat])
-  const nodes = useMemo(() => (cat === 'all' ? rawNodes : rawNodes.filter(inCat)), [cat, rawNodes, inCat])
-  const branches = useMemo(() => (cat === 'all' ? rawBranches : Object.fromEntries(Object.entries(rawBranches ?? {}).map(([p, list]) => [p, list.filter(inCat)]))), [cat, rawBranches, inCat])
+  // 종류 (11/17): 1 · 2 · 3단계의 서로 다른 말을 종류별로 셈 (서버가 2 · 3단계에도 kind를 붙임)
+  const kindCounts = useMemo(() => {
+    const seen = new Map()
+    for (const n of rawNodes) seen.set(n.word, n.kind)
+    for (const list of Object.values(rawBranches ?? {})) for (const c of list) if (!seen.has(c.word)) seen.set(c.word, c.kind)
+    const count = new Map()
+    for (const k of seen.values()) if (KIND_LABEL[k]) count.set(k, (count.get(k) ?? 0) + 1)
+    return Object.keys(KIND_LABEL).filter((k) => count.has(k)).map((k) => [k, count.get(k)])
+  }, [rawNodes, rawBranches])
+  const [kindPick, setKindPick] = useState('all')
+  const kind = kindCounts.some(([k]) => k === kindPick) ? kindPick : 'all'
+  // 고르는 기준 (11/17): 중요도 정보(imp)가 하나도 없으면 「함께 나온 순」으로 고정
+  const hasImp = rawNodes.some((n) => n.imp != null)
+  const [byPick, setByPick] = useState('co')
+  const by = hasImp ? byPick : 'co'
+  const keep = useCallback((n) => (cat === 'all' || (n.subcats ?? []).includes(cat)) && (kind === 'all' || n.kind === kind), [cat, kind])
+  // 중요도순: 평균 중요도 높은 순, 같으면 함께 나온 순. 평균이 없는 말(이슈 3개 미만)은 뒤로
+  const order = useCallback((list) => (by === 'imp' ? [...list].sort((a, b) => (b.imp ?? -1) - (a.imp ?? -1) || b.score - a.score) : list), [by])
+  const nodes = useMemo(() => order(cat === 'all' && kind === 'all' ? rawNodes : rawNodes.filter(keep)), [cat, kind, rawNodes, keep, order])
+  const branches = useMemo(
+    () => (cat === 'all' && kind === 'all' && by === 'co' ? rawBranches : Object.fromEntries(Object.entries(rawBranches ?? {}).map(([p, list]) => [p, order(list.filter(keep))]))),
+    [cat, kind, by, rawBranches, keep, order],
+  )
+  const filterName = cat !== 'all' ? `「${cat}」` : kind !== 'all' ? `「${KIND_LABEL[kind]}」` : null
+  const filterReset = cat !== 'all' ? '기술 분류' : '종류'
   const cloudEmpty = nodes.length === 0 && !Object.values(branches ?? {}).some((l) => l.length)
   // 처음 값 (가이드): 가지 7 · 키워드 40 · 함께 나온 이슈 6개 이상. 휴대폰(720px 미만)은 가지 6 · 키워드 18 (390px에서 글자가 겹쳤음, 11/14 실측)
   const phone = typeof window !== 'undefined' && window.innerWidth < 720
@@ -772,9 +802,9 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
     <div className={large ? 'km km-large' : 'km'}>
       <div ref={box} className="km-stage" data-overlaps={overlaps}>
         {mode === 'cloud' ? (
-          <CloudView W={W} H={H} keyword={keyword} nodes={nodes} branches={branches} isOn={isOn} onPick={onToggle} total={totalN} avoid={CLOUD_AVOID} colors={colors} svgRef={svgRef} onHover={setHover} />
+          <CloudView W={W} H={H} keyword={keyword} nodes={nodes} branches={branches} isOn={isOn} onPick={onToggle} total={totalN} avoid={CLOUD_AVOID} colors={colors} svgRef={svgRef} onHover={setHover} by={by} />
         ) : (
-          <MapStage W={W} H={H} keyword={keyword} issues={issues} graph={graph} pos={pos} view={view} setView={setView} colors={colors} isOn={isOn} onPick={onToggle} hidden={hidden} onHide={onHide} svgRef={svgRef} onDragNode={onDragNode} onHover={setHover} />
+          <MapStage W={W} H={H} keyword={keyword} issues={issues} graph={graph} pos={pos} view={view} setView={setView} colors={colors} isOn={isOn} onPick={onToggle} hidden={hidden} onHide={onHide} svgRef={svgRef} onDragNode={onDragNode} onHover={setHover} impOn={by === 'imp'} />
         )}
         {hover && (
           <div className="km-card" role="note" style={{ left: cardLeft, top: cardTop }}>
@@ -825,10 +855,40 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
                   <input type="range" min="1" max="20" value={minCo} onChange={(e) => setMinCo(Number(e.target.value))} />
                 </label>
               )}
-              {catCounts.length > 0 && (
-                <div className="km-ctl">
-                  <span className="km-lbl">기술 분류</span>
-                  <Dropdown value={cat} onChange={setCatPick} label="기술 분류" size="md" options={[{ value: 'all', label: '전체' }, ...catCounts.map(([c, n]) => ({ value: c, label: `${c} (${n})` }))]} />
+              <div className="km-ctl">
+                <span className="km-lbl">고르는 기준</span>
+                <Seg
+                  value={by}
+                  onChange={setByPick}
+                  label="고르는 기준"
+                  size="md"
+                  disabled={!hasImp}
+                  options={[
+                    { value: 'imp', label: '중요도순' },
+                    { value: 'co', label: '함께 나온 순' },
+                  ]}
+                />
+                {hasImp ? (
+                  by === 'imp' && <span className="km-note">말이 든 이슈들의 평균 중요도 순 (이슈 3개 이상). 점 · 글자 크기는 함께 나온 수 그대로</span>
+                ) : (
+                  <span className="km-note">중요도 정보가 아직 없어 함께 나온 순으로 보여요</span>
+                )}
+              </div>
+              {/* 11/17: 기술 분류 · 종류는 한 줄에 (창 높이를 줄여 대시보드 칸에서도 아래가 잘리지 않게) */}
+              {(catCounts.length > 0 || kindCounts.length > 1) && (
+                <div className="km-prow">
+                  {catCounts.length > 0 && (
+                    <div className="km-ctl">
+                      <span className="km-lbl">기술 분류</span>
+                      <Dropdown value={cat} onChange={setCatPick} label="기술 분류" size="sm" options={[{ value: 'all', label: '전체' }, ...catCounts.map(([c, n]) => ({ value: c, label: `${c} (${n})` }))]} />
+                    </div>
+                  )}
+                  {kindCounts.length > 1 && (
+                    <div className="km-ctl">
+                      <span className="km-lbl">종류</span>
+                      <Dropdown value={kind} onChange={setKindPick} label="종류" size="sm" options={[{ value: 'all', label: '전체' }, ...kindCounts.map(([k, n]) => ({ value: k, label: `${KIND_LABEL[k]} (${n})` }))]} />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -848,9 +908,9 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
           </div>
         )}
         {mode === 'map' && graph.l1.length === 0 && (
-          <p className="km-empty">{cat !== 'all' ? `「${cat}」에 드는 말이 없어요. 기술 분류를 「전체」로 바꿔 보세요.` : `함께 나온 이슈가 ${minCo}개 이상인 말이 없어요. 「함께 나온 이슈」 기준을 낮춰 보세요.`}</p>
+          <p className="km-empty">{filterName ? `${filterName}에 드는 말이 없어요. ${filterReset}를 「전체」로 바꿔 보세요.` : `함께 나온 이슈가 ${minCo}개 이상인 말이 없어요. 「함께 나온 이슈」 기준을 낮춰 보세요.`}</p>
         )}
-        {mode === 'cloud' && cat !== 'all' && cloudEmpty && <p className="km-empty">「{cat}」에 드는 말이 없어요. 기술 분류를 「전체」로 바꿔 보세요.</p>}
+        {mode === 'cloud' && filterName && cloudEmpty && <p className="km-empty">{filterName}에 드는 말이 없어요. {filterReset}를 「전체」로 바꿔 보세요.</p>}
         <div className="km-legend">
           {mode === 'cloud' ? (
             <span>「{keyword}」와 함께 나온 말 · 누르면 볼 범위에 넣기</span>

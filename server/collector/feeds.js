@@ -189,6 +189,17 @@ export async function collectFeeds(words, { disabled = [] } = {}) {
   return { articles: unique, results: FEEDS.filter((f) => !disabled.includes(f.id)).map((f) => results.find((r) => r.id === f.id)) }
 }
 
+// 날짜 기준(14일) 없이 한 출처의 글을 모두 받는다 (11/17 조장: SID 논문집처럼 1년에 한 번 한꺼번에 올라오는 곳을
+// 수집 시작 전에 놓친 경우 한 번 채우기). 키워드에 안 맞은 글도 버리지 않는다 (11/09, BROAD_KEYWORD)
+export async function fetchFeedAll(id, words = []) {
+  const feed = FEEDS.find((f) => f.id === id && !f.paper)
+  if (!feed) throw new Error(`없는 출처: ${id}`)
+  const items = parseFeed(await getText(feed.url, feed.ua))
+  return items
+    .filter((item) => item.title && item.link)
+    .map((item) => toFeedArticle(item, feed, words.find((w) => hasKeyword(`${item.title} ${item.description}`, w)) ?? BROAD_KEYWORD))
+}
+
 // 관리 화면용 목록
 export function feedList() {
   return FEEDS.map(({ id, name, tier, url, lang, paper }) => ({ id, name, tier, url: url ?? 'https://api.openalex.org', lang: lang ?? 'ko', paper: Boolean(paper) }))
