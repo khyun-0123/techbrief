@@ -114,6 +114,9 @@ function AdminSources({ onToast }) {
               .map((f) => {
                 const r = results[f.id]
                 const on = !off.includes(f.id)
+                // 11/17: 받기는 되는데 14일 동안 저장된 글이 없으면 표시 (논문 검색은 따로 셈)
+                const st = data.stored?.[f.id]
+                const dead = data.stored && !f.paper && on && !(st?.recent > 0)
                 return (
                   <li key={f.id} className={on ? '' : 'is-off'}>
                     <label>
@@ -128,6 +131,12 @@ function AdminSources({ onToast }) {
                         <>
                           받은 글 {r.items} · 키워드 맞음 <b>{r.matched}</b>
                           {r.added != null && ` · 새로 ${r.added}`}
+                          {dead && (
+                            <span className="adm-state warn" title={st?.last ? `마지막으로 저장된 글: ${formatAt(st.last)}` : '한 번도 저장된 적 없음'}>
+                              {' '}
+                              · 14일 동안 저장 0건{st?.total ? '' : ' (저장된 적 없음)'}
+                            </span>
+                          )}
                         </>
                       ) : (
                         <span className="adm-state bad">오류 · {r.error}</span>

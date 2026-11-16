@@ -513,7 +513,7 @@ async function handleApiInner(req, res) {
     // 수집 출처 (14 문서 4-B): 네이버 밖 출처 목록 · 켜기/끄기 · 지난 수집 결과. 관리자만
     if (req.method === 'GET' && req.url === '/api/admin/sources') {
       requireAdmin(req)
-      return send(res, 200, { list: feedList(), ...(await getSources()), papers: await paperProviderStatus(), corpus: await corpusStatus().catch(() => null) })
+      return send(res, 200, { list: feedList(), ...(await getSources({ counts: true })), papers: await paperProviderStatus(), corpus: await corpusStatus().catch(() => null) })
     }
     if (req.method === 'PUT' && req.url === '/api/admin/sources') {
       const admin = requireAdmin(req)
