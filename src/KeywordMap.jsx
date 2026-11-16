@@ -19,10 +19,6 @@ import { pageZoom } from './utils.js'
 
 const short = (t, n = 14) => (t.length > n ? `${t.slice(0, n - 1)}…` : t)
 const textW = (t, px) => [...t].reduce((n, ch) => n + (/[가-힣]/.test(ch) ? px : px * 0.6), 0)
-const MAP_VIEWS = [
-  ['map', '마인드맵'],
-  ['cloud', '워드클라우드'],
-]
 const reduceMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 // 색은 토큰에서 읽어 SVG 속성으로 넣는다 — PNG로 저장할 때도 같은 색이 나오게
@@ -536,7 +532,7 @@ function savePng(svg, name, colors) {
   })
 }
 
-// view · onView: 보기(마인드맵 · 워드클라우드)는 칸 머리 칩과 표시 설정이 같이 쓰므로 바깥(KeywordAnalysis)에서 가짐
+// view: 보기(마인드맵 · 워드클라우드)는 칸 머리 칩에서 바꾸고 바깥(KeywordAnalysis)이 가짐 (11/17: 표시 설정 창의 같은 단추는 뺐음)
 // 빽빽함 (11/14 조장): 멈춘 자리(final)와 지금 확대로 글자 상자끼리 겹치는 쌍을 센다. 많으면 「크게 보기」 안내
 function countOverlaps(final, view, graph, hidden, keyword, isOn) {
   const max = Math.max(1, ...graph.l1.map((n) => n.score), ...graph.l2.map((n) => n.score))
@@ -576,7 +572,7 @@ function countOverlaps(final, view, graph, hidden, keyword, isOn) {
 }
 const CROWDED = 6 // 글자 · 알약 · 배지 겹침이 이만큼 이상이면 안내 (11/14 3038 실측: 1440 반 칸 ai 안경 10 · 탠덤 OLED 4 · QD-OLED 2, 크게 보기 ai 안경 4)
 
-export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, branches: rawBranches, isOn, onToggle, large = false, view: mode = 'map', onView, onEnlarge }) {
+export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, branches: rawBranches, isOn, onToggle, large = false, view: mode = 'map', onEnlarge }) {
   const box = useRef(null)
   const svgRef = useRef(null)
   const [size, setSize] = useState({ W: 640, H: 520 })
@@ -829,10 +825,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
           </div>
           {panelOpen && (
             <div className="km-pbody">
-              <div className="km-ctl">
-                <span className="km-lbl">보기</span>
-                <Seg value={mode} onChange={(v) => onView?.(v)} label="보기" size="md" options={MAP_VIEWS.map(([value, label]) => ({ value, label }))} />
-              </div>
+              {/* 11/17 조장: 「보기(마인드맵 · 워드클라우드)」는 칸 머리 단추와 같아 뺐다 (맵팀 가이드와 다름, 38 문서) */}
               <div className="km-prow">
                 <label className="km-ctl">
                   <span className="km-lbl">
@@ -894,7 +887,8 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
             </div>
           )}
         </section>
-        {mode === 'map' && !crowdOff && overlaps >= CROWDED && (
+        {/* 11/17: 표시 설정 창을 펼쳤을 때는 안 띄운다 (둘이 겹쳤음, 창에서 가지 수를 줄이면 바로 줄어듦) */}
+        {mode === 'map' && !crowdOff && !panelOpen && overlaps >= CROWDED && (
           <div className="km-crowd" role="status">
             <span>점이 많아 글자가 겹쳐요{large ? ` · ${phone ? '두 손가락으로 벌려 확대' : '휠로 확대'}하거나 표시 설정에서 가지 수를 줄여 보세요` : ''}</span>
             {!large && onEnlarge && (
