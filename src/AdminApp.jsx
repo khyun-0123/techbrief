@@ -91,7 +91,7 @@ function sectionFromHash() {
 }
 
 // 확인할 일: 연결 끊김, 수집 실패, 오래 수집 안 됨, 설정 빈칸
-function buildAlerts({ health, refresh, keywords, lists, ops }) {
+function buildAlerts({ health, refresh, keywords, ops }) {
   const alerts = []
   if (ops && ops.mode !== 'normal') alerts.push({ level: ops.mode === 'notice' ? 'warn' : 'bad', text: `일반 화면이 「${OPS_LABEL[ops.mode]}」 상태예요.`, go: 'ops' })
   if (health?.error) alerts.push({ level: 'bad', text: '서버에 연결되지 않아요.' })

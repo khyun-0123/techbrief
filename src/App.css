@@ -7665,6 +7665,13 @@ a.brand:focus-visible {
   text-align: center;
   pointer-events: none;
 }
+/* 표시 설정 작은 안내 (11/17) */
+.km-note {
+  display: block;
+  margin-top: 4px;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+}
 /* 11/15: 표시 설정 창이 펼쳐져 있으면 안내를 창 오른쪽 빈자리로 (좁은 칸에서는 절반까지만) */
 .km-panel[data-collapsed='false'] ~ .km-empty {
   padding-left: min(340px, 50%);
