@@ -31,8 +31,9 @@ export const FEEDS = [
   { id: 'microled-info', name: 'MicroLED-Info', tier: 2, url: 'https://www.microled-info.com/rss.xml', lang: 'en' },
   { id: 'trendforce', name: 'TrendForce', tier: 2, url: 'https://www.trendforce.com/feed/Display.html', lang: 'en' },
   { id: 'ledinside', name: 'LEDinside', tier: 2, url: 'https://www.ledinside.com/rss.xml', lang: 'en' },
-  { id: 'ubi-ko', name: '유비리서치', tier: 2, url: 'https://www.ubiresearch.com/feed/' },
-  { id: 'ubi-en', name: 'UBI Research', tier: 2, url: 'https://www.ubiresearch.com/en/feed/', lang: 'en' },
+  // 11/17: www 주소는 다른 주소로 넘겨 응답이 12~13초(시간 제한 15초 가까이) → 넘겨진 주소를 바로 (5초)
+  { id: 'ubi-ko', name: '유비리서치', tier: 2, url: 'https://ubiresearch.com/feed/' },
+  { id: 'ubi-en', name: 'UBI Research', tier: 2, url: 'https://ubiresearch.com/en/feed/', lang: 'en' },
   { id: 'kipost', name: 'KIPOST', tier: 2, url: 'https://www.kipost.net/rss/allArticle.xml' },
   { id: 'etnews', name: '전자신문', tier: 2, url: 'https://rss.etnews.com/06.xml' },
   { id: 'zdnet', name: 'ZDNet Korea', tier: 2, url: 'https://feeds.feedburner.com/zdkorea' },
@@ -171,7 +172,10 @@ export async function collectFeeds(words, { disabled = [] } = {}) {
           if (keyword) matched += 1
           articles.push(toFeedArticle(item, feed, keyword ?? BROAD_KEYWORD))
         }
-        results.push({ id: feed.id, ok: true, items: items.length, matched, ...(items.via ? { via: items.via } : {}) })
+        // newest: 피드에서 가장 최근 글 날짜 (11/17) — 저장 0건이 「고장」인지 「새 글이 드문 곳」인지 관리 화면에서 가르려고
+        const times = items.map((i) => Date.parse(i.date)).filter(Number.isFinite)
+        const newest = times.length ? new Date(Math.max(...times)).toISOString() : null
+        results.push({ id: feed.id, ok: true, items: items.length, matched, newest, ...(items.via ? { via: items.via } : {}) })
       } catch (err) {
         results.push({ id: feed.id, ok: false, error: err.name === 'TimeoutError' ? '응답 시간 초과' : err.message })
       }

@@ -115,8 +115,10 @@ function AdminSources({ onToast }) {
                 const r = results[f.id]
                 const on = !off.includes(f.id)
                 // 11/17: 받기는 되는데 14일 동안 저장된 글이 없으면 표시 (논문 검색은 따로 셈)
+                // 피드의 최근 글도 14일보다 오래됐으면 고장이 아니라 「새 글이 드문 곳」 (예: SID 논문집은 1년에 한 번, VESA는 1년에 두어 번)
                 const st = data.stored?.[f.id]
                 const dead = data.stored && !f.paper && on && !(st?.recent > 0)
+                const quiet = dead && r?.newest && Date.now() - Date.parse(r.newest) > 14 * 86_400_000
                 return (
                   <li key={f.id} className={on ? '' : 'is-off'}>
                     <label>
@@ -131,11 +133,18 @@ function AdminSources({ onToast }) {
                         <>
                           받은 글 {r.items} · 키워드 맞음 <b>{r.matched}</b>
                           {r.added != null && ` · 새로 ${r.added}`}
-                          {dead && (
-                            <span className="adm-state warn" title={st?.last ? `마지막으로 저장된 글: ${formatAt(st.last)}` : '한 번도 저장된 적 없음'}>
+                          {quiet ? (
+                            <span className="muted" title="피드에 새 글이 올라오면 그때 모아요. 끌 필요 없어요">
                               {' '}
-                              · 14일 동안 저장 0건{st?.total ? '' : ' (저장된 적 없음)'}
+                              · 새 글이 드문 곳 (피드 최근 글 {formatAt(r.newest)})
                             </span>
+                          ) : (
+                            dead && (
+                              <span className="adm-state warn" title={st?.last ? `마지막으로 저장된 글: ${formatAt(st.last)}` : '한 번도 저장된 적 없음'}>
+                                {' '}
+                                · 14일 동안 저장 0건{st?.total ? '' : ' (저장된 적 없음)'}
+                              </span>
+                            )
                           )}
                         </>
                       ) : (
