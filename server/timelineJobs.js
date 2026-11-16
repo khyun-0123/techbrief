@@ -4,6 +4,8 @@
 // - AI는 「뒤에서 도는 일」 순서라 사람이 누른 요약 · 보고서가 먼저다 (llm/client.js PRIORITY.BACKGROUND)
 // - 특허: 받아 둔 디스플레이 특허 DB · 전 세계 특허 제목 파일에서 미리 센다(비용 없음, 11/12). 둘 다 없을 때만 BigQuery(한 번 26GB)라 미리 받지 않고 사람이 열 때 받는다
 // - OpenAlex는 한 말에 $0.002 → 30개면 $0.06. 서버가 켜지고 10분 뒤, 그 뒤 6시간마다. TIMELINE_PRECOMPUTE=off면 안 함
+// - 11/17: 같은 말의 연관 키워드 맵 · 맵 재료(논문 · 특허) · 보고서용 묶음도 같이 만들어 둔다 (37 문서 P3). 예전엔 시계열만 28개 준비되고 맵은 2개뿐이라
+//   미리 분석된 말도 맵을 열면 네이버 + 형태소 분석을 기다렸고, 묶음이 없으면 보고서 만들 때 최대 20초 기다렸다. 맵은 네이버 1회 · AI 안 씀. 이미 있으면 바로 끝남
 import { dbEnabled } from './db/index.js'
 import { getKeywords, getSetting, setSetting } from './db/store.js'
 import { frequentSearches, queryKey, rememberTerms } from './queryTerms.js'
@@ -11,6 +13,27 @@ import { getTechTrends } from './techtrends.js'
 import { buildTimeline, cachedTimeline, timelineStory } from './timeline.js'
 import { surgeMonths } from './timesfm.js'
 import { patentDbReady, titlesReady } from './patentDb.js'
+import { relatedWords } from './related.js'
+import { mapMaterials } from './mapMaterials.js'
+import { prepareBundle } from './keywordBundle.js'
+
+// 맵 · 맵 재료 · 보고서용 묶음 (하나가 실패해도 나머지는 계속)
+async function warmExtras(query) {
+  let n = 0
+  for (const [name, job] of [
+    ['맵', () => relatedWords(query, { background: true })],
+    ['맵 재료', () => mapMaterials(query)],
+    ['보고서 묶음', () => prepareBundle(query)],
+  ]) {
+    try {
+      const r = await job()
+      if (name !== '보고서 묶음' && r && !r.cached) n += 1 // 새로 만든 맵 · 맵 재료 수 (묶음은 기억 여부를 돌려주지 않아 세지 않음)
+    } catch (err) {
+      console.warn(`[timeline-jobs] ${name} ${query}: ${err.message}`)
+    }
+  }
+  return n
+}
 
 const STATE_KEY = 'timeline_precompute'
 const FRESH_MS = 3 * 86_400_000
@@ -46,6 +69,7 @@ export async function runPrecompute() {
   const started = new Date().toISOString()
   let made = 0
   let skipped = 0
+  let extras = 0
   const failed = []
   try {
     const targets = await precomputeTargets()
@@ -58,20 +82,22 @@ export async function runPrecompute() {
         skipped += 1
         // 「예상 밖 급증」(TimesFM, 11/16)만 없으면 채워 둔다 (기억해 둔 값이 있으면 바로 끝남)
         if (timeline.naver?.status === 'ok') await surgeMonths(timeline.naver.months).catch((err) => console.warn(`[timesfm] ${err.message}`))
+        extras += await warmExtras(t.query)
         continue
       }
       try {
         await buildTimeline(t.query, { background: true, refresh: Boolean(timeline) && Date.now() - Date.parse(timeline.at) >= FRESH_MS })
         await timelineStory(t.query, { background: true, refresh: Boolean(story) })
         made += 1
+        extras += await warmExtras(t.query)
       } catch (err) {
         // 사람 요청에 자리를 내준 것(PreemptedError)은 다음 차례에 다시
         failed.push({ query: t.query, error: err.preempted ? '사람 요청 먼저 (다음에 다시)' : err.message })
       }
     }
-    const state = { phase: null, startedAt: started, endedAt: new Date().toISOString(), total: targets.length, made, skipped, failed: failed.slice(0, 10) }
+    const state = { phase: null, startedAt: started, endedAt: new Date().toISOString(), total: targets.length, made, skipped, extras, failed: failed.slice(0, 10) }
     await setSetting(STATE_KEY, state)
-    console.log(`[timeline-jobs] 미리 분석 ${made}개 · 건너뜀 ${skipped}개 · 실패 ${failed.length}개`)
+    console.log(`[timeline-jobs] 미리 분석 ${made}개 · 건너뜀 ${skipped}개 · 맵 · 맵 재료 새로 ${extras}개 · 실패 ${failed.length}개`)
     return state
   } finally {
     run.busy = false

@@ -16,7 +16,8 @@ import { queryKey } from './queryTerms.js'
 import { isException, isStop, subcatsOf } from './wordFilter.js'
 import { loadKiwi, nounsOf } from './kiwi.js'
 
-const TTL = 6 * 3600_000
+const TTL = 6 * 3600_000 // 맵 점의 기사(wordArticles)
+const MAP_TTL = 24 * 3600_000 // 맵 (11/17: 6시간 → 24시간, 미리 분석 작업이 6시간마다 대상 맵을 만들어 둔다 · 37 문서 P3)
 const MAX_NODES = 24
 
 // 조사 · 어미 (낱말 끝에서 뗀다). 긴 것부터
@@ -220,7 +221,8 @@ function suggestCount(nodes, issueWords) {
 }
 
 // 돌려주는 값: { center, docs, issues, nodes: [{ word, kind, score(함께 나온 이슈 수), share, subcats }], edges, children, autoPick }
-export async function relatedWords(rawCenter, { refresh = false } = {}) {
+// background: 미리 분석 작업에서 부를 때 — 네이버 하루 한도의 80%에서 멈춘다 (sourceGuard.js)
+export async function relatedWords(rawCenter, { refresh = false, background = false } = {}) {
   const center = String(rawCenter ?? '').trim().slice(0, 50)
   if (!center) throw Object.assign(new Error('키워드를 입력해 주세요.'), { status: 400 })
   const key = `related:v8:${queryKey(center)}` // v2: 영어 기능어(11/11) · v3: 워드클라우드팀 불용어 · 예외 · 사업 분류 · v4: 교차선 · 2단계(11/14) · v5: 자동 개수(11/15) · v6~7: Kiwi 명사(동사로 쓰인 명사 뺌) · 전체 기간 + AI 요약 · 3단계 · auto(11/15)
@@ -229,7 +231,7 @@ export async function relatedWords(rawCenter, { refresh = false } = {}) {
     if (hit) return { ...hit, cached: true }
   }
   const [naver, mine, lists, kiwi] = await Promise.all([
-    searchNews(center, { sort: 'sim' }).catch(() => []),
+    searchNews(center, { sort: 'sim', background }).catch(() => []),
     collectedDocs(center).catch(() => []),
     getLists(),
     loadKiwi(),
@@ -276,7 +278,7 @@ export async function relatedWords(rawCenter, { refresh = false } = {}) {
   const { edges, children } = linksOf(nodes, issueWords, merged)
   const autoPick = suggestCount(nodes, issueWords)
   const out = { center, docs: docs.length, issues: issues.length, nodes, edges, children, autoPick, words: kiwi ? 'kiwi' : 'rules', at: new Date().toISOString() }
-  await cachePut(key, out, TTL).catch(() => {})
+  await cachePut(key, out, MAP_TTL).catch(() => {})
   return { ...out, cached: false }
 }
 
