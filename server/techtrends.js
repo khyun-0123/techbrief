@@ -679,13 +679,16 @@ export async function refreshPapersNow() {
 }
 
 // 서버가 켜지면 1분 뒤 한 번, 그 뒤 하루마다. TECH_TRENDS=off면 돌지 않음 (테스트 서버용)
-export function startTechTrends() {
+// allowed: 이 앱이 배경 작업을 해도 되는지 (11/17, refresh.js backgroundAllowed — 수집 담당 앱만)
+export function startTechTrends({ allowed = async () => true } = {}) {
   if (process.env.TECH_TRENDS === 'off' || !dbEnabled()) return
   globalThis.__techTrendsCycle = cycle // 서버가 다시 올라오면 새 코드의 cycle로 바뀜
+  globalThis.__techTrendsAllowed = allowed
   schedulePaperRetry()
   if (globalThis.__techTrendsTimer) return
-  setTimeout(() => globalThis.__techTrendsCycle(), 60_000).unref?.()
-  globalThis.__techTrendsTimer = setInterval(() => globalThis.__techTrendsCycle(), CYCLE_MS)
+  const auto = () => globalThis.__techTrendsAllowed().then((ok) => ok && globalThis.__techTrendsCycle()).catch(() => {})
+  setTimeout(auto, 60_000).unref?.()
+  globalThis.__techTrendsTimer = setInterval(auto, CYCLE_MS)
   globalThis.__techTrendsTimer.unref?.()
 }
 

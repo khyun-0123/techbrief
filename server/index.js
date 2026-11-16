@@ -59,7 +59,7 @@ import {
   SECTION_SCHEMA,
 } from './llm/reportPrompts.js'
 import { adminConfigured, adminHere, adminOf, changeLog, clientIp, diffWords, logChange, login, logout, readCookie, requireAdmin } from './admin.js'
-import { backlogBrief, queueSearchSummaries, refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
+import { backgroundAllowed, backlogBrief, queueSearchSummaries, refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
 import { featureList, FEATURES, getFeatures, saveFeatures } from './features.js'
 import { summarizeArticle, summarizeOnly } from './summarize.js'
 import { pruneUsage, recordClientEvent, usageStats } from './usage.js'
@@ -362,9 +362,9 @@ export function startScheduler() {
     .catch((err) => console.warn(`[llm] 저장된 AI 서버를 쓸 수 없어 기본값으로: ${err.message}`))
   startRefreshScheduler()
   listArticles().catch(() => {}) // 11/17: 자료 현황 목록을 켜질 때 미리 계산해 둔다 (첫 화면이 계산을 기다리지 않게)
-  startTechTrends() // 기술 트렌드: 켜진 뒤 1분, 그 뒤 하루마다 (TECH_TRENDS=off면 안 함)
-  startCorpus() // 디스플레이 논문 DB: 켜진 뒤 3분, 그 뒤 6시간마다 (PAPER_CORPUS=off면 안 함, papers/corpus.js)
-  startPrecompute() // 기술 시계열 미리 분석: 켜진 뒤 10분, 그 뒤 6시간마다 (TIMELINE_PRECOMPUTE=off면 안 함, timelineJobs.js)
+  startTechTrends({ allowed: backgroundAllowed }) // 기술 트렌드: 켜진 뒤 1분, 그 뒤 하루마다 (TECH_TRENDS=off면 안 함)
+  startCorpus({ allowed: backgroundAllowed }) // 디스플레이 논문 DB: 켜진 뒤 3분, 그 뒤 6시간마다 (PAPER_CORPUS=off면 안 함, papers/corpus.js)
+  startPrecompute({ allowed: backgroundAllowed }) // 기술 시계열 미리 분석: 켜진 뒤 10분, 그 뒤 6시간마다 (TIMELINE_PRECOMPUTE=off면 안 함, timelineJobs.js)
   // 사용 현황 원본은 90일만 둔다: 켜질 때 한 번, 그 뒤 하루 한 번
   const prune = () => {
     pruneUsage().catch((err) => console.warn(`[usage] 오래된 기록 정리 실패: ${err.message}`))
@@ -513,7 +513,7 @@ async function handleApiInner(req, res) {
     // 수집 출처 (14 문서 4-B): 네이버 밖 출처 목록 · 켜기/끄기 · 지난 수집 결과. 관리자만
     if (req.method === 'GET' && req.url === '/api/admin/sources') {
       requireAdmin(req)
-      return send(res, 200, { list: feedList(), ...(await getSources()), papers: await paperProviderStatus(), corpus: await corpusStatus().catch(() => null) })
+      return send(res, 200, { list: feedList(), ...(await getSources({ counts: true })), papers: await paperProviderStatus(), corpus: await corpusStatus().catch(() => null) })
     }
     if (req.method === 'PUT' && req.url === '/api/admin/sources') {
       const admin = requireAdmin(req)

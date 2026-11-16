@@ -123,10 +123,23 @@ async function cleanupDb() {
 const SOURCES_KEY = 'feed_sources' // { disabled: [id] }
 const SOURCES_STATUS_KEY = 'feed_sources_status' // { at, results: [{ id, ok, items, matched, added, error }] }
 
-export async function getSources() {
+export async function getSources({ counts = false } = {}) {
   const saved = await getSetting(SOURCES_KEY, { disabled: [] })
   const disabled = (saved.disabled ?? []).filter((id) => FEEDS.some((f) => f.id === id))
-  return { disabled, status: await getSetting(SOURCES_STATUS_KEY, null) }
+  return { disabled, status: await getSetting(SOURCES_STATUS_KEY, null), ...(counts ? { stored: await storedByFeed() } : {}) }
+}
+
+// 출처마다 최근 14일 · 전체 저장 건수 (11/17, 관리 페이지): 「정상 · 받은 글 580」인데 한 번도 저장되지 않은 출처가 5곳 있었음 (36 문서 4-1)
+// 받기는 되지만 날짜 기준(14일)이나 키워드에 걸려 모두 버려지는 경우가 화면에 보이지 않았다
+export const STORED_DAYS = 14
+async function storedByFeed() {
+  if (!dbEnabled()) return null
+  const { rows } = await query(
+    `SELECT substr(section, 6) AS id, count(*) FILTER (WHERE published_at > now() - make_interval(days => $1))::int AS recent, count(*)::int AS total, max(published_at) AS last
+       FROM articles WHERE section LIKE 'feed:%' GROUP BY 1`,
+    [STORED_DAYS],
+  )
+  return Object.fromEntries(rows.map((r) => [r.id, { recent: r.recent, total: r.total, last: r.last?.toISOString() ?? null }]))
 }
 
 export async function saveSources(input = {}) {

@@ -149,11 +149,12 @@ export async function runCorpus({ force = null } = {}) {
 }
 
 // 서버가 켜지고 3분 뒤, 그 뒤 6시간마다 (처음 받기는 멈춘 곳부터 이어 받음). PAPER_CORPUS=off면 안 함
-export function startCorpus() {
+// allowed: 이 앱이 배경 작업을 해도 되는지 (11/17, refresh.js backgroundAllowed — 수집 담당 앱만)
+export function startCorpus({ allowed = async () => true } = {}) {
   if (process.env.PAPER_CORPUS === 'off' || !dbEnabled()) return
   clearTimeout(run.timer)
   const tick = () => {
-    runCorpus().finally(() => {
+    allowed().catch(() => false).then((ok) => (ok ? runCorpus() : null)).finally(() => {
       run.timer = setTimeout(tick, 6 * 3600_000)
     })
   }

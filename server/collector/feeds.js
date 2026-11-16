@@ -42,7 +42,8 @@ export const FEEDS = [
   { id: 'samsung-en', name: 'Samsung Newsroom', tier: 1, url: 'https://news.samsung.com/global/feed', lang: 'en' },
   { id: 'skhynix-en', name: 'SK hynix Newsroom', tier: 1, url: 'https://news.skhynix.com/en/feed/', lang: 'en' }, // 한국어판 피드는 403
   { id: 'vesa', name: 'VESA', tier: 1, url: 'https://vesa.org/feed/', lang: 'en' },
-  { id: 'semi-digest', name: 'Semiconductor Digest', tier: 2, url: 'https://www.semiconductor-digest.com/feed/', lang: 'en' },
+  // ua (11/17): 이 곳은 기본 접속 이름(UA)을 막아(응답 520) 한 번도 저장되지 않았음. 브라우저인 척하지 않고 다른 이름으로 밝힌다 (36 문서 4-1)
+  { id: 'semi-digest', name: 'Semiconductor Digest', tier: 2, url: 'https://www.semiconductor-digest.com/feed/', lang: 'en', ua: 'techbrief/0.1 (+rss reader)' },
   { id: 'semi-eng', name: 'Semiconductor Engineering', tier: 2, url: 'https://semiengineering.com/feed/', lang: 'en' },
   { id: 'eetimes', name: 'EE Times', tier: 2, url: 'https://www.eetimes.com/feed/', lang: 'en' },
   { id: 'ieee-spectrum', name: 'IEEE Spectrum', tier: 2, url: 'https://spectrum.ieee.org/feeds/feed.rss', lang: 'en' },
@@ -87,8 +88,8 @@ function parseFeed(xml) {
   })
 }
 
-async function getText(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/rss+xml, application/xml, text/xml, */*' }, signal: AbortSignal.timeout(TIMEOUT_MS) })
+async function getText(url, ua = UA) {
+  const res = await fetch(url, { headers: { 'User-Agent': ua, Accept: 'application/rss+xml, application/xml, text/xml, */*' }, signal: AbortSignal.timeout(TIMEOUT_MS) })
   if (!res.ok) throw new Error(`응답 ${res.status}`)
   return res.text()
 }
@@ -158,7 +159,7 @@ export async function collectFeeds(words, { disabled = [] } = {}) {
   await Promise.all(
     feeds.map(async (feed) => {
       try {
-        const items = feed.paper ? await searchPapers(words) : parseFeed(await getText(feed.url))
+        const items = feed.paper ? await searchPapers(words) : parseFeed(await getText(feed.url, feed.ua))
         let matched = 0
         for (const item of items) {
           if (!item.title || !item.link) continue

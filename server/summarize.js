@@ -30,6 +30,12 @@ function checkBasis(summary, articles) {
   return summary
 }
 
+// 요약 모양 버전 (11/17, 36 문서 2-1). 1 = 11/07 전 모양(근거 출처 basisSource 없음, 원문 기반 아님) · 2 = 지금
+// 예전 앱(다른 포트, 예전 모델)이 같은 DB에 1 모양 요약을 계속 써 왔고, 저장된 요약은 다시 만들지 않아 그대로 쓰였다
+// → 자동 요약 대기열이 1 모양 요약을 새 기사 다음 순서로 다시 만든다 (refresh.js buildBacklog)
+export const SUMMARY_VERSION = 2
+export const isOutdatedSummary = (summary) => Boolean(summary) && !summary.basisSource && !summary.promptVersion
+
 export function idOf(article) {
   return String(article.id ?? (article.url ? articleId(article.url) : article.title))
 }
@@ -66,6 +72,7 @@ export async function summarizeArticle(article, related = [], { refresh = false,
   })
   const summary = checkBasis(data, articles)
   summary.basisSource = body ? 'fulltext' : abstract ? 'abstract' : 'excerpt'
+  summary.promptVersion = SUMMARY_VERSION
   if (paperText) Object.assign(summary, { basisFrom: paperText.from, basisUrl: paperText.url })
   const result = { summary, model, createdAt: new Date().toISOString() }
   await saveSummary(id, result, related.map((r) => (r.id || r.url ? idOf(r) : null)))
