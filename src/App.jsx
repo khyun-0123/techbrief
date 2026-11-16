@@ -1545,7 +1545,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                       <th>제목</th>
                       <th className="center">출처</th>
                       <th className="center">발행</th>
-                      <th className="center" title="기사 제목 · 내용에 나온 우리 용어(수집 키워드 · 회사 · 관심 기술 · 뜨는 기술)와 요약 핵심어. 누르면 그 말로 걸러요">키워드</th>
+                      <th className="center" title="기사 제목 · 내용에 나온 우리 용어(수집 키워드 · 회사 · 뜨는 기술)와 요약 핵심어. 누르면 그 말로 걸러요">키워드</th>
                       <th className="center">작업</th>
                     </tr>
                   </thead>

@@ -788,6 +788,7 @@ async function handleApiInner(req, res) {
       const { keywords = [] } = await readJson(req)
       const saved = await setKeywords(keywords)
       await logChange(admin, '자동 수집 키워드', diffWords(before, saved))
+      markListStale() // 11/17: 관심 기술 = 자동 수집 키워드라 중요도(사업 연관성)도 바뀜
       return send(res, 200, { keywords: saved })
     }
     // 직접 추가한 자료 (27 문서 3장). 파일은 base64로 받아 크기 제한을 따로 둔다

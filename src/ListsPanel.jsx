@@ -1,11 +1,10 @@
-// 「회사·관심 기술」: 자사·자회사 / 경쟁사 / 관심 기술 목록 (13 문서 F6, 팀 공용)
+// 「회사」: 자사·자회사 / 경쟁사 목록 (13 문서 F6, 팀 공용). 관심 기술은 11/17부터 자동 수집 키워드를 그대로 씀 (server/collector/lists.js)
 // 중요도 점수에 쓰여 모두에게 영향을 주므로 관리자 화면에서만 바꾼다. 일반 화면은 보기만 (17 문서)
 import { useState } from 'react'
 
 const GROUPS = [
   ['own', '자사·자회사', '「자사·자회사 기사 제외」에 쓰여요', '예: LG디스플레이'],
   ['competitors', '경쟁사', '중요도의 경쟁사 언급에 쓰여요', '예: 삼성디스플레이'],
-  ['interests', '관심 기술', '제목에 나오면 중요도 점수가 올라가요', '예: 마이크로LED'],
 ]
 
 // onChange가 없으면 보기만
@@ -57,7 +56,7 @@ function ListsPanel({ lists }) {
   return (
     <details className="lists-panel">
       <summary>
-        회사·관심 기술 <span className="list-count">자사 {lists.own.length} · 경쟁사 {lists.competitors.length} · 관심 기술 {lists.interests.length}</span>
+        회사 <span className="list-count">자사 {lists.own.length} · 경쟁사 {lists.competitors.length}</span>
       </summary>
       {GROUPS.map(([key, label, hint, placeholder]) => (
         <ChipList
@@ -74,7 +73,7 @@ function ListsPanel({ lists }) {
   )
 }
 
-// 관리자 화면: 세 목록을 바꿔 저장 (17 문서)
+// 관리자 화면: 두 목록을 바꿔 저장 (17 문서)
 export function ListsEditor({ lists, onSave }) {
   return GROUPS.map(([key, label, hint, placeholder]) => (
     <ChipList

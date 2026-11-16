@@ -105,7 +105,6 @@ function buildAlerts({ health, refresh, keywords, lists, ops }) {
   }
   if (refresh?.settings?.mode === 'off') alerts.push({ level: 'warn', text: '자동 최신화가 꺼져 있어요. 직접 누를 때만 모아요.', go: 'refresh' })
   if (keywords && keywords.keywords.length === 0) alerts.push({ level: 'warn', text: '자동 수집 키워드가 없어요.', go: 'targets' })
-  if (lists && lists.interests.length === 0) alerts.push({ level: 'warn', text: '관심 기술이 비어 있어 사업 연관성을 판단하지 못해요.', go: 'targets' })
   if (refresh?.backlog?.failed > 0) alerts.push({ level: 'warn', text: `자동 요약 실패 ${refresh.backlog.failed}건`, go: 'refresh' })
   return alerts
 }
@@ -395,7 +394,7 @@ function AdminApp() {
     llm: draft.llm ?? health?.llm?.current,
     features: draft.features ?? features?.features,
   }
-  const DRAFT_LABEL = { keywords: '자동 수집 키워드', lists: '회사 · 관심 기술', refresh: '자동 최신화', llm: 'AI 모델', features: '실험 기능' }
+  const DRAFT_LABEL = { keywords: '자동 수집 키워드', lists: '회사', refresh: '자동 최신화', llm: 'AI 모델', features: '실험 기능' }
   const DRAFT_SECTION = { keywords: 'targets', lists: 'targets', refresh: 'refresh', llm: 'llm', features: 'features' }
   const dirty = Object.keys(draft)
   const dirtySections = new Set(dirty.map((k) => DRAFT_SECTION[k]))
@@ -637,7 +636,7 @@ function AdminApp() {
               <section className="adm-card">
                 <h2>수집 대상</h2>
                 <p className="adm-desc">
-                  키워드 {keywords?.keywords.length ?? 0}개 · 관심 기술 {lists?.interests.length ?? 0}개 · 경쟁사 {lists?.competitors.length ?? 0}개
+                  키워드 {keywords?.keywords.length ?? 0}개 · 경쟁사 {lists?.competitors.length ?? 0}개
                 </p>
                 <div className="chips">
                   {(keywords?.keywords ?? []).map((k) => (
@@ -695,8 +694,8 @@ function AdminApp() {
               )}
             </section>
             <section className="adm-card">
-              <h2>회사 · 관심 기술</h2>
-              <p className="adm-desc">중요도 점수(경쟁사 언급·관심 기술)와 「자사·자회사 기사 제외」에 쓰여요.</p>
+              <h2>회사</h2>
+              <p className="adm-desc">중요도 점수(경쟁사 언급)와 「자사·자회사 기사 제외」에 쓰여요. 관심 기술은 위 자동 수집 키워드를 그대로 써요 (11/17 합침).</p>
               {view.lists && <ListsEditor lists={view.lists} onSave={(next) => change('lists', next)} />}
             </section>
             <section className="adm-card adm-span">
