@@ -111,10 +111,26 @@ function AdminRefresh({ status, starting, disabled, onRun, onSave, keywords = []
             자동 요약할 기사 기간
             <Seg value={settings.summaryDays ?? 7} onChange={(v) => change({ summaryDays: Number(v) })} label="자동 요약할 기사 기간" options={[3, 7, 14, 21].map((d) => ({ value: d, label: `최근 ${d}일${d === 7 ? ' (기본)' : ''}` }))} />
             <small>
-              기사(네이버 · 전문매체)만이에요. 처음 켜면 이 기간의 기사를 중요도 순으로 요약하고, 그 뒤로는 새로 모은 기사를 이어서 요약해요. 네이버 검색 결과는 21일까지만 보관해요(23 문서). 논문은 따로 최근 7일.
+              기사(네이버 · 전문매체)만이에요. 처음 켜면 이 기간의 기사를 중요도 순으로 요약하고, 그 뒤로는 새로 모은 기사를 이어서 요약해요. 논문은 따로 최근 7일.
             </small>
           </label>
         )}
+        {/* 11/17 (37 문서 Q6): 네이버로 모은 기사 보관 기간 */}
+        <label className="adm-field-inline">
+          네이버 기사 보관
+          <Seg
+            value={settings.naverKeepDays ?? 0}
+            onChange={(v) => change({ naverKeepDays: Number(v) })}
+            label="네이버 기사 보관"
+            options={[
+              { value: 21, label: '21일' },
+              { value: 0, label: '지우지 않음' },
+            ]}
+          />
+          <small>
+            네이버 검색 API로 모은 기사만이에요(네이버 이용 조건은 21일 보관, 23 문서). 1·2차 출처(전문매체 · 기업 RSS)는 원래 사이트에서 받아 해당 없어요. 요약된 기사는 보고서 근거라 남아요. 「지우지 않음」이면 1년 뒤에 정리해요. 다음 최신화 때 적용돼요.
+          </small>
+        </label>
       </section>
       </div>
 

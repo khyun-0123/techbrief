@@ -25,7 +25,10 @@ export const HOUR_OPTIONS = [1, 2, 3, 4, 6, 8, 12]
 // autoSummary: 자동 요약 켜기/끄기. all(관련도 낮음을 뺀 기사 전부, 중요도 높은 순) / off(직접 누를 때만)
 // 개발 중에는 off로 두고, 시연·테스트 때 all로 켠다
 export const AUTO_SUMMARY_OPTIONS = ['all', 'off']
-const DEFAULT_SETTINGS = { mode: 'off', time: '06:00', hours: 2, autoSummary: 'off', summaryDays: 7 }
+const DEFAULT_SETTINGS = { mode: 'off', time: '06:00', hours: 2, autoSummary: 'off', summaryDays: 7, naverKeepDays: 0 }
+// 네이버로 모은 기사 보관 (11/17 조장 · 37 문서 Q6): 21 = 21일 지나면 지움(네이버 이용 조건, 23 문서) · 0 = 지우지 않음(1년 뒤 정리, 예전 그대로)
+// 1·2차 출처(RSS)는 네이버가 아니라 원래 사이트에서 받으므로 해당 없음. 요약된 기사는 보고서 근거라 남긴다
+export const NAVER_KEEP_OPTIONS = [21, 0]
 // 자동 요약할 기사 기간 (관리자, 11/08). 기사(네이버 · 전문매체)만. 네이버 검색 결과 보관 21일(23 문서) 안에서 고른다
 // 논문은 기간 기준이 달라 따로 둔다 (지금은 7일 고정, PAPER_SUMMARY_DAYS)
 export const SUMMARY_DAY_OPTIONS = [3, 7, 14, 21]
@@ -123,6 +126,7 @@ export function normalizeSettings(input = {}) {
     hours: HOUR_OPTIONS.includes(Number(s.hours)) ? Number(s.hours) : DEFAULT_SETTINGS.hours,
     autoSummary: AUTO_SUMMARY_OPTIONS.includes(s.autoSummary) ? s.autoSummary : DEFAULT_SETTINGS.autoSummary,
     summaryDays: SUMMARY_DAY_OPTIONS.includes(Number(s.summaryDays)) ? Number(s.summaryDays) : DEFAULT_SETTINGS.summaryDays,
+    naverKeepDays: NAVER_KEEP_OPTIONS.includes(Number(s.naverKeepDays)) ? Number(s.naverKeepDays) : DEFAULT_SETTINGS.naverKeepDays,
     enabledAt: s.enabledAt ?? null, // 켠 시각. 켜기 전에 지난 예정은 따라잡지 않는다
   }
 }

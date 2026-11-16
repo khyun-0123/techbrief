@@ -112,6 +112,7 @@ async function updateDaily(reps) {
 }
 
 // 1년이 지난 기사 정리. 요약한 기사는 보고서 근거라 남긴다
+// 11/17 (37 문서 Q6): 관리 페이지 「네이버 기사 보관」이 21일이면 네이버로 모은 기사(1·2차 출처 RSS 말고)는 21일 지나면 지운다 (요약된 것은 남김)
 async function cleanupDb() {
   await query(
     `DELETE FROM articles a
@@ -119,6 +120,18 @@ async function cleanupDb() {
         AND NOT EXISTS (SELECT 1 FROM summaries s WHERE s.article_id = a.id)`,
     [KEEP_DAYS],
   )
+  const naverKeepDays = Number((await getSetting('refresh_settings', {}).catch(() => ({})))?.naverKeepDays) || 0
+  if (naverKeepDays > 0) {
+    const { rowCount } = await query(
+      `DELETE FROM articles a
+        WHERE coalesce(a.section, '') NOT LIKE 'feed:%'
+          AND a.published_at < now() - make_interval(days => $1)
+          AND NOT EXISTS (SELECT 1 FROM summaries s WHERE s.article_id = a.id)`,
+      [naverKeepDays],
+    )
+    if (rowCount) console.log(`[collect] 네이버 기사 ${naverKeepDays}일 지난 것 ${rowCount}건 지움`)
+  }
+  await query('DELETE FROM article_scores s WHERE NOT EXISTS (SELECT 1 FROM articles a WHERE a.id = s.issue_id)').catch(() => {})
 }
 
 // 네이버 밖 출처 (feeds.js). 관리자가 끈 출처와 지난 수집 결과는 app_settings에 둔다
