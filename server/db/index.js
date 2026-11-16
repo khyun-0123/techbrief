@@ -104,6 +104,20 @@ CREATE TABLE IF NOT EXISTS article_texts (
   fetched_at  timestamptz NOT NULL DEFAULT now()
 );
 
+-- 기사(이슈) 중요도 저장 (11/17 조장: 키워드 점수(요즘 뜨는 기술)와 자료 점수는 별개로 저장, 한 번 매긴 점수는 다시 쓴다 · 37 문서 P2)
+-- issue_id = 이슈 대표 기사 id. parts = 칸별 원점수 · 관련도 배수 · 잡음 배수 등 (score.js). 최신성은 시간에 따라 줄어서
+-- 볼 때 다시 계산한다 (score.js rescore). sig = 최신성을 뺀 점수 재료 + 기준 버전 — 바뀐 것만 다시 쓴다
+CREATE TABLE IF NOT EXISTS article_scores (
+  issue_id      text PRIMARY KEY,
+  sig           text NOT NULL,
+  score         integer NOT NULL,
+  level         text NOT NULL,
+  parts         jsonb NOT NULL,
+  relevance     text,
+  published_at  timestamptz,
+  computed_at   timestamptz NOT NULL DEFAULT now()
+);
+
 -- 논문 출처 결과 캐시 (server/papers). 검색 6시간 · 논문 수 24시간~30일 뒤 다시 받는다. 지난 것은 가끔 지움
 CREATE TABLE IF NOT EXISTS paper_cache (
   key         text PRIMARY KEY,

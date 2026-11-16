@@ -48,6 +48,16 @@ export function mentions(text, term) {
 // relevance: 이슈의 관련도 high / mid / low
 // rising: 「요즘 뜨는 기술」 상위 용어 [{ name, en, firstSeen }] (techtrends.js 종합 순위) → 신규성. 처음 잡힌 지 30일 안의 용어만
 // rerun: 3~21일 전에 비슷한 제목의 이슈가 이미 있었음(재탕) → 신규성의 「첫 소식」 점수 없음
+// 저장해 둔 점수 재료(parts)로 지금 점수를 다시 계산 (11/17, article_scores): 최신성만 지금 시각으로, 배점은 지금 기준으로
+export function rescore(parts, publishedAt, rule = importanceRule()) {
+  if (!parts?.raw) return null
+  const hours = (Date.now() - Date.parse(publishedAt)) / 3600_000
+  const raw = { ...parts.raw, recency: Number.isFinite(hours) ? Math.round(15 * Math.max(0, 1 - hours / RECENCY_HOURS)) : 0 }
+  const total = Object.entries(raw).reduce((sum, [k, v]) => sum + Math.round(((v * rule.weights[k]) / DEFAULT_RULE.weights[k]) * 10) / 10, 0)
+  const score = Math.max(0, Math.min(100, Math.round(total * (parts.weight ?? 1) * (parts.noise ?? 1))))
+  return { score, level: score >= rule.high ? 'high' : 'normal' }
+}
+
 export function scoreArticle(article, groupSize, competitors = [], { relevance = 'high', interests = [], own = [], rising = [], rerun = false, outlets } = {}) {
   const title = article.title
   const text = `${title} ${article.description ?? ''}`

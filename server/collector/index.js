@@ -8,10 +8,11 @@ import { searchNews } from './naver.js'
 import { findMention, getLists } from './lists.js'
 import { EXPERT_SOURCES, toArticle } from './normalize.js'
 import { BROAD_KEYWORD, relevanceInfo } from './relevance.js'
-import { mentions, scoreArticle } from './score.js'
+import { mentions, rescore, scoreArticle } from './score.js'
 import { titleSentiment } from './sentiment.js'
 import { restoreTitles } from './titles.js'
-import { loadImportanceRule } from '../importanceRule.js'
+import crypto from 'node:crypto'
+import { importanceRule, loadImportanceRule } from '../importanceRule.js'
 
 const MAX_KEYWORDS = 10 // API 호출 수를 지키기 위한 한도
 const MAX_PAGES = 10 // 키워드마다 100건씩 최대 10번(1,000건, 네이버 한도)까지 넘겨 받는다
@@ -72,7 +73,8 @@ async function loadRecentFromDb(days) {
 const BODY_FOR_RELEVANCE = 4_000
 
 // 같은 이슈 묶기를 다시 해서 바뀐 것만 저장한다. 수집이 끝날 때 한 번 (접속할 때마다 묶으면 느려서)
-async function regroupDb(stored) {
+// days: 다시 불러올 기간 (11/17: 예전엔 늘 7일만 돌려줘, 21일 자동 요약 대상 · 400일 점수 채우기가 다시 묶은 날엔 7일치만 받았음)
+async function regroupDb(stored, days = LIST_DAYS) {
   const changed = groupArticles(stored).filter((a, i) => a.groupId !== stored[i].groupId)
   if (changed.length === 0) return stored
   await query(
@@ -80,7 +82,7 @@ async function regroupDb(stored) {
        FROM unnest($1::text[], $2::text[]) AS c(id, group_id) WHERE a.id = c.id`,
     [changed.map((a) => a.id), changed.map((a) => a.groupId)],
   )
-  return loadRecentFromDb(LIST_DAYS)
+  return loadRecentFromDb(days)
 }
 
 async function lastCollectedFromDb() {
@@ -394,6 +396,7 @@ function rebuildList({ regroup = false } = {}) {
       snap.value = value
       snap.at = Date.now()
       snap.dirty = snap.gen !== gen
+      saveScores(value.articles).catch((err) => console.warn(`[scores] 저장 실패: ${err.message}`))
       return value
     })
     .finally(() => {
@@ -404,9 +407,86 @@ function rebuildList({ regroup = false } = {}) {
   return run
 }
 
+// ── 중요도 저장 (11/17 조장 · 37 문서 P2-1 · P2-2 · P2-5) ──
+// 목록을 계산할 때마다 이슈 점수를 article_scores에 저장한다. 최신성을 뺀 재료 · 기준이 바뀐 것만 다시 쓴다
+// (관리 페이지에서 중요도 기준 · 회사 목록을 바꾸면 markListStale → 다시 계산 → 바뀐 것이 모두 다시 저장됨)
+// 목록(7일)을 지난 이슈도 마지막 점수가 남는다 → 맵 「중요도순」 · 검색처럼 7일 밖 기사를 보는 곳이 쓴다 (storedScores)
+// 수집 담당 앱만 쓴다 (refresh.js backgroundAllowed). 처음 한 번은 DB 기사 전체(400일)로 채운다
+const scoreStore = (globalThis.__scoreStore ??= { loaded: false, sigs: new Map() })
+const BACKFILL_SCORES_KEY = 'article_scores_backfill_v2'
+const ruleKey = () => crypto.createHash('sha1').update(JSON.stringify(importanceRule())).digest('hex').slice(0, 10)
+const sigOf = (a, key) => {
+  const { recency, ...rest } = a.scoreParts?.raw ?? {} // eslint-disable-line no-unused-vars
+  return JSON.stringify([rest, a.scoreParts?.weight ?? 1, a.scoreParts?.noise ?? 1, a.relevance, key])
+}
+async function saveScores(articles) {
+  if (!dbEnabled()) return 0
+  const { backgroundAllowed } = await import('../refresh.js') // 정적으로 가져오면 서로 가져오기가 돌아서 실행할 때 가져옴
+  if (!(await backgroundAllowed().catch(() => false))) return 0
+  if (!scoreStore.loaded) {
+    const { rows } = await query('SELECT issue_id, sig FROM article_scores')
+    for (const r of rows) scoreStore.sigs.set(r.issue_id, r.sig)
+    scoreStore.loaded = true
+  }
+  // 처음 채우기는 한 번만 (설정에 기록). 11/17 첫 시도는 regroupDb 버그로 7일치만 채워져 v2로 다시
+  if (scoreStore.backfillDone !== BACKFILL_SCORES_KEY) {
+    scoreStore.backfillDone = BACKFILL_SCORES_KEY
+    if (!(await getSetting(BACKFILL_SCORES_KEY, null))) {
+      await setSetting(BACKFILL_SCORES_KEY, { at: new Date().toISOString() })
+      // 처음 켰을 때: 지난 기사 전체 점수를 뒤에서 한 번 채운다 (재탕 판단은 지금 기준 21일 제목이라 오래된 기사는 조금 덜 정확)
+      computeList({ days: 400 })
+        .then((all) => saveScores(all.articles))
+        .then((n) => console.log(`[scores] 처음 채우기 ${n}건`))
+        .catch((err) => console.warn(`[scores] 처음 채우기 실패: ${err.message}`))
+    }
+  }
+  const key = ruleKey()
+  const changed = []
+  for (const a of articles) {
+    if (!a.scoreParts?.raw || a.material) continue
+    const sig = sigOf(a, key)
+    if (scoreStore.sigs.get(a.id) !== sig) changed.push([a, sig])
+  }
+  for (let i = 0; i < changed.length; i += 500) {
+    const part = changed.slice(i, i + 500)
+    await query(
+      `INSERT INTO article_scores (issue_id, sig, score, level, parts, relevance, published_at, computed_at)
+       SELECT id, sig, score, level, parts, relevance, published_at, now()
+         FROM unnest($1::text[], $2::text[], $3::int[], $4::text[], $5::jsonb[], $6::text[], $7::timestamptz[])
+           AS t(id, sig, score, level, parts, relevance, published_at)
+       ON CONFLICT (issue_id) DO UPDATE SET sig = EXCLUDED.sig, score = EXCLUDED.score, level = EXCLUDED.level, parts = EXCLUDED.parts,
+         relevance = EXCLUDED.relevance, published_at = EXCLUDED.published_at, computed_at = now()`,
+      [
+        part.map(([a]) => a.id),
+        part.map(([, s]) => s),
+        part.map(([a]) => a.importance ?? 0),
+        part.map(([a]) => a.importanceLevel ?? 'normal'),
+        part.map(([a]) => JSON.stringify(a.scoreParts)),
+        part.map(([a]) => a.relevance ?? null),
+        part.map(([a]) => a.publishedAt),
+      ],
+    )
+    for (const [a, sig] of part) scoreStore.sigs.set(a.id, sig)
+  }
+  return changed.length
+}
+
+// 저장해 둔 점수 읽기: ids(이슈 대표 기사 id) → Map(id → { score, level, parts, relevance }). 최신성 · 배점은 지금 기준으로 다시 맞춘다
+export async function storedScores(ids) {
+  const out = new Map()
+  if (!dbEnabled() || !ids?.length) return out
+  await loadImportanceRule()
+  const { rows } = await query('SELECT issue_id, parts, relevance, published_at FROM article_scores WHERE issue_id = ANY($1::text[])', [ids])
+  for (const r of rows) {
+    const now = rescore(r.parts, r.published_at?.toISOString())
+    if (now) out.set(r.issue_id, { ...now, parts: r.parts, relevance: r.relevance })
+  }
+  return out
+}
+
 async function computeList({ regroup = false, days = LIST_DAYS } = {}) {
   let stored = dbEnabled() ? await loadRecentFromDb(days) : [...memory.values()]
-  if (dbEnabled() && (regroup || stored.some((a) => !a.groupId))) stored = await regroupDb(stored)
+  if (dbEnabled() && (regroup || stored.some((a) => !a.groupId))) stored = await regroupDb(stored, days)
   const articles = toIssues(stored, await getLists(), await scoreContext())
   const lastCollectedAt = dbEnabled() ? await lastCollectedFromDb() : memoryCollectedAt
   return { articles, total: stored.length, lastCollectedAt, storage: dbEnabled() ? 'db' : 'memory' }
