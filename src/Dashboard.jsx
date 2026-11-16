@@ -2,7 +2,8 @@
 // - 처음: 「키워드 분석」 검색창 + 바로 아래 「요즘 뜨는 기술」(참고해서 고르도록). 분석 칸은 비어 있어 작다
 // - 찾거나 기술을 누르면: 같은 패널 안에서 분석이 펼쳐진다 (연관 키워드 맵 + 기술 시계열, KeywordAnalysis.jsx). 검색창과 분석을 한 카드로 묶어 겹치지 않게
 //   「자료 찾기 →」(기간과 함께)를 눌러야 자료 현황에서 뉴스 · 논문을 찾는다. 「닫기」로 처음 모양으로
-// - 자동 수집 키워드 칩은 지금처럼 자료 현황에서 모은 기사를 그 키워드로 걸러 보여 준다
+// - 검색어 칩은 두 묶음 (11/16 조장): 「자동 수집 키워드」(공용, 예전 추천 검색어를 합침) · 「즐겨찾기 · 최근 검색어」(내 것, IP별).
+//   어느 칩이든 누르면 그 말로 분석한다 (예전: 자동 수집 키워드는 자료 현황으로 넘어갔음 — 대시보드는 분석하는 곳. 모은 기사는 「자료 찾기 →」)
 // - 예전 「추적 중인 키워드 추이」는 11/10 조장 결정으로 뺐다 (KeywordTrends.jsx는 그래프 부품 Spark만 씀)
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { fetchReadyTimelines } from './api.js'
@@ -42,7 +43,7 @@ function fitInLines(widths, moreW, avail, gap, lines) {
   return 1
 }
 
-function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, onGoReports, stats, keywords, recommended = [], favorites, recent, periods, period, onPeriod, onSearch, onScopeSearch, onAutoReport, onKeyword, onGoCollect, onRemember }) {
+function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, onGoReports, stats, keywords, favorites, recent, periods, period, onPeriod, onSearch, onScopeSearch, onAutoReport, onGoCollect, onRemember }) {
   const [text, setText] = useState('')
   const [focus, setFocus] = useState(null) // 분석 중인 말 (없으면 검색창 + 미리 분석된 키워드 + 요즘 뜨는 기술)
   const [ready, setReady] = useState([]) // 미리 분석해 둔 말 (11/10): 검색 전에도 분석이 어떤 모양인지 보이게
@@ -167,9 +168,10 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     setFocus(null)
     setText('')
   }
-  const recentOnly = recent.filter((q) => !favorites.includes(q) && !recommended.includes(q)).slice(0, 8)
-  const recommendedOnly = recommended.filter((q) => !favorites.includes(q))
-  const chipCount = keywords.length + recommendedOnly.length + favorites.length + recentOnly.length
+  // 내 검색어: ★ 즐겨찾기 먼저, 그 뒤 최근 검색어 (자동 수집 키워드 · 즐겨찾기와 겹치는 말은 한 번만)
+  const recentOnly = recent.filter((q) => !favorites.includes(q) && !keywords.includes(q)).slice(0, 8)
+  const mine = [...favorites.map((q) => ({ q, star: true })), ...recentOnly.map((q) => ({ q, star: false }))]
+  const chipCount = keywords.length + mine.length
 
   function submit(e) {
     e.preventDefault()
@@ -274,33 +276,18 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
         {chipCount > 0 && (
           <details className="dash-more">
             <summary>
-              자동 수집 키워드 · 추천 · 즐겨찾기 · 최근 검색어 <span className="dash-more-count">{chipCount}개</span>
-              {[...recommendedOnly, ...favorites, ...recentOnly].some((k) => unseen.has(k)) && mark([...unseen][0])}
+              자동 수집 키워드 · 즐겨찾기 · 최근 검색어 <span className="dash-more-count">{chipCount}개</span>
+              {[...keywords, ...mine.map((m) => m.q)].some((k) => unseen.has(k)) && mark([...unseen][0])}
             </summary>
             {keywords.length > 0 && (
               <div className="dash-chips">
                 <span className="dash-chips-label">
                   자동 수집 키워드
-                  <small>모은 기사에서 보기</small>
+                  <small>모두에게 보이는 추천</small>
                 </span>
                 <div className="dash-chips-list">
                   {keywords.map((k) => (
-                    <button key={k} type="button" className="chip dash-chip" onClick={() => onKeyword(k)} title={`모은 기사 중 「${k}」만 보기`}>
-                      {showTerm(k)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {recommendedOnly.length > 0 && (
-              <div className="dash-chips">
-                <span className="dash-chips-label">
-                  추천 검색어
-                  <small>뉴스·논문에서 찾기</small>
-                </span>
-                <div className="dash-chips-list">
-                  {recommendedOnly.map((k) => (
-                    <button key={k} type="button" className="chip dash-chip" onClick={() => analyze(k)} title={`「${k}」 분석 (관리자가 고른 추천 검색어)`}>
+                    <button key={k} type="button" className="chip dash-chip" onClick={() => analyze(k)} title={`「${k}」 분석 (자동으로 모으는 키워드)`}>
                       {showTerm(k)}
                       {mark(k)}
                     </button>
@@ -308,33 +295,18 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
                 </div>
               </div>
             )}
-            {favorites.length > 0 && (
+            {mine.length > 0 && (
               <div className="dash-chips">
                 <span className="dash-chips-label">
-                  ★ 즐겨찾기
-                  <small>뉴스·논문에서 찾기</small>
+                  즐겨찾기 · 최근 검색어
+                  <small>나만 보여요</small>
                 </span>
                 <div className="dash-chips-list">
-                  {favorites.map((k) => (
-                    <button key={k} type="button" className="chip dash-chip" onClick={() => analyze(k)} title={`「${k}」 분석`}>
-                      {showTerm(k)}
-                      {mark(k)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {recentOnly.length > 0 && (
-              <div className="dash-chips">
-                <span className="dash-chips-label">
-                  최근 검색어
-                  <small>네이버에서 다시 찾기</small>
-                </span>
-                <div className="dash-chips-list">
-                  {recentOnly.map((k) => (
-                    <button key={k} type="button" className="chip dash-chip" onClick={() => analyze(k)} title={`「${k}」 분석`}>
-                      {showTerm(k)}
-                      {mark(k)}
+                  {mine.map(({ q, star }) => (
+                    <button key={q} type="button" className="chip dash-chip" onClick={() => analyze(q)} title={`「${q}」 분석${star ? ' (즐겨찾기)' : ''}`}>
+                      {star && <span aria-label="즐겨찾기">★ </span>}
+                      {showTerm(q)}
+                      {mark(q)}
                     </button>
                   ))}
                 </div>
