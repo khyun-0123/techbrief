@@ -4055,7 +4055,7 @@ a.brand:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: var(--tb-space-2);
-  margin: var(--tb-space-4) 0;
+  margin: var(--tb-space-3) 0;
 }
 .seg-btn {
   min-height: 36px;
@@ -4113,6 +4113,55 @@ a.brand:focus-visible {
 }
 .add-material-form .btn.primary {
   justify-self: start;
+}
+/* 11/17: 한 화면에 — 항목 이름 옆에 작은 안내, 입력칸 한 줄에 둘 · 셋 */
+.add-material-form .am-lbl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+.add-material-form .am-lbl small {
+  font-size: var(--fs-xs);
+}
+.add-material-row.am-main {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+.add-material-row.am-sub {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1.3fr) auto;
+}
+.add-material-row.am-sub > .btn.primary {
+  align-self: end;
+  height: 43px;
+}
+.add-material-row.am-sub > .am-confirm {
+  grid-column: 1 / -1;
+}
+.am-select {
+  display: grid;
+  gap: 4px;
+  align-content: end;
+  min-width: 0;
+}
+.am-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: 10px;
+  background: var(--tb-color-bg);
+  font-size: var(--fs-sm);
+}
+.am-confirm span {
+  flex: 1 1 280px;
+}
+@media (max-width: 720px) {
+  .add-material-row.am-main,
+  .add-material-row.am-sub {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 
