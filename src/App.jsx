@@ -59,7 +59,7 @@ import RefreshPanel from './RefreshPanel.jsx'
 import TestTools from './TestTools.jsx'
 import SentimentBadge, { sentimentLabel, sentimentOf as pickSentiment } from './SentimentBadge.jsx'
 import SummaryItems from './SummaryItems.jsx'
-import { formatPublished, load } from './utils.js'
+import { formatPublished, load, save } from './utils.js'
 import { clientId, enableUsage, track, trackVisit } from './usage.js'
 import AddMaterial from './AddMaterial.jsx'
 import DataMove from './DataMove.jsx'
@@ -84,6 +84,7 @@ const RECENT_MAX = 10
 const TIER_TITLE = { 1: '1차 출처: 기업 발표·학회·논문', 2: '2차 출처: 전문매체', 3: '3차 출처: 일반 뉴스' }
 const EXTRA_KEY = 'techbrief-extra-articles' // 「기사 찾기」 결과에서 선별한 기사 (수집 목록에 없는 것)
 const MAX_SAVED = 400
+const SAVED_SUMMARIES = 200 // 브라우저에 남기는 최근 AI 요약 수 (11/17, 나머지는 서버에서 다시 받음)
 // 선별 폴더 (11/07 결정, 27 문서 2장). 브라우저에 두고 서버(selections)에도 같이 저장한다
 const FOLDERS_KEY = 'techbrief-folders'
 const FOLDER_OF_KEY = 'techbrief-folder-of'
@@ -280,7 +281,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [newReportIds, setNewReportIds] = useState(() => load(NEW_REPORTS_KEY, []))
   useEffect(() => {
     try {
-      localStorage.setItem(NEW_REPORTS_KEY, JSON.stringify(newReportIds))
+      save(NEW_REPORTS_KEY, newReportIds)
     } catch {
       // 저장이 막힌 브라우저면 이번 접속 동안만 기억
     }
@@ -290,7 +291,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     const seen = load(SEEN_REPORTS_KEY, [])
     if (!seen.includes(id)) {
       try {
-        localStorage.setItem(SEEN_REPORTS_KEY, JSON.stringify([id, ...seen].slice(0, 200)))
+        save(SEEN_REPORTS_KEY, [id, ...seen].slice(0, 200))
       } catch {
         // 무시
       }
@@ -305,8 +306,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     // 예전에는 화면도 400개로 잘라서, 빠짐없이 수집한 뒤로는 최근 몇 시간 치만 보였다
     setFetched(result.articles)
     setCollectedAt(result.lastCollectedAt)
-    localStorage.setItem(ARTICLES_KEY, JSON.stringify(result.articles.slice(0, MAX_SAVED)))
-    localStorage.setItem(COLLECTED_AT_KEY, JSON.stringify(result.lastCollectedAt))
+    save(ARTICLES_KEY, result.articles.slice(0, MAX_SAVED))
+    save(COLLECTED_AT_KEY, result.lastCollectedAt)
   }, [])
 
   useEffect(() => {
@@ -373,17 +374,17 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
   function toggleSummarizedFirst(on) {
     setSummarizedFirst(on)
-    localStorage.setItem(SUMMARIZED_FIRST_KEY, JSON.stringify(on))
+    save(SUMMARIZED_FIRST_KEY, on)
   }
 
   function toggleShowLow(on) {
     setShowLow(on)
-    localStorage.setItem(SHOW_LOW_KEY, JSON.stringify(on))
+    save(SHOW_LOW_KEY, on)
   }
 
   function toggleExcludeOwn(on) {
     setExcludeOwn(on)
-    localStorage.setItem(EXCLUDE_OWN_KEY, JSON.stringify(on))
+    save(EXCLUDE_OWN_KEY, on)
   }
 
   // 자동 최신화 상태: 도는 중이면 3초, 아니면 30초마다 확인. 끝나면(마지막 실행 시각이 바뀌면) 기사를 다시 불러온다
@@ -554,9 +555,17 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   // 관리자 권한은 관리 페이지(/admin 보고서 관리, /admin/test)에서만 (11/08 원칙). 브라우저에만 있는 보고서함은 각자 지움
   const canDeleteReport = (r) => !reportsInDb || Boolean(r?.mine) || (isTest && Boolean(admin))
 
+  // AI 요약은 서버에 다 있으므로 브라우저에는 일부만 (11/17: 전체 3,000건 넘게 저장하다 한도를 넘어 화면이 꺼졌음)
+  // 남기는 것: 선별 · 보고서에 담은 기사 요약 + 최근 만든 요약 SAVED_SUMMARIES개
   useEffect(() => {
-    localStorage.setItem(AI_SUMMARIES_KEY, JSON.stringify(aiSummaries))
-  }, [aiSummaries])
+    const keep = new Set([...selectedIds, ...includedIds])
+    const entries = Object.entries(aiSummaries)
+    const recent = entries
+      .filter(([id]) => !keep.has(id))
+      .sort((a, b) => String(b[1]?.createdAt ?? '').localeCompare(String(a[1]?.createdAt ?? '')))
+      .slice(0, SAVED_SUMMARIES)
+    save(AI_SUMMARIES_KEY, Object.fromEntries([...entries.filter(([id]) => keep.has(id)), ...recent]))
+  }, [aiSummaries, selectedIds, includedIds])
 
   // 선별한 기사 중 이 브라우저에 요약이 없는 것은 DB에서 가져온다 (다른 브라우저·이전 작업에서 만든 요약)
   useEffect(() => {
@@ -602,7 +611,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   })
 
   useEffect(() => {
-    localStorage.setItem(KEYWORDS_KEY, JSON.stringify(keywords))
+    save(KEYWORDS_KEY, keywords)
   }, [keywords])
 
   // 자동 수집 키워드: 관리자가 정한 팀 공용 목록(DB)을 불러온다. 바꾸는 곳은 관리자 화면 (17 문서)
@@ -619,16 +628,16 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   }, [])
 
   useEffect(() => {
-    localStorage.setItem(SELECTED_KEY, JSON.stringify(selectedIds))
+    save(SELECTED_KEY, selectedIds)
   }, [selectedIds])
 
   useEffect(() => {
-    localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders))
-    localStorage.setItem(FOLDER_OF_KEY, JSON.stringify(folderOf))
+    save(FOLDERS_KEY, folders)
+    save(FOLDER_OF_KEY, folderOf)
   }, [folders, folderOf])
 
   useEffect(() => {
-    localStorage.setItem(TARGET_FOLDER_KEY, JSON.stringify(targetFolder))
+    save(TARGET_FOLDER_KEY, targetFolder)
   }, [targetFolder])
 
   // 서버에도 저장 (1.5초 모았다가 한 번). 불러오기가 끝나기 전에는 빈 값으로 덮지 않게 기다린다
@@ -640,11 +649,11 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   }, [folders, folderOf, selectedIds])
 
   useEffect(() => {
-    localStorage.setItem(INCLUDED_KEY, JSON.stringify(includedIds))
+    save(INCLUDED_KEY, includedIds)
   }, [includedIds])
 
   useEffect(() => {
-    localStorage.setItem(EXTRA_KEY, JSON.stringify(extraArticles))
+    save(EXTRA_KEY, extraArticles)
   }, [extraArticles])
 
   // 한 번도 수집하지 않았으면 샘플 기사를 보여 준다
@@ -729,7 +738,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   function changePageSize(size) {
     setPageSize(size)
     setPage(1)
-    localStorage.setItem(PAGE_SIZE_KEY, JSON.stringify(size))
+    save(PAGE_SIZE_KEY, size)
   }
 
   function goPage(p) {
@@ -798,7 +807,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     saveRecent([scope.query, ...recent.filter((r) => r !== scope.query)].slice(0, RECENT_MAX))
     setSearch({ query: scope.query, period: p, loading: true, scope })
     try {
-      localStorage.setItem(LAST_SCOPE_KEY, JSON.stringify({ ...scope, at: new Date().toISOString() }))
+      save(LAST_SCOPE_KEY, { ...scope, at: new Date().toISOString() })
     } catch {
       // 저장 공간이 막혀도 찾기는 그대로
     }
@@ -841,7 +850,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   function closeTour() {
     setTour(0)
     try {
-      localStorage.setItem(TOUR_KEY, TOUR_VERSION)
+      save(TOUR_KEY, TOUR_VERSION)
     } catch {
       // 저장 못 하면 다음에 또 보임
     }
@@ -855,7 +864,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     setAutoRun({ step: 'search', scope })
     track('search', scope.query)
     try {
-      localStorage.setItem(LAST_SCOPE_KEY, JSON.stringify({ ...scope, at: new Date().toISOString() }))
+      save(LAST_SCOPE_KEY, { ...scope, at: new Date().toISOString() })
     } catch {
       // 저장 공간이 막혀도 그대로
     }

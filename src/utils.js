@@ -7,6 +7,18 @@ export function load(key, fallback) {
   }
 }
 
+// 브라우저 저장 (11/17): 실패해도 화면을 멈추지 않는다. 브라우저 한도(약 5MB)를 넘으면 QuotaExceededError가 나는데,
+// 예전엔 이 오류를 잡지 않아 화면 전체가 하얗게 꺼졌다 (AI 요약이 3,000건을 넘자 요약 전체를 저장하다 넘침). 저장 못 하면 이번 화면에서만 기억
+export function save(key, value) {
+  try {
+    localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value))
+    return true
+  } catch (err) {
+    console.warn(`[저장] ${key} 저장 못 함: ${err?.name ?? err}`)
+    return false
+  }
+}
+
 // 발행 시각 표시 (16 문서 A9): 시각인지 날짜인지 한눈에 보이게 말로 붙인다
 // 오늘 10:30 · 어제 14:05 · 10월 3일 · 25년 3월 14일 (오늘·어제는 달력 기준, 이틀 넘으면 시각은 뺌)
 export function formatPublished(hoursAgo, now = new Date()) {
