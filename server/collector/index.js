@@ -1,7 +1,7 @@
 // 수집 흐름: 키워드별 검색 → 정리 → 원문 주소로 중복 제외 → 저장 → 같은 이슈 묶기 → 중요도 점수
 // 저장: DATABASE_URL이 있으면 PostgreSQL, 없으면 서버 메모리 (서버를 끄면 비워짐)
 import { dbEnabled, query } from '../db/index.js'
-import { getSetting, setSetting } from '../db/store.js'
+import { getSetting, getSummaries, setSetting } from '../db/store.js'
 import { findReruns, groupArticles, sameIssue, titleGrams } from './dedupe.js'
 import { collectFeeds, FEEDS, fetchFeedAll, PAPER_KEYWORD_DAYS, tierOf } from './feeds.js'
 import { searchNews } from './naver.js'
@@ -414,6 +414,22 @@ export async function listArticles({ regroup = false, days = LIST_DAYS, fresh = 
   return snap.value
 }
 
+// 자료마다 요약의 가벼운 칸만 붙인다 (11/17): 화면이 「요약된 자료 먼저」 정렬 · 건수, 해시태그(요약 핵심어), 감성에 목록 전체 요약을 쓰느라
+// 새로고침마다 요약 3,000건 넘게(56번 · 8.4MB) 받아 왔음 → 제목(headline) · 핵심어 · 감성만 목록에 싣고, 요약 본문은 화면에 보이는 자료만 묻는다
+async function attachSummaryLite(value) {
+  try {
+    const ids = value.articles.map((a) => a.id)
+    const found = ids.length ? await getSummaries(ids) : {}
+    for (const a of value.articles) {
+      const s = found[a.id]?.summary
+      if (s) a.summaryLite = { headline: s.headline ?? null, keywords: (s.keywords ?? []).slice(0, 6), ...(s.sentiment ? { sentiment: s.sentiment } : {}) }
+    }
+  } catch (err) {
+    console.warn(`[list] 요약 칸 붙이기 실패: ${err.message}`)
+  }
+  return value
+}
+
 // 기준이 바뀌었을 때 (관리 페이지): 다음 요청부터 뒤에서 다시 계산. 그동안은 기존 값
 export function markListStale() {
   snap.gen += 1
@@ -428,6 +444,7 @@ function rebuildList({ regroup = false } = {}) {
   const run = (snap.running ?? Promise.resolve())
     .catch(() => {})
     .then(() => computeList({ regroup }))
+    .then(attachSummaryLite)
     .then((value) => {
       snap.value = value
       snap.at = Date.now()

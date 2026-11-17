@@ -588,30 +588,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIds])
 
-  // 목록 기사 중 미리 요약된 것을 가져온다 (자동 최신화·다른 팀원이 만든 요약)
-  // 자동 요약은 최신화와 따로 뒤에서 계속 돈다 → 진행 건수가 바뀌면 다시 가져온다
   const searchArticles = search?.articles
   const backlogDone = refresh?.backlog?.done
-  // 「네이버에서 찾기」 결과가 이미 모은 기사와 같은 이슈면 서버가 summaryId로 알려 준다 → 그 요약을 함께 쓴다
-  useEffect(() => {
-    const missing = [...fetched, ...(searchArticles ?? [])].filter((a) => !aiSummaries[a.id])
-    const ids = [...new Set(missing.flatMap((a) => (a.summaryId && a.summaryId !== a.id ? [a.id, a.summaryId] : [a.id])))]
-    if (ids.length === 0) return
-    let alive = true
-    const chunks = []
-    for (let i = 0; i < ids.length; i += 200) chunks.push(ids.slice(i, i + 200))
-    Promise.all(chunks.map((c) => lookupSummaries(c)))
-      .then((results) => {
-        const found = Object.assign({}, ...results.map((r) => r.summaries))
-        for (const a of missing) if (!found[a.id] && a.summaryId && found[a.summaryId]) found[a.id] = found[a.summaryId]
-        if (alive && Object.keys(found).length) setAiSummaries((prev) => ({ ...found, ...prev }))
-      })
-      .catch(() => {})
-    return () => {
-      alive = false
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetched, searchArticles, backlogDone])
 
   // 「선별 추가」하면 자동 요약 (08 13-1: 선별한 기사만 요약)
   const queue = useSummaryQueue({
@@ -696,7 +674,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     () => buildTagDict([keywords, lists?.own, lists?.competitors, lists?.interests, techTerms]),
     [keywords, lists, techTerms],
   )
-  const tagsFor = (a) => tagsOf(a, aiSummaries[a.id]?.summary, tagDict)
+  // 요약 본문을 아직 안 받은 자료는 목록에 실린 가벼운 요약(제목 · 핵심어 · 감성)으로
+  const liteOf = (a) => aiSummaries[a.id]?.summary ?? a.summaryLite
+  const tagsFor = (a) => tagsOf(a, liteOf(a), tagDict)
   const byId = new Map(pool.map((a) => [a.id, a]))
   // 자사·자회사만 나온 기사 (경쟁사도 함께 나오면 경쟁사 소식이라 남긴다)
   const isOwnOnly = (a) => Boolean(a.own) && !a.scoreParts?.competitorName
@@ -724,8 +704,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const isLow = (a) => a.relevance === 'low'
   const lowCount = listed.filter(isLow).length
   const ownCount = listed.filter(isOwnOnly).length
-  const sentimentOf = (a) => sentimentLabel(pickSentiment(a, aiSummaries[a.id]?.summary))
-  const hasSummary = (a) => Boolean(aiSummaries[a.id]?.summary)
+  const sentimentOf = (a) => sentimentLabel(pickSentiment(a, liteOf(a)))
+  const hasSummary = (a) => Boolean(liteOf(a))
   const ordered = summarizedFirst ? [...listed.filter(hasSummary), ...listed.filter((a) => !hasSummary(a))] : listed
   const visible = ordered.filter(
     (a) =>
@@ -742,6 +722,31 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize))
   const currentPage = Math.min(page, pageCount)
   const paged = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  // 목록 기사 중 미리 요약된 것을 가져온다 (자동 최신화·다른 팀원이 만든 요약)
+  // 자동 요약은 최신화와 따로 뒤에서 계속 돈다 → 진행 건수가 바뀌면 다시 가져온다
+  // 「네이버에서 찾기」 결과가 이미 모은 기사와 같은 이슈면 서버가 summaryId로 알려 준다 → 그 요약을 함께 쓴다
+  // 11/17: 목록 전체(3,000건 넘게)가 아니라 화면에 보이는 쪽 · 찾기 결과 · 직접 넣은 자료만 묻는다 (정렬 · 해시태그 · 감성은 목록의 summaryLite)
+  const lookupKey = paged.map((a) => a.id).join(',')
+  useEffect(() => {
+    const missing = [...paged, ...(searchArticles ?? []), ...extraArticles].filter((a) => !aiSummaries[a.id])
+    const ids = [...new Set(missing.flatMap((a) => (a.summaryId && a.summaryId !== a.id ? [a.id, a.summaryId] : [a.id])))]
+    if (ids.length === 0) return
+    let alive = true
+    const chunks = []
+    for (let i = 0; i < ids.length; i += 200) chunks.push(ids.slice(i, i + 200))
+    Promise.all(chunks.map((c) => lookupSummaries(c)))
+      .then((results) => {
+        const found = Object.assign({}, ...results.map((r) => r.summaries))
+        for (const a of missing) if (!found[a.id] && a.summaryId && found[a.summaryId]) found[a.id] = found[a.summaryId]
+        if (alive && Object.keys(found).length) setAiSummaries((prev) => ({ ...found, ...prev }))
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lookupKey, searchArticles, extraArticles, backlogDone])
 
   function changePageSize(size) {
     setPageSize(size)
@@ -878,7 +883,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     }
     try {
       const res = await searchScopeApi(scope, period)
-      const marked = res.articles.map((a) => ({ ...a, hasSummary: Boolean(aiSummaries[a.id]?.summary?.items) }))
+      // 목록에서는 보이는 쪽 요약만 받아 두므로, 자동 선별 전에 결과 자료의 요약을 한 번 묻는다
+      const ask = res.articles.map((a) => a.id).filter((id) => !aiSummaries[id])
+      const got = {}
+      for (let i = 0; i < ask.length; i += 200) Object.assign(got, (await lookupSummaries(ask.slice(i, i + 200)).catch(() => ({ summaries: {} }))).summaries)
+      if (Object.keys(got).length) setAiSummaries((prev) => ({ ...got, ...prev }))
+      const marked = res.articles.map((a) => ({ ...a, hasSummary: Boolean((aiSummaries[a.id] ?? got[a.id])?.summary?.items) }))
       setAutoRun((r) => (r?.scope === scope ? { step: 'confirm', scope, result: pickMaterials(marked, scope.terms) } : r))
     } catch (err) {
       setAutoRun((r) => (r?.scope === scope ? { step: 'error', scope, error: err.message } : r))
