@@ -24,7 +24,7 @@ import { getLists, saveLists } from './collector/lists.js'
 import { getArticleText, getSelection, getSetting, pruneArticleTexts, saveSelection, setSetting } from './db/store.js'
 import { addMaterial, deleteMaterial, listMaterials, materialBlocksAi } from './materials.js'
 import { lookupWiki } from './wiki.js'
-import { dbEnabled, dbStatus } from './db/index.js'
+import { dbEnabled, dbStatus, query } from './db/index.js'
 import {
   deleteReport,
   getSummaries,
@@ -870,9 +870,11 @@ async function handleApiInner(req, res) {
       const list = dbEnabled() ? await listReports(1000, { ip: clientIp(req) }) : []
       const entry = list.find((e) => String(e.id) === String(id))
       if (!entry) return send(res, 404, { error: '보고서를 찾지 못했어요.' })
-      const { reportToTemplate } = await import('./reportToTemplate.js')
+      const { reportToTemplate, topicTrendItems } = await import('./reportToTemplate.js')
       const { renderPptx } = await import('../scripts/report-template.mjs')
-      const data = reportToTemplate(entry)
+      // 추이 그래프: 보고서 주제어가 든 모은 기사 수 → 없으면 맞는 수집 키워드 (11/17)
+      const [topicItems, trendItems] = await Promise.all([topicTrendItems(entry, query).catch(() => []), getTrends().then((t) => t.items).catch(() => [])])
+      const data = reportToTemplate(entry, { topicItems, trendItems })
       const buf = await renderPptx(data)
       const name = encodeURIComponent(`${(entry.report?.title ?? '보고서').replace(/[\\/:*?"<>|]/g, '_')}_담당자양식.pptx`)
       res.writeHead(200, {

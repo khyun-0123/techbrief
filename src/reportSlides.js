@@ -660,9 +660,13 @@ export function reportPages(saved, extra = {}) {
   // 기간: 근거 기사 가장 이른 날 3일 전 ~ 보고서 만든 날 (최대 26주). 30일을 넘으면 주별로 묶는다 (11/12 가독성 규칙)
   const DAY = 86_400_000
   const dayOf = (t) => Date.parse(`${ymd(t, '-')}T00:00:00`)
-  const hay = norm([meta.title, meta.direction, ...meta.keywords, ...saved.articles.map((a) => a.title)].join(' '))
-  const matched = (extra.trends?.items ?? []).filter((it) => it.keyword && hay.includes(norm(it.keyword)) && (it.news ?? []).length)
+  // 11/17: 제목 · 기사 제목에 든 말로 맞추면 「디스플레이」가 「마이크로디스플레이」 안에서 맞아 디스플레이 기사 전체가 그려짐
+  // → 보고서 주제어(sources.topics · 분석 키워드)와 같거나 그것을 품은 수집 키워드만 (담당자 양식 PPT도 같은 규칙, server/reportToTemplate.js)
+  const topics = [...(saved.report?.sources?.topics ?? []), ...(saved.report?.analysis ?? []).map((x) => x?.keyword)].map(norm).filter(Boolean)
+  const matched = (extra.trends?.items ?? []).filter((it) => it.keyword && (it.news ?? []).length && topics.some((t) => norm(it.keyword).includes(t)))
   const daily = new Map() // 'YYYY-MM-DD' → 기사 수 (빈 날은 0)
+  // 논문 날짜(몇 해 전)는 기사 수 추이에서 뺀다 — 섞이면 기간이 몇 해로 늘어 막대가 수백 개가 됨 (11/17)
+  const newsTimes = base.filter((a) => !a.paper).map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite)
   let trendFrom = ''
   let start = 0
   let end = 0
@@ -672,11 +676,11 @@ export function reportPages(saved, extra = {}) {
     for (let t = start; t <= end; t += DAY) daily.set(ymd(t, '-'), 0)
     for (const it of matched) for (const p of it.news) if (daily.has(p.t)) daily.set(p.t, daily.get(p.t) + p.v)
     trendFrom = `수집 키워드 「${matched.map((it) => it.keyword).join(', ')}」 기사 수`
-  } else if (times.length) {
-    start = dayOf(Math.min(...times))
-    end = dayOf(Math.max(...times))
+  } else if (newsTimes.length) {
+    start = dayOf(Math.min(...newsTimes))
+    end = dayOf(Math.max(...newsTimes))
     for (let t = start; t <= end; t += DAY) daily.set(ymd(t, '-'), 0)
-    for (const a of base) if (a.publishedAt && daily.has(ymd(a.publishedAt, '-'))) daily.set(ymd(a.publishedAt, '-'), daily.get(ymd(a.publishedAt, '-')) + 1)
+    for (const a of base) if (!a.paper && a.publishedAt && daily.has(ymd(a.publishedAt, '-'))) daily.set(ymd(a.publishedAt, '-'), daily.get(ymd(a.publishedAt, '-')) + 1)
     trendFrom = '근거 기사 발행일별 수 (맞는 수집 키워드 없음)'
   }
   const mdShort = (key) => `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}` // M/D (예: 10/19)
