@@ -5,14 +5,8 @@
 // 새 실험 기능은 FEATURES에 한 줄 추가하고, 화면에서는 useFeature('키')로 확인한다 (src/features.js)
 import { getSetting, setSetting } from './db/store.js'
 
+// 11/17: 긍정·중립·부정 표시(sentiment)는 뺌 — 담당자 「크게 도움 안 됨」(14 문서), 기사 목록의 「자사 위협 · 기회 기술」 표시로 대신
 export const FEATURES = [
-  {
-    key: 'sentiment',
-    label: '긍정·중립·부정 표시',
-    // 13 F5. 담당자님 "크게 도움 안 됨"(14 문서) → 기본은 테스트에서만
-    desc: '기사 제목 옆 ○ △ ✕ 표시와 「긍정만」 같은 거르기',
-    default: 'test',
-  },
   {
     key: 'collectPanel',
     label: '자료 현황의 「수집 설정」 칸',
