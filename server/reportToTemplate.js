@@ -15,6 +15,14 @@ const md = (iso) => {
   const d = new Date(iso)
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
+// 낱말 단위로 줄이기 (11/17: AI가 한 줄 요약을 60자 넘게 쓰는 일이 있어, 칸(50자)에 맞춰 마지막 낱말을 자르지 않고 줄임)
+const cutWords = (t, n) => {
+  const s = String(t ?? '').replace(/[.。]$/, '')
+  if ([...s].length <= n) return s
+  const head = s.slice(0, n - 1)
+  const at = head.lastIndexOf(' ')
+  return `${(at > n * 0.6 ? head.slice(0, at) : head).replace(/[,\s·]+$/, '')}…`
+}
 const cut = (t, n) => (String(t ?? '').length > n ? `${String(t).slice(0, n - 1)}…` : String(t ?? ''))
 // 업계 동향 쪽 낱말 (회사 · 제품 · 투자 · 공급 · 양산 · 특허 · 시장)
 const INDUSTRY = /삼성|LG|BOE|CSOT|애플|Apple|구글|메타|투자|공급|양산|수주|계약|출시|점유율|시장|매출|특허|라인|증설|협력|인수|가격|원가/
@@ -102,7 +110,7 @@ export function reportToTemplate(entry, { trends = null, dept = '' } = {}) {
     actions,
     trend,
     source: { period, article_count: r.sources?.articles ?? arts.length, media_count: media.size, keywords },
-    one_line_summary: cut(r.oneLine ?? '', 50),
+    one_line_summary: cutWords(r.oneLine ?? '', 50),
     appendix: {
       analysis,
       single_facts: single,
