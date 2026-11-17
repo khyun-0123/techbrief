@@ -103,12 +103,14 @@ function TopThree({ rows, cols, onPick }) {
   )
 }
 
-function Composite({ data, onPick, verdicts, onVerdict }) {
+// show: 처음 보일 줄 수 (11/17: 펼쳐 보기 판은 높이가 넉넉해 13줄 — 1440×900에서 스크롤 없이)
+function Composite({ data, onPick, verdicts, onVerdict, show = SHOW }) {
   const [more, setMore] = useState(false)
   // 종합에 들어가는 출처만 (특허는 공개가 약 18개월 늦어 종합에서 뺐다, 11/11)
-  const cols = data.sources.filter((s) => COMPOSITE_SOURCES.includes(s.id) && s.ranking.length >= 2)
+  // 11/17: 값이 하나도 없는 신호 칸은 숨긴다 (예: Reddit은 11/10부터 막혀 모두 「—」)
+  const cols = data.sources.filter((s) => COMPOSITE_SOURCES.includes(s.id) && s.ranking.length >= 2 && data.composite.some((r) => r.parts?.[s.id]))
   if (data.composite.length === 0) return <p className="tt-empty">논문과 관심 신호(검색량 · 위키 · Reddit)가 모두 있는 용어가 아직 없어요. 하루 한 번 받는 값이 쌓이면 보여요.</p>
-  const rows = more ? data.composite : data.composite.slice(0, SHOW)
+  const rows = more ? data.composite : data.composite.slice(0, show)
   const notable = data.composite.filter((r) => r.score >= 60).length
   return (
     <>
@@ -172,9 +174,9 @@ function Composite({ data, onPick, verdicts, onVerdict }) {
           ))}
         </tbody>
       </table>
-      {data.composite.length > SHOW && (
+      {data.composite.length > show && (
         <button type="button" className="btn-text tt-more" onClick={() => setMore((v) => !v)}>
-          {more ? '접기' : `${data.composite.length - SHOW}개 더 보기`}
+          {more ? '접기' : `${data.composite.length - show}개 더 보기`}
         </button>
       )}
       {/* 짧은 기간이면 논문 · 특허는 다른 기간으로 비교한 값이 들어간다 (탭과 같은 값). 아래 「기준 · 출처」에 접어 둠 */}
@@ -250,7 +252,8 @@ function SourceList({ src, win, onPick }) {
   )
 }
 
-function TechTrends({ onPick, verdicts, onVerdict }) {
+// onClose (11/17): 대시보드 「펼쳐 보기」 판 안에서 쓸 때 — 카드 테두리 없이, 제목 줄에 「접기」
+function TechTrends({ onPick, verdicts, onVerdict, onClose, closeRef }) {
   const [period, setPeriod] = useState('week')
   const [range, setRange] = useState({ from: '', to: '' })
   const [applied, setApplied] = useState(null)
@@ -281,7 +284,7 @@ function TechTrends({ onPick, verdicts, onVerdict }) {
   const src = data?.sources.find((s) => s.id === tab)
 
   return (
-    <section className="panel tt" aria-labelledby="tt-title">
+    <section className={onClose ? 'tt tt-embedded' : 'panel tt'} aria-labelledby="tt-title">
       <div className="tt-head">
         <div>
           <h2 id="tt-title">요즘 뜨는 기술</h2>
@@ -296,6 +299,11 @@ function TechTrends({ onPick, verdicts, onVerdict }) {
               {p.label}
             </button>
           ))}
+          {onClose && (
+            <button ref={closeRef} type="button" className="trend-drawer-close" onClick={onClose}>
+              <span aria-hidden="true">‹</span> 접기
+            </button>
+          )}
         </div>
       </div>
 
@@ -344,7 +352,7 @@ function TechTrends({ onPick, verdicts, onVerdict }) {
       {data && (data.terms === 0 ? (
         <p className="tt-empty">{data.status.running ? `기사에서 기술 용어를 찾는 중이에요 (${data.status.phase}). 처음 한 번은 30분쯤 걸려요.` : '아직 찾은 기술 용어가 없어요.'}</p>
       ) : tab === 'composite' ? (
-        <Composite data={data} onPick={onPick} verdicts={verdicts} onVerdict={onVerdict} />
+        <Composite show={onClose ? 13 : SHOW} data={data} onPick={onPick} verdicts={verdicts} onVerdict={onVerdict} />
       ) : (
         src && <SourceList src={src} win={win} onPick={onPick} />
       ))}

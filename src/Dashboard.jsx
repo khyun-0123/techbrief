@@ -5,7 +5,7 @@
 // - 검색어 칩은 두 묶음 (11/16 조장): 「자동 수집 키워드」(공용, 예전 추천 검색어를 합침) · 「즐겨찾기 · 최근 검색어」(내 것, IP별).
 //   어느 칩이든 누르면 그 말로 분석한다 (예전: 자동 수집 키워드는 자료 현황으로 넘어갔음 — 대시보드는 분석하는 곳. 모은 기사는 「자료 찾기 →」)
 // - 예전 「추적 중인 키워드 추이」는 11/10 조장 결정으로 뺐다 (KeywordTrends.jsx는 그래프 부품 Spark만 씀)
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { fetchReadyTimelines } from './api.js'
 import KeywordAnalysis, { AnalysisPreview } from './KeywordAnalysis.jsx'
 import DashHome from './DashHome.jsx'
@@ -60,16 +60,27 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
   const exampleExtra = useRef(null) // 펼쳤을 때 늘어나는 높이 (펼쳐 있을 때 잼)
   // 요즘 뜨는 기술 (11/14 조장): 왼쪽 작은 막대 + 「펼쳐 보기」로 왼쪽에서 나오는 판, 자사 위협 · 기회 설명 창
   const [drawer, setDrawer] = useState(false)
+  const [drawerClosing, setDrawerClosing] = useState(false) // 11/17: 닫을 때도 미끄러져 들어가게 (끝나면 drawer를 끔)
+  const closeDrawer = useCallback(() => {
+    if (drawerClosing) return
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reduce) return setDrawer(false)
+    setDrawerClosing(true)
+    setTimeout(() => {
+      setDrawer(false)
+      setDrawerClosing(false)
+    }, 240)
+  }, [drawerClosing])
   const [verdictData, setVerdictData] = useState(null)
   const [verdictView, setVerdictView] = useState(null) // { term, info }
   const drawerClose = useRef(null)
   useEffect(() => {
     if (!drawer) return undefined
     drawerClose.current?.focus()
-    const esc = (e) => e.key === 'Escape' && !verdictView && setDrawer(false)
+    const esc = (e) => e.key === 'Escape' && !verdictView && closeDrawer()
     window.addEventListener('keydown', esc)
     return () => window.removeEventListener('keydown', esc)
-  }, [drawer, verdictView])
+  }, [drawer, verdictView, closeDrawer])
   const openVerdict = (term, info) => setVerdictView({ term, info })
   // 대시보드 탭을 한 번 더 누르거나 로고를 누르면 첫 화면으로 (11/15): 분석 · 펼친 목록 · 판정 창을 닫는다
   const firstReset = useRef(resetKey)
@@ -336,11 +347,8 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
 
       {/* 「세부 기술 × 경쟁사 특허」는 대시보드에서 뺌 (11/14 조장: 계속 볼 자료가 아님) — 보고서 분석 자료 · 위협 · 기회 설명 창에서 씀 */}
       {drawer && (
-        <div className="trend-drawer-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && setDrawer(false)}>
+        <div className={drawerClosing ? 'trend-drawer-backdrop is-closing' : 'trend-drawer-backdrop'} role="presentation" onClick={(e) => e.target === e.currentTarget && closeDrawer()}>
           <div className="trend-drawer" role="dialog" aria-modal="true" aria-label="요즘 뜨는 기술 전체">
-            <button ref={drawerClose} type="button" className="trend-drawer-close" onClick={() => setDrawer(false)}>
-              <span aria-hidden="true">‹</span> 접기
-            </button>
             <TechTrends
               onPick={(t) => {
                 setDrawer(false)
@@ -348,7 +356,13 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
               }}
               verdicts={verdictData?.verdicts}
               onVerdict={openVerdict}
+              onClose={closeDrawer}
+              closeRef={drawerClose}
             />
+            {/* 11/17 조장: 판 오른쪽 가장자리 손잡이 — 눌러서 닫기 */}
+            <button type="button" className="trend-drawer-grip" onClick={closeDrawer} aria-label="요즘 뜨는 기술 접기" title="접기">
+              <span aria-hidden="true">‹</span>
+            </button>
           </div>
         </div>
       )}
