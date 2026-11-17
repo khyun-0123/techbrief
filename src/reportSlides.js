@@ -53,6 +53,14 @@ function units(text) {
   }
   return u
 }
+// 낱말 단위로 줄이기 (담당자 양식 PPT와 같은 규칙, server/reportToTemplate.js cutWords)
+export function cutWords(t, n) {
+  const s = String(t ?? '').replace(/[.。]$/, '')
+  if ([...s].length <= n) return s
+  const head = s.slice(0, n - 1)
+  const at = head.lastIndexOf(' ')
+  return `${(at > n * 0.6 ? head.slice(0, at) : head).replace(/[,\s·]+$/, '')}…`
+}
 export function linesOf(text, pt, widthIn) {
   return String(text)
     .split('\n')
@@ -392,8 +400,11 @@ export function reportPages(saved, extra = {}) {
     y += hlH + 0.14
 
     const srcY = FOOT_Y - 0.5
+    // 한 줄 요약 (11/17, 보고서팀 양식 본문 맨 아래 칸): 있으면 출처 줄 위에 한 줄. 양식처럼 50자(낱말 단위)로 줄임
+    const oneLine = report.oneLine ? cutWords(report.oneLine, 50) : ''
+    const oneY = srcY - 0.46
     const colTop = y
-    const colH = srcY - 0.1 - colTop
+    const colH = (oneLine ? oneY : srcY) - 0.1 - colTop
     const colW = (CW - 0.2) / 2
     const innerW = colW - 0.3
 
@@ -461,6 +472,10 @@ export function reportPages(saved, extra = {}) {
     }
     if (rightAi.length) aiBox(els, rx + 0.15, colTop + colH - 0.12 - raiH, innerW, rightAi)
 
+    if (oneLine) {
+      els.push(rect(M, oneY, CW, 0.38, { line: COLOR.accent, radius: 0.08 }))
+      els.push(text(M + 0.15, oneY + 0.09, CW - 0.3, LH(SIZE.body), SIZE.body, [{ text: '한 줄 요약   ', bold: true, color: COLOR.accent }, { text: oneLine, bold: true }]))
+    }
     // 출처 정보 줄
     els.push(rect(M, srcY, CW, 0.38, { fill: COLOR.gray, radius: 0.08 }))
     const srcRuns = [
@@ -470,7 +485,8 @@ export function reportPages(saved, extra = {}) {
       { text: '근거 자료 ', bold: true },
       { text: `${evidenceLabel(saved)}   ` },
       { text: '주요 출처 ', bold: true },
-      { text: `${sources.slice(0, 4).join(', ')}${sources.length > 4 ? ` 외 ${sources.length - 4}곳` : ''}` },
+      // 한 줄에 들어가게 (11/17: 논문 학술지 이름이 길어 두 줄로 넘침) — 3곳까지, 곳마다 20자
+      { text: `${sources.slice(0, 3).map((x) => (x.length > 20 ? `${x.slice(0, 19)}…` : x)).join(', ')}${sources.length > 3 ? ` 외 ${sources.length - 3}곳` : ''}` },
     ]
     els.push(text(M + 0.15, srcY + 0.19 - LH(SIZE.note) / 2, CW - 0.3, LH(SIZE.note), SIZE.note, srcRuns, { color: COLOR.sub }))
     pages.push({ kind: 'cover', label: '1페이지 · 핵심 요약', els, fit: { hlOver, moved: movedFacts.length } })
@@ -601,12 +617,13 @@ export function reportPages(saved, extra = {}) {
   // 11/17 (40 문서 R4): 기술 시계열 재료(v3 묶음)는 다음 장 「기술 시계열」로 — 한 장에 그래프 3개를 넣으니 축 · 글이 겹쳤음
   const drawBlocks = (els, y, leftW, blocks) => {
     for (const b of blocks) {
-      const h = b.head ? LH(SIZE.sub) + 0.08 : bulletHeight(leftW, runsText(b.runs)) + 0.05
+      // 굵은 글 · 영문 낱말 줄바꿈 때문에 어림보다 길어진다 → 폭을 90%로 잡아 높이를 어림 (11/17 렌더: 「주요 기업」 줄이 아래 제목과 겹침)
+      const h = b.head ? LH(SIZE.sub) + 0.08 : bulletHeight(leftW * 0.9, runsText(b.runs)) + 0.05
       if (y + h > BOTTOM) break
       if (b.head) {
         els.push(text(M, y, leftW, LH(SIZE.sub), SIZE.sub, b.head, { bold: true }))
         y += LH(SIZE.sub) + 0.08
-      } else y += bulletLine(els, M, y, leftW, b.runs) + 0.05
+      } else y += Math.max(bulletLine(els, M, y, leftW, b.runs), h - 0.05) + 0.05
     }
   }
   // 연도별 수: 0인 해는 빠져 오므로 0으로 채우고 끝난 해까지 최근 12개
@@ -616,7 +633,9 @@ export function reportPages(saved, extra = {}) {
     const from = Math.min(...have.keys())
     return Array.from({ length: last - from + 1 }, (_, i) => ({ y: from + i, n: have.get(from + i) ?? 0 })).slice(-12)
   }
-  for (const an of (report.analysis ?? []).filter((x) => x && (x.patentYears?.length || x.competitors || x.stage || x.papers))) {
+  // 11/17 전 보고서는 묶음에 기술 시계열 칸이 없다 → 기억해 둔 묶음(extra.analysis)으로 채운다 (「분석 기준일」이 보고서 날짜와 다를 수 있음)
+  const analysisList = (report.analysis ?? []).map((x) => (x && !x.papers && extra.analysis?.[x.keyword] ? { ...extra.analysis[x.keyword], ...x } : x))
+  for (const an of analysisList.filter((x) => x && (x.patentYears?.length || x.competitors || x.stage || x.papers))) {
     const last = new Date(saved.createdAt ?? Date.now()).getFullYear() - 1
     const leftW = 4.3
     const cx = M + leftW + 0.25
@@ -687,7 +706,7 @@ export function reportPages(saved, extra = {}) {
       if (up.length) {
         blocks.push({ head: '최근 논문에서 늘어난 세부 주제' })
         for (const x of up.slice(0, 4)) blocks.push({ runs: [{ text: `${x.name} ` }, { text: `${x.before}→${x.recent}편`, bold: true }] })
-        if (an.makers?.length) blocks.push({ runs: [{ text: '주요 기업: ', bold: true }, { text: an.makers.slice(0, 4).join(' · ') }] })
+        if (an.makers?.length) blocks.push({ runs: [{ text: '주요 기업: ', bold: true }, { text: an.makers.slice(0, 3).map((m) => (m.length > 24 ? `${m.slice(0, 23)}…` : m)).join(' · ') }] })
       }
       if (br?.institutions) blocks.push({ head: `연구 폭 (${br.years})` }, { runs: [{ text: `논문 낸 기관 ${br.institutions}곳${br.companyShare != null ? ` · 기업 저자 ${Math.round(br.companyShare * 100)}%` : ''}${br.fwci != null ? ` · FWCI ${br.fwci}(참고)` : ''}` }] })
       if (an.attention?.label || an.surges?.length || an.signal?.score != null) blocks.push({ head: '관심 신호 (네이버 검색 관심도 · AI 입력 안 함)' })

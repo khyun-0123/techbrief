@@ -356,6 +356,13 @@ export async function saveSourcesApi(disabled) {
 }
 
 // 키워드 추이 (뉴스 기사량 · 네이버 검색량 · Wikipedia 관심도 · GDELT 해외 보도량) — 22 문서 6-4
+// 11/17 전 보고서: 저장된 분석 묶음에 기술 시계열 칸이 없으면 기억해 둔 묶음을 받아 채운다
+export async function fetchReportAnalysis(saved) {
+  const old = (saved?.report?.analysis ?? []).filter((a) => a?.keyword && !a.papers).map((a) => a.keyword)
+  if (!old.length) return null
+  return postJson('/api/report-analysis', { keywords: old })
+}
+
 // 보고서 주제어가 든 모은 기사의 날짜별 수 (11/17): 미리보기 · PPT 「기사 수 추이」 — 담당자 양식 PPT와 같은 값
 export async function fetchTopicTrend(saved) {
   const terms = [...(saved?.report?.sources?.topics ?? []), ...(saved?.report?.analysis ?? []).map((a) => a?.keyword)].filter(Boolean)
