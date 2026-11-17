@@ -9431,3 +9431,11 @@ a.dash-home-t:hover,
     font-size: var(--fs-xs);
   }
 }
+
+/* 자료 목록의 자사 위협 · 기회 기술 (11/17, VerdictBadge.jsx) — 모양은 .tr-verdict */
+.verdict-badge {
+  margin-right: 6px;
+  vertical-align: 1px;
+  white-space: nowrap;
+  cursor: help;
+}

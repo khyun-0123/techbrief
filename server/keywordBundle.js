@@ -71,6 +71,24 @@ export const THREAT_FACTOR = 1.5
 // - 비율은 양쪽에 RATIO_PRIOR건씩 더해 계산 (가법 보정 · 작은 표본일수록 1배 쪽으로 당겨짐): 1→5건 = 5배가 아니라 (5+5)/(1+5) = 1.67배, 100→500건은 4.9배로 거의 그대로
 export const RATIO_MIN = 10
 export const RATIO_PRIOR = 5
+// 한 말의 자사 위협 · 기회 판정 (11/14 「요즘 뜨는 기술」 옆 표시 · 11/17 자료 목록 표시가 같이 씀)
+// 그 말 특허가 가장 많은 세부 분류 → 경쟁사 특허 비교. 맵 재료는 8초까지만 기다림
+// 판정하지 않는 경우 (연결이 약함):
+// - 그 분류 특허 10건 미만
+// - 11/17: 그 말 특허 중 그 분류 비율이 45% 미만 — 「LED」(26%, 조명 등 여러 분야) · 「키오스크」(15%)처럼 한 분류로 대표할 수 없는 말 [우리 판단, 33 문서 W32]
+// - 11/17: 「디스플레이 특허 안에서만」 센 말 (디스플레이 논문이 적은 말 — 키오스크 · UTG)
+export const VERDICT_SHARE_MIN = 0.45
+export async function termVerdict(term) {
+  const m = await Promise.race([mapMaterials(term), new Promise((res) => setTimeout(() => res(null), 8_000))]).catch(() => null)
+  const cat = m?.categories?.[0]
+  if (!cat || cat.count < 10) return null
+  if (m.basis === '디스플레이 특허 안에서만') return null
+  const share = m.patentTotal ? cat.count / m.patentTotal : 0
+  if (share < VERDICT_SHARE_MIN) return null
+  const comp = await categoryCompetitors(cat.id).catch(() => null)
+  return comp ? { category: { id: cat.id, name: cat.name, patents: cat.count, share: Math.round(share * 100) / 100 }, verdict: comp.verdict, competitors: comp } : null
+}
+
 export async function categoryCompetitors(catId) {
   const cat = DISPLAY_CATEGORIES.find((c) => c.id === catId)
   if (!cat || !dbEnabled()) return null

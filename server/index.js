@@ -14,7 +14,7 @@ import { relatedWords, wordArticles } from './related.js'
 import { checkRule, DEFAULT_RULE, describeRule, loadImportanceRule, PARTS as IMPORTANCE_PARTS, previewRule, ruleHistory, saveImportanceRule } from './importanceRule.js'
 import { kiwiStatus } from './kiwi.js'
 import { fillMap, mapMaterials } from './mapMaterials.js'
-import { allCategoryCompetitors, bundleFacts, categoryCompetitors, categoryTrends, headlineSeeds, prepareBundle, THREAT_FACTOR } from './keywordBundle.js'
+import { allCategoryCompetitors, bundleFacts, categoryTrends, headlineSeeds, prepareBundle, termVerdict, THREAT_FACTOR } from './keywordBundle.js'
 import { scopeSearch } from './scopeSearch.js'
 import { popularPapers } from './papers/journals.js'
 import { getTechTrends, startTechTrends } from './techtrends.js'
@@ -713,14 +713,13 @@ async function handleApiInner(req, res) {
     }
     if (req.method === 'GET' && req.url.startsWith('/api/trend-verdicts?')) {
       const terms = (new URL(req.url, 'http://x').searchParams.get('terms') ?? '').split('|').map((t) => t.trim()).filter(Boolean).slice(0, 20)
-      const one = async (term) => {
-        const m = await Promise.race([mapMaterials(term), new Promise((res) => setTimeout(() => res(null), 8_000))]).catch(() => null)
-        const cat = m?.categories?.[0]
-        if (!cat || cat.count < 10) return [term, null]
-        const comp = await categoryCompetitors(cat.id).catch(() => null)
-        return [term, comp ? { category: { id: cat.id, name: cat.name, patents: cat.count }, verdict: comp.verdict, competitors: comp } : null]
-      }
+      const one = async (term) => [term, await termVerdict(term).catch(() => null)]
       return send(res, 200, { verdicts: Object.fromEntries(await Promise.all(terms.map(one))), threatFactor: THREAT_FACTOR })
+    }
+    // 자료 목록의 「자사 위협 · 기회 기술」 표시 (11/17, server/techVerdicts.js)
+    if (req.method === 'GET' && req.url === '/api/tech-verdicts') {
+      const { techVerdicts } = await import('./techVerdicts.js')
+      return send(res, 200, await techVerdicts())
     }
     if (req.method === 'GET' && req.url === '/api/category-competitors') {
       return send(res, 200, { categories: await allCategoryCompetitors(), rule: `위협: 경쟁사 중 하나가 분야 증가의 ${THREAT_FACTOR}배 이상 · 자사는 분야보다 느림 / 기회: 자사가 경쟁사 모두보다 빠르고 분야 이상` })
