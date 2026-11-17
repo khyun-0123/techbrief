@@ -39,25 +39,35 @@ export default function TrendRail({ onPick, onOpen, onVerdicts, onVerdict }) {
   const listRef = useRef(null)
   const [framed, setFramed] = useState(false)
   const [fit, setFit] = useState(MAX)
+  const [gap, setGap] = useState(0)
   const all = (data?.composite ?? []).slice(0, MAX)
+  // 11/18 조장: 조금이라도 잘리는 줄은 빼고, 남는 아래 여백은 줄 사이에 고르게 나눈다 (하단을 비워 두지 않게)
+  // 예전엔 처음 그린 높이로만 셌다 → 위협 · 기회 표시가 붙거나 글꼴이 늦게 들어와 줄이 높아지면 마지막 줄이 잘렸음.
+  // 이제 줄마다 높이가 바뀌면 다시 센다. 줄 높이만 더해 세므로(사이 여백 제외) 여백을 넣어도 셈이 흔들리지 않는다
   useLayoutEffect(() => {
     const ol = listRef.current
     if (!ol) return undefined
     const decide = () => {
       const clip = getComputedStyle(ol).overflowY === 'hidden' // 화면 틀(App.css)에서만 막대 높이에 맞춤
       setFramed(clip)
-      if (!clip) return
-      const lis = [...ol.children]
+      if (!clip) return setGap(0)
       const room = ol.clientHeight
+      let used = 0
       let n = 0
-      for (const li of lis) if (li.offsetTop - ol.offsetTop + li.offsetHeight <= room + 1) n += 1
+      for (const li of ol.children) {
+        if (used + li.offsetHeight > room) break
+        used += li.offsetHeight
+        n += 1
+      }
       setFit(Math.max(MIN, n))
+      setGap(n > 1 ? Math.min(14, Math.max(0, (room - used) / n)) : 0)
     }
     decide()
     const ro = new ResizeObserver(decide)
     ro.observe(ol)
+    for (const li of ol.children) ro.observe(li)
     return () => ro.disconnect()
-  }, [all.length])
+  }, [all.length, verdicts])
   const list = framed ? all : all.slice(0, TOP)
   return (
     <aside className="panel trend-rail" aria-labelledby="tr-title">
@@ -78,7 +88,7 @@ export default function TrendRail({ onPick, onOpen, onVerdicts, onVerdict }) {
         </ol>
       )}
       {data && !list.length && <p className="tr-empty">아직 찾은 기술이 없어요</p>}
-      <ol ref={listRef} className="tr-list">
+      <ol ref={listRef} className="tr-list" style={framed ? { '--tr-gap': `${gap}px` } : undefined}>
         {list.map((r, i) => {
           const v = verdicts[r.name]
           return (
