@@ -1467,16 +1467,22 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               ) : null}
               {search?.scope?.terms?.length > 0 && search.articles ? (
                 // 범위 칩 (11/10): 고른 말이 든 자료만 보기 · 이 범위로 폴더 만들기
-                <div className="scope-bar" role="group" aria-label="고른 범위로 거르기">
-                  <span className="scope-bar-label">고른 말이 든 자료</span>
-                  <button type="button" className={scopeTerm ? 'scope-chip' : 'scope-chip on'} aria-pressed={!scopeTerm} onClick={() => setScopeTerm(null)}>
-                    전체 {search.articles.length}
-                  </button>
-                  {search.scope.terms.map((t) => (
-                    <button key={t} type="button" className={scopeTerm === t ? 'scope-chip on' : 'scope-chip'} aria-pressed={scopeTerm === t} onClick={() => setScopeTerm(scopeTerm === t ? null : t)} title={search.scope.termsEn?.[t]?.length ? `영문 표기도 함께: ${search.scope.termsEn[t].join(', ')}` : undefined}>
-                      {t} {search.scope.counts?.[t] ?? 0}
+                // 11/17 (39 문서 C9): 왼쪽에 몰려 보였음 → 옅은 바탕 한 묶음, 제목 · 설명 · 칩(건수는 옅게) · 오른쪽 폴더 단추
+                <div className="scope-bar" role="group" aria-label="고른 말로 거르기">
+                  <span className="scope-bar-label">
+                    <b>고른 말로 거르기</b>
+                    <small>「{search.scope.query}」 자료 중 그 말이 든 것만</small>
+                  </span>
+                  <span className="scope-chips">
+                    <button type="button" className={scopeTerm ? 'scope-chip' : 'scope-chip on'} aria-pressed={!scopeTerm} onClick={() => setScopeTerm(null)}>
+                      전체 <span className="scope-n">{search.articles.length}</span>
                     </button>
-                  ))}
+                    {search.scope.terms.map((t) => (
+                      <button key={t} type="button" className={scopeTerm === t ? 'scope-chip on' : 'scope-chip'} aria-pressed={scopeTerm === t} onClick={() => setScopeTerm(scopeTerm === t ? null : t)} title={search.scope.termsEn?.[t]?.length ? `영문 표기도 함께: ${search.scope.termsEn[t].join(', ')}` : undefined}>
+                        {t} <span className="scope-n">{search.scope.counts?.[t] ?? 0}</span>
+                      </button>
+                    ))}
+                  </span>
                   <button
                     type="button"
                     className="btn scope-folder"
@@ -1485,9 +1491,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                       const existing = folders.find((f) => f.name === name)
                       setTargetFolder(existing ? existing.id : createFolder(name))
                     }}
-                    title="「선별 추가」가 이 폴더에 담겨요"
+                    title="「키워드 · 고른 말」 이름으로 폴더를 만들고, 「선별 추가」가 그 폴더에 담기게 해요"
                   >
-                    이 범위로 폴더 만들기
+                    + 이 범위로 폴더
                   </button>
                 </div>
               ) : null}
