@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { Readability } from '@mozilla/readability'
 import { JSDOM, VirtualConsole } from 'jsdom'
 import { dbEnabled, query } from './db/index.js'
+import { importanceRule } from './importanceRule.js'
 import { FetchBlocked, safeFetch } from './safeFetch.js'
 
 const MAX_TEXT = 200_000 // 저장하는 본문 길이(글자)
@@ -174,7 +175,11 @@ function toArticle(row, clientId = null) {
     addedAt: new Date(row.added_at).toISOString(),
     mine: Boolean(clientId && row.added_by && row.added_by === clientId),
     fileName: row.file_name || undefined,
-    importance: 0,
+    // 11/17 (37 문서 P7 · 36 문서 1장): 예전엔 늘 0점이라 맨 아래 · 자동 선별에서 안 뽑힘. 사람이 일부러 넣은 자료라 「중요」 기준 점수로 둔다
+    // (자동 점수 재료 — 보도량 · 출처 · 신규성 — 가 없어 계산하지 않음. 기준을 관리 페이지에서 바꾸면 따라감)
+    importance: importanceRule()?.high ?? 45,
+    importanceLevel: 'high',
+    scoreParts: { material: true, high: importanceRule()?.high ?? 45 },
     relevance: 'high',
   }
 }

@@ -34,7 +34,7 @@ import {
 import AutoReportDialog from './AutoReportDialog.jsx'
 import GuideTour from './GuideTour.jsx'
 import Dropdown, { PeriodSeg, Seg } from './Dropdown.jsx'
-import { pickMaterials, periodLabelOf } from './autoPick.js'
+import { byRank, pickMaterials, periodLabelOf } from './autoPick.js'
 import { buildTagDict, tagsOf } from './hashtags.js'
 import SettingsMenu from './SettingsMenu.jsx'
 import { buildBundleHtml } from './exportBundle.js'
@@ -130,6 +130,8 @@ function TitleWithIcon({ title, terms }) {
 // 왜 중요한지 (13 문서 F7). 보도량(같은 이슈 N건)과 최신성(발행 칸)은 이미 줄에 보이므로
 // 선별에 도움이 되는 전문 매체·경쟁사·관심 기술·기술 소식만 글로 보여 준다. 점수 전체는 마우스를 올리면
 function importanceReasons(a) {
+  // 직접 추가한 자료는 사람이 고른 자료라 「중요」로 둔다 (11/17 P7, server/materials.js)
+  if (a.material) return ['직접 추가한 자료']
   // 논문 (찾기 결과, server/papers/corpus.js paperScore2, 11/10): 기업 저자 · 인용 상위 · 전문지
   if (a.paperParts) {
     const pp = a.paperParts
@@ -688,7 +690,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         // 논문은 서버가 기간을 넓게 잡아 찾으므로(하루 · 일주일 안 논문은 거의 없음) 화면 기간으로 다시 거르지 않는다
         .filter((a) => (a.paper || a.hoursAgo < maxHours) && sourceMatch(a) && (!scopeTerm || scopeHitsOf.get(a.id)?.includes(scopeTerm)))
         .sort((a, b) =>
-          sort === 'importance' ? b.importance - a.importance || a.hoursAgo - b.hoursAgo : a.hoursAgo - b.hoursAgo,
+          // 기사 · 논문이 섞여 「중요」 먼저 · 각자 기준에 맞춘 점수 (11/17 P7, autoPick.js byRank)
+          sort === 'importance' ? byRank(a, b) || a.hoursAgo - b.hoursAgo : a.hoursAgo - b.hoursAgo,
         )
     : collected
     .filter(

@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { createReportJob } from './api.js'
 import { articleKey } from './reportStore.js'
+import { byRank } from './autoPick.js'
 import { clientId, track } from './usage.js'
 import { AI_BLOCKED_TITLE, useOps } from './ops.js'
 import { LAST_ANALYZED_KEY, load } from './utils.js'
@@ -27,7 +28,7 @@ const LEVELS = [
 function topByImportance(articles, limit) {
   const keep = new Set(
     [...articles]
-      .sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0) || (a.hoursAgo ?? 0) - (b.hoursAgo ?? 0))
+      .sort((a, b) => byRank(a, b) || (a.hoursAgo ?? 0) - (b.hoursAgo ?? 0)) // 기사 · 논문 섞임: 「중요」 먼저 (11/17 P7)
       .slice(0, limit)
       .map((a) => a.id),
   )
