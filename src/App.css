@@ -9475,3 +9475,27 @@ a.dash-home-t:hover,
 .queue-move button:hover {
   background: var(--tb-color-surface-hover);
 }
+
+/* 기술 시계열 칸: 화면이 넓으면 더 보여 주는 블록 (11/18, TimelineExtras.jsx) — 높이는 다 들어가는 블록만큼만 */
+.tlx {
+  overflow: hidden;
+  margin-top: var(--tb-space-3, 12px);
+}
+.tlx-block + .tlx-block {
+  margin-top: 12px;
+}
+.tlx-block.is-out {
+  visibility: hidden;
+}
+.tlx-news h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.tlx-news ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 13px;
+}
+.tlx-news li + li {
+  margin-top: 4px;
+}
