@@ -145,8 +145,22 @@ export async function setReportStar(owner, id, on) {
   else await query('DELETE FROM report_stars WHERE owner = $1 AND report_id = $2', [owner, id])
 }
 
+// 같은 제목이 이미 있으면 끝에 번호 (11/17 조장): 「11.17 OLED 동향 브리핑」 → 「… 2」 → 「… 3」. 휴지통에 있는 것도 센다(번호가 겹치지 않게)
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+export async function uniqueReportTitle(title) {
+  const base = String(title ?? '').trim() || '보고서'
+  const titles = dbEnabled()
+    ? (await query(`SELECT title FROM reports WHERE title = $1 OR title ~ $2`, [base, `^${escapeRe(base)} [0-9]+$`])).rows.map((r) => r.title)
+    : memoryReports.map((e) => e.report?.title).filter((t) => t === base || new RegExp(`^${escapeRe(base)} \\d+$`).test(t ?? ''))
+  if (!titles.length) return base
+  const nums = titles.map((t) => (t === base ? 1 : Number(t.slice(base.length + 1)) || 1))
+  return `${base} ${Math.max(...nums) + 1}`
+}
+
 // ip: 만든 사람의 IP (일반 화면에서 지울 수 있는 사람). 화면에는 보내지 않는다
-export async function saveReport(entry, ip = null) {
+// unique: 새로 만든 보고서 — 같은 제목이 있으면 번호를 붙여 저장 (entry.report.title도 바뀜)
+export async function saveReport(entry, ip = null, { unique = false } = {}) {
+  if (unique) entry.report.title = await uniqueReportTitle(entry.report.title)
   if (!dbEnabled()) {
     memoryReports.unshift(entry)
     if (ip) memoryReportIps.set(entry.id, ip)
