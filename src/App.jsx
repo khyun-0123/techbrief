@@ -39,7 +39,7 @@ import GuideTour from './GuideTour.jsx'
 import Dropdown, { PeriodSeg, Seg } from './Dropdown.jsx'
 import { byRank, pickMaterials, periodLabelOf } from './autoPick.js'
 import { buildTagDict, mentionOf, tagsOf, techTermNames } from './hashtags.js'
-import { collectedView, isLow, isOwnOnly, sentimentLabel, sentimentOf as pickSentiment } from './articleFilter.js'
+import { collectedView, isLow, isOwnOnly } from './articleFilter.js'
 import SettingsMenu from './SettingsMenu.jsx'
 import { buildBundleHtml } from './exportBundle.js'
 import SelectToggle from './SelectToggle.jsx'
@@ -61,7 +61,6 @@ import ListsPanel from './ListsPanel.jsx'
 import LogoMark from './Logo.jsx'
 import RefreshPanel from './RefreshPanel.jsx'
 import TestTools from './TestTools.jsx'
-import SentimentBadge from './SentimentBadge.jsx'
 import SummaryItems from './SummaryItems.jsx'
 import { formatPublished, load, save } from './utils.js'
 import { clientId, enableUsage, track, trackVisit } from './usage.js'
@@ -288,7 +287,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [showLow, setShowLow] = useState(() => load(SHOW_LOW_KEY, false)) // 관련도 낮은 기사도 보기 (F4)
   // 요약된 기사 먼저: 지금 정렬은 그대로 두고 요약된 기사를 위로 (요약을 먼저 보고 고르게)
   const [summarizedFirst, setSummarizedFirst] = useState(() => load(SUMMARIZED_FIRST_KEY, true))
-  const [sentimentFilter, setSentimentFilter] = useState('all') // 긍정·중립·부정 거르기 (F5)
   const [favorites, setFavorites] = useState([]) // 즐겨찾기 ☆ (IP별, 11/09)
   const [recent, setRecent] = useState(() => load(RECENT_KEY, [])) // 최근 검색어 (IP별, 서버 값이 오기 전엔 브라우저 값)
   const [pageSize, setPageSize] = useState(() => load(PAGE_SIZE_KEY, 20))
@@ -730,9 +728,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     : null
   // 강조할 검색어: 네이버 찾기 결과면 찾은 말, 모은 기사에서 거르는 중이면 입력한 말 (Highlight.jsx)
   const hlTerms = search?.query ? [search.query, ...(search.scope?.terms ?? [])] : q ? [q] : []
-  const sentimentOf = (a) => sentimentLabel(pickSentiment(a, liteOf(a)))
   const hasSummary = (a) => Boolean(liteOf(a))
-  const sentimentOk = (a) => !features.has('sentiment') || sentimentFilter === 'all' || sentimentOf(a) === sentimentFilter
   // 찾기 결과는 여기서, 모은 자료는 공용 함수(src/articleFilter.js — 서버의 한 쪽씩 보기와 같은 규칙)
   const view = listed
     ? (() => {
@@ -746,8 +742,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       })()
     : paging
       ? null
-      : collectedView(collected, { maxHours, source, q, sort, summarizedFirst, showLow, excludeOwn, hasSummary, sentiment: features.has('sentiment') ? sentimentFilter : 'all', summaryFor: liteOf, textFor: (a) => `${a.title} ${a.keyword} ${tagsFor(a).join(' ')}` })
-  const visible = view ? (listed ? view.visible.filter(sentimentOk) : view.visible) : []
+      : collectedView(collected, { maxHours, source, q, sort, summarizedFirst, showLow, excludeOwn, hasSummary, textFor: (a) => `${a.title} ${a.keyword} ${tagsFor(a).join(' ')}` })
+  const visible = view ? view.visible : []
   // 한 쪽씩 보기: 개수 · 쪽은 서버 값
   const serverList = !view && paging
   const visibleCount = serverList ? (serverPage?.total ?? 0) : visible.length
@@ -757,13 +753,13 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const summarizedCount = serverList ? (serverPage?.summarizedCount ?? 0) : view.summarizedCount
 
   // 정렬·필터·검색이 바뀌면 1페이지로 (13 문서 F2)
-  const listKey = [period, source, sort, q, search?.query ?? '', keywords.join(','), excludeOwn, showLow, sentimentFilter, summarizedFirst].join('|')
+  const listKey = [period, source, sort, q, search?.query ?? '', keywords.join(','), excludeOwn, showLow, summarizedFirst].join('|')
   useEffect(() => {
     setPage(1)
   }, [listKey])
 
   // 한 쪽씩 보기 (11/17 B2): 거르기 · 쪽이 바뀌면 서버에서 그 쪽만 받는다. 검색어는 치는 동안 0.3초 기다림
-  const pageQuery = paging && !searchArticles ? new URLSearchParams({ period, source, q, sort, sf: summarizedFirst ? '1' : '0', low: showLow ? '1' : '0', own: excludeOwn ? '1' : '0', sentiment: features.has('sentiment') ? sentimentFilter : 'all', page: String(page), size: String(pageSize) }).toString() : ''
+  const pageQuery = paging && !searchArticles ? new URLSearchParams({ period, source, q, sort, sf: summarizedFirst ? '1' : '0', low: showLow ? '1' : '0', own: excludeOwn ? '1' : '0', page: String(page), size: String(pageSize) }).toString() : ''
   useEffect(() => {
     if (!pageQuery) return undefined
     let alive = true
@@ -1595,22 +1591,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   <input type="checkbox" checked={showLow} onChange={(e) => toggleShowLow(e.target.checked)} />
                   관련도 낮은 자료도 보기 <span className="own-count">{lowCount}건</span>
                 </label>
-                {features.has('sentiment') && (
-                <Dropdown
-                  className="sentiment-filter"
-                  size="lg"
-                  value={sentimentFilter}
-                  onChange={setSentimentFilter}
-                  label="긍정·중립·부정 거르기"
-                  title="기사 속 소식 자체의 성격이에요. 요약 전에는 제목 기준, 요약 후에는 요약 기준이에요 (투자 판단용 아님)"
-                  options={[
-                    { value: 'all', label: '긍정·부정 전체' },
-                    { value: '긍정', label: '○ 긍정만' },
-                    { value: '중립', label: '△ 중립만' },
-                    { value: '부정', label: '✕ 부정만' },
-                  ]}
-                />
-                )}
                 <label className="own-toggle" title="자사·자회사만 나온 자료를 숨겨요. 경쟁사도 함께 나오면 남겨요">
                   <input type="checkbox" checked={excludeOwn} onChange={(e) => toggleExcludeOwn(e.target.checked)} />
                   자사·자회사 자료 제외 <span className="own-count">{ownCount}건</span>
@@ -1698,7 +1678,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                                   {a.aiAllowed === false && ' · AI 안 씀'}
                                 </span>
                               )}
-                              <SentimentBadge sentiment={pickSentiment(a, ai?.summary)} />
                               {a.url ? (
                                 <a className="title-link" href={a.url} target="_blank" rel="noreferrer" title="원문 열기 (새 창)" onClick={() => track('open', a.title)}>
                                   <TitleWithIcon title={a.title} terms={hlTerms} />

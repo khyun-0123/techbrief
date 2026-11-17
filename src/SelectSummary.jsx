@@ -4,9 +4,7 @@
 // 폴더 옮기기는 기사 펼침의 「폴더」 메뉴로 (끌어 놓기는 11/08에 뺌)
 import { useState } from 'react'
 import { SAMPLE_SUMMARIES } from './sampleArticles.js'
-import { useFeature } from './features.js'
 import { AI_BLOCKED_TITLE, useOps } from './ops.js'
-import SentimentBadge from './SentimentBadge.jsx'
 import SummaryItems from './SummaryItems.jsx'
 import { formatPublished } from './utils.js'
 import AddMaterial from './AddMaterial.jsx'
@@ -48,7 +46,6 @@ function SelectSummary({
 }) {
   const { aiBlocked } = useOps()
   const [sort, setSort] = useState('importance')
-  const showSentiment = useFeature('sentiment')
   const [openId, setOpenId] = useState(null)
   const [folder, setFolder] = useState(null) // 보는 폴더 (null = 전체)
   const [showAdd, setShowAdd] = useState(false)
@@ -105,11 +102,6 @@ function SelectSummary({
             </a>
           )}
         </div>
-        {showSentiment && ai?.summary?.sentiment && (
-          <p className="sentiment-line">
-            <SentimentBadge sentiment={ai.summary.sentiment} /> {ai.summary.sentiment.reason}
-          </p>
-        )}
         {busy && (
           <div className="summary-progress">
             <span>{job.status === 'running' ? `AI 요약 중 ${queue.progressOf(job)}% (예상)` : '요약 대기 중'}</span>

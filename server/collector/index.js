@@ -9,7 +9,6 @@ import { findMention, getLists } from './lists.js'
 import { EXPERT_SOURCES, toArticle } from './normalize.js'
 import { BROAD_KEYWORD, relevanceInfo } from './relevance.js'
 import { mentions, rescore, scoreArticle } from './score.js'
-import { titleSentiment } from './sentiment.js'
 import { restoreTitles } from './titles.js'
 import crypto from 'node:crypto'
 import { importanceRule, loadImportanceRule } from '../importanceRule.js'
@@ -388,7 +387,6 @@ function toIssues(stored, lists, ctx = { rising: [], older: [] }) {
         related,
         own,
         relevance,
-        titleSentiment: titleSentiment(fullTitle ?? rep.title),
       }
     })
     .sort((x, y) => y.publishedAt.localeCompare(x.publishedAt))
@@ -428,7 +426,7 @@ async function attachSummaryLite(value) {
     const found = ids.length ? await getSummaries(ids) : {}
     for (const a of value.articles) {
       const s = found[a.id]?.summary
-      if (s) a.summaryLite = { headline: s.headline ?? null, keywords: (s.keywords ?? []).slice(0, 6), ...(s.sentiment ? { sentiment: s.sentiment } : {}) }
+      if (s) a.summaryLite = { headline: s.headline ?? null, keywords: (s.keywords ?? []).slice(0, 6) }
     }
   } catch (err) {
     console.warn(`[list] 요약 칸 붙이기 실패: ${err.message}`)

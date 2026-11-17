@@ -4,7 +4,6 @@
 //       선별해 둔 자료는 /api/articles/by-ids로 필요한 것만
 // - 거르기 · 정렬은 화면과 같은 함수(src/articleFilter.js collectedView)
 // - 검색어는 제목 · 키워드 · 해시태그로 맞춘다. 사전은 화면과 같음: 자동 수집 키워드 · 회사 목록 · 「요즘 뜨는 기술」 용어(techTermNames)
-// - 긍정 · 중립 · 부정 거르기도 같은 함수 (요약 본문은 서버 목록의 summaryLite 기준)
 import { collectedView, PERIOD_HOURS } from '../src/articleFilter.js'
 import { buildTagDict, tagsOf, techTermNames } from '../src/hashtags.js'
 import { getKeywords } from './db/store.js'
@@ -65,7 +64,6 @@ export async function articlesPage(light, params, clientId = null) {
     summarizedFirst: params.get('sf') === '1',
     showLow: params.get('low') === '1',
     excludeOwn: params.get('own') === '1',
-    sentiment: ['긍정', '중립', '부정'].includes(params.get('sentiment')) ? params.get('sentiment') : 'all',
     textFor: (a) => `${a.title} ${a.keyword} ${tagsOf(a, a.summaryLite, dict).map((t) => t.term ?? t).join(' ')}`,
   })
   const pageCount = Math.max(1, Math.ceil(visible.length / size))

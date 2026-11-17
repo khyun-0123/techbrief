@@ -2094,55 +2094,7 @@ a.btn {
 }
 
 /* 긍정·중립·부정 ○ △ ✕ (F5) — 색과 함께 기호·글자로도 구분 */
-.sentiment {
-  display: inline-block;
-  margin-right: 6px;
-  padding: 1px 8px;
-  border-radius: var(--tb-radius-full);
-  font-size: 12px;
-  font-weight: 700;
-  vertical-align: 1px;
-  white-space: nowrap;
-}
-
-.sentiment.good {
-  background: var(--tb-color-success-soft);
-  color: var(--tb-color-success);
-}
-
-.sentiment.neutral {
-  background: var(--tb-color-bg-strong);
-  color: var(--tb-color-text-sub);
-}
-
-.sentiment.bad {
-  background: var(--tb-color-danger-soft);
-  color: var(--tb-color-danger);
-}
-
 /* 제목 단어로 빠르게 판단한 표시 — 요약 기준보다 옅게 */
-.sentiment.by-title {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px currentColor;
-  opacity: 0.75;
-}
-
-.sentiment-line {
-  margin: 10px 0 0;
-  color: var(--tb-color-text-sub);
-  font-size: 15px;
-}
-
-.sentiment-note {
-  color: var(--tb-color-text-faint);
-  font-size: 13px;
-}
-
-.sentiment-filter {
-  padding: 4px 8px;
-  font-size: 13px;
-}
-
 /* 즐겨찾는 검색어 (F3): 넓은 화면은 왼쪽 열, 좁으면 목록 위 한 줄 */
 .page.page-wide {
   max-width: 1600px;
