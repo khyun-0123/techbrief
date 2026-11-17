@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto'
 import { englishTerms, openAlexQuery } from './queryTerms.js'
 import { isCompetitorTech, keywordPapers } from './papers/journals.js'
 import { corpusReady, paperScore2, searchCorpus } from './papers/corpus.js'
+import { kciReady, searchKci } from './papers/kci.js'
 
 const DAYS = { today: 90, week: 365, all: 365 * 3 } // 논문은 하루 · 일주일 안에 거의 없어 넓게
 const LIMIT = 100
@@ -76,6 +77,18 @@ export async function searchPaperArticles(query, period = 'all', terms = null) {
     ;({ works, provider } = await keywordPapers(en, { from, to, limit: LIMIT }))
     works = works.filter((w) => !w.retracted)
   }
+  // 국내 논문 (11/17, KCI · 39 문서 D1): 키가 있으면 한글 검색어로 20편까지 더한다 (DOI · 제목이 같으면 한 번)
+  let kciCount = 0
+  if (kciReady()) {
+    const kci = await searchKci(query, { from, to, limit: 20 }).catch((err) => {
+      console.warn(`[papers] KCI 찾기 실패: ${err.message}`)
+      return []
+    })
+    const seen = new Set(works.flatMap((w) => [w.doi?.toLowerCase(), w.title?.toLowerCase()]).filter(Boolean))
+    const fresh = kci.filter((w) => !seen.has(w.doi?.toLowerCase()) && !seen.has(w.title.toLowerCase()))
+    kciCount = fresh.length
+    works = [...works, ...fresh]
+  }
   const scored = works.map((w, i) => ({ w, ...paperScore2(w, 1 - i / Math.max(1, works.length)) }))
   const articles = pick(scored).map(({ w, score, parts }) => {
     const url = w.url || (w.doi ? `https://doi.org/${w.doi}` : '')
@@ -112,5 +125,6 @@ export async function searchPaperArticles(query, period = 'all', terms = null) {
   if (t.source in how) notes.push(`논문은 「${t.terms.join(' · ')}」로 찾았어요${how[t.source]}`)
   if (provider === 'corpus') notes.push(`우리 논문 DB ${rows.length}편 중 중요도 순`)
   if (noAbstract) notes.push(`논문 ${noAbstract}편은 초록을 받지 못했어요 (출판사가 공개하지 않음)`)
+  if (kciCount) notes.push(`국내 논문(KCI) ${kciCount}편 더함`)
   return { articles, provider, note: notes.join(' · ') || null, terms: t.terms }
 }
