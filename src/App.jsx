@@ -11,6 +11,9 @@ import {
   updateReportApi,
   fetchAdminMe,
   fetchArticles,
+  fetchArticlesByIds,
+  fetchArticlesHome,
+  fetchArticlesPage,
   fetchFavorites,
   fetchFeatures,
   fetchHealth,
@@ -36,12 +39,13 @@ import GuideTour from './GuideTour.jsx'
 import Dropdown, { PeriodSeg, Seg } from './Dropdown.jsx'
 import { byRank, pickMaterials, periodLabelOf } from './autoPick.js'
 import { buildTagDict, mentionOf, tagsOf } from './hashtags.js'
+import { collectedView, isLow, isOwnOnly } from './articleFilter.js'
 import SettingsMenu from './SettingsMenu.jsx'
 import { buildBundleHtml } from './exportBundle.js'
 import SelectToggle from './SelectToggle.jsx'
 import FavoritesRail from './FavoritesRail.jsx'
 import Highlight from './Highlight.jsx'
-import { highlightPattern, matchesTerms } from './highlightTerms.js'
+import { highlightPattern } from './highlightTerms.js'
 import Pager from './Pager.jsx'
 import ProgressPanel from './ProgressPanel.jsx'
 import { requestOpenStory, useStoryJobs } from './storyJobs.js'
@@ -103,6 +107,12 @@ function materialView(m) {
 }
 
 // 서버 기사(publishedAt)를 화면에서 쓰는 모양(hoursAgo)으로 바꾼다
+// 서버가 배점 · 기준을 한 번만 보내므로(rule) 자료마다 다시 붙인다 (scoreParts.max · high · weight · noise를 쓰는 곳 그대로, 11/17)
+function withRule(list, rule) {
+  if (!rule) return list ?? []
+  return (list ?? []).map((a) => (a.scoreParts && !a.paper ? { ...a, scoreParts: { weight: 1, noise: 1, ...a.scoreParts, max: rule.max, high: rule.high } } : a))
+}
+
 function toView(a) {
   if (a.hoursAgo !== undefined) return a
   return { ...a, hoursAgo: Math.max(0, (Date.now() - Date.parse(a.publishedAt)) / 3600_000) }
@@ -217,6 +227,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [featureStates, setFeatureStates] = useState({}) // 실험 기능 { key: 'off' | 'test' | 'all' }
   const [featureList, setFeatureList] = useState([]) // [{ key, label }] 테스트 띠에 한글 이름으로 보여 줄 때
   const features = useMemo(() => enabledFeatures(featureStates, mode), [featureStates, mode])
+  const paging = features.has('articlesPaging')
   const [techTerms, setTechTerms] = useState([]) // 핵심어 사전용 기술 용어
   const [tagsOpen, setTagsOpen] = useState(() => new Set()) // 「+N」을 눌러 키워드를 모두 펼친 기사
   const [abstractOpen, setAbstractOpen] = useState(() => new Set()) // 「초록 전체 보기」를 누른 논문
@@ -251,6 +262,13 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [period, setPeriod] = useState('all') // 기본 「전체」 (11/09 조장). 모은 기사 목록은 서버가 7일치만 보냄 (30 문서 1장)
   const [source, setSource] = useState('all')
   const [fetched, setFetched] = useState(() => load(ARTICLES_KEY, []))
+  // 한 쪽씩 보기 (11/17 B2): 첫 화면 값 · 지금 쪽 · id로 받은 선별 자료 · 다시 받기 신호
+  const [home, setHome] = useState(null)
+  const [serverPage, setServerPage] = useState(null)
+  const [byIdArticles, setByIdArticles] = useState([])
+  const [pageReload, setPageReload] = useState(0)
+  const [featuresReady, setFeaturesReady] = useState(false)
+  const rulesRef = useRef(null)
   const [collectedAt, setCollectedAt] = useState(() => load(COLLECTED_AT_KEY, null))
   const [refresh, setRefresh] = useState(null) // 자동 최신화 상태 (서버)
   const [openSummaryId, setOpenSummaryId] = useState(null) // 목록에서 요약을 펼친 기사
@@ -306,14 +324,20 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
   // 서버에 쌓인 기사를 불러온다. 앱을 열 때, 최신화가 끝났을 때
   const reloadArticles = useCallback(async () => {
+    // 한 쪽씩 보기 (11/17 B2): 목록 전체(약 4MB) 대신 첫 화면 값만. 자료 현황 쪽은 아래 효과가 받는다
+    if (paging) {
+      const h = await fetchArticlesHome()
+      rulesRef.current = h.rule
+      h.homeIssues = withRule(h.homeIssues, h.rule)
+      setHome(h)
+      setCollectedAt(h.lastCollectedAt)
+      setPageReload((n) => n + 1)
+      return
+    }
     const result = await fetchArticles()
     if (result.articles.length === 0) return
     // 11/17: 서버가 배점 · 기준을 한 번만 보내므로(rule) 자료마다 다시 붙인다 (scoreParts.max · high · weight · noise를 쓰는 곳 그대로)
-    if (result.rule) {
-      for (const a of result.articles) {
-        if (a.scoreParts && !a.paper) a.scoreParts = { weight: 1, noise: 1, ...a.scoreParts, max: result.rule.max, high: result.rule.high }
-      }
-    }
+    result.articles = withRule(result.articles, result.rule)
     // 화면에는 서버가 준 기사 전부 (최근 7일). 브라우저 저장은 용량 때문에 최신 MAX_SAVED개만 (서버가 꺼졌을 때 보여 줄 용도)
     // 예전에는 화면도 400개로 잘라서, 빠짐없이 수집한 뒤로는 최근 몇 시간 치만 보였다
     setFetched(result.articles)
@@ -321,10 +345,14 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     // 브라우저에는 첫 화면(대시보드 「최근 중요 자료」 · 머리 숫자)용 가벼운 목록만 (11/17 조장: 지금 보이는 것만 저장)
     save(ARTICLES_KEY, result.articles.slice(0, MAX_SAVED).map(({ id, url, title, source, keyword, publishedAt, importance, importanceLevel, relevance, sameIssue, tier, own, groupId }) => ({ id, url, title, source, keyword, publishedAt, importance, importanceLevel, relevance, sameIssue, tier, own, groupId })))
     save(COLLECTED_AT_KEY, result.lastCollectedAt)
-  }, [])
+  }, [paging])
+
+  // 기사 목록은 실험 기능 상태를 안 뒤에 (한 쪽씩 보기면 받는 것이 다름)
+  useEffect(() => {
+    if (featuresReady) reloadArticles().catch(() => {})
+  }, [featuresReady, reloadArticles])
 
   useEffect(() => {
-    reloadArticles().catch(() => {})
     fetchFavorites()
       .then((d) => {
         setFavorites(d.favorites ?? [])
@@ -338,6 +366,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         setFeatureList(f.list)
       })
       .catch(() => {})
+      .finally(() => setFeaturesReady(true))
     fetchLists()
       .then(setLists)
       .catch(() => {})
@@ -348,7 +377,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     fetchMaterials(clientId())
       .then(setMaterials)
       .catch(() => {})
-  }, [reloadArticles])
+  }, [])
 
   // 선별 폴더: 서버에 IP별로 담는다 (11/08). 이 IP의 선별이 서버에 있으면 그것을 쓰고, 없으면 이 브라우저 것을 올린다
   const selectionLoaded = useRef(false)
@@ -648,29 +677,32 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   }, [extraArticles])
 
   // 한 번도 수집하지 않았으면 샘플 기사를 보여 준다
-  const isSample = fetched.length === 0
+  // 11/17 B2: 「자료 현황 한 쪽씩 받기」(실험 기능 articlesPaging)를 켜면 목록 전체를 받지 않는다 → 서버가 준 첫 화면 값 · 쪽
+  const isSample = !paging && fetched.length === 0
   // 화면 전체에서 쓰는 기사: 수집 기사 + 찾기에서 선별한 기사 + 지금 찾기 결과
   const pool = useMemo(() => {
-    const base = [...(isSample ? SAMPLE_ARTICLES : fetched.map(toView)), ...materials.map(materialView)]
+    const base = [...(paging ? [...(serverPage?.items ?? []), ...(home?.homeIssues ?? []), ...byIdArticles].map(toView) : isSample ? SAMPLE_ARTICLES : fetched.map(toView)), ...materials.map(materialView)]
     const seen = new Set(base.map((a) => a.id))
     const more = [...extraArticles, ...(searchArticles ?? [])].filter((a) => !seen.has(a.id) && seen.add(a.id))
     return [...base, ...more.map(toView)]
-  }, [isSample, fetched, extraArticles, searchArticles, materials])
-  const sources = useMemo(() => [...new Set(pool.map((a) => a.source))].sort(), [pool])
+  }, [isSample, fetched, extraArticles, searchArticles, materials, paging, serverPage, home, byIdArticles])
+  const sources = useMemo(() => [...new Set([...(paging ? (home?.sources ?? []) : []), ...pool.map((a) => a.source)])].sort(), [pool, paging, home])
   // 출처 거르기: 'all' · 'tier:1'(1차 기업·학회·논문) · 'tier:2'(2차 전문매체) · 'tier:3'(3차 일반 뉴스) · 매체 이름
   const sourceMatch = (a) =>
     source === 'all' || (source === 'material' ? Boolean(a.material) : source.startsWith('tier:') ? String(a.tier ?? 3) === source.slice(5) : a.source === source)
 
   // 수집 대상: 등록한 키워드에 해당하는 기사. 샘플은 키워드와 상관없이 모두 보여 준다 (샘플 키워드가 기본 키워드와 다름)
   // 「1·2차 출처」: 키워드에 안 맞은 RSS 글도 모두 모은다 (11/09 조장, 관련도 · 중요도로 판단)
-  const gathered = isSample ? SAMPLE_ARTICLES : fetched.map(toView).filter((a) => keywords.includes(a.keyword) || a.keyword === '1·2차 출처')
+  const gathered = paging ? [] : isSample ? SAMPLE_ARTICLES : fetched.map(toView).filter((a) => keywords.includes(a.keyword) || a.keyword === '1·2차 출처')
+  const countArticles = (list) => list.reduce((n, a) => n + 1 + (a.sameIssue ?? 0), 0)
   // 오늘 이슈 수: 키워드에 안 맞은 1·2차 출처 글 중 관련 낮음(기본 숨김)은 세지 않는다
   const todayIssues = gathered.filter((a) => a.hoursAgo < 24 && !(a.keyword === '1·2차 출처' && a.relevance === 'low'))
   // 대시보드 첫 화면 「최근 중요 기사」 (11/15): 최근 48시간, 관련도 낮음 빼고 중요도 순
-  const homeIssues = gathered.filter((a) => a.hoursAgo < 48 && a.relevance !== 'low').sort((x, y) => (y.importance ?? 0) - (x.importance ?? 0))
+  const homeIssues = paging ? (home?.homeIssues ?? []).map(toView) : gathered.filter((a) => a.hoursAgo < 48 && a.relevance !== 'low').sort((x, y) => (y.importance ?? 0) - (x.importance ?? 0))
+  const todayCount = paging ? (home?.todayIssues ?? 0) : todayIssues.length
+  const todayArticleCount = paging ? (home?.todayArticles ?? 0) : countArticles(todayIssues)
   // 자료 현황 목록: 모은 기사 + 직접 추가한 자료
   const collected = [...gathered, ...materials.map(materialView)]
-  const countArticles = (list) => list.reduce((n, a) => n + 1 + (a.sameIssue ?? 0), 0)
 
   const maxHours = PERIODS.find((p) => p.value === period).hours
   const q = query.trim().toLowerCase()
@@ -684,8 +716,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const liteOf = (a) => aiSummaries[a.id]?.summary ?? a.summaryLite
   const tagsFor = (a) => tagsOf(a, liteOf(a), tagDict)
   const byId = new Map(pool.map((a) => [a.id, a]))
-  // 자사·자회사만 나온 기사 (경쟁사도 함께 나오면 경쟁사 소식이라 남긴다)
-  const isOwnOnly = (a) => Boolean(a.own) && !a.scoreParts?.competitorName
   // 범위 찾기 결과의 「든 말」 (모은 기사와 id가 같으면 모은 쪽 객체가 쓰이므로 찾기 결과에서 따로 꺼냄)
   const scopeHitsOf = new Map((searchArticles ?? []).map((a) => [a.id, a.scopeHits ?? []]))
   const listed = searchArticles
@@ -697,38 +727,73 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           // 기사 · 논문이 섞여 「중요」 먼저 · 각자 기준에 맞춘 점수 (11/17 P7, autoPick.js byRank)
           sort === 'importance' ? byRank(a, b) || a.hoursAgo - b.hoursAgo : a.hoursAgo - b.hoursAgo,
         )
-    : collected
-    .filter(
-      (a) =>
-        // 「직접 추가한 자료」만 볼 때는 기간과 상관없이 모두
-        (a.hoursAgo < maxHours || source === 'material') &&
-        sourceMatch(a) &&
-        (!q || matchesTerms(`${a.title} ${a.keyword} ${tagsFor(a).join(' ')}`, [q])),
-    )
-    .sort((a, b) => (sort === 'importance' ? (b.importance ?? 0) - (a.importance ?? 0) : 0) || a.hoursAgo - b.hoursAgo)
+    : null
   // 강조할 검색어: 네이버 찾기 결과면 찾은 말, 모은 기사에서 거르는 중이면 입력한 말 (Highlight.jsx)
   const hlTerms = search?.query ? [search.query, ...(search.scope?.terms ?? [])] : q ? [q] : []
-  const isLow = (a) => a.relevance === 'low'
-  const lowCount = listed.filter(isLow).length
-  const ownCount = listed.filter(isOwnOnly).length
   const sentimentOf = (a) => sentimentLabel(pickSentiment(a, liteOf(a)))
   const hasSummary = (a) => Boolean(liteOf(a))
-  const ordered = summarizedFirst ? [...listed.filter(hasSummary), ...listed.filter((a) => !hasSummary(a))] : listed
-  const visible = ordered.filter(
-    (a) =>
-      (showLow || !isLow(a)) &&
-      !(excludeOwn && isOwnOnly(a)) &&
-      (!features.has('sentiment') || sentimentFilter === 'all' || sentimentOf(a) === sentimentFilter),
-  )
+  const sentimentOk = (a) => !features.has('sentiment') || sentimentFilter === 'all' || sentimentOf(a) === sentimentFilter
+  // 찾기 결과는 여기서, 모은 자료는 공용 함수(src/articleFilter.js — 서버의 한 쪽씩 보기와 같은 규칙)
+  const view = listed
+    ? (() => {
+        const ordered = summarizedFirst ? [...listed.filter(hasSummary), ...listed.filter((a) => !hasSummary(a))] : listed
+        return {
+          visible: ordered.filter((a) => (showLow || !isLow(a)) && !(excludeOwn && isOwnOnly(a))),
+          lowCount: listed.filter(isLow).length,
+          ownCount: listed.filter(isOwnOnly).length,
+          summarizedCount: listed.filter(hasSummary).length,
+        }
+      })()
+    : paging
+      ? null
+      : collectedView(collected, { maxHours, source, q, sort, summarizedFirst, showLow, excludeOwn, hasSummary, textFor: (a) => `${a.title} ${a.keyword} ${tagsFor(a).join(' ')}` })
+  const visible = view ? view.visible.filter(sentimentOk) : []
+  // 한 쪽씩 보기: 개수 · 쪽은 서버 값
+  const serverList = !view && paging
+  const visibleCount = serverList ? (serverPage?.total ?? 0) : visible.length
+  const visibleArticleCount = serverList ? (serverPage?.totalArticles ?? 0) : countArticles(visible)
+  const lowCount = serverList ? (serverPage?.lowCount ?? 0) : view.lowCount
+  const ownCount = serverList ? (serverPage?.ownCount ?? 0) : view.ownCount
+  const summarizedCount = serverList ? (serverPage?.summarizedCount ?? 0) : view.summarizedCount
 
   // 정렬·필터·검색이 바뀌면 1페이지로 (13 문서 F2)
   const listKey = [period, source, sort, q, search?.query ?? '', keywords.join(','), excludeOwn, showLow, sentimentFilter, summarizedFirst].join('|')
   useEffect(() => {
     setPage(1)
   }, [listKey])
-  const pageCount = Math.max(1, Math.ceil(visible.length / pageSize))
+
+  // 한 쪽씩 보기 (11/17 B2): 거르기 · 쪽이 바뀌면 서버에서 그 쪽만 받는다. 검색어는 치는 동안 0.3초 기다림
+  const pageQuery = paging && !searchArticles ? new URLSearchParams({ period, source, q, sort, sf: summarizedFirst ? '1' : '0', low: showLow ? '1' : '0', own: excludeOwn ? '1' : '0', page: String(page), size: String(pageSize) }).toString() : ''
+  useEffect(() => {
+    if (!pageQuery) return undefined
+    let alive = true
+    const t = setTimeout(() => {
+      fetchArticlesPage(pageQuery)
+        .then((d) => alive && setServerPage({ ...d, items: withRule(d.items, rulesRef.current) }))
+        .catch(() => {})
+    }, q ? 300 : 0)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageQuery, pageReload])
+
+  // 한 쪽씩 보기: 선별해 둔 자료 중 지금 받은 목록에 없는 것은 id로 받는다 (선별·요약 · 보고서가 그대로 보이게)
+  const wantIdsKey = paging ? [...selectedIds, ...includedIds].filter((id) => !extraArticles.some((x) => x.id === id)).join(',') : ''
+  useEffect(() => {
+    if (!wantIdsKey) return undefined
+    let alive = true
+    fetchArticlesByIds(wantIdsKey.split(','))
+      .then((d) => alive && setByIdArticles(withRule(d.items, rulesRef.current)))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [wantIdsKey, pageReload])
+  const pageCount = Math.max(1, Math.ceil(visibleCount / pageSize))
   const currentPage = Math.min(page, pageCount)
-  const paged = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const paged = serverList ? (serverPage?.items ?? []).map((a) => byId.get(a.id) ?? toView(a)) : visible.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   // 목록 기사 중 미리 요약된 것을 가져온다 (자동 최신화·다른 팀원이 만든 요약)
   // 자동 요약은 최신화와 따로 뒤에서 계속 돈다 → 진행 건수가 바뀌면 다시 가져온다
@@ -1189,7 +1254,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           {/* 오늘 수집 · 선별 숫자 (11/08: 대시보드 숫자 칸을 메뉴 막대로 옮김). 누르면 그 화면으로 */}
           <span className="topbar-stats">
             <button type="button" onClick={() => setScreen('collect')} title="오늘(24시간) 모은 이슈 · 자료 — 자료 현황으로">
-              오늘 이슈 <strong>{todayIssues.length}</strong> · 자료 <strong>{countArticles(todayIssues)}</strong>
+              오늘 이슈 <strong>{todayCount}</strong> · 자료 <strong>{todayArticleCount}</strong>
             </button>
             <button type="button" onClick={() => setScreen('select')} title="선별한 자료 — 선별·요약으로">
               선별 <strong>{selectedIds.length}</strong>
@@ -1282,8 +1347,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             window.scrollTo({ top: 0 })
           }}
           stats={{
-            todayIssues: todayIssues.length,
-            todayArticles: countArticles(todayIssues),
+            todayIssues: todayCount,
+            todayArticles: todayArticleCount,
             selected: selectedIds.length,
             collectedLabel: refreshRunning ? '최신화 중…' : collectedAt ? `마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 수집 전',
           }}
@@ -1465,7 +1530,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                     {search.articles && ` · 뉴스 ${search.newsCount ?? 0}건${search.collectedCount ? ` · 모아 둔 1·2차 출처 ${search.collectedCount}건` : ''} · 논문 ${search.paperCount ?? 0}건`}
                     {search.paperNote && <span className="search-note"> · {search.paperNote}</span>}
                     {search.newsNote && <span className="search-note" role="status"> · {search.newsNote}</span>}
-                    {search.articles && ` · 이슈 ${visible.length}개 · 자료 ${countArticles(visible)}건`}
+                    {search.articles && ` · 이슈 ${visibleCount}개 · 자료 ${visibleArticleCount}건`}
                     {search.loading && ' · 찾는 중…'}
                     {search.truncated && (
                       <span className="search-note">
@@ -1518,13 +1583,13 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               <div className="list-tools">
                 {search ? null : (
                   <span className="list-count">
-                    이슈 {visible.length}개 · 자료 {countArticles(visible)}건
+                    이슈 {visibleCount}개 · 자료 {visibleArticleCount}건
                     {q && <span className="search-note"> · 모은 자료에서 찾는 중. 없으면 「논문 · 뉴스에서 찾기」</span>}
                   </span>
                 )}
                 <label className="own-toggle" title="지금 정렬은 그대로 두고, AI 요약이 있는 자료를 위로 올려요">
                   <input type="checkbox" checked={summarizedFirst} onChange={(e) => toggleSummarizedFirst(e.target.checked)} />
-                  요약된 자료 먼저 <span className="own-count">{listed.filter(hasSummary).length}건</span>
+                  요약된 자료 먼저 <span className="own-count">{summarizedCount}건</span>
                 </label>
                 <label className="own-toggle" title="키워드 이야기가 한두 줄뿐이거나, 제목이 주식·쇼핑·생활 등 다른 주제이고 기술 내용이 없는 자료예요 (기본은 숨김)">
                   <input type="checkbox" checked={showLow} onChange={(e) => toggleShowLow(e.target.checked)} />
@@ -1555,7 +1620,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
               {/* 표는 이 칸 안에서 스크롤 (11/15 화면 틀: 거르기 · 페이지 번호는 늘 보임) */}
               <div className="list-scroll">
-              {visible.length === 0 ? (
+              {visibleCount === 0 ? (
                 <p className="empty">
                   {search
                     ? search.loading
@@ -1828,8 +1893,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 </table>
               )}
               </div>
-              {visible.length > 0 && (
-                <Pager page={currentPage} pageSize={pageSize} total={visible.length} onPage={goPage} onPageSize={changePageSize} />
+              {visibleCount > 0 && (
+                <Pager page={currentPage} pageSize={pageSize} total={visibleCount} onPage={goPage} onPageSize={changePageSize} />
               )}
             </section>
 

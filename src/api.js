@@ -20,6 +20,21 @@ export async function fetchArticles() {
   return res.json()
 }
 
+// 자료 현황 한 쪽씩 (11/17 B2, 실험 기능 articlesPaging): 첫 화면 값 · 한 쪽 · id로
+export async function fetchArticlesHome() {
+  const res = await fetch('/api/articles/home')
+  if (!res.ok) throw new Error('첫 화면 자료를 불러오지 못했어요')
+  return res.json()
+}
+export async function fetchArticlesPage(qs) {
+  const res = await fetch(`/api/articles/page?${qs}`)
+  if (!res.ok) throw new Error('자료 목록을 불러오지 못했어요')
+  return res.json()
+}
+export function fetchArticlesByIds(ids) {
+  return postJson('/api/articles/by-ids', { ids })
+}
+
 // 기사 찾기: 등록 키워드와 상관없이 네이버에서 바로 찾는다 (DB에 쌓지 않음)
 // period: 'today' | 'week' | 'all' (18 문서)
 export function searchNewsApi(query, period = 'all') {
