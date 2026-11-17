@@ -44,8 +44,19 @@ function fitInLines(widths, moreW, avail, gap, lines) {
 }
 
 function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, onGoReports, stats, keywords, favorites, recent, onSearch, onScopeSearch, onAutoReport, onGoCollect, onRemember }) {
-  const [text, setText] = useState('')
-  const [focus, setFocus] = useState(null) // 분석 중인 말 (없으면 검색창 + 미리 분석된 키워드 + 요즘 뜨는 기술)
+  // 보고서의 「분석 열기 ↗」 링크(/?analyze=키워드, 11/17)로 들어오면 그 키워드 분석을 바로 연다
+  const [linked] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('analyze')?.trim().slice(0, 50) || null
+    } catch {
+      return null
+    }
+  })
+  const [text, setText] = useState(linked ?? '')
+  const [focus, setFocus] = useState(linked) // 분석 중인 말 (없으면 검색창 + 미리 분석된 키워드 + 요즘 뜨는 기술)
+  useEffect(() => {
+    if (linked) window.history.replaceState(null, '', window.location.pathname) // 새로고침해도 다시 열리지 않게 주소에서 뺀다
+  }, [linked])
   const [ready, setReady] = useState([]) // 미리 분석해 둔 말 (11/10): 검색 전에도 분석이 어떤 모양인지 보이게
   const [readyLoading, setReadyLoading] = useState(true) // 11/17: 받는 동안 칩 자리를 그려 둔다
   const [allReady, setAllReady] = useState(false)

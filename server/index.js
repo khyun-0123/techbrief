@@ -323,8 +323,8 @@ async function buildReportEntry(body) {
         source,
         url,
         publishedAt,
-        fulltext: Boolean(b),
-        ...(analysis ? { analysis: true, description } : {}),
+        // [분석] 줄은 우리 규칙 계산이라 원문 · 발췌문 표시가 없다 (11/17: 「발췌문으로 작성」으로 보였음). 어느 키워드 분석인지 남겨 앱 분석으로 잇는다
+        ...(analysis ? { analysis: true, description, ...(a.keyword ? { keyword: a.keyword } : {}) } : { fulltext: Boolean(b) }),
         ...(paper ? { paper: true, access: paperAccessOf(a), ...(authors?.length ? { authors: authors.slice(0, 6) } : {}) } : {}),
       }
     }),

@@ -16,7 +16,7 @@
 //   - 지금 보고서 데이터에는 여러 계열 비교 · 두 지표 짝이 없어 묶음 막대 · 산점도는 고르는 규칙만 있고 쓰는 쪽이 없다
 // 근거: 뺀 줄(excluded)은 넣지 않는다. 기사 확인 사실(✓ · 근거 번호)과 AI 해설·제안은 섞지 않는다
 import { ACCESS_LABEL, PAID_NOTICE, paperAccess } from './paperAccess.js'
-import { kindOf } from './reportStore.js'
+import { analysisUrl, evidenceLabel, kindOf } from './reportStore.js'
 
 export const PAGE = { w: 10, h: 7.5, m: 0.5 }
 export const SIZE = { title: 18, sub: 14, body: 11, note: 10 }
@@ -375,7 +375,7 @@ export function reportPages(saved, extra = {}) {
     chrome(els, meta, null)
     els.push(text(PAGE.w - M - 3, 0.5, 3, LH(SIZE.note), SIZE.note, `보고일 ${meta.date}${meta.dept ? ` · ${meta.dept}` : ''}`, { align: 'right', color: COLOR.sub }))
     els.push(text(M, 0.72, 5.2, LH(SIZE.title), SIZE.title, meta.title, { bold: true }))
-    els.push(text(PAGE.w - M - 3.8, 0.72 + LH(SIZE.title) - LH(SIZE.note), 3.8, LH(SIZE.note), SIZE.note, `수집 기간 ${meta.period}  |  기사 ${meta.base}건${added ? ` · 보충 자료 ${added}건 (총 ${meta.base + added}건)` : ''}`, { align: 'right', color: COLOR.sub }))
+    els.push(text(PAGE.w - M - 3.8, 0.72 + LH(SIZE.title) - LH(SIZE.note), 3.8, LH(SIZE.note), SIZE.note, `수집 기간 ${meta.period}  |  ${evidenceLabel(saved)}`, { align: 'right', color: COLOR.sub }))
     els.push({ t: 'line', x: M, y: 0.72 + LH(SIZE.title) + 0.08, w: CW, color: COLOR.line })
     let y = 0.72 + LH(SIZE.title) + 0.18
     if (meta.direction) {
@@ -468,9 +468,8 @@ export function reportPages(saved, extra = {}) {
       { text: '출처 정보   ', bold: true, color: COLOR.accent },
       { text: '수집 기간 ', bold: true },
       { text: `${meta.period}   ` },
-      { text: '분석 기사 수 ', bold: true },
-      { text: `${meta.base}건   ` },
-      ...(added ? [{ text: '보충 자료 수 ', bold: true }, { text: `${added}건   ` }] : []),
+      { text: '근거 자료 ', bold: true },
+      { text: `${evidenceLabel(saved)}   ` },
       { text: '주요 출처 ', bold: true },
       { text: `${sources.slice(0, 4).join(', ')}${sources.length > 4 ? ` 외 ${sources.length - 4}곳` : ''}` },
     ]
@@ -778,11 +777,11 @@ export function reportPages(saved, extra = {}) {
     // 논문은 유료 여부 표시. 유료면 제목 · 저자 · 출처까지만 쓰고 그 뒤 자리에 안내 문구 + 원문 링크 (11/12 유료 논문 처리)
     const items = saved.articles.map((a, i) => {
       const access = paperAccess(a)
-      const badge = a.analysis ? '분석 자료' : access ? ACCESS_LABEL[access] : a.supplement ? `보충 · ${a.supplement === 'wiki' ? '위키백과' : '우리 자료'}` : a.fulltext === false ? '발췌문 기준' : a.fulltext ? '원문 반영' : ''
+      const badge = a.analysis ? '우리 분석 · 규칙 계산' : access ? ACCESS_LABEL[access] : a.supplement ? `보충 · ${a.supplement === 'wiki' ? '위키백과' : '우리 자료'}` : a.fulltext === false ? '발췌문 기준' : a.fulltext ? '원문 반영' : ''
       const who = a.authors?.length ? `${a.authors.slice(0, 3).join(', ')}${a.authors.length > 3 ? ' 외' : ''}  |  ` : ''
       // [분석] 근거: 날짜 · 링크 없음 → 출처만 (11/14)
       const metaText = a.analysis ? a.source ?? '테크브리프 분석' : `${who}${a.source ?? '-'}  |  ${a.publishedAt ? md(a.publishedAt) : '-'}`
-      return { n: i + 1, title: a.title, meta: metaText, badge, url: a.analysis ? '' : (a.url ?? ''), paid: access === 'paid' }
+      return { n: i + 1, title: a.title, meta: metaText, badge, url: a.analysis ? analysisUrl(saved, a) : (a.url ?? ''), analysis: Boolean(a.analysis), paid: access === 'paid' }
     })
     const made = []
     let els = null
@@ -790,10 +789,10 @@ export function reportPages(saved, extra = {}) {
     const startRef = () => {
       els = []
       made.push(els)
-      chrome(els, meta, `${meta.title}  |  유첨 3. 근거 기사`)
-      y = pageTitle(els, made.length > 1 ? '근거 기사 (계속)' : '근거 기사')
+      chrome(els, meta, `${meta.title}  |  유첨 3. 근거 자료`)
+      y = pageTitle(els, made.length > 1 ? '근거 자료 (계속)' : '근거 자료')
       if (made.length === 1) {
-        const note = 'AI 작성 초안 — 근거 기사 확인 후 수정 필요'
+        const note = 'AI 작성 초안 — 근거 자료 확인 후 수정 필요'
         els.push(rect(PAGE.w - M - 3.9, 0.6, 3.9, LH(SIZE.body) + 0.14, { fill: COLOR.pink, radius: 0.08 }))
         els.push(text(PAGE.w - M - 3.9, 0.67, 3.9, LH(SIZE.body), SIZE.body, note, { color: COLOR.accent, align: 'center' }))
       }
@@ -810,7 +809,7 @@ export function reportPages(saved, extra = {}) {
       const metaRuns = [{ text: it.meta, color: COLOR.sub }]
       if (it.badge) metaRuns.push({ text: `   ${it.badge}`, color: COLOR.accent, bold: true })
       els.push(text(M + 0.42, y + tl * LH(SIZE.body) + 0.03, listW - (it.url && !it.paid ? 1.45 : 0.45), LH(SIZE.note), SIZE.note, metaRuns)) // 링크 없는 줄은 「원문 열기」 자리까지 씀 (11/14)
-      if (it.url && !it.paid) els.push(text(M + listW - 1.0, y + tl * LH(SIZE.body) + 0.03, 1.0, LH(SIZE.note), SIZE.note, [{ text: '원문 열기 ↗', color: COLOR.accent, link: it.url }], { align: 'right' }))
+      if (it.url && !it.paid) els.push(text(M + listW - 1.0, y + tl * LH(SIZE.body) + 0.03, 1.0, LH(SIZE.note), SIZE.note, [{ text: it.analysis ? '분석 열기 ↗' : '원문 열기 ↗', color: COLOR.accent, link: it.url }], { align: 'right' }))
       if (notice)
         els.push(
           text(M + 0.42, y + tl * LH(SIZE.body) + LH(SIZE.note) + 0.06, listW - 0.45, nl * LH(SIZE.note), SIZE.note, [
@@ -827,8 +826,8 @@ export function reportPages(saved, extra = {}) {
     chartBox(made[0], rx, 1.2, rw, 3.55, trendChart)
     const info = [
       ['수집 기간', meta.periodFull],
-      ['분석 기사 수', `총 ${meta.base}건`],
-      ['보충 자료 수', `총 ${added}건`],
+      // 11/17: 「분석 기사 수」는 기사 · 논문 · 우리 분석이 섞인 이름이라 나눠 씀
+      ['근거 자료', `${evidenceLabel(saved)} (총 ${saved.articles.length}건)`],
       ['주요 출처', `${sources.slice(0, 4).join(', ')}${sources.length > 4 ? ` 외 ${sources.length - 4}곳` : ''}`],
     ]
     const iy = 4.9
@@ -837,7 +836,7 @@ export function reportPages(saved, extra = {}) {
     made[0].push(rect(rx, iy, rw, Math.min(ih, BOTTOM - iy), { line: COLOR.line, radius: 0.1 }))
     made[0].push(text(rx + 0.15, iy + 0.1, rw - 0.3, LH(SIZE.body), SIZE.body, '수집·분석 정보', { bold: true }))
     made[0].push({ t: 'table', x: rx + 0.12, y: iy + 0.2 + LH(SIZE.body), w: rw - 0.24, cols: [1.0, rw - 1.24], rows: info.map((cells, i) => ({ cells, h: rowHs[i] })), size: SIZE.note, headCol: true })
-    made.forEach((e, i) => pages.push({ kind: 'refs', label: i ? '근거 기사 (계속)' : '유첨 3 근거 기사', els: e }))
+    made.forEach((e, i) => pages.push({ kind: 'refs', label: i ? '근거 자료 (계속)' : '유첨 3 근거 자료', els: e }))
   }
 
   // 쪽 번호

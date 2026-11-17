@@ -5,7 +5,7 @@
 // - AI 해설 보충은 보고서를 만들 때 대기열에서 자동으로 한다(자료 조사 수준). 보충한 줄은 「근거 보충」 표시
 import { useState } from 'react'
 import { exportPptx, printReport } from './reportExport.js'
-import { APPENDIX, formatDate, kindOf, SECTIONS, sourcesLine } from './reportStore.js'
+import { analysisUrl, APPENDIX, evidenceLabel, formatDate, kindOf, SECTIONS, sourcesLine } from './reportStore.js'
 import { track } from './usage.js'
 import { ACCESS_LABEL, ACCESS_TITLE, paperAccess } from './paperAccess.js'
 
@@ -295,19 +295,20 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
           </section>
         )}
 
-        <p className="hint">AI가 만든 초안이에요. 근거 기사를 확인하고 고쳐 쓰세요. · 모델 {saved.model}</p>
+        <p className="hint">AI가 만든 초안이에요. 근거 자료를 확인하고 고쳐 쓰세요. · 모델 {saved.model}</p>
       </article>
 
       {stacked ? (
         <details className="report-refs report-refs-fold">
-          <summary>근거 기사 {saved.articles.length}건</summary>
+          <summary>근거 자료 {saved.articles.length}건 ({evidenceLabel(saved)})</summary>
         <ol>
           {saved.articles.map((a, i) => (
             <li key={`${i}-${a.title}`} id={`ref-${saved.id}-${i + 1}`}>
               <span className="report-ref-num">[{i + 1}]</span>
               <div>
                 <div className="title">
-                  {a.supplement && <span className="basis basis-supplement">보충 · {a.supplement === 'wiki' ? '위키백과' : '우리 자료'}</span>} {a.title}
+                  {a.supplement && <span className="basis basis-supplement">보충 · {a.supplement === 'wiki' ? '위키백과' : '우리 자료'}</span>}
+                  {a.analysis && <span className="basis basis-supplement">우리 분석</span>} {a.title}
                 </div>
                 <div className="meta">
                   {a.source}
@@ -320,7 +321,8 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
                     </span>
                   )}
                   {!a.paper && a.fulltext === true && <span className="fulltext-badge on"> · 원문 반영</span>}
-                  {!a.paper && a.fulltext === false && (
+                  {a.analysis && <span className="fulltext-badge on"> · AI가 만든 숫자 아님</span>}
+                  {!a.paper && !a.analysis && a.fulltext === false && (
                     <span className="fulltext-badge off" title="원문 페이지에서 본문을 가져오지 못해 네이버 발췌문으로 썼어요">
                       {' '}
                       · 발췌문으로 작성
@@ -332,6 +334,12 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
                     원문 열기 ↗
                   </a>
                 )}
+                {/* [분석] 줄은 원문이 없다 → 그 키워드의 분석(기술 시계열 · 맵)을 새 창으로 (11/17) */}
+                {a.analysis && analysisUrl(saved, a) && (
+                  <a href={analysisUrl(saved, a)} target="_blank" rel="noreferrer">
+                    분석 열기 ↗
+                  </a>
+                )}
               </div>
             </li>
           ))}
@@ -339,14 +347,16 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
         </details>
       ) : (
         <aside className="panel report-refs">
-          <h3>근거 기사</h3>
+          <h3>근거 자료</h3>
+          <p className="hint">{evidenceLabel(saved)}</p>
         <ol>
           {saved.articles.map((a, i) => (
             <li key={`${i}-${a.title}`} id={`ref-${saved.id}-${i + 1}`}>
               <span className="report-ref-num">[{i + 1}]</span>
               <div>
                 <div className="title">
-                  {a.supplement && <span className="basis basis-supplement">보충 · {a.supplement === 'wiki' ? '위키백과' : '우리 자료'}</span>} {a.title}
+                  {a.supplement && <span className="basis basis-supplement">보충 · {a.supplement === 'wiki' ? '위키백과' : '우리 자료'}</span>}
+                  {a.analysis && <span className="basis basis-supplement">우리 분석</span>} {a.title}
                 </div>
                 <div className="meta">
                   {a.source}
@@ -359,7 +369,8 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
                     </span>
                   )}
                   {!a.paper && a.fulltext === true && <span className="fulltext-badge on"> · 원문 반영</span>}
-                  {!a.paper && a.fulltext === false && (
+                  {a.analysis && <span className="fulltext-badge on"> · AI가 만든 숫자 아님</span>}
+                  {!a.paper && !a.analysis && a.fulltext === false && (
                     <span className="fulltext-badge off" title="원문 페이지에서 본문을 가져오지 못해 네이버 발췌문으로 썼어요">
                       {' '}
                       · 발췌문으로 작성
@@ -369,6 +380,12 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
                 {a.url && (
                   <a href={a.url} target="_blank" rel="noreferrer">
                     원문 열기 ↗
+                  </a>
+                )}
+                {/* [분석] 줄은 원문이 없다 → 그 키워드의 분석(기술 시계열 · 맵)을 새 창으로 (11/17) */}
+                {a.analysis && analysisUrl(saved, a) && (
+                  <a href={analysisUrl(saved, a)} target="_blank" rel="noreferrer">
+                    분석 열기 ↗
                   </a>
                 )}
               </div>
