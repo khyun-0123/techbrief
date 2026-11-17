@@ -246,7 +246,7 @@ export function build(data) {
   put(s1, 'judgment', [{ text: '자사 판단  ', options: { bold: true } }, { text: `[${jt}] `, options: { bold: true, color: tag } }, { text: data?.judgment?.reason ?? '' }])
   put(s1, 'actions', bullets((data?.actions ?? []).map((a) => [{ text: a.what }, ...(a.priority_or_due ? [{ text: ` — ${a.priority_or_due}`, options: { bold: true } }] : [])])))
   const src = data?.source
-  put(s1, 'source', src ? `수집 기간 ${src.period} | 기사 ${src.article_count}건 | 매체 ${src.media_count}곳 | 키워드: ${(src.keywords ?? []).join(', ') || '-'}` : '')
+  put(s1, 'source', src ? `수집 기간 ${src.period} | ${src.counts ?? `기사 ${src.article_count}건`} | 매체 ${src.media_count}곳 | 키워드: ${(src.keywords ?? []).join(', ') || '-'}` : '')
   // 원본에 한 줄 요약이 없으면 (다른 서버 보고서) 지어내지 않고 회색으로 「없음」
   put(s1, 'summary', data?.one_line_summary || [{ text: '없음 — 원본 보고서에 한 줄 요약 칸이 없음 (직접 입력)', options: { bold: false, color: C.sub } }])
   s1.addNotes('본문 1장. 개체 틀을 눌러 AI 결과(templates/report-prompt.md 프롬프트의 「붙여 넣기용」 블록)를 칸 이름대로 붙여 넣는다: title · byline · headline · facts_tech(area=기술) · facts_industry(area=업계) · judgment · actions · source · summary(one_line_summary). 추이 그래프는 차트 → 데이터 편집에서 trend.labels / values로 바꾸고, 변화 요약은 마지막 구간을 바로 앞 구간과 비교. 글자 크기를 줄이지 말고, 넘치면 문장을 줄이거나 유첨 1로 옮긴다.')
