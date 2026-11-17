@@ -163,8 +163,16 @@ export const enqueueForTest = (task, priority, meta) => enqueue(task, priority, 
 // task(signal): signal이 끊기면 AI 서버 요청도 끊는다
 function enqueue(task, priority = PRIORITY.SUMMARY, meta = {}) {
   return new Promise((resolve, reject) => {
+    // 키워드를 연달아 열 때 (11/17): 같은 사람이 새 키워드의 흐름 정리를 걸면, 그 사람의 아직 시작 안 한 흐름 정리는 맨 뒤 단계로 내린다
+    // 취소하지 않음 — 한가할 때 정리해 기억해 두므로 다시 열면 바로 보임. 지금 보는 키워드가 먼저
+    if (priority === PRIORITY.STORY && meta.client) {
+      for (const j of waiting) {
+        if (j.priority === PRIORITY.STORY && j.meta.client === meta.client) Object.assign(j, { priority: PRIORITY.PRECOMPUTE, meta: { ...j.meta, priority: PRIORITY.PRECOMPUTE, demoted: true } })
+      }
+    }
     waiting.push({ priority, order: seq++, task, resolve, reject, meta: { ...meta, priority, enqueuedAt: Date.now() } })
-    if (running !== null && !isHuman(running) && isHuman(priority) && runningAbort && !runningAbort.signal.aborted) {
+    // 내린 흐름 정리는 사람이 건 일이라 끊지 않는다 (끊으면 그 사람 화면에 오류가 남)
+    if (running !== null && !isHuman(running) && !runningMeta?.demoted && isHuman(priority) && runningAbort && !runningAbort.signal.aborted) {
       console.log('[llm] 사람 요청이 와서 자동 요약을 멈추고 뒤로 보냄')
       runningAbort.abort(new PreemptedError())
     }
