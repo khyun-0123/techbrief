@@ -215,7 +215,9 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
   const [dataStartedAt] = useState(() => Date.now())
   const [relatedStartedAt] = useState(() => Date.now())
   // AI 흐름 정리는 숫자를 받은 뒤 시작 (앱 전체에서 기다림: 이 칸을 닫아도 끝나면 진행 창이 알림, storyJobs.js)
-  const job = useStory(keyword, Boolean(data))
+  // 11/18 조장: 검색하는 순간 AI 대기열에 넣는다 (예전엔 시계열 숫자를 받은 뒤 시작 → 3~4초 안에 닫으면 아예 안 걸렸음).
+  // 서버(timelineStory)가 시계열을 스스로 만든 뒤 쓰므로 화면이 숫자를 기다릴 필요가 없다. 닫아도 끝까지 하고 진행 창에 「정리 끝」
+  const job = useStory(keyword, true)
 
   useEffect(() => {
     if (!keyword) return undefined
