@@ -232,7 +232,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
   useEffect(() => {
     if (!keyword) return undefined
     let alive = true
-    fetchTimeline(keyword)
+    fetchTimeline(keyword, false, { open: true })
       .then((d) => {
         if (!alive) return
         setData(d)

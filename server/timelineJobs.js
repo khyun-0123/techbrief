@@ -10,7 +10,7 @@ import { dbEnabled } from './db/index.js'
 import { getKeywords, getSetting, setSetting } from './db/store.js'
 import { frequentSearches, queryKey, rememberTerms } from './queryTerms.js'
 import { getTechTrends } from './techtrends.js'
-import { buildTimeline, cachedTimeline, timelineStory } from './timeline.js'
+import { buildTimeline, cachedTimeline, storyMatches, timelineStory } from './timeline.js'
 import { surgeMonths } from './timesfm.js'
 import { patentDbReady, titlesReady } from './patentDb.js'
 import { relatedWords } from './related.js'
@@ -78,7 +78,8 @@ export async function runPrecompute() {
       const { timeline, story } = await cachedTimeline(t.query)
       // 11/12 D3: 디스플레이 특허 DB가 생기면 예전 특허 숫자로 만든 것은 3일이 안 지났어도 다시 (특허 DB는 비용 없음)
       const toDb = timeline && Boolean(await patentDbReady()) && (!['family', 'family-all'].includes(timeline.patents?.basis) || (timeline.patents?.inDisplay && Boolean(await titlesReady())))
-      if (timeline && story && Date.now() - Date.parse(story.at) < FRESH_MS && !toDb) {
+      // 11/17 P12: 시계열을 다시 계산해 글이 예전 숫자로 쓰였으면 3일이 안 지났어도 다시 쓴다 (사람이 열기 전에)
+      if (timeline && story && Date.now() - Date.parse(story.at) < FRESH_MS && !toDb && (story.thin || storyMatches(timeline, story))) {
         skipped += 1
         // 「예상 밖 급증」(TimesFM, 11/16)만 없으면 채워 둔다 (기억해 둔 값이 있으면 바로 끝남)
         if (timeline.naver?.status === 'ok') await surgeMonths(timeline.naver.months).catch((err) => console.warn(`[timesfm] ${err.message}`))
@@ -128,7 +129,7 @@ export async function readyTimelines(limit = 12) {
   for (const t of targets.sort((a, b) => order(a) - order(b))) {
     const { timeline, story } = await cachedTimeline(t.query)
     if (!timeline) continue
-    out.push({ query: timeline.query, from: t.from, stage: timeline.stage?.stage ?? null, growth: timeline.stage?.growth ?? null, companyShareNow: timeline.stage?.companyShareNow ?? null, story: Boolean(story && !story.thin) })
+    out.push({ query: timeline.query, from: t.from, stage: timeline.stage?.stage ?? null, growth: timeline.stage?.growth ?? null, companyShareNow: timeline.stage?.companyShareNow ?? null, story: Boolean(story && !story.thin && storyMatches(timeline, story)) })
     if (out.length >= limit) break
   }
   const state = await getSetting(STATE_KEY, {})

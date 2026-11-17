@@ -661,8 +661,10 @@ async function handleApiInner(req, res) {
     }
     // 기술 시계열 (11/10): 숫자 · 단계는 규칙으로(buildTimeline), 글은 AI가 따로(timelineStory, 1분 안팎)
     if (req.method === 'POST' && req.url === '/api/timeline') {
-      const { query, refresh = false } = await readJson(req)
+      const { query, refresh = false, open = false } = await readJson(req)
       const tl = await buildTimeline(query, { refresh: Boolean(refresh) })
+      // 키워드 분석을 연 기록 (11/17 P12): 화면이 open을 보낼 때만 (미리보기 · 다시 계산은 세지 않음)
+      if (open && !refresh) recordSearch(query, clientIp(req), { open: true }).catch(() => {})
       // 11/12: 분석한 키워드는 보고서에 쓸 묶음을 뒤에서 미리 만들어 둔다 (keywordBundle.js, 3일 기억)
       prepareBundle(query, { refresh: Boolean(refresh) }).catch((err) => console.warn(`[bundle] ${query}: ${err.message}`))
       return send(res, 200, tl)

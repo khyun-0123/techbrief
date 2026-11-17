@@ -308,6 +308,14 @@ function TechTimeline({ query, onClose, initialData = null, job: givenJob = null
                       </section>
                     ) : null,
                   )}
+                  {/* 글이 어느 계산으로 쓰였나 (11/17 P12): 위 숫자를 다시 계산했으면 서버가 글도 다시 쓴다. 화면에 남은 예전 글이면 알려 줌 */}
+                  {story.tlAt && (
+                    <p className="hint">
+                      {story.stage ? `단계 「${story.stage}」 · ` : ''}
+                      {new Date(story.tlAt).toLocaleDateString('ko-KR')} 계산한 숫자로 씀
+                      {data.at && story.tlAt !== data.at && ' — 위 숫자가 그 뒤 다시 계산됐어요. 「다시 정리」를 누르면 맞춰 써요'}
+                    </p>
+                  )}
                   <details>
                     <summary>근거 논문 {story.papers.length}편</summary>
                     <ol className="tl-refs">

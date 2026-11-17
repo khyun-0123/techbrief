@@ -547,6 +547,15 @@ function thinReason(corpus) {
 const demoteBare = (b) => (b.kind === 'fact' && !b.refs?.length && !/\d/.test(b.text) ? { ...b, kind: 'ai' } : b)
 const demoteStory = (out) => ({ ...out, story: Object.fromEntries(Object.entries(out.story ?? {}).map(([k, list]) => [k, (list ?? []).map(demoteBare)])) })
 
+// AI 흐름 정리가 지금 시계열 숫자로 쓴 것인지 (11/17, 37 문서 P12 · 36 문서 2-4)
+// 글에 「어느 계산으로 썼나」(tlAt) · 단계를 같이 저장한다. 시계열을 다시 계산했으면 글을 다시 쓴다 (단계 · 숫자를 예전 글이 뒤집지 않게)
+// 예전 글(tlAt 없음): 정리는 늘 시계열을 만든 뒤에 쓰므로, 시계열 계산 시각보다 뒤에 쓴 글이면 그 숫자로 쓴 것
+export function storyMatches(tl, story) {
+  if (!tl || !story) return false
+  if (story.tlAt) return story.tlAt === tl.at && (!story.stage || story.stage === tl.stage?.stage)
+  return Date.parse(story.at) >= Date.parse(tl.at)
+}
+
 // 같은 말의 AI 흐름 정리가 이미 도는 중이면 그 결과를 함께 기다린다 (11/11: 정리 중에 화면을 닫았다 다시 열면 AI를 한 번 더 불렀다)
 const storyRuns = new Map()
 export function timelineStory(rawQuery, opts = {}) {
@@ -567,7 +576,8 @@ async function makeTimelineStory(rawQuery, { refresh = false, background = false
     const hit = await cacheGet(key).catch(() => null)
     // 특허 숫자가 특허 DB 기준으로 바뀐 뒤에는 예전 숫자로 쓴 정리를 다시 만든다 (11/12 D3)
     const stale = ['family', 'family-all'].includes(tl.patents?.basis) && hit?.patBasis !== tl.patents.basis
-    if (hit && !stale) return { ...demoteStory(hit), cached: true }
+    if (hit && !stale && storyMatches(tl, hit)) return { ...demoteStory(hit), tlAt: hit.tlAt ?? tl.at, stage: hit.stage ?? tl.stage?.stage ?? null, cached: true }
+    if (hit && !stale) console.log(`[timeline] 흐름 정리 다시 씀 (시계열을 다시 계산함): ${tl.query}`)
   }
   const { text, papers } = storyInput(tl)
   const { data, model } = await chatJson({
@@ -612,7 +622,7 @@ async function makeTimelineStory(rawQuery, { refresh = false, background = false
         .map(checkNumbers),
     ]),
   )
-  const out = { query: tl.query, story, papers: papers.map((p) => ({ title: p.title, year: p.year, journal: p.journal, doi: p.doi, cited: p.cited, companies: p.companies ?? [] })), model, patBasis: tl.patents?.basis ?? null, at: new Date().toISOString() }
+  const out = { query: tl.query, story, papers: papers.map((p) => ({ title: p.title, year: p.year, journal: p.journal, doi: p.doi, cited: p.cited, companies: p.companies ?? [] })), model, patBasis: tl.patents?.basis ?? null, tlAt: tl.at, stage: tl.stage?.stage ?? null, at: new Date().toISOString() }
   await cachePut(key, out, TTL).catch(() => {})
   return { ...out, cached: false }
 }
