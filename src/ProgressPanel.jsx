@@ -82,6 +82,13 @@ function StoryJobs({ jobs, onOpen }) {
   )
 }
 
+// 시:분 (오늘이 아니면 월/일도)
+const hm = (iso) => {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const t = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return d.toDateString() === new Date().toDateString() ? t : `${d.getMonth() + 1}/${d.getDate()} ${t}`
+}
 const REPORT_STATUS = { queued: '대기', running: '작성 중', need_confirm: '확인 필요', done: '완성', error: '오류', cancelled: '취소됨' }
 
 function ReportJobs({ jobs, onAnswer, onCancel, onOpenReport, onHide }) {
@@ -93,9 +100,11 @@ function ReportJobs({ jobs, onAnswer, onCancel, onOpenReport, onHide }) {
             <span className="progress-title" title={j.title}>
               보고서 「{j.title}」 <small>· 자료 {j.count}건 · {j.levelLabel}</small>
             </span>
-            <span className="progress-status">
+            {/* 11/17: 주제어로 제목이 같아지면(「마이크로디스플레이 동향 브리핑」 둘) 같은 보고서로 보임 → 시작 · 끝 시각을 함께 */}
+            <span className="progress-status" title={`시작 ${hm(j.createdAt)}${j.status === 'done' ? ` · 완성 ${hm(j.updatedAt)}` : ''}`}>
               {REPORT_STATUS[j.status]}
               {j.status === 'queued' && j.queuePos > 0 && ` ${j.queuePos}번째`}
+              <small> · {hm(j.status === 'done' || j.status === 'error' ? j.updatedAt : j.createdAt)}</small>
             </span>
             {['queued', 'running', 'need_confirm'].includes(j.status) ? (
               <button type="button" className="icon-btn" onClick={() => onCancel(j.id)} title="보고서 만들기 취소" aria-label="보고서 만들기 취소">

@@ -304,8 +304,8 @@ export function SlideFrame({ deck, index, width }) {
 // extra: 화면이 받아 둔 추가 데이터 (기사 수 추이용 /api/trends)
 export async function printSlides(saved, extra) {
   if (!extra) {
-    const { fetchTrends } = await import('./api.js')
-    extra = { trends: await fetchTrends().catch(() => null) }
+    const { loadReportExtra } = await import('./reportExport.js')
+    extra = await loadReportExtra(saved)
   }
   const deck = reportPages(saved, extra)
   const host = document.createElement('div')

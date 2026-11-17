@@ -94,12 +94,14 @@ function SlidePreview({ saved }) {
   const [index, setIndex] = useState(0)
   useEffect(() => {
     let on = true
-    loadReportExtra()
+    loadReportExtra(saved)
       .then((x) => on && setExtra(x))
       .catch(() => on && setExtra({}))
     return () => {
       on = false
     }
+    // 같은 보고서(saved.id)면 다시 받지 않는다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saved.id])
   if (!extra) return <p className="hint">쪽을 만드는 중…</p>
   const deck = reportPages(saved, extra)

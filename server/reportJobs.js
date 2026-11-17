@@ -217,7 +217,8 @@ async function run(job) {
     if (left) entry.report.warnings.splice(1, 0, `AI 해설·제안 ${left}개는 근거를 찾지 못했어요 — 확인 후 쓰세요`)
   }
   step(job, '저장하는 중', 95)
-  if (dbEnabled()) await saveReport(entry, job.ip)
+  if (dbEnabled()) await saveReport(entry, job.ip, { unique: true })
+  job.title = entry.report.title // 날짜 · 번호가 붙은 저장 제목으로 (AI 대기열 카드)
   entry.mine = true // 만든 사람 화면에서 바로 지울 수 있게
   job.entry = entry
   job.entryId = entry.id

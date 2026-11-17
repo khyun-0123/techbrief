@@ -16,7 +16,7 @@
 //   - 지금 보고서 데이터에는 여러 계열 비교 · 두 지표 짝이 없어 묶음 막대 · 산점도는 고르는 규칙만 있고 쓰는 쪽이 없다
 // 근거: 뺀 줄(excluded)은 넣지 않는다. 기사 확인 사실(✓ · 근거 번호)과 AI 해설·제안은 섞지 않는다
 import { ACCESS_LABEL, PAID_NOTICE, paperAccess } from './paperAccess.js'
-import { kindOf } from './reportStore.js'
+import { analysisUrl, evidenceLabel, kindOf } from './reportStore.js'
 
 export const PAGE = { w: 10, h: 7.5, m: 0.5 }
 export const SIZE = { title: 18, sub: 14, body: 11, note: 10 }
@@ -318,9 +318,13 @@ export function reportPages(saved, extra = {}) {
   const base = saved.articles.filter((a) => !a.supplement && !a.analysis)
   const added = saved.articles.filter((a) => a.supplement).length // 보충 자료만 ([분석] 근거는 세지 않음)
   const sources = [...new Set(base.map((a) => a.source).filter(Boolean))]
-  const times = base.map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite)
-  const period = times.length ? `${md(Math.min(...times))} ~ ${md(Math.max(...times))}` : String(saved.periodLabel ?? '').replace(/\s*기사$/, '') || '-'
-  const periodFull = times.length ? `${ymd(Math.min(...times))} ~ ${ymd(Math.max(...times))}` : period
+  // 수집 기간은 기사 날짜로만, 논문은 연도 범위를 따로 (11/17, 40 문서 R8: 논문이 섞이면 「2024-06-01 ~ 2026-06-01」처럼 보였음)
+  const nt = base.filter((a) => !a.paper).map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite)
+  const py = base.filter((a) => a.paper).map((a) => new Date(a.publishedAt).getFullYear()).filter(Number.isFinite)
+  const paperPart = py.length ? `논문 ${Math.min(...py)}${Math.max(...py) !== Math.min(...py) ? `~${Math.max(...py)}` : ''}` : ''
+  const withPapers = (t) => [t, paperPart].filter(Boolean).join(' · ')
+  const period = nt.length ? withPapers(`${md(Math.min(...nt))} ~ ${md(Math.max(...nt))}`) : paperPart || String(saved.periodLabel ?? '').replace(/\s*기사$/, '') || '-'
+  const periodFull = nt.length ? withPapers(`${ymd(Math.min(...nt))} ~ ${ymd(Math.max(...nt))}`) : period
   const meta = {
     title: report.title || '테크 동향 브리핑',
     date: ymd(saved.createdAt ?? Date.now()),
@@ -370,7 +374,7 @@ export function reportPages(saved, extra = {}) {
     chrome(els, meta, null)
     els.push(text(PAGE.w - M - 3, 0.5, 3, LH(SIZE.note), SIZE.note, `보고일 ${meta.date}${meta.dept ? ` · ${meta.dept}` : ''}`, { align: 'right', color: COLOR.sub }))
     els.push(text(M, 0.72, 5.2, LH(SIZE.title), SIZE.title, meta.title, { bold: true }))
-    els.push(text(PAGE.w - M - 3.8, 0.72 + LH(SIZE.title) - LH(SIZE.note), 3.8, LH(SIZE.note), SIZE.note, `수집 기간 ${meta.period}  |  기사 ${meta.base}건${added ? ` · 보충 자료 ${added}건 (총 ${meta.base + added}건)` : ''}`, { align: 'right', color: COLOR.sub }))
+    els.push(text(PAGE.w - M - 3.8, 0.72 + LH(SIZE.title) - LH(SIZE.note), 3.8, LH(SIZE.note), SIZE.note, `수집 기간 ${meta.period}  |  ${evidenceLabel(saved)}`, { align: 'right', color: COLOR.sub }))
     els.push({ t: 'line', x: M, y: 0.72 + LH(SIZE.title) + 0.08, w: CW, color: COLOR.line })
     let y = 0.72 + LH(SIZE.title) + 0.18
     if (meta.direction) {
@@ -463,9 +467,8 @@ export function reportPages(saved, extra = {}) {
       { text: '출처 정보   ', bold: true, color: COLOR.accent },
       { text: '수집 기간 ', bold: true },
       { text: `${meta.period}   ` },
-      { text: '분석 기사 수 ', bold: true },
-      { text: `${meta.base}건   ` },
-      ...(added ? [{ text: '보충 자료 수 ', bold: true }, { text: `${added}건   ` }] : []),
+      { text: '근거 자료 ', bold: true },
+      { text: `${evidenceLabel(saved)}   ` },
       { text: '주요 출처 ', bold: true },
       { text: `${sources.slice(0, 4).join(', ')}${sources.length > 4 ? ` 외 ${sources.length - 4}곳` : ''}` },
     ]
@@ -595,22 +598,8 @@ export function reportPages(saved, extra = {}) {
   if (!brief?.fromMain) sectionPage('implications', '유첨', '시사점 및 제언')
 
   // ════ 유첨 2 분석 자료 (11/14 통합): 대시보드 분석 묶음의 규칙 숫자를 그래프로 — 35 문서 R3 · R6 · R9 ════
-  for (const an of (report.analysis ?? []).filter((x) => x && (x.patentYears?.length || x.competitors || x.stage))) {
-    const els = []
-    chrome(els, meta, `${meta.title}  |  유첨 2. 분석 자료`)
-    let y = pageTitle(els, `분석 자료 · ${an.keyword}`)
-    const leftW = 4.3
-    const blocks = []
-    if (an.stage?.stage) blocks.push({ head: '기술 단계 (규칙 판정)' }, { runs: [{ text: `[${an.stage.stage}] `, bold: true, color: COLOR.accent }, { text: an.stage.why ?? '' }] })
-    if (an.stage?.thin) blocks.push({ runs: [{ text: '논문이 적어 참고용', color: COLOR.sub }] })
-    const cv = an.competitors
-    if (cv?.verdict) blocks.push({ head: '자사 판정 (세부 기술 × 경쟁사 특허)' }, { runs: [{ text: `[${cv.verdict}] `, bold: true, color: COLOR.accent }, { text: `${cv.name} — ${cv.years}` }] })
-    if (an.owners?.length) blocks.push({ head: '특허 출원인 상위' }, { runs: [{ text: an.owners.slice(0, 5).map((o) => `${o.word} ${o.count ?? ''}건`.trim()).join(' · ') }] })
-    if (an.quotes?.length) {
-      blocks.push({ head: '상용화 시점 언급 (원문 인용)' })
-      for (const q of an.quotes.slice(0, 3)) blocks.push({ runs: [{ text: `「${String(q.text ?? '').slice(0, 90)}」`, color: COLOR.ink }, { text: ` — ${q.source ?? ''}`, color: COLOR.sub }] })
-    }
-    blocks.push({ runs: [{ text: '숫자는 테크브리프 특허 · 논문 DB에서 규칙으로 센 값 (AI가 만든 숫자 아님)', color: COLOR.sub }] })
+  // 11/17 (40 문서 R4): 기술 시계열 재료(v3 묶음)는 다음 장 「기술 시계열」로 — 한 장에 그래프 3개를 넣으니 축 · 글이 겹쳤음
+  const drawBlocks = (els, y, leftW, blocks) => {
     for (const b of blocks) {
       const h = b.head ? LH(SIZE.sub) + 0.08 : bulletHeight(leftW, runsText(b.runs)) + 0.05
       if (y + h > BOTTOM) break
@@ -619,40 +608,110 @@ export function reportPages(saved, extra = {}) {
         y += LH(SIZE.sub) + 0.08
       } else y += bulletLine(els, M, y, leftW, b.runs) + 0.05
     }
+  }
+  // 연도별 수: 0인 해는 빠져 오므로 0으로 채우고 끝난 해까지 최근 12개
+  const fillYears = (list, last) => {
+    const have = new Map((list ?? []).filter((p) => p.y <= last).map((p) => [p.y, p.n]))
+    if (!have.size) return []
+    const from = Math.min(...have.keys())
+    return Array.from({ length: last - from + 1 }, (_, i) => ({ y: from + i, n: have.get(from + i) ?? 0 })).slice(-12)
+  }
+  for (const an of (report.analysis ?? []).filter((x) => x && (x.patentYears?.length || x.competitors || x.stage || x.papers))) {
+    const last = new Date(saved.createdAt ?? Date.now()).getFullYear() - 1
+    const leftW = 4.3
     const cx = M + leftW + 0.25
     const cw = CW - leftW - 0.25
-    const last = new Date(saved.createdAt ?? Date.now()).getFullYear() - 1
-    const py = (an.patentYears ?? []).filter((p) => p.y <= last).slice(-12)
-    const patKind = chooseChart('trend', py.length)
-    chartBox(els, cx, 1.2, cw, 2.75, {
-      title: `「${an.keyword}」 특허 공개 수 (연도별)`,
-      kind: patKind,
-      labels: py.map((p) => String(p.y)),
-      values: py.map((p) => p.n),
-      xTitle: '연도',
-      yTitle: '특허 수 (건)',
-      unit: '건',
-      empty: '특허 자료 없음',
-      reason: `연도에 따른 변화(추이)라 ${CHART_NAME[patKind]}`,
-      source: '테크브리프 디스플레이 특허 DB (같은 발명은 한 번 · 첫 공개 연도)',
-      asOf: `${last}년까지`,
-    })
-    const comp = cv ? [{ name: '분야 전체', ratio: cv.field?.ratio }, ...(cv.companies ?? []).filter((c) => !c.unsure)].filter((c) => c.ratio != null) : []
-    const compKind = chooseChart('rank', comp.length)
-    chartBox(els, cx, 4.1, cw, BOTTOM - 4.1, {
-      title: cv ? `${cv.name} 특허 증가 배수 (회사별)` : '경쟁사 특허 증가 배수',
-      kind: compKind,
-      labels: comp.map((c) => (c.own ? `${c.name} (자사)` : c.name)),
-      values: comp.map((c) => c.ratio),
-      xTitle: '회사',
-      yTitle: '앞 3년 대비 (배)',
-      unit: '배',
-      empty: '경쟁사 특허 자료 없음',
-      reason: `회사별 값을 나란히 비교하므로 ${CHART_NAME[compKind]}`,
-      source: '테크브리프 디스플레이 특허 DB · 세부 기술 CPC',
-      asOf: cv?.years ?? '-',
-    })
-    pages.push({ kind: 'analysis', label: `유첨 2 분석 자료 · ${an.keyword}`, els })
+    const cv = an.competitors
+    {
+      const els = []
+      chrome(els, meta, `${meta.title}  |  유첨 2. 분석 자료`)
+      const y = pageTitle(els, `분석 자료 · ${an.keyword}`)
+      const blocks = []
+      if (an.stage?.stage) blocks.push({ head: '기술 단계 (규칙 판정)' }, { runs: [{ text: `[${an.stage.stage}] `, bold: true, color: COLOR.accent }, { text: an.stage.why ?? '' }] })
+      if (an.stage?.thin) blocks.push({ runs: [{ text: '논문이 적어 참고용', color: COLOR.sub }] })
+      if (cv?.verdict) blocks.push({ head: '자사 판정 (세부 기술 × 경쟁사 특허)' }, { runs: [{ text: `[${cv.verdict}] `, bold: true, color: COLOR.accent }, { text: `${cv.name} — ${cv.years}` }] })
+      if (an.owners?.length) blocks.push({ head: '특허 출원인 상위' }, { runs: [{ text: an.owners.slice(0, 5).map((o) => `${o.word} ${o.count ?? ''}건`.trim()).join(' · ') }] })
+      if (an.quotes?.length) {
+        blocks.push({ head: '상용화 시점 언급 (원문 인용)' })
+        for (const q of an.quotes.slice(0, 3)) blocks.push({ runs: [{ text: `「${String(q.text ?? '').slice(0, 90)}」`, color: COLOR.ink }, { text: ` — ${q.source ?? ''}`, color: COLOR.sub }] })
+      }
+      blocks.push({ runs: [{ text: '숫자는 테크브리프 특허 · 논문 DB에서 규칙으로 센 값 (AI가 만든 숫자 아님)', color: COLOR.sub }] })
+      drawBlocks(els, y, leftW, blocks)
+      const py = fillYears(an.patentYears, last)
+      const patKind = chooseChart('trend', py.length)
+      chartBox(els, cx, 1.2, cw, 2.75, {
+        title: `「${an.keyword}」 특허 공개 수 (연도별)`,
+        kind: patKind,
+        labels: py.map((p) => String(p.y)),
+        values: py.map((p) => p.n),
+        xTitle: '연도',
+        yTitle: '특허 수 (건)',
+        unit: '건',
+        empty: '특허 자료 없음',
+        reason: `연도에 따른 변화(추이)라 ${CHART_NAME[patKind]}`,
+        source: '테크브리프 디스플레이 특허 DB (같은 발명은 한 번 · 첫 공개 연도)',
+        asOf: `${last}년까지`,
+      })
+      const comp = cv ? [{ name: '분야 전체', ratio: cv.field?.ratio }, ...(cv.companies ?? []).filter((c) => !c.unsure)].filter((c) => c.ratio != null) : []
+      const compKind = chooseChart('rank', comp.length)
+      chartBox(els, cx, 4.1, cw, BOTTOM - 4.1, {
+        title: cv ? `${cv.name} 특허 증가 배수 (회사별)` : '경쟁사 특허 증가 배수',
+        kind: compKind,
+        labels: comp.map((c) => (c.own ? `${c.name} (자사)` : c.name)),
+        values: comp.map((c) => c.ratio),
+        xTitle: '회사',
+        yTitle: '앞 3년 대비 (배)',
+        unit: '배',
+        empty: '경쟁사 특허 자료 없음',
+        reason: `회사별 값을 나란히 비교하므로 ${CHART_NAME[compKind]}`,
+        source: '테크브리프 디스플레이 특허 DB · 세부 기술 CPC',
+        asOf: cv?.years ?? '-',
+      })
+      pages.push({ kind: 'analysis', label: `유첨 2 분석 자료 · ${an.keyword}`, els })
+    }
+
+    // 기술 시계열 (v3 묶음이 있는 보고서만): 논문 추이 · 늘어난 세부 주제 · 연구 폭 · 관심 대 실질 · 급증 · 신호 — 담당자 양식 PPT 유첨 5와 같은 내용
+    const papY = fillYears(an.papers?.years, last)
+    const pp = an.papers
+    const up = (an.rising ?? []).filter((x) => x.recent >= 2)
+    const br = an.breadth
+    if (papY.length >= 2 || up.length || br?.institutions || an.attention || an.signal) {
+      const els = []
+      chrome(els, meta, `${meta.title}  |  유첨 2. 기술 시계열`)
+      const y = pageTitle(els, `기술 시계열 · ${an.keyword}`)
+      const blocks = []
+      if (pp?.recent != null) {
+        const span = String(pp.span ?? '').split(' 대 ')[0] || '최근 3년'
+        blocks.push({ head: '논문 추이' }, { runs: [{ text: `${span} ${pp.recent}편` }, ...(pp.recent >= 10 && pp.growth != null ? [{ text: ` · 앞 3년의 ${pp.growth}배${pp.relGrowth != null ? ` (분야 전체보다 ${pp.relGrowth}배)` : ''}`, bold: true }] : [{ text: ` (앞 3년 ${pp.before ?? '-'}편 — 편수가 적어 배수는 쓰지 않음)`, color: COLOR.sub }])] })
+      }
+      if (up.length) {
+        blocks.push({ head: '최근 논문에서 늘어난 세부 주제' })
+        for (const x of up.slice(0, 4)) blocks.push({ runs: [{ text: `${x.name} ` }, { text: `${x.before}→${x.recent}편`, bold: true }] })
+        if (an.makers?.length) blocks.push({ runs: [{ text: '주요 기업: ', bold: true }, { text: an.makers.slice(0, 4).join(' · ') }] })
+      }
+      if (br?.institutions) blocks.push({ head: `연구 폭 (${br.years})` }, { runs: [{ text: `논문 낸 기관 ${br.institutions}곳${br.companyShare != null ? ` · 기업 저자 ${Math.round(br.companyShare * 100)}%` : ''}${br.fwci != null ? ` · FWCI ${br.fwci}(참고)` : ''}` }] })
+      if (an.attention?.label || an.surges?.length || an.signal?.score != null) blocks.push({ head: '관심 신호 (네이버 검색 관심도 · AI 입력 안 함)' })
+      if (an.attention?.label) blocks.push({ runs: [{ text: an.attention.label, bold: true }, { text: ` — ${an.attention.basis}`, color: COLOR.sub }] })
+      for (const x of an.surges ?? []) blocks.push({ runs: [{ text: `예상 밖 급증 ${x.t}: `, bold: true }, { text: `예상 최대 ${x.hi} → 실제 ${x.v}` }] })
+      if (an.signal?.score != null) blocks.push({ runs: [{ text: '요즘 뜨는 기술 신호: ', bold: true }, { text: `${an.signal.score}점 · ${an.signal.grade}${an.signal.stage ? ` · ${an.signal.stage}` : ''}` }] })
+      blocks.push({ runs: [{ text: `규칙으로 센 값 (AI가 만든 숫자 아님)${an.at ? ` · 분석 ${String(an.at).slice(0, 10)}` : ''} · 판단 기준 33 문서`, color: COLOR.sub }] })
+      drawBlocks(els, y, leftW, blocks)
+      const papKind = chooseChart('trend', papY.length)
+      chartBox(els, cx, 1.2, cw, BOTTOM - 1.2, {
+        title: `「${an.keyword}」 논문 수 (연도별)`,
+        kind: papKind,
+        labels: papY.map((p) => String(p.y)),
+        values: papY.map((p) => p.n),
+        xTitle: '연도',
+        yTitle: '논문 수 (편)',
+        unit: '편',
+        empty: '논문 자료 없음',
+        reason: `연도에 따른 변화(추이)라 ${CHART_NAME[papKind]}`,
+        source: an.papers?.basis === 'openalex' ? 'OpenAlex 논문 수 (기술 단계 판정과 같은 값)' : '테크브리프 논문 DB (디스플레이 논문)',
+        asOf: `${last}년까지`,
+      })
+      pages.push({ kind: 'analysis', label: `유첨 2 기술 시계열 · ${an.keyword}`, els })
+    }
   }
 
   // ════ 5쪽 근거 기사 (부록) ════
@@ -660,23 +719,31 @@ export function reportPages(saved, extra = {}) {
   // 기간: 근거 기사 가장 이른 날 3일 전 ~ 보고서 만든 날 (최대 26주). 30일을 넘으면 주별로 묶는다 (11/12 가독성 규칙)
   const DAY = 86_400_000
   const dayOf = (t) => Date.parse(`${ymd(t, '-')}T00:00:00`)
-  const hay = norm([meta.title, meta.direction, ...meta.keywords, ...saved.articles.map((a) => a.title)].join(' '))
-  const matched = (extra.trends?.items ?? []).filter((it) => it.keyword && hay.includes(norm(it.keyword)) && (it.news ?? []).length)
+  // 11/17: 제목 · 기사 제목에 든 말로 맞추면 「디스플레이」가 「마이크로디스플레이」 안에서 맞아 디스플레이 기사 전체가 그려짐
+  // → 보고서 주제어(sources.topics · 분석 키워드)와 같거나 그것을 품은 수집 키워드만 (담당자 양식 PPT도 같은 규칙, server/reportToTemplate.js)
+  const topics = [...(saved.report?.sources?.topics ?? []), ...(saved.report?.analysis ?? []).map((x) => x?.keyword)].map(norm).filter(Boolean)
+  // 주제어가 든 모은 기사 수(/api/topic-trend)가 있으면 그것을 먼저 — 주제어가 수집 키워드가 아니어도 그릴 수 있음 (11/17)
+  const topicItems = (extra.topic?.items ?? []).filter((it) => (it.news ?? []).length)
+  const topicTotal = topicItems.reduce((n, it) => n + it.news.reduce((m, p) => m + p.v, 0), 0)
+  const matched = topicTotal > 0 ? topicItems : (extra.trends?.items ?? []).filter((it) => it.keyword && (it.news ?? []).length && topics.some((t) => norm(it.keyword).includes(t)))
   const daily = new Map() // 'YYYY-MM-DD' → 기사 수 (빈 날은 0)
+  // 논문 날짜(몇 해 전)는 기사 수 추이에서 뺀다 — 섞이면 기간이 몇 해로 늘어 막대가 수백 개가 됨 (11/17)
+  const newsTimes = base.filter((a) => !a.paper).map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite)
   let trendFrom = ''
   let start = 0
   let end = 0
   if (matched.length) {
-    end = dayOf(saved.createdAt ?? Date.now())
-    start = Math.max(times.length ? dayOf(Math.min(...times)) - 3 * DAY : end - 7 * DAY, end - 181 * DAY)
+    end = dayOf(saved.createdAt ?? Date.now()) - DAY // 끝난 날까지 (만든 날은 반나절, 11/17)
+    // 시작: 근거 기사 가장 이른 날 3일 전 (논문 날짜는 빼고, 11/17). 기사가 없으면 주제어 기사 수는 28일 · 수집 키워드는 7일
+    start = Math.max(newsTimes.length ? dayOf(Math.min(...newsTimes)) - 3 * DAY : end - (topicTotal > 0 ? 27 : 7) * DAY, end - 181 * DAY)
     for (let t = start; t <= end; t += DAY) daily.set(ymd(t, '-'), 0)
     for (const it of matched) for (const p of it.news) if (daily.has(p.t)) daily.set(p.t, daily.get(p.t) + p.v)
-    trendFrom = `수집 키워드 「${matched.map((it) => it.keyword).join(', ')}」 기사 수`
-  } else if (times.length) {
-    start = dayOf(Math.min(...times))
-    end = dayOf(Math.max(...times))
+    trendFrom = topicTotal > 0 ? `「${matched.map((it) => it.keyword).join(', ')}」 든 모은 기사 수` : `수집 키워드 「${matched.map((it) => it.keyword).join(', ')}」 기사 수`
+  } else if (newsTimes.length) {
+    start = dayOf(Math.min(...newsTimes))
+    end = dayOf(Math.max(...newsTimes))
     for (let t = start; t <= end; t += DAY) daily.set(ymd(t, '-'), 0)
-    for (const a of base) if (a.publishedAt && daily.has(ymd(a.publishedAt, '-'))) daily.set(ymd(a.publishedAt, '-'), daily.get(ymd(a.publishedAt, '-')) + 1)
+    for (const a of base) if (!a.paper && a.publishedAt && daily.has(ymd(a.publishedAt, '-'))) daily.set(ymd(a.publishedAt, '-'), daily.get(ymd(a.publishedAt, '-')) + 1)
     trendFrom = '근거 기사 발행일별 수 (맞는 수집 키워드 없음)'
   }
   const mdShort = (key) => `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}` // M/D (예: 10/19)
@@ -713,11 +780,11 @@ export function reportPages(saved, extra = {}) {
     // 논문은 유료 여부 표시. 유료면 제목 · 저자 · 출처까지만 쓰고 그 뒤 자리에 안내 문구 + 원문 링크 (11/12 유료 논문 처리)
     const items = saved.articles.map((a, i) => {
       const access = paperAccess(a)
-      const badge = a.analysis ? '분석 자료' : access ? ACCESS_LABEL[access] : a.supplement ? `보충 · ${a.supplement === 'wiki' ? '위키백과' : '우리 자료'}` : a.fulltext === false ? '발췌문 기준' : a.fulltext ? '원문 반영' : ''
+      const badge = a.analysis ? '우리 분석 · 규칙 계산' : access ? ACCESS_LABEL[access] : a.supplement ? `보충 · ${a.supplement === 'wiki' ? '위키백과' : '우리 자료'}` : a.fulltext === false ? '발췌문 기준' : a.fulltext ? '원문 반영' : ''
       const who = a.authors?.length ? `${a.authors.slice(0, 3).join(', ')}${a.authors.length > 3 ? ' 외' : ''}  |  ` : ''
       // [분석] 근거: 날짜 · 링크 없음 → 출처만 (11/14)
       const metaText = a.analysis ? a.source ?? '테크브리프 분석' : `${who}${a.source ?? '-'}  |  ${a.publishedAt ? md(a.publishedAt) : '-'}`
-      return { n: i + 1, title: a.title, meta: metaText, badge, url: a.analysis ? '' : (a.url ?? ''), paid: access === 'paid' }
+      return { n: i + 1, title: a.title, meta: metaText, badge, url: a.analysis ? analysisUrl(saved, a) : (a.url ?? ''), analysis: Boolean(a.analysis), paid: access === 'paid' }
     })
     const made = []
     let els = null
@@ -725,27 +792,32 @@ export function reportPages(saved, extra = {}) {
     const startRef = () => {
       els = []
       made.push(els)
-      chrome(els, meta, `${meta.title}  |  유첨 3. 근거 기사`)
-      y = pageTitle(els, made.length > 1 ? '근거 기사 (계속)' : '근거 기사')
+      chrome(els, meta, `${meta.title}  |  유첨 3. 근거 자료`)
+      y = pageTitle(els, made.length > 1 ? '근거 자료 (계속)' : '근거 자료')
       if (made.length === 1) {
-        const note = 'AI 작성 초안 — 근거 기사 확인 후 수정 필요'
+        const note = 'AI 작성 초안 — 근거 자료 확인 후 수정 필요'
         els.push(rect(PAGE.w - M - 3.9, 0.6, 3.9, LH(SIZE.body) + 0.14, { fill: COLOR.pink, radius: 0.08 }))
         els.push(text(PAGE.w - M - 3.9, 0.67, 3.9, LH(SIZE.body), SIZE.body, note, { color: COLOR.accent, align: 'center' }))
       }
     }
     startRef()
     for (const it of items) {
-      const tl = Math.min(2, linesOf(it.title, SIZE.body, listW - 0.45))
+      // 제목은 두 줄까지 (11/17: 세 줄 제목이 아래 출처 줄과 겹쳤음) — 넘치면 줄여 「…」
+      let title = it.title
+      // 굵은 영문 제목은 낱말 단위 줄바꿈 때문에 어림보다 길어진다 → 폭을 75%로 잡아 어림 (11/17 렌더 확인)
+      const titleW = (listW - 0.45) * 0.75
+      while (title.length > 10 && linesOf(title, SIZE.body, titleW) > 2) title = `${title.slice(0, -4).trimEnd()}…`
+      const tl = Math.min(2, linesOf(title, SIZE.body, titleW))
       const notice = it.paid ? `${PAID_NOTICE}${it.url || '링크 없음'}` : ''
       const nl = notice ? linesOf(notice, SIZE.note, listW - 0.45) : 0
       const h = tl * LH(SIZE.body) + LH(SIZE.note) + nl * LH(SIZE.note) + 0.2
       if (y + h > BOTTOM) startRef()
       els.push(text(M, y, 0.4, LH(SIZE.body), SIZE.body, `[${it.n}]`, { bold: true }))
-      els.push(text(M + 0.42, y, listW - 0.45, tl * LH(SIZE.body), SIZE.body, it.title, { bold: true }))
+      els.push(text(M + 0.42, y, listW - 0.45, tl * LH(SIZE.body), SIZE.body, title, { bold: true }))
       const metaRuns = [{ text: it.meta, color: COLOR.sub }]
       if (it.badge) metaRuns.push({ text: `   ${it.badge}`, color: COLOR.accent, bold: true })
       els.push(text(M + 0.42, y + tl * LH(SIZE.body) + 0.03, listW - (it.url && !it.paid ? 1.45 : 0.45), LH(SIZE.note), SIZE.note, metaRuns)) // 링크 없는 줄은 「원문 열기」 자리까지 씀 (11/14)
-      if (it.url && !it.paid) els.push(text(M + listW - 1.0, y + tl * LH(SIZE.body) + 0.03, 1.0, LH(SIZE.note), SIZE.note, [{ text: '원문 열기 ↗', color: COLOR.accent, link: it.url }], { align: 'right' }))
+      if (it.url && !it.paid) els.push(text(M + listW - 1.0, y + tl * LH(SIZE.body) + 0.03, 1.0, LH(SIZE.note), SIZE.note, [{ text: it.analysis ? '분석 열기 ↗' : '원문 열기 ↗', color: COLOR.accent, link: it.url }], { align: 'right' }))
       if (notice)
         els.push(
           text(M + 0.42, y + tl * LH(SIZE.body) + LH(SIZE.note) + 0.06, listW - 0.45, nl * LH(SIZE.note), SIZE.note, [
@@ -762,8 +834,8 @@ export function reportPages(saved, extra = {}) {
     chartBox(made[0], rx, 1.2, rw, 3.55, trendChart)
     const info = [
       ['수집 기간', meta.periodFull],
-      ['분석 기사 수', `총 ${meta.base}건`],
-      ['보충 자료 수', `총 ${added}건`],
+      // 11/17: 「분석 기사 수」는 기사 · 논문 · 우리 분석이 섞인 이름이라 나눠 씀
+      ['근거 자료', `${evidenceLabel(saved)} (총 ${saved.articles.length}건)`],
       ['주요 출처', `${sources.slice(0, 4).join(', ')}${sources.length > 4 ? ` 외 ${sources.length - 4}곳` : ''}`],
     ]
     const iy = 4.9
@@ -772,7 +844,7 @@ export function reportPages(saved, extra = {}) {
     made[0].push(rect(rx, iy, rw, Math.min(ih, BOTTOM - iy), { line: COLOR.line, radius: 0.1 }))
     made[0].push(text(rx + 0.15, iy + 0.1, rw - 0.3, LH(SIZE.body), SIZE.body, '수집·분석 정보', { bold: true }))
     made[0].push({ t: 'table', x: rx + 0.12, y: iy + 0.2 + LH(SIZE.body), w: rw - 0.24, cols: [1.0, rw - 1.24], rows: info.map((cells, i) => ({ cells, h: rowHs[i] })), size: SIZE.note, headCol: true })
-    made.forEach((e, i) => pages.push({ kind: 'refs', label: i ? '근거 기사 (계속)' : '유첨 3 근거 기사', els: e }))
+    made.forEach((e, i) => pages.push({ kind: 'refs', label: i ? '근거 자료 (계속)' : '유첨 3 근거 자료', els: e }))
   }
 
   // 쪽 번호

@@ -48,7 +48,7 @@ export const APPENDIX = new Set(['tech', 'industry'])
 export function sourcesLine(saved) {
   const s = saved.report.sources
   const n = s?.articles ?? saved.articles.filter((a) => !a.supplement && !a.analysis).length
-  return [s?.period && `수집 기간 ${s.period}`, `기사 ${n}건`, ...(s?.analysis ?? []).map((x) => `분석: ${x}`)].filter(Boolean).join(' · ')
+  return [s?.period && `수집 기간 ${s.period}`, s?.papers && `논문 ${s.papers}년`, evidenceLabel(saved) || `기사 ${n}건`, ...(s?.analysis ?? []).map((x) => `분석: ${x}`)].filter(Boolean).join(' · ')
 }
 
 export function formatDate(iso, withTime = false) {
@@ -100,4 +100,24 @@ export async function copyText(text) {
     document.execCommand('copy')
     area.remove()
   }
+}
+
+// 근거 자료 구성 (11/17): 기사 · 논문 · 우리 분석([분석] 규칙 계산) · 보충 자료를 나눠 센다 — 「분석 기사 N건」처럼 섞어 부르지 않게
+export function evidenceCounts(saved) {
+  const list = saved?.articles ?? []
+  const analysis = list.filter((a) => a.analysis).length
+  const supplement = list.filter((a) => a.supplement).length
+  const paper = list.filter((a) => a.paper && !a.supplement).length
+  const news = list.length - analysis - supplement - paper
+  return { news, paper, analysis, supplement, total: list.length }
+}
+export function evidenceLabel(saved) {
+  const c = evidenceCounts(saved)
+  return [c.news && `기사 ${c.news}`, c.paper && `논문 ${c.paper}`, c.analysis && `우리 분석 ${c.analysis}`, c.supplement && `보충 ${c.supplement}`].filter(Boolean).join(' · ')
+}
+// [분석] 줄 → 앱의 키워드 분석을 새 창으로 (/?analyze=키워드). 키워드를 남기지 않은 예전 보고서는 보고서 분석 묶음 · 주제어로
+export function analysisUrl(saved, a) {
+  const kw = a?.keyword ?? saved?.report?.analysis?.[0]?.keyword ?? saved?.report?.sources?.topics?.[0]
+  if (!kw || typeof window === 'undefined') return ''
+  return `${window.location.origin}/?analyze=${encodeURIComponent(kw)}`
 }

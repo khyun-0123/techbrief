@@ -24,7 +24,7 @@ import { getLists, saveLists } from './collector/lists.js'
 import { getArticleText, getSelection, getSetting, pruneArticleTexts, saveSelection, setSetting } from './db/store.js'
 import { addMaterial, deleteMaterial, listMaterials, materialBlocksAi } from './materials.js'
 import { lookupWiki } from './wiki.js'
-import { dbEnabled, dbStatus } from './db/index.js'
+import { dbEnabled, dbStatus, query } from './db/index.js'
 import {
   deleteReport,
   getSummaries,
@@ -267,7 +267,10 @@ async function buildReportEntry(body) {
   const all = body.mode === 'all'
   const picked = readReportArticles(body, all ? MAX_REPORT_ALL : MAX_REPORT_ARTICLES)
   for (const a of picked) if (await materialBlocksAi(String(a.id ?? ''))) throw Object.assign(new Error(`AI 입력을 허용하지 않은 자료가 있어요: ${a.title}`), { status: 403 })
-  const title = body.title?.trim() || `${String(body.topics?.[0] ?? '').trim() || '테크'} 동향 브리핑` // 11/14: 주제 키워드를 제목에
+  // 11/14: 주제 키워드를 제목에. 11/17 조장: 제목 앞에 날짜(MM.DD), 같은 날 같은 제목이면 저장할 때 끝에 번호 2 · 3 …(saveReport unique)
+  const baseTitle = (body.title?.trim() || `${String(body.topics?.[0] ?? '').trim() || '테크'} 동향 브리핑`).replace(/^\d{1,2}\.\d{1,2}\s+/, '')
+  const kst = new Date(Date.now() + 9 * 3600_000)
+  const title = `${String(kst.getUTCMonth() + 1).padStart(2, '0')}.${String(kst.getUTCDate()).padStart(2, '0')} ${baseTitle}`.slice(0, 80)
   const direction = String(body.direction ?? '').trim().slice(0, 300)
   // 11/12 조장: 대시보드에서 분석한 키워드는 보고서에 「당연히」 들어간다 — 주제 키워드의 분석 묶음(keywordBundle.js)을 [분석] 근거로 자동으로 붙인다
   // 주제 키워드: 화면이 보낸 topics(대시보드에서 고른 범위의 중심 키워드). 묶음이 없으면 20초까지 만들어 보고, 못 만들면 없이 쓴다
@@ -293,10 +296,13 @@ async function buildReportEntry(body) {
     if (bad.length) b.numCheck = bad
   }
   // ④ 출처: AI가 아니라 서버가 센다 (담당자 회신: 수집 기간과 기사 수)
-  const dates = picked.map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite).sort((a, b) => a - b)
+  // 수집 기간은 기사 날짜만, 논문은 연도 범위를 따로 (11/17, 40 문서 R8)
+  const dates = picked.filter((a) => !a.paper).map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite).sort((a, b) => a - b)
+  const paperYears = picked.filter((a) => a.paper).map((a) => new Date(a.publishedAt).getFullYear()).filter(Number.isFinite).sort((a, b) => a - b)
   const day = (t) => new Date(t + 9 * 3600_000).toISOString().slice(0, 10)
   const sources = {
     period: dates.length ? `${day(dates[0])} ~ ${day(dates[dates.length - 1])}` : null,
+    ...(paperYears.length ? { papers: paperYears[0] === paperYears.at(-1) ? `${paperYears[0]}` : `${paperYears[0]}~${paperYears.at(-1)}` } : {}),
     articles: picked.length,
     analysis: facts.length ? [...new Set(facts.map((f) => f.source))] : [],
     topics,
@@ -307,7 +313,7 @@ async function buildReportEntry(body) {
     id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
     articleKey: articles.map((a) => String(a.id ?? '')).sort().join('|'),
     // analysis: 유첨 그래프용 분석 묶음 (규칙 숫자, 화면 전용 — report와 함께 저장돼 다시 열어도 보인다)
-    report: { title, direction, headline, ...(typeof data.oneLine === 'string' && data.oneLine.trim() ? { oneLine: data.oneLine.trim().slice(0, 80) } : {}), sections, sources, analysis: bundles.map((b) => ({ keyword: b.keyword, stage: b.stage, patentYears: b.patentYears, competitors: b.competitors, owners: b.owners, quotes: b.quotes })), warnings: [...reportWarnings(sections), ...(headline?.numCheck?.length ? [`헤드라인 숫자가 근거와 달라요 (${headline.numCheck.join(', ')}) — 확인하세요`] : []), ...(headline && !headline.refs.length ? ['헤드라인에 근거 번호가 없어요 — AI 해설로 보고 확인하세요'] : []), ...(data.warnings ?? [])] },
+    report: { title, direction, headline, ...(typeof data.oneLine === 'string' && data.oneLine.trim() ? { oneLine: data.oneLine.trim().slice(0, 80) } : {}), sections, sources, analysis: bundles.map((b) => ({ keyword: b.keyword, at: b.at, stage: b.stage, patentYears: b.patentYears, competitors: b.competitors, owners: b.owners, quotes: b.quotes, papers: b.papers, rising: b.rising, makers: b.makers, breadth: b.breadth, attention: b.attention, surges: b.surges, signal: b.signal })), warnings: [...reportWarnings(sections), ...(headline?.numCheck?.length ? [`헤드라인 숫자가 근거와 달라요 (${headline.numCheck.join(', ')}) — 확인하세요`] : []), ...(headline && !headline.refs.length ? ['헤드라인에 근거 번호가 없어요 — AI 해설로 보고 확인하세요'] : []), ...(data.warnings ?? [])] },
     model,
     createdAt,
     periodLabel: body.periodLabel ?? '오늘',
@@ -320,8 +326,8 @@ async function buildReportEntry(body) {
         source,
         url,
         publishedAt,
-        fulltext: Boolean(b),
-        ...(analysis ? { analysis: true, description } : {}),
+        // [분석] 줄은 우리 규칙 계산이라 원문 · 발췌문 표시가 없다 (11/17: 「발췌문으로 작성」으로 보였음). 어느 키워드 분석인지 남겨 앱 분석으로 잇는다
+        ...(analysis ? { analysis: true, description, ...(a.keyword ? { keyword: a.keyword } : {}) } : { fulltext: Boolean(b) }),
         ...(paper ? { paper: true, access: paperAccessOf(a), ...(authors?.length ? { authors: authors.slice(0, 6) } : {}) } : {}),
       }
     }),
@@ -333,7 +339,7 @@ setDraftBuilder(buildReportEntry)
 
 async function handleReport(req, res) {
   const entry = await buildReportEntry(await readJson(req))
-  if (dbEnabled()) await saveReport(entry, clientIp(req))
+  if (dbEnabled()) await saveReport(entry, clientIp(req), { unique: true })
   send(res, 200, { entry: { ...entry, mine: true }, stored: dbEnabled() })
 }
 
@@ -865,14 +871,36 @@ async function handleApiInner(req, res) {
     }
     // 담당자(보고서팀) PPT 양식으로 내려받기 (11/17, 39 문서 E): 4:3 · 본문 1장 + 유첨 4장 (templates/report-template.pptx와 같은 칸)
     // 옮기는 규칙 server/reportToTemplate.js · 그리는 것 scripts/report-template.mjs(보고서팀). 못 채운 칸은 X-Report-Notes 머리글로 알림
+    // 보고서 주제어가 든 모은 기사의 날짜별 수 (11/17): 앱 미리보기 「기사 수 추이」 — 담당자 양식 PPT와 같은 계산(reportToTemplate.js)
+    if (req.method === 'POST' && req.url === '/api/topic-trend') {
+      const { terms = [], createdAt } = await readJson(req)
+      const topics = (Array.isArray(terms) ? terms : []).map((t) => String(t ?? '').trim().slice(0, 50)).filter(Boolean).slice(0, 3)
+      if (!dbEnabled() || !topics.length) return send(res, 200, { items: [] })
+      const { topicTrendItems } = await import('./reportToTemplate.js')
+      const at = Number.isFinite(Date.parse(createdAt)) ? createdAt : new Date().toISOString()
+      return send(res, 200, { items: await topicTrendItems({ createdAt: at, report: { sources: { topics } } }, query) })
+    }
     if (req.method === 'GET' && req.url.startsWith('/api/reports/pptx?')) {
       const id = new URL(req.url, 'http://x').searchParams.get('id')
       const list = dbEnabled() ? await listReports(1000, { ip: clientIp(req) }) : []
       const entry = list.find((e) => String(e.id) === String(id))
       if (!entry) return send(res, 404, { error: '보고서를 찾지 못했어요.' })
-      const { reportToTemplate } = await import('./reportToTemplate.js')
+      const { reportToTemplate, topicTrendItems } = await import('./reportToTemplate.js')
       const { renderPptx } = await import('../scripts/report-template.mjs')
-      const data = reportToTemplate(entry)
+      // 예전 보고서(11/17 전)는 분석 묶음에 논문 추이 · 연구 폭 등이 없음 → 지금 묶음(3일 기억)으로 채우고 「분석 기준일」을 그 묶음 날짜로 (40 문서 R6)
+      const r0 = entry.report ?? {}
+      const kws = (r0.analysis?.length ? r0.analysis.map((a) => a.keyword) : (r0.sources?.topics ?? [])).filter(Boolean).slice(0, 2)
+      const fresh = await Promise.all(kws.map((k) => Promise.race([prepareBundle(k).catch(() => null), new Promise((ok) => setTimeout(() => ok(null), 15_000))])))
+      const analysis = kws.map((k, i) => {
+        const old = r0.analysis?.find((a) => a.keyword === k)
+        const b = fresh[i]
+        if (old?.papers || !b) return old
+        return { ...(old ?? {}), keyword: k, at: b.at, stage: old?.stage ?? b.stage, patentYears: old?.patentYears?.length ? old.patentYears : b.patentYears, competitors: old?.competitors ?? b.competitors, owners: old?.owners ?? b.owners, quotes: old?.quotes ?? b.quotes, papers: b.papers, rising: b.rising, makers: b.makers, breadth: b.breadth, attention: b.attention, surges: b.surges, signal: b.signal }
+      }).filter(Boolean)
+      if (analysis.length) entry.report = { ...r0, analysis }
+      // 추이 그래프: 보고서 주제어가 든 모은 기사 수 → 없으면 맞는 수집 키워드 (11/17)
+      const [topicItems, trendItems] = await Promise.all([topicTrendItems(entry, query).catch(() => []), getTrends().then((t) => t.items).catch(() => [])])
+      const data = reportToTemplate(entry, { topicItems, trendItems })
       const buf = await renderPptx(data)
       const name = encodeURIComponent(`${(entry.report?.title ?? '보고서').replace(/[\\/:*?"<>|]/g, '_')}_담당자양식.pptx`)
       res.writeHead(200, {
