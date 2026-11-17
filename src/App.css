@@ -5575,6 +5575,57 @@ a.brand:focus-visible {
   color: var(--tb-color-text);
   font-size: var(--fs-md);
 }
+/* 진행 단계 한 줄 (11/17, FlowSteps.jsx · 39 문서 C6) */
+.flow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+  color: var(--tb-color-text-faint);
+}
+.flow-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.flow-steps li + li::before {
+  content: '→';
+  margin-right: 2px;
+  color: var(--tb-color-line-strong, var(--tb-color-text-faint));
+}
+.flow-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.flow-steps .is-done {
+  color: var(--tb-color-text-sub);
+}
+.flow-steps .is-now {
+  color: var(--tb-color-text);
+  font-weight: 700;
+}
+.flow-steps .is-now .flow-mark {
+  border-color: var(--tb-color-text);
+  background: var(--tb-color-text);
+  color: var(--tb-color-surface);
+}
+.flow-note {
+  color: var(--tb-color-text-sub);
+  font-weight: 400;
+}
+.ka-auto {
+  font-size: var(--fs-sm);
+}
 .ka-actions {
   display: flex;
   flex-wrap: wrap;
