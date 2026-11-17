@@ -11,6 +11,7 @@ import { patentDbReady } from './patentDb.js'
 import { cacheGet, cachePut } from './papers/index.js'
 import { queryKey } from './queryTerms.js'
 import { getTechTrends } from './techtrends.js'
+import { getLists } from './collector/lists.js'
 import { buildTimeline, cachedTimeline } from './timeline.js'
 import { surgeMonths } from './timesfm.js'
 
@@ -30,12 +31,37 @@ export async function allCategoryCompetitors() {
 }
 
 // 회사는 출원인 이름 글자로 묶는다 (33 문서 W25: CSOT는 이름이 바뀌었을 수 있어 판단에서 뺀다)
-const COMPANIES = [
-  { id: 'sdc', name: '삼성디스플레이', like: 'SAMSUNG DISPLAY%' },
-  { id: 'lgd', name: 'LG디스플레이 (자사)', like: 'LG DISPLAY%', own: true },
-  { id: 'boe', name: 'BOE', like: 'BOE TECHNOLOGY%' },
-  { id: 'csot', name: 'CSOT', like: '%CHINA STAR%', unsure: true },
+// 11/17 (37 문서 P9): 비교 회사를 4곳 고정 → **관리 페이지 「회사」의 경쟁사 목록**으로. 이름 → 특허 출원인 글자 사전에 있는 회사만 센다
+// (사전에 없는 회사는 `unmatched`로 알려 준다 — 사전에 한 줄 더하면 됨). id는 화면(CategoryGlance)이 쓰는 sdc · lgd · boe 그대로
+// 출원인 글자는 11/17 특허 DB 실측(최근 6년 출원인 상위)으로 정함
+const OWNER_DICT = [
+  { id: 'lgd', names: ['LG디스플레이', 'LGD', '엘지디스플레이', 'LG Display'], like: ['LG DISPLAY%'] },
+  { id: 'sdc', names: ['삼성디스플레이', 'SDC', 'Samsung Display'], like: ['SAMSUNG DISPLAY%'] },
+  { id: 'boe', names: ['BOE', '비오이', 'BOE Technology'], like: ['BOE TECHNOLOGY%'] },
+  { id: 'csot', names: ['CSOT', 'China Star', '차이나스타', 'TCL CSOT'], like: ['%CHINA STAR%'], unsure: true },
+  { id: 'tianma', names: ['티엔마', '톈마', 'Tianma'], like: ['%TIANMA%'] },
+  { id: 'sharp', names: ['샤프', 'Sharp'], like: ['SHARP%'] },
+  { id: 'jdi', names: ['JDI', '재팬디스플레이', 'Japan Display'], like: ['JAPAN DISPLAY%'] },
+  { id: 'visionox', names: ['비전옥스', 'Visionox'], like: ['%VISIONOX%'] },
+  { id: 'auo', names: ['AUO', 'AU Optronics'], like: ['AU OPTRONICS%'] },
+  { id: 'innolux', names: ['이노룩스', 'Innolux'], like: ['INNOLUX%'] },
+  { id: 'everdisplay', names: ['에버디스플레이', 'EverDisplay', 'EDO'], like: ['%EVERDISPLAY%'] },
 ]
+const flatName = (t) => String(t ?? '').toLowerCase().replace(/[\s·.()-]/g, '')
+const dictOf = (name) => OWNER_DICT.find((d) => d.names.some((n) => flatName(n) === flatName(name)))
+// 자사(LG디스플레이) + 관리 페이지 경쟁사 목록. 목록을 못 읽으면 예전 4곳
+export async function compareCompanies() {
+  const lists = await getLists().catch(() => null)
+  const wanted = lists?.competitors?.length ? lists.competitors : ['삼성디스플레이', 'BOE', 'CSOT']
+  const out = [{ ...OWNER_DICT[0], name: 'LG디스플레이 (자사)', own: true }]
+  const unmatched = []
+  for (const name of wanted) {
+    const d = dictOf(name)
+    if (!d) unmatched.push(name)
+    else if (!out.some((x) => x.id === d.id)) out.push({ ...d, name: d.id === 'csot' ? 'CSOT' : String(name).trim() })
+  }
+  return { companies: out, unmatched }
+}
 // 위협 · 기회 (규칙, [우리 판단] — 33 문서): 경쟁사 중 누군가 분야보다 1.5배 이상 빠르고 자사가 분야보다 느리면 위협,
 // 자사가 확실한 경쟁사 모두보다 빠르고 분야 이상이면 기회
 export const THREAT_FACTOR = 1.5
@@ -50,16 +76,17 @@ export async function categoryCompetitors(catId) {
   // 특허 DB를 다시 받으면(분기 · 11/13 CPC 전체 코드) 다시 센다
   const meta = await patentDbReady().catch(() => null)
   if (!meta) return null
-  const key = `cat-competitors:v3:${catId}:${meta.at}` // v2: 작은 수 보정 · v3: 2개국 이상 출원 비율 (11/15)
+  const { companies: COMPANIES, unmatched } = await compareCompanies()
+  const key = `cat-competitors:v4:${catId}:${meta.at}:${COMPANIES.map((c) => c.id).join(',')}` // v2: 작은 수 보정 · v3: 2개국 이상 출원 비율 (11/15) · v4: 관리 페이지 경쟁사 목록 (11/17)
   const hit = await cacheGet(key).catch(() => null)
   if (hit) return hit
   const last = new Date().getFullYear() - 1
   const [a, b] = [(last - 5) * 10000, (last - 2) * 10000]
   const cols = COMPANIES.map(
     (c, i) =>
-      `count(*) FILTER (WHERE pub >= $2 AND pub < $3 AND EXISTS (SELECT 1 FROM unnest(owners) o WHERE o LIKE $${i + 5}))::int AS b${i},
-       count(*) FILTER (WHERE pub >= $3 AND pub < $4 AND EXISTS (SELECT 1 FROM unnest(owners) o WHERE o LIKE $${i + 5}))::int AS r${i},
-       count(*) FILTER (WHERE pub >= $3 AND pub < $4 AND cardinality(countries) >= 2 AND EXISTS (SELECT 1 FROM unnest(owners) o WHERE o LIKE $${i + 5}))::int AS i${i}`,
+      `count(*) FILTER (WHERE pub >= $2 AND pub < $3 AND EXISTS (SELECT 1 FROM unnest(owners) o WHERE o LIKE ANY($${i + 5}::text[])))::int AS b${i},
+       count(*) FILTER (WHERE pub >= $3 AND pub < $4 AND EXISTS (SELECT 1 FROM unnest(owners) o WHERE o LIKE ANY($${i + 5}::text[])))::int AS r${i},
+       count(*) FILTER (WHERE pub >= $3 AND pub < $4 AND cardinality(countries) >= 2 AND EXISTS (SELECT 1 FROM unnest(owners) o WHERE o LIKE ANY($${i + 5}::text[])))::int AS i${i}`,
   ).join(', ')
   const { rows } = await query(
     `SELECT count(*) FILTER (WHERE pub >= $2 AND pub < $3)::int AS fb, count(*) FILTER (WHERE pub >= $3 AND pub < $4)::int AS fr,
@@ -76,13 +103,13 @@ export async function categoryCompetitors(catId) {
   const own = companies.find((c) => c.own)
   const threat = own?.ratio != null && field != null && sure.some((c) => c.ratio >= THREAT_FACTOR * field) && own.ratio < field
   const chance = own?.ratio != null && field != null && sure.every((c) => own.ratio > c.ratio) && own.ratio >= field
-  const out = { id: cat.id, name: cat.name, years: `${last - 5}~${last - 3} → ${last - 2}~${last}`, field: { before: r.fb, now: r.fr, ratio: field, intl: r.fr ? Math.round((r.fi / r.fr) * 100) / 100 : null }, companies, verdict: threat ? '위협' : chance ? '기회' : null }
+  const out = { id: cat.id, name: cat.name, years: `${last - 5}~${last - 3} → ${last - 2}~${last}`, field: { before: r.fb, now: r.fr, ratio: field, intl: r.fr ? Math.round((r.fi / r.fr) * 100) / 100 : null }, companies, verdict: threat ? '위협' : chance ? '기회' : null, ...(unmatched.length ? { unmatched } : {}) }
   await cachePut(key, out, 7 * 86_400_000).catch(() => {})
   return out
 }
 
 // ── 묶음 만들기 ──
-const bundleKey = (keyword) => `bundle:v4:${queryKey(keyword)}`
+const bundleKey = (keyword) => `bundle:v5:${queryKey(keyword)}` // v5 (11/17): 특허 비교 회사 = 관리 페이지 경쟁사 목록
 // 기억해 둔 묶음만 (만들지 않음): 11/17 전 보고서 미리보기에 기술 시계열을 채울 때 (화면이 기다리지 않게)
 export async function cachedBundle(raw) {
   const keyword = String(raw ?? '').trim().slice(0, 50)
