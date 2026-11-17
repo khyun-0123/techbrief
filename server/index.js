@@ -139,6 +139,8 @@ function cleanBullets(bullets, articles) {
       b = { ...b, tag: b.tag || lead[1] }
       text = text.slice(lead[0].length)
     }
+    // 표시 낱말만 쓴 줄(「기회」 · 「위협」)은 내용이 없어 뺀다 (11/17 지시문 시험에서 실제로 나옴)
+    if (/^(기회|위협|할 일|기회·위협 공존|검토 필요)[.。]?$/.test(text)) continue
     const claimed = [...new Set((b.refs ?? []).filter((n) => Number.isInteger(n) && n >= 1 && n <= articles.length))]
     const all = articles.map((_, i) => i + 1)
     const min = b.kind === 'ai' ? STRONG_OVERLAP : undefined
