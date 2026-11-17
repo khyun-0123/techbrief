@@ -6069,12 +6069,37 @@ a.brand:focus-visible {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 8px;
+  gap: 8px 16px;
   margin: 8px 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--tb-color-bg);
 }
 .scope-bar-label {
-  color: var(--tb-color-text-sub);
+  display: grid;
+  gap: 2px;
+  color: var(--tb-color-text);
   font-size: var(--fs-sm);
+}
+.scope-bar-label small {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+}
+.scope-chips {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.scope-n {
+  margin-left: 4px;
+  color: var(--tb-color-text-sub);
+  font-variant-numeric: tabular-nums;
+}
+.scope-chip.on .scope-n {
+  color: inherit;
+  opacity: 0.75;
 }
 .scope-chip {
   height: 30px;
