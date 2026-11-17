@@ -110,16 +110,27 @@ export function selectProvider(id) {
 }
 
 // 맥미니 메모리가 넉넉하지 않아 요청을 한 번에 하나씩 보낸다.
-// 기다리는 요청은 우선순위가 높은 것(숫자가 작은 것)부터, 같으면 먼저 온 순서로 꺼낸다.
+// 기다리는 요청은 우선순위가 높은 것(숫자가 작은 것)부터 꺼낸다.
+// 같은 단계 안에서는 사람(브라우저)마다 번갈아 (11/17): 한 사람이 요약 10건을 걸어도 다른 사람 일이 10건 뒤로 밀리지 않게. 같은 사람 것은 먼저 온 순서
 // 돌고 있는 것이 자동 요약(BACKGROUND)이고 사람 요청이 오면 자동 요약을 끊는다 (22 문서 3-3, 11/06 조장 결정)
 // - 끊긴 요약은 저장되지 않는다 (요약은 AI 응답이 끝까지 와야만 저장) → 「요약 안 됨」 그대로
 // - 끊긴 요청은 PreemptedError로 끝나고, 자동 요약 쪽(refresh.js)이 대기열 맨 앞에 다시 넣는다
 // 사람 요청 · 승인 요약끼리는 끊지 않는다 (13 문서 F1)
+// AI 순서 (11/17 정함, 41 문서 S5). 기준: ① 사람이 화면에서 기다리는가 ② 짧은 일 먼저 (최근 7일 실측 중앙값)
+// 1~4는 사람 일, 5~7은 자동 일. 사람 일이 오면 돌고 있는 자동 일을 끊는다 (사람 일끼리는 끊지 않음)
 export const PRIORITY = {
-  USER: 1, // 사람이 누른 요약·보고서
-  APPROVED: 2, // AI 추천을 위해 사람이 승인한 요약
-  BACKGROUND: 3, // 자동 최신화의 미리 요약
+  WAIT: 1, // 사람이 화면에서 바로 기다리는 짧은 일: 검색어 영문 표기 · 보고서 근거 보충(4.7초) · 섹션 다시 쓰기
+  SUMMARY: 2, // 사람이 누르거나 선별한 요약 (19.8초)
+  REPORT: 3, // 보고서 쓰기 · 보고서에 쓸 자료 요약 (58초, 진행 칸으로 기다림)
+  STORY: 4, // 사람이 연 키워드의 AI 흐름 정리 (37초, 분석을 열면 저절로 시작 — 누른 일보다 뒤)
+  AUTO_IMPORTANT: 5, // 자동 요약 중 「중요」
+  AUTO: 6, // 자동 요약 나머지
+  PRECOMPUTE: 7, // 미리 분석 흐름 정리 · 요즘 뜨는 기술 용어
 }
+// 예전 이름 (다른 코드가 아직 쓰면): USER = 사람 요약, BACKGROUND = 자동 요약
+PRIORITY.USER = PRIORITY.SUMMARY
+PRIORITY.BACKGROUND = PRIORITY.AUTO
+export const isHuman = (p) => p < PRIORITY.AUTO_IMPORTANT
 
 // 사람 요청에 자리를 내주느라 끊긴 자동 요약. 실패가 아니다 (다시 요약해야 함)
 export class PreemptedError extends Error {
@@ -135,6 +146,7 @@ let running = null // 지금 처리 중인 요청의 우선순위
 let runningAbort = null // 지금 처리 중인 요청을 끊는 스위치 (AbortController)
 let runningMeta = null // 지금 처리 중인 요청의 보이는 정보 { kind, label, client, priority, enqueuedAt, startedAt }
 let seq = 0
+const lastServed = new Map() // 브라우저 번호 → 마지막으로 AI를 쓴 때 (같은 단계 안 번갈아 주기)
 
 // ── 대기열 보기 (11/15): 누가 · 무엇을 기다리는지 ──
 // 요청마다 { client(브라우저 번호), label(무슨 작업) }을 함께 들고 다닌다. API 요청 하나가 시작될 때 server/index.js가 넣고,
@@ -145,11 +157,14 @@ export function withQueueContext(ctx, fn) {
 }
 const KIND_LABEL = { summary: '기사 요약', report: '보고서 쓰기', translate: '검색어 영문 표기', timeline: '기술 흐름 정리', reinforce: '보고서 근거 보충', section: '보고서 섹션 다시 쓰기', terms: '요즘 뜨는 기술 용어', test: '모델 시험' }
 
+// 순서 규칙 시험용 (AI를 부르지 않고 가짜 일로 대기열만 돌려 봄)
+export const enqueueForTest = (task, priority, meta) => enqueue(task, priority, meta)
+
 // task(signal): signal이 끊기면 AI 서버 요청도 끊는다
-function enqueue(task, priority = PRIORITY.USER, meta = {}) {
+function enqueue(task, priority = PRIORITY.SUMMARY, meta = {}) {
   return new Promise((resolve, reject) => {
     waiting.push({ priority, order: seq++, task, resolve, reject, meta: { ...meta, priority, enqueuedAt: Date.now() } })
-    if (running === PRIORITY.BACKGROUND && priority < PRIORITY.BACKGROUND && runningAbort) {
+    if (running !== null && !isHuman(running) && isHuman(priority) && runningAbort && !runningAbort.signal.aborted) {
       console.log('[llm] 사람 요청이 와서 자동 요약을 멈추고 뒤로 보냄')
       runningAbort.abort(new PreemptedError())
     }
@@ -159,13 +174,18 @@ function enqueue(task, priority = PRIORITY.USER, meta = {}) {
 
 async function pump() {
   if (running !== null || waiting.length === 0) return
-  let next = 0
-  for (let i = 1; i < waiting.length; i += 1) {
+  // 가장 높은 단계 → 그 안에서 가장 오래 못 받은 사람 → 먼저 온 것
+  const top = Math.min(...waiting.map((j) => j.priority))
+  const servedAt = (j) => lastServed.get(j.meta.client ?? '') ?? 0
+  let next = -1
+  for (let i = 0; i < waiting.length; i += 1) {
     const a = waiting[i]
+    if (a.priority !== top) continue
     const b = waiting[next]
-    if (a.priority < b.priority || (a.priority === b.priority && a.order < b.order)) next = i
+    if (!b || servedAt(a) < servedAt(b) || (servedAt(a) === servedAt(b) && a.order < b.order)) next = i
   }
   const job = waiting.splice(next, 1)[0]
+  lastServed.set(job.meta.client ?? '', Date.now())
   running = job.priority
   runningMeta = { ...job.meta, startedAt: Date.now() }
   const controller = new AbortController()
@@ -189,7 +209,7 @@ async function pump() {
 // who: mine(내가 시킨 것) · auto(자동 — 자동 요약 · 미리 분석 등 우선순위가 가장 낮은 일, 또는 브라우저 번호가 없는 일) · other(다른 사람)
 function publicMeta(m, viewer) {
   if (!m) return null
-  const auto = m.priority === PRIORITY.BACKGROUND || !m.client
+  const auto = !isHuman(m.priority) || !m.client
   return {
     kind: m.kind,
     kindLabel: KIND_LABEL[m.kind] ?? 'AI 작업',
@@ -207,8 +227,8 @@ export function queueList(viewer) {
 
 // 대기 상황 (자동 최신화 화면에 "사용자 요청 먼저 처리 중"을 보여 줄 때 쓴다)
 export function queueStatus() {
-  const ahead = waiting.filter((j) => j.priority < PRIORITY.BACKGROUND).length
-  return { running, waiting: waiting.length, userFirst: ahead + (running !== null && running < PRIORITY.BACKGROUND ? 1 : 0) }
+  const ahead = waiting.filter((j) => isHuman(j.priority)).length
+  return { running, waiting: waiting.length, userFirst: ahead + (running !== null && isHuman(running) ? 1 : 0) }
 }
 
 // Ollama는 OpenAI 호환 주소(/v1)로 부르면 입력을 약 2,000토큰까지만 읽는다 (실측: 더 긴 입력은 앞부분이 잘림).
@@ -305,7 +325,7 @@ async function callChat(cfg, { messages, schema, schemaName, report = false, tim
 // report·timeoutMs는 선택 (보고서는 *_REPORT_MODEL과 더 긴 시간), priority는 PRIORITY 중 하나 (기본: 사람 요청)
 // AI 서버는 요청한 순간에 고른 곳을 쓴다 (기다리는 동안 상단에서 바꿔도 그대로)
 // label: 대기열에 보일 작업 이름 (기사 제목 · 키워드 등, 선택). 없으면 요청 맥락(withQueueContext)의 label
-export async function chatJson({ messages, schema, schemaName = 'result', report, timeoutMs, priority = PRIORITY.USER, provider, kind: callKind, label }) {
+export async function chatJson({ messages, schema, schemaName = 'result', report, timeoutMs, priority = PRIORITY.SUMMARY, provider, kind: callKind, label }) {
   let cfg = config(provider)
   // callKind: 요약 · 보고서가 아닌 호출의 이름 (translate 검색어 영문 표기 · timeline 흐름 정리 · reinforce 근거 보충 · section 섹션 다시 쓰기 · terms 뜨는 기술, 11/11)
   const kind = provider ? 'test' : callKind ?? (report ? 'report' : 'summary')
@@ -319,7 +339,7 @@ export async function chatJson({ messages, schema, schemaName = 'result', report
       try {
         result = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs, signal })
       } catch (err) {
-        const alt = !provider && priority === PRIORITY.USER && !signal.aborted && reachable(err) ? fallbackId(cfg.id) : null
+        const alt = !provider && isHuman(priority) && !signal.aborted && reachable(err) ? fallbackId(cfg.id) : null
         if (!alt) throw err
         recordAiCall(kind, false, Date.now() - startedAt, { provider: cfg.id, model: (report && cfg.reportModel) || cfg.model })
         console.warn(`[llm] ${cfg.label} 실패(${err.message.slice(0, 80)}) → ${alt}로 한 번 다시`)

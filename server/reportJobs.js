@@ -269,7 +269,7 @@ async function supplement(job, entry, gaps, research) {
         checkCancel(job)
         step(job, `요약 안 된 기사 요약 중 ${i + 1}/${list.length}`, 45 + Math.round((i / list.length) * 20))
         try {
-          const { summary } = await summarizeArticle({ id: c.id, url: c.url, title: c.title, source: c.source, description: c.description ?? '' }, [], { priority: PRIORITY.USER })
+          const { summary } = await summarizeArticle({ id: c.id, url: c.url, title: c.title, source: c.source, description: c.description ?? '' }, [], { priority: PRIORITY.REPORT })
           const items = Object.values(summary?.items ?? {})
             .filter((it) => it.basis === 'article')
             .map((it) => it.text)

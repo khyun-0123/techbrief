@@ -198,7 +198,7 @@ export async function rewriteWithPassages(bulletText, passages, existing = []) {
     messages: messages(bullet, passages),
     schema: SCHEMA,
     schemaName: 'reinforce_bullet',
-    priority: PRIORITY.USER,
+    priority: PRIORITY.WAIT,
     kind: 'reinforce',
   })
   const used = [...new Set((data.refs ?? []).filter((n) => Number.isInteger(n) && n >= 1 && n <= passages.length))]

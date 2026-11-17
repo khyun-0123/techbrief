@@ -48,7 +48,7 @@ import { searchPaperArticles } from './searchPapers.js'
 import { activeJobs, addJob, answerJob, cancelJob, listJobs, setDraftBuilder } from './reportJobs.js'
 import { sourceStatus } from './sourceGuard.js'
 import { patentDbStatus } from './patentDb.js'
-import { chatJson, llmProviders, modelName, pingModel, providerLabel, queueList, selectProvider, withQueueContext } from './llm/client.js'
+import { chatJson, llmProviders, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, withQueueContext } from './llm/client.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
   buildMergeMessages,
@@ -242,6 +242,7 @@ function draftReport(articles, opts) {
     schemaName: 'report_draft',
     report: true,
     timeoutMs: REPORT_TIMEOUT_MS,
+    priority: PRIORITY.REPORT,
   })
 }
 
@@ -260,6 +261,7 @@ async function draftLongReport(articles, opts) {
     schemaName: 'report_draft',
     report: true,
     timeoutMs: REPORT_TIMEOUT_MS,
+    priority: PRIORITY.REPORT,
   })
   const notes = parts.flatMap((p) => p.warnings ?? [])
   return { ...merged, data: { ...merged.data, warnings: [...new Set([...(merged.data.warnings ?? []), ...notes])] } }
@@ -368,6 +370,7 @@ async function handleReportSection(req, res) {
     kind: 'section',
     report: true,
     timeoutMs: REPORT_TIMEOUT_MS,
+    priority: PRIORITY.WAIT, // 보고서 화면에서 섹션 하나를 다시 쓰는 동안 사람이 기다림
   })
   const bullets = cleanBullets(data.bullets, articles)
   if (body.reportId && dbEnabled()) await updateReportSection(body.reportId, body.key, bullets)
