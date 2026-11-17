@@ -9499,3 +9499,23 @@ a.dash-home-t:hover,
 .tlx-news li + li {
   margin-top: 4px;
 }
+
+/* 내 보고서: 아직 열어 보지 않은 보고서 NEW (11/18, 메뉴 「NEW n」과 같은 모양) */
+.mr-new {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  vertical-align: 1px;
+}
+.mr-view .mr-new {
+  margin: 0 0 0 auto;
+}
+.mr-view .mr-new + .mr-count {
+  margin-left: 6px;
+}

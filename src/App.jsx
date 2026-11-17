@@ -302,6 +302,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [reportJobs, setReportJobs] = useState([])
   const ingestedJobs = useRef(new Set())
   const [archiveTarget, setArchiveTarget] = useState(null) // 진행 창 「보고서함에서 보기」로 바로 열 보고서
+  const [archiveNav, setArchiveNav] = useState(0) // 메뉴 「내 보고서」를 누른 횟수 → 열린 보고서를 닫고 목록으로 (11/18)
   // 이 브라우저에서 만들어졌고 아직 안 연 보고서 (11/09): 「보고서함」 탭을 누르면 가장 최근 것이 바로 열린다. 한 번 열면 빠짐
   const [newReportIds, setNewReportIds] = useState(() => load(NEW_REPORTS_KEY, []))
   useEffect(() => {
@@ -1235,15 +1236,16 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           aria-current={screen === 'archive' ? 'page' : undefined}
           data-tour="tab-reports"
           onClick={() => {
-            // 새로 만들어진(아직 안 연) 내 보고서가 있으면 그것부터, 없으면 목록
-            setArchiveTarget(newReportIds.find((id) => reports.some((r) => r.id === id)) ?? null)
+            // 11/18 조장: 늘 목록으로 (예전: 안 연 새 보고서가 있으면 그것을 바로 열었음 → 어색). 안 연 보고서는 목록에 NEW, 처음 보기는 「내가 만든」
+            setArchiveTarget(null)
+            setArchiveNav((n) => n + 1)
             setScreen('archive')
           }}
         >
           내 보고서{liveReports.length > 0 && <span className="tab-count">{liveReports.length}</span>}
           {newReportIds.some((id) => reports.some((r) => r.id === id)) && (
-            <span className="tab-new" title="새로 만들어진 보고서가 있어요 — 누르면 바로 열려요">
-              새 {newReportIds.filter((id) => reports.some((r) => r.id === id)).length}
+            <span className="tab-new" title="아직 열어 보지 않은 내 보고서 — 목록에 NEW로 표시돼요">
+              NEW {newReportIds.filter((id) => reports.some((r) => r.id === id)).length}
             </span>
           )}
         </button>
@@ -1393,6 +1395,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           onCleanup={handleCleanup}
           initialId={archiveTarget}
           onOpened={markReportSeen}
+          newIds={newReportIds}
+          listNav={archiveNav}
           key={archiveTarget ?? 'archive'}
         />
       ) : screen === 'select' ? (

@@ -10,7 +10,7 @@
 // - 지우기: 관리자 또는 그 보고서를 만든 브라우저
 // - 보고서를 열었을 때 그 보고서에 쓴 기사가 아직 선별 목록에 있으면 정리할지 한 번 묻는다
 // onDelete가 없으면 「지우기」를 숨긴다 (공용 보고서함은 관리자만 지움, 17 문서)
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Seg } from './Dropdown.jsx'
 import { exportPptx, loadReportExtra, printReport } from './reportExport.js'
 import { SlideFrame } from './ReportSlide.jsx'
@@ -124,21 +124,35 @@ function SlidePreview({ saved }) {
   )
 }
 
-function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, initialId, selectedIds = [], onCleanup, onOpened, onRestore, onPurge, onStar, tagsFor, trashDays }) {
+// newIds: 확인 안 한 내 보고서 (목록에 NEW). listNav: 메뉴 「내 보고서」를 누를 때마다 바뀜 → 열린 보고서를 닫고 목록으로 (11/18 조장)
+function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, initialId, selectedIds = [], onCleanup, onOpened, onRestore, onPurge, onStar, tagsFor, trashDays, newIds = [], listNav = 0 }) {
   const [openId, setOpenId] = useState(initialId ?? null)
   useEffect(() => {
-    if (openId) onOpened?.(openId) // 「새」 표시 지우기
+    if (openId) onOpened?.(openId) // NEW 지우기
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openId])
+  // 메뉴 「내 보고서」를 다시 누르면 목록으로 (보던 보기 · 검색어는 그대로)
+  const firstNav = useRef(listNav)
+  useEffect(() => {
+    if (listNav === firstNav.current) return
+    setOpenId(null)
+    setPreviewId(null)
+  }, [listNav])
   const [asked, setAsked] = useState(() => load(ASKED_KEY, []))
   const [notice, setNotice] = useState('')
   const [q, setQ] = useState('')
-  const [view, setView] = useState('all') // all | mine | recent | starred | trash
+  // 처음 보기: 내가 만든 보고서가 있으면 「내가 만든」, 없으면 「전체」 (11/18 조장 — AI 대기열 「내 작업」과 같은 흐름)
+  const [view, setView] = useState(() => (reports.some((r) => !r.deletedAt && (r.mine ?? r.report?.createdBy === clientId())) ? 'mine' : 'all')) // all | mine | others | recent | starred | trash
   const [period, setPeriod] = useState('all')
   const [kwq, setKwq] = useState('')
   const [sort, setSort] = useState('new')
   const [checked, setChecked] = useState([])
   const [previewId, setPreviewId] = useState(null)
+  // 미리보기로 봐도 「확인함」 (NEW 지우기)
+  useEffect(() => {
+    if (previewId) onOpened?.(previewId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewId])
   const [menuId, setMenuId] = useState(null) // ⋯ · 다운로드 메뉴가 열린 줄 (`${kind}:${id}`)
   const [busy, setBusy] = useState(false)
   const me = clientId()
@@ -148,9 +162,11 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
 
   const live = reports.filter((r) => !r.deletedAt)
   const weekAgo = Date.now() - 7 * 86_400_000
+  // 11/18: AI 대기열(전체 · 내 작업 · 자동 · 다른 사람)과 같은 구성 — 전체 · 내가 만든 · 다른 사람, 처음엔 내가 만든
   const VIEWS = [
-    ['all', '전체 보고서', live, '팀 공용 보고서'],
+    ['all', '전체 보고서', live, '팀 공용 보고서 모두'],
     ['mine', '내가 만든', live.filter(isMine), '이 IP에서 만든 보고서 (11/08부터 기록)'],
+    ['others', '다른 사람', live.filter((r) => !isMine(r)), '다른 팀원이 만든 보고서'],
     ['recent', '최근 생성', live.filter((r) => Date.parse(r.createdAt) >= weekAgo), '최근 7일'],
     ['starred', '중요 보고서', live.filter((r) => r.starred), '내가 별표한 보고서'],
     ['trash', '휴지통', reports.filter((r) => r.deletedAt && isMine(r)), '내가 지운 보고서'],
@@ -344,6 +360,7 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
                 }}
               >
                 <span>{label}</span>
+                {id === 'mine' && list.some((r) => newIds.includes(r.id)) && <span className="mr-new">NEW {list.filter((r) => newIds.includes(r.id)).length}</span>}
                 <span className="mr-count">{list.length}</span>
               </button>
             ))}
@@ -459,6 +476,11 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
                             {r.starred && (
                               <span className="mr-star" aria-label="중요">
                                 ★
+                              </span>
+                            )}
+                            {newIds.includes(r.id) && (
+                              <span className="mr-new" title="아직 열어 보지 않은 보고서">
+                                NEW
                               </span>
                             )}
                             <Mark text={r.report.title} q={q.trim()} />
