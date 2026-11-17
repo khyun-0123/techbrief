@@ -11,6 +11,7 @@ import { fetchBundle, fetchRelated, fetchTimeline, fetchTimelineStory, fetchWord
 import { retryStory, useStory } from './storyJobs.js'
 import { Spark } from './KeywordTrends.jsx'
 import TechTimeline from './TechTimeline.jsx'
+import TimelineExtras from './TimelineExtras.jsx'
 import { Seg } from './Dropdown.jsx'
 import FlowSteps from './FlowSteps.jsx'
 
@@ -586,6 +587,8 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
                       )
                     })()}
                   </dl>
+                  {/* 화면이 넓으면 「크게 보기」 내용을 더 (11/18 조장, TimelineExtras.jsx) */}
+                  <TimelineExtras keyword={keyword} data={data} job={job} />
                 </>
               )}
             </div>
