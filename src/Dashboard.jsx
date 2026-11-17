@@ -21,7 +21,7 @@ const showTerm = (q) => String(q).replace(/\b[a-z]{2,4}\b/g, (w) => w.toUpperCas
 // 「바로 볼 수 있는 분석」 처음에 보이는 수 (11/14 D5: 8개 고정) → 11/15: 2줄에 들어가는 만큼, 남으면 마지막 자리에 「+n개 더」
 // (FHD에서 8개가 7 + 1로 끊기고, QHD는 12개가 다 들어가는데 4개를 숨겼음). 휴대폰은 한 줄로 두고 옆으로 밀어 봄
 const READY_SHOWN = 8 // 아직 못 쟀을 때
-const READY_LINES = 2
+const READY_LINES = 1 // 11/17 조장: 한 줄만 (넘치면 「+n개 더」)
 
 // 칩 폭을 차례로 줄에 담아 lines줄 안에 몇 개 들어가는지 (다 못 담으면 「+n개 더」 자리를 남김)
 function fitInLines(widths, moreW, avail, gap, lines) {
