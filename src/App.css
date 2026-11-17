@@ -9385,6 +9385,10 @@ a.dash-home-t:hover,
   .tr-list li.is-clipped {
     visibility: hidden;
   }
+  /* 다 들어가는 줄 사이에 남는 높이를 고르게 (TrendRail.jsx --tr-gap, 최대 14px) */
+  .tr-list li:not(.is-clipped) {
+    margin-bottom: var(--tr-gap, 0px);
+  }
 }
 
 /* 자료 현황 「담을 폴더」 (11/15): 범위로 찾을 때마다 「· 자동」 폴더가 늘어 줄이 늘고 표가 줄었음 → 선별·요약처럼 한 줄, 옆으로 밀어 봄 */
