@@ -15,6 +15,11 @@ function asciiPattern(key) {
   return new RegExp(`(^|[^a-z0-9])${[...key].map(esc).join('[\\s\\-·_]?')}($|[^a-z0-9])`)
 }
 
+// 「요즘 뜨는 기술」 응답(/api/tech-trends)에서 사전에 넣을 용어 (화면 · 서버 같이, 11/17 B2)
+export function techTermNames(d) {
+  return [...new Set([...(d?.composite ?? []), ...(d?.sources ?? []).flatMap((s) => s.ranking ?? [])].map((r) => r.name).filter(Boolean))]
+}
+
 // 사전: [{ term, key, re }] 긴 것부터
 export function buildTagDict(groups) {
   const seen = new Map()

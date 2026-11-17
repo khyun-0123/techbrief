@@ -422,6 +422,17 @@ function lightParts(p) {
   }
   return out
 }
+// 가벼운 목록 객체 (미리 계산한 목록마다 한 번) — 한 쪽씩 보기가 같은 객체를 쓴다
+const lightObjs = new WeakMap()
+async function lightOf(list) {
+  let o = lightObjs.get(list)
+  if (!o) {
+    o = lightList(list)
+    lightObjs.set(list, o)
+  }
+  return o
+}
+
 function lightList(list) {
   const sample = list.articles.find((a) => a.scoreParts?.max)
   return {
@@ -817,6 +828,18 @@ async function handleApiInner(req, res) {
         if (d !== '변경 없음') await logChange(admin, label, d)
       }
       return send(res, 200, saved)
+    }
+    // 자료 현황 한 쪽씩 (11/17 B2, server/articlePages.js): 실험 기능 「articlesPaging」을 켠 화면만 쓴다. 같은 미리 계산 목록 · 가벼운 꼴
+    if (req.method === 'GET' && (req.url === '/api/articles/home' || req.url.startsWith('/api/articles/page'))) {
+      const light = await lightOf(await listArticles())
+      const { articlesHome, articlesPage } = await import('./articlePages.js')
+      if (req.url === '/api/articles/home') return send(res, 200, await articlesHome(light))
+      return send(res, 200, await articlesPage(light, new URL(req.url, 'http://x').searchParams, clientOf(req)))
+    }
+    if (req.method === 'POST' && req.url === '/api/articles/by-ids') {
+      const { ids = [] } = await readJson(req)
+      const { articlesByIds } = await import('./articlePages.js')
+      return send(res, 200, await articlesByIds(await lightOf(await listArticles()), ids))
     }
     if (req.method === 'GET' && req.url === '/api/articles') {
       // 11/17 (39 문서 B): 화면용으로 가볍게 — 미리 계산한 목록마다 한 번만 만들어 두고 그대로 보낸다

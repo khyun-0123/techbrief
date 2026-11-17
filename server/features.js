@@ -27,6 +27,14 @@ export const FEATURES = [
     default: 'all', // 11/07: 기능은 메인에, 고민되는 것만 테스트 (CLAUDE.md 결정)
   },
 ]
+// 11/17 (39 문서 5장 B2): 자료 현황을 한 쪽씩 서버에서 받기. 데모(11/21) 전 버그 위험이 있어 처음은 테스트 페이지에서만
+// 켜면 첫 화면이 7일치 전체(약 4MB) 대신 오늘 숫자 · 중요 30건만 받는다. 끄면 예전 그대로 (server/articlePages.js)
+FEATURES.push({
+  key: 'articlesPaging',
+  label: '자료 현황 한 쪽씩 받기',
+  desc: '첫 화면이 자료 전체(약 4MB) 대신 오늘 숫자 · 중요 자료만 받고, 자료 현황은 서버에서 한 쪽씩 받아요. 거르기 · 찾기 규칙은 예전과 같아요',
+  default: 'test',
+})
 export const FEATURE_STATES = ['off', 'test', 'all']
 const KEY = 'features'
 
