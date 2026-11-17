@@ -188,6 +188,17 @@ CREATE TABLE IF NOT EXISTS search_counts (
   people    text[] NOT NULL DEFAULT '{}',
   PRIMARY KEY (query, day)
 );
+-- 키워드로 받은 논문 (11/17, 39 문서 D2 · server/papers/keywordStore.js): 디스플레이 논문 DB에 적은 말은 OpenAlex에서 받은 것을 키워드마다 저장해 다시 씀
+-- papers(디스플레이 주제)와 섞지 않는다. work = 찾기 결과 한 편(JSON). 한 말에 최근 300편까지
+CREATE TABLE IF NOT EXISTS keyword_papers (
+  query       text NOT NULL,
+  key         text NOT NULL,
+  work        jsonb NOT NULL,
+  provider    text,
+  published   date,
+  fetched_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (query, key)
+);
 -- 키워드 분석을 연 횟수 (11/17, 37 문서 P12 · 36 문서 3-5): 미리 분석 대상이 「찾기」만이 아니라 실제로 연 말도 따라가게
 ALTER TABLE search_counts ADD COLUMN IF NOT EXISTS opens integer NOT NULL DEFAULT 0;
 
