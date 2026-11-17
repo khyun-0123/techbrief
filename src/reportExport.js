@@ -164,13 +164,14 @@ export async function buildPptx(saved, { PptxGenJS, JSZip, extra } = {}) {
 }
 
 // 어디서 내려받든(보고서 화면 · 편집 탭) 미리보기와 같은 그래프가 되게, 추가 데이터를 안 받았으면 여기서 불러온다
-export async function loadReportExtra() {
-  const { fetchTrends } = await import('./api.js')
-  return { trends: await fetchTrends().catch(() => null) }
+export async function loadReportExtra(saved) {
+  const { fetchTopicTrend, fetchTrends } = await import('./api.js')
+  const [trends, topic] = await Promise.all([fetchTrends().catch(() => null), saved ? fetchTopicTrend(saved).catch(() => null) : null])
+  return { trends, topic }
 }
 
 export async function exportPptx(saved, extra) {
-  extra ??= await loadReportExtra()
+  extra ??= await loadReportExtra(saved)
   const data = await buildPptx(saved, { extra })
   const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' })
   const link = document.createElement('a')

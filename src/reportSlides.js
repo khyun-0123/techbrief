@@ -318,7 +318,6 @@ export function reportPages(saved, extra = {}) {
   const base = saved.articles.filter((a) => !a.supplement && !a.analysis)
   const added = saved.articles.filter((a) => a.supplement).length // 보충 자료만 ([분석] 근거는 세지 않음)
   const sources = [...new Set(base.map((a) => a.source).filter(Boolean))]
-  const times = base.map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite)
   // 수집 기간은 기사 날짜로만, 논문은 연도 범위를 따로 (11/17, 40 문서 R8: 논문이 섞이면 「2024-06-01 ~ 2026-06-01」처럼 보였음)
   const nt = base.filter((a) => !a.paper).map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite)
   const py = base.filter((a) => a.paper).map((a) => new Date(a.publishedAt).getFullYear()).filter(Number.isFinite)
@@ -723,7 +722,10 @@ export function reportPages(saved, extra = {}) {
   // 11/17: 제목 · 기사 제목에 든 말로 맞추면 「디스플레이」가 「마이크로디스플레이」 안에서 맞아 디스플레이 기사 전체가 그려짐
   // → 보고서 주제어(sources.topics · 분석 키워드)와 같거나 그것을 품은 수집 키워드만 (담당자 양식 PPT도 같은 규칙, server/reportToTemplate.js)
   const topics = [...(saved.report?.sources?.topics ?? []), ...(saved.report?.analysis ?? []).map((x) => x?.keyword)].map(norm).filter(Boolean)
-  const matched = (extra.trends?.items ?? []).filter((it) => it.keyword && (it.news ?? []).length && topics.some((t) => norm(it.keyword).includes(t)))
+  // 주제어가 든 모은 기사 수(/api/topic-trend)가 있으면 그것을 먼저 — 주제어가 수집 키워드가 아니어도 그릴 수 있음 (11/17)
+  const topicItems = (extra.topic?.items ?? []).filter((it) => (it.news ?? []).length)
+  const topicTotal = topicItems.reduce((n, it) => n + it.news.reduce((m, p) => m + p.v, 0), 0)
+  const matched = topicTotal > 0 ? topicItems : (extra.trends?.items ?? []).filter((it) => it.keyword && (it.news ?? []).length && topics.some((t) => norm(it.keyword).includes(t)))
   const daily = new Map() // 'YYYY-MM-DD' → 기사 수 (빈 날은 0)
   // 논문 날짜(몇 해 전)는 기사 수 추이에서 뺀다 — 섞이면 기간이 몇 해로 늘어 막대가 수백 개가 됨 (11/17)
   const newsTimes = base.filter((a) => !a.paper).map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite)
@@ -732,10 +734,11 @@ export function reportPages(saved, extra = {}) {
   let end = 0
   if (matched.length) {
     end = dayOf(saved.createdAt ?? Date.now()) - DAY // 끝난 날까지 (만든 날은 반나절, 11/17)
-    start = Math.max(times.length ? dayOf(Math.min(...times)) - 3 * DAY : end - 7 * DAY, end - 181 * DAY)
+    // 시작: 근거 기사 가장 이른 날 3일 전 (논문 날짜는 빼고, 11/17). 기사가 없으면 주제어 기사 수는 28일 · 수집 키워드는 7일
+    start = Math.max(newsTimes.length ? dayOf(Math.min(...newsTimes)) - 3 * DAY : end - (topicTotal > 0 ? 27 : 7) * DAY, end - 181 * DAY)
     for (let t = start; t <= end; t += DAY) daily.set(ymd(t, '-'), 0)
     for (const it of matched) for (const p of it.news) if (daily.has(p.t)) daily.set(p.t, daily.get(p.t) + p.v)
-    trendFrom = `수집 키워드 「${matched.map((it) => it.keyword).join(', ')}」 기사 수`
+    trendFrom = topicTotal > 0 ? `「${matched.map((it) => it.keyword).join(', ')}」 든 모은 기사 수` : `수집 키워드 「${matched.map((it) => it.keyword).join(', ')}」 기사 수`
   } else if (newsTimes.length) {
     start = dayOf(Math.min(...newsTimes))
     end = dayOf(Math.max(...newsTimes))
@@ -799,13 +802,18 @@ export function reportPages(saved, extra = {}) {
     }
     startRef()
     for (const it of items) {
-      const tl = Math.min(2, linesOf(it.title, SIZE.body, listW - 0.45))
+      // 제목은 두 줄까지 (11/17: 세 줄 제목이 아래 출처 줄과 겹쳤음) — 넘치면 줄여 「…」
+      let title = it.title
+      // 굵은 영문 제목은 낱말 단위 줄바꿈 때문에 어림보다 길어진다 → 폭을 75%로 잡아 어림 (11/17 렌더 확인)
+      const titleW = (listW - 0.45) * 0.75
+      while (title.length > 10 && linesOf(title, SIZE.body, titleW) > 2) title = `${title.slice(0, -4).trimEnd()}…`
+      const tl = Math.min(2, linesOf(title, SIZE.body, titleW))
       const notice = it.paid ? `${PAID_NOTICE}${it.url || '링크 없음'}` : ''
       const nl = notice ? linesOf(notice, SIZE.note, listW - 0.45) : 0
       const h = tl * LH(SIZE.body) + LH(SIZE.note) + nl * LH(SIZE.note) + 0.2
       if (y + h > BOTTOM) startRef()
       els.push(text(M, y, 0.4, LH(SIZE.body), SIZE.body, `[${it.n}]`, { bold: true }))
-      els.push(text(M + 0.42, y, listW - 0.45, tl * LH(SIZE.body), SIZE.body, it.title, { bold: true }))
+      els.push(text(M + 0.42, y, listW - 0.45, tl * LH(SIZE.body), SIZE.body, title, { bold: true }))
       const metaRuns = [{ text: it.meta, color: COLOR.sub }]
       if (it.badge) metaRuns.push({ text: `   ${it.badge}`, color: COLOR.accent, bold: true })
       els.push(text(M + 0.42, y + tl * LH(SIZE.body) + 0.03, listW - (it.url && !it.paid ? 1.45 : 0.45), LH(SIZE.note), SIZE.note, metaRuns)) // 링크 없는 줄은 「원문 열기」 자리까지 씀 (11/14)

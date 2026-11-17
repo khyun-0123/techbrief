@@ -868,6 +868,15 @@ async function handleApiInner(req, res) {
     }
     // 담당자(보고서팀) PPT 양식으로 내려받기 (11/17, 39 문서 E): 4:3 · 본문 1장 + 유첨 4장 (templates/report-template.pptx와 같은 칸)
     // 옮기는 규칙 server/reportToTemplate.js · 그리는 것 scripts/report-template.mjs(보고서팀). 못 채운 칸은 X-Report-Notes 머리글로 알림
+    // 보고서 주제어가 든 모은 기사의 날짜별 수 (11/17): 앱 미리보기 「기사 수 추이」 — 담당자 양식 PPT와 같은 계산(reportToTemplate.js)
+    if (req.method === 'POST' && req.url === '/api/topic-trend') {
+      const { terms = [], createdAt } = await readJson(req)
+      const topics = (Array.isArray(terms) ? terms : []).map((t) => String(t ?? '').trim().slice(0, 50)).filter(Boolean).slice(0, 3)
+      if (!dbEnabled() || !topics.length) return send(res, 200, { items: [] })
+      const { topicTrendItems } = await import('./reportToTemplate.js')
+      const at = Number.isFinite(Date.parse(createdAt)) ? createdAt : new Date().toISOString()
+      return send(res, 200, { items: await topicTrendItems({ createdAt: at, report: { sources: { topics } } }, query) })
+    }
     if (req.method === 'GET' && req.url.startsWith('/api/reports/pptx?')) {
       const id = new URL(req.url, 'http://x').searchParams.get('id')
       const list = dbEnabled() ? await listReports(1000, { ip: clientIp(req) }) : []
