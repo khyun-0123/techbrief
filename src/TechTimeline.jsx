@@ -3,7 +3,7 @@
 // 대시보드 「키워드 분석」에서 열면 이미 돌고 있는 정리(job, storyJobs.js)를 이어서 보여 준다 (11/11: 정리 중인데 버튼이 안 누른 상태로 보였음)
 // 그래프는 단위가 서로 달라 따로 그린다 (한 축에 겹치지 않음). 네이버 검색 관심도는 약관상 그래프로만 (AI에 넣지 않음)
 import { useEffect, useState } from 'react'
-import { fetchTimeline, fetchTimelineStory } from './api.js'
+import { fetchTimeline, fetchTimelineNews, fetchTimelineStory } from './api.js'
 import { retryStory, useStory } from './storyJobs.js'
 import { Spark } from './KeywordTrends.jsx'
 
@@ -33,6 +33,16 @@ function TechTimeline({ query, onClose, initialData = null, job: givenJob = null
   const [own, setOwn] = useState(null) // 이 창에서 「다시 정리」로 새로 받은 값 (있으면 job보다 먼저)
   const [storyState, setStoryState] = useState('idle') // idle · loading · error
   const [storyError, setStoryError] = useState('')
+  const [news, setNews] = useState(null) // 최근 소식 (11/17 P8) — 시계열과 따로 받아 늦어도 위 그래프를 막지 않는다
+  useEffect(() => {
+    let alive = true
+    fetchTimelineNews(query)
+      .then((d) => alive && setNews(d))
+      .catch(() => alive && setNews({ items: [], total: 0 }))
+    return () => {
+      alive = false
+    }
+  }, [query])
 
   useEffect(() => {
     if (initialData) return undefined
@@ -206,6 +216,35 @@ function TechTimeline({ query, onClose, initialData = null, job: givenJob = null
                   </span>
                 ))}
               </p>
+            )}
+
+            {/* 최근 소식 (11/17, 37 문서 P8): 시계열은 논문 · 특허로 판정하고, 모은 기사는 「지금 무슨 일이」를 보여 주기만 (판정 · AI 정리에는 안 넣음) */}
+            {news?.items?.length > 0 && (
+              <section className="tl-news">
+                <h4>
+                  최근 소식 <span className="muted">모은 자료 {news.days}일 · {news.total}개 이슈 중 중요도 순</span>
+                </h4>
+                <ul>
+                  {news.items.map((n) => (
+                    <li key={n.id}>
+                      <span className={n.high ? 'tl-news-score is-high' : 'tl-news-score'} title="자료 현황과 같은 중요도">
+                        {n.score ?? '-'}
+                      </span>
+                      <span>
+                        <a href={n.url} target="_blank" rel="noreferrer">
+                          {n.title}
+                        </a>
+                        <span className="muted">
+                          {' '}
+                          · {n.source ?? '-'} · {n.publishedAt.slice(5, 10).replace('-', '/')}
+                          {n.feed ? ' · 1·2차 출처' : ''}
+                        </span>
+                        {n.headline && <span className="tl-news-sum">AI 요약: {n.headline}</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             )}
 
             {data.origins.length > 0 && (

@@ -501,6 +501,12 @@ export async function fetchReadyTimelines() {
 }
 
 // 연관 키워드 (대시보드 맵 재료) · 범위 찾기 (11/10)
+// 기술 시계열 「최근 소식」 (11/17 P8): 모은 기사 중 최근 30일 그 말이 든 이슈 (자료 현황과 같은 점수)
+export async function fetchTimelineNews(q) {
+  const res = await fetch(`/api/timeline/news?q=${encodeURIComponent(q)}`)
+  if (!res.ok) throw new Error(`서버 오류 (${res.status})`)
+  return res.json()
+}
 export async function fetchRelated(q) {
   const res = await fetch(`/api/related?q=${encodeURIComponent(q)}`)
   const data = await res.json().catch(() => ({}))
