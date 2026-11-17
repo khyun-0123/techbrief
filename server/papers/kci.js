@@ -29,7 +29,7 @@ export async function searchKci(query, { from = null, to = null, limit = 20, bac
   if (to) u.searchParams.set('dateTo', to.slice(0, 7).replace('-', ''))
   const res = await guardedFetch('kci', u, { signal: AbortSignal.timeout(TIMEOUT_MS) }, { background })
   if (!res.ok) throw new Error(`KCI 응답 ${res.status}`)
-  return parseKci(await res.text())
+  return parseKci(await res.text()).slice(0, limit) // KCI는 10건보다 적게 달라고 해도 10건을 줌 (11/17 실측)
 }
 
 // KCI 응답 XML → 논문 목록 (따로 시험할 수 있게 떼어 둠)

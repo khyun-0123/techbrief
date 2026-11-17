@@ -45,7 +45,9 @@ function pick(scored) {
   const byScore = [...scored].sort((a, b) => b.score - a.score)
   const yearAgo = Date.now() - 365 * 86_400_000
   const recent = byScore.filter((x) => Date.parse(x.w.date) >= yearAgo).slice(0, RECENT_SLOTS)
-  const chosen = new Set(recent)
+  // 국내 논문(KCI, 11/17): 인용 백분위 같은 점수 재료가 없어 점수순으로는 늘 밀림 → 받은 것은 모두 자리를 남긴다 (최대 20편)
+  const domestic = byScore.filter((x) => x.w.provider === 'kci')
+  const chosen = new Set([...domestic, ...recent])
   for (const x of byScore) {
     if (chosen.size >= LIMIT) break
     chosen.add(x)
