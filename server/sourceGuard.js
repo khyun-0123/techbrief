@@ -19,6 +19,7 @@ export const SOURCES = {
   crossref: { label: 'Crossref', daily: null, restMs: null, note: '' },
   semanticscholar: { label: 'Semantic Scholar', daily: null, restMs: null, note: '' },
   arxiv: { label: 'arXiv', daily: null, restMs: null, note: '' },
+  kci: { label: 'KCI 국내 논문', daily: envNum('KCI_DAILY_LIMIT', null), restMs: 30 * 60_000, note: '한도는 공식 페이지에 안 적힘 (공공데이터포털 개발 단계 5,000회 · 23 문서) — 알면 KCI_DAILY_LIMIT' },
   wikipedia: { label: 'Wikipedia', daily: null, restMs: 10 * 60_000, note: '' },
 }
 
