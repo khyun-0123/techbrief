@@ -22,6 +22,14 @@ export function reasonOf(a) {
   return [`${a.importance ?? 0}점`, ...(a.paper ? ['논문'] : a.collected ? ['1·2차 출처'] : []), ...parts].join(' · ')
 }
 
+// 섞인 목록 줄 세우기 (11/17, 37 문서 P7 · 36 문서 1장 「섞인 목록」): 기사(45점 기준)와 논문(60점 기준) 점수를 한 숫자로 비교하지 않는다
+// 「중요」 표시가 붙은 것 먼저, 같은 묶음 안에서는 점수를 각자 「중요」 기준에 맞춰 견줌(논문 60점 = 기사 45점 → 논문 점수 × 0.75)
+// 자동 선별(pickMaterials)과 같은 순서. 찾기 결과 「중요도순」 · 보고서 상위 10건이 쓴다
+const PAPER_RATIO = 45 / 60
+export const isHighOf = (a, high = FALLBACK_HIGH) => (a.importanceLevel ? a.importanceLevel === 'high' : (a.importance ?? 0) >= high)
+export const rankOf = (a) => (a.paperParts ? (a.importance ?? 0) * PAPER_RATIO : (a.importance ?? 0))
+export const byRank = (a, b) => Number(isHighOf(b)) - Number(isHighOf(a)) || rankOf(b) - rankOf(a)
+
 export function pickMaterials(articles, terms = [], opt = AUTO_PICK) {
   // 「중요」 기준은 서버(관리 페이지 「중요도 기준」, 11/15)가 정한 importanceLevel을 따름. 없으면 점수로
   const high = opt.high ?? articles?.find((a) => a.scoreParts?.high != null)?.scoreParts.high ?? FALLBACK_HIGH
@@ -38,7 +46,7 @@ export function pickMaterials(articles, terms = [], opt = AUTO_PICK) {
     if (!cur || byScore(a, cur) < 0) best.set(k, a)
   }
   // 「중요」 표시가 붙은 자료 먼저, 그다음 점수 순 (논문은 「중요」 기준이 60점으로 달라 점수만으로 줄 세우면 50점대 논문이 「중요」 뉴스를 앞섬)
-  const pool = [...best.values()].sort((a, b) => Number(isHigh(b)) - Number(isHigh(a)) || byScore(a, b))
+  const pool = [...best.values()].sort((a, b) => Number(isHigh(b)) - Number(isHigh(a)) || rankOf(b) - rankOf(a) || time(b) - time(a))
   const important = pool.filter(isHigh)
   // 2 · 3. 중요는 모두(최대 max), 모자라면 min까지 채움
   const n = Math.min(max, Math.max(min, important.length), pool.length)
@@ -56,7 +64,7 @@ export function pickMaterials(articles, terms = [], opt = AUTO_PICK) {
       if (idx != null) chosen[idx] = { article: cand, why: 'term', term: t }
     }
   }
-  chosen.sort((x, y) => byScore(x.article, y.article))
+  chosen.sort((x, y) => Number(isHigh(y.article)) - Number(isHigh(x.article)) || rankOf(y.article) - rankOf(x.article) || time(y.article) - time(x.article))
   return { picked: chosen, important: important.length, pool: pool.length, rule: { min, max, high } }
 }
 
