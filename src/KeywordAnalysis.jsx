@@ -607,31 +607,47 @@ function MiniLine({ series }) {
   const pts = series.filter((p) => p.v != null)
   if (pts.length < 2) return null
   const max = Math.max(...pts.map((p) => p.v), 10) // 11/15: 최소 축 10 (적은 수가 급등처럼 안 보이게)
-  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${((i / (pts.length - 1)) * 116 + 2).toFixed(1)},${(30 - (p.v / max) * 26).toFixed(1)}`).join('')
+  const xy = pts.map((p, i) => [(i / (pts.length - 1)) * 232 + 4, 76 - (p.v / max) * 68])
+  const d = xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join('')
+  const [lx, ly] = xy[xy.length - 1]
   return (
-    <svg className="kp-line" viewBox="0 0 120 32" aria-hidden="true">
+    <svg className="kp-line" viewBox="0 0 240 80" aria-hidden="true">
+      <path d={`${d}L${lx.toFixed(1)},78L4,78Z`} className="area" />
       <path d={d} />
+      <circle cx={lx} cy={ly} r={3.5} />
     </svg>
   )
 }
 
-function MiniMap({ names }) {
+// 11/17 조장 (39 문서 C11): 도식을 크게 — 점 옆에 실제 말을 적는다 (예전: 120×36 점만)
+function MiniMap({ names, center }) {
+  // 점 위(위쪽 두 점) · 아래(아래쪽 두 점) 가운데에 말을 적어 양옆이 잘리지 않게
   const spots = [
-    [20, 10],
-    [100, 10],
-    [12, 34],
-    [108, 34],
-    [60, 44],
+    [56, 26, -9],
+    [184, 26, -9],
+    [56, 74, 17],
+    [184, 74, 17],
   ]
+  const short = (t) => (t.length > 8 ? `${t.slice(0, 7)}…` : t)
   return (
-    <svg className="kp-map" viewBox="0 0 120 48" aria-hidden="true">
-      {spots.slice(0, Math.max(3, names.length)).map(([x, y], i) => (
+    <svg className="kp-map" viewBox="0 0 240 100" aria-hidden="true">
+      {spots.slice(0, Math.max(3, Math.min(4, names.length))).map(([x, y, dy], i) => (
         <g key={i}>
-          <line x1={60} y1={24} x2={x} y2={y} />
-          <circle cx={x} cy={y} r={4} className={i % 3 === 2 ? 'firm' : ''} />
+          <line x1={120} y1={50} x2={x} y2={y} />
+          <circle cx={x} cy={y} r={5} className={i % 3 === 2 ? 'firm' : ''} />
+          {names[i] && (
+            <text x={x} y={y + dy} textAnchor="middle">
+              {short(names[i])}
+            </text>
+          )}
         </g>
       ))}
-      <circle cx={60} cy={24} r={7} className="center" />
+      <circle cx={120} cy={50} r={9} className="center" />
+      {center && (
+        <text x={120} y={74} textAnchor="middle" className="center-label">
+          {short(center)}
+        </text>
+      )}
     </svg>
   )
 }
@@ -667,7 +683,7 @@ export function AnalysisPreview({ example, onOpen }) {
       <span className="kp-steps">
         <span className="kp-step">
           <span className="kp-label">① 연관 키워드</span>
-          <MiniMap names={names} />
+          <MiniMap names={[...names, ...firms]} center={example} />
           <span className="kp-text">{[...names.slice(0, 2), ...firms.slice(0, 1)].join(' · ') || '기술 · 회사'}</span>
         </span>
         <span className="kp-step">
