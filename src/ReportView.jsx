@@ -135,6 +135,15 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
             {report.headline.numCheck?.length > 0 && <span className="basis basis-noref">숫자 확인: {report.headline.numCheck.join(', ')}</span>}
           </p>
         )}
+        {/* 한 줄 요약 (11/17, 보고서팀 양식 본문 맨 아래 칸). 근거 번호가 없는 AI 정리라 표시한다. 양식 칸은 50자 — 넘으면 PPT · 미리보기에서 줄여 들어감 */}
+        {report.oneLine && (
+          <p className="report-oneline">
+            <span className="report-slot">한 줄 요약</span>
+            {report.oneLine}
+            <span className="report-ai-chip">AI 정리 · 확인 필요</span>
+            {[...report.oneLine].length > 50 && <span className="basis basis-noref">{[...report.oneLine].length}자 — 양식 칸(50자)에서는 줄여 들어가요</span>}
+          </p>
+        )}
 
         {report.warnings?.length > 0 &&
           (stacked ? (
