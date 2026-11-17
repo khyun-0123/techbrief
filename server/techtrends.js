@@ -132,7 +132,7 @@ async function extractTerms(limit = 400) {
   if (!dbEnabled()) return 0
   const since = state.extractedUntil ?? new Date(Date.now() - 60 * DAY).toISOString()
   const { rows } = await query(
-    `SELECT id, title, published_at, collected_at FROM articles WHERE collected_at > $1 ORDER BY collected_at LIMIT $2`,
+    `SELECT id, title, published_at, collected_at FROM articles WHERE collected_at > $1 AND NOT from_search ORDER BY collected_at LIMIT $2` /* 찾기로 받은 기사는 뺌 (11/17 P2-3) */,
     [since, limit],
   )
   let done = 0
