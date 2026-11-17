@@ -85,7 +85,7 @@ export async function categoryCompetitors(catId) {
 export async function prepareBundle(raw, { refresh = false } = {}) {
   const keyword = String(raw ?? '').trim().slice(0, 50)
   if (!keyword) return null
-  const key = `bundle:v3:${queryKey(keyword)}` // v3 (11/17, 40 문서 R1): 논문 추이 · 관심 대 실질 · 연구 폭 · 떠오르는 세부 주제 · 주요 기업 · 급증 · 신호 점수 // v2 (11/17): 11/15에 「2개국 이상 출원」을 넣고도 v1 그대로라 예전 묶음이 3일 동안 나갔음 (36 문서 2-6)
+  const key = `bundle:v4:${queryKey(keyword)}` // v4 (11/17): 논문 연도별 수를 단계 판정과 같은 값(long)으로. v3 (11/17, 40 문서 R1): 논문 추이 · 관심 대 실질 · 연구 폭 · 떠오르는 세부 주제 · 주요 기업 · 급증 · 신호 점수 // v2 (11/17): 11/15에 「2개국 이상 출원」을 넣고도 v1 그대로라 예전 묶음이 3일 동안 나갔음 (36 문서 2-6)
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return hit
@@ -114,9 +114,9 @@ export async function prepareBundle(raw, { refresh = false } = {}) {
       competitors,
       quotes,
       // ── v3 (11/17): 기술 시계열에서 더 가져오는 것 ──
-      // 논문 연도별 수 · 앞 3년 대비 성장(분야 대비)
-      papers: tl?.corpus?.years?.length
-        ? { years: tl.corpus.years.map(({ y, n }) => ({ y, n })), total: tl.corpus.total ?? null, span: st?.years ?? null, recent: st?.recentPapers ?? null, before: st?.beforePapers ?? null, growth: st?.growth ?? null, relGrowth: st?.relGrowth ?? null }
+      // 논문 연도별 수 · 앞 3년 대비 성장(분야 대비). 연도별 수는 단계 판정이 쓴 값(long, OpenAlex)과 같게 — 11/17 시험에서 디스플레이 논문 모음(corpus) 수를 그려 글(2편)과 그래프(8편)가 달랐음
+      papers: (tl?.long?.length || tl?.corpus?.years?.length)
+        ? { years: (tl.long?.length ? tl.long : tl.corpus.years).map(({ y, n }) => ({ y, n })), basis: tl.long?.length ? 'openalex' : 'corpus', total: tl.corpus.total ?? null, span: st?.years ?? null, recent: st?.recentPapers ?? null, before: st?.beforePapers ?? null, growth: st?.growth ?? null, relGrowth: st?.relGrowth ?? null }
         : null,
       // 떠오르는 세부 주제: 최근 논문 키워드 중 앞 시기에 없던 것 · 늘어난 것
       rising: (tl?.corpus?.rising ?? []).slice(0, 5).map((x) => ({ name: x.name, before: x.before, recent: x.recent })),

@@ -149,7 +149,7 @@ function timelineSlide(an, createdAt) {
     lines,
     papers: series(an.papers?.years),
     patents: series(an.patentYears),
-    source: `테크브리프 논문 DB(OpenAlex) · 디스플레이 특허 DB${an.attention || an.surges?.length ? ' · 네이버 검색 관심도' : ''}`,
+    source: `${an.papers?.basis === 'openalex' ? 'OpenAlex 논문 수(단계 판정과 같은 값)' : '테크브리프 논문 DB'} · 디스플레이 특허 DB${an.attention || an.surges?.length ? ' · 네이버 검색 관심도' : ''}`,
     as_of: `${last}년까지${an.at ? ` · 분석 ${ymd(an.at)}` : ''}`,
     note: '숫자는 규칙으로 센 값 (AI가 만든 숫자 아님) · 판단 기준은 33 문서',
   }
@@ -157,7 +157,8 @@ function timelineSlide(an, createdAt) {
 
 // 할 일 「무엇을 — 시점」: 앱 보고서는 시점을 「— 단기」처럼 글 끝에 붙여 씀 → 양식의 priority_or_due 칸으로 가른다
 function splitAction(text) {
-  const m = String(text ?? '').match(/^(.*?)\s*[—–-]\s*([^—–-]{1,14})$/)
+  // 「… — 단기」 또는 「… (즉시)」 (11/17 새 보고서: 괄호로 씀)
+  const m = String(text ?? '').match(/^(.*?)\s*[—–-]\s*([^—–-]{1,14})$/) ?? String(text ?? '').match(/^(.*?)\s*\(([^()]{1,14})\)$/)
   const what = (m ? m[1] : text).replace(/\s*필요함?$/, ' 필요')
   return { what: cut(what, 28), priority_or_due: m ? m[2].trim() : '' }
 }

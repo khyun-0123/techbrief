@@ -600,31 +600,8 @@ export function reportPages(saved, extra = {}) {
   if (!brief?.fromMain) sectionPage('implications', '유첨', '시사점 및 제언')
 
   // ════ 유첨 2 분석 자료 (11/14 통합): 대시보드 분석 묶음의 규칙 숫자를 그래프로 — 35 문서 R3 · R6 · R9 ════
-  for (const an of (report.analysis ?? []).filter((x) => x && (x.patentYears?.length || x.competitors || x.stage || x.papers))) {
-    const els = []
-    chrome(els, meta, `${meta.title}  |  유첨 2. 분석 자료`)
-    let y = pageTitle(els, `분석 자료 · ${an.keyword}`)
-    const leftW = 4.3
-    const blocks = []
-    if (an.stage?.stage) blocks.push({ head: '기술 단계 (규칙 판정)' }, { runs: [{ text: `[${an.stage.stage}] `, bold: true, color: COLOR.accent }, { text: an.stage.why ?? '' }] })
-    if (an.stage?.thin) blocks.push({ runs: [{ text: '논문이 적어 참고용', color: COLOR.sub }] })
-    const cv = an.competitors
-    if (cv?.verdict) blocks.push({ head: '자사 판정 (세부 기술 × 경쟁사 특허)' }, { runs: [{ text: `[${cv.verdict}] `, bold: true, color: COLOR.accent }, { text: `${cv.name} — ${cv.years}` }] })
-    if (an.owners?.length) blocks.push({ head: '특허 출원인 상위' }, { runs: [{ text: an.owners.slice(0, 5).map((o) => `${o.word} ${o.count ?? ''}건`.trim()).join(' · ') }] })
-    // v3 묶음 (11/17, 40 문서 R4): 기술 시계열에서 더 가져온 것 — 예전 보고서에는 없음
-    const up = (an.rising ?? []).filter((x) => x.recent >= 2)
-    if (up.length) blocks.push({ head: '최근 논문에서 늘어난 세부 주제' }, { runs: [{ text: up.slice(0, 4).map((x) => `${x.name} ${x.before}→${x.recent}편`).join(' · ') }] })
-    if (an.makers?.length) blocks.push({ runs: [{ text: '최근 논문 주요 기업: ', bold: true }, { text: an.makers.slice(0, 4).join(' · ') }] })
-    const br = an.breadth
-    if (br?.institutions) blocks.push({ head: `연구 폭 (${br.years})` }, { runs: [{ text: `논문 낸 기관 ${br.institutions}곳${br.companyShare != null ? ` · 기업 저자 ${Math.round(br.companyShare * 100)}%` : ''}${br.fwci != null ? ` · FWCI ${br.fwci}(참고)` : ''}` }] })
-    if (an.attention?.label) blocks.push({ head: '관심 대 실질' }, { runs: [{ text: an.attention.label, bold: true }, { text: ` — ${an.attention.basis}`, color: COLOR.sub }] })
-    if (an.surges?.length) blocks.push({ runs: [{ text: '예상 밖 급증 (TimesFM): ', bold: true }, { text: an.surges.map((x) => `${x.t} 예상 최대 ${x.hi} → ${x.v}`).join(' · ') }] })
-    if (an.signal?.score != null) blocks.push({ runs: [{ text: '요즘 뜨는 기술 신호: ', bold: true }, { text: `${an.signal.score}점 · ${an.signal.grade}${an.signal.stage ? ` · ${an.signal.stage}` : ''}` }] })
-    if (an.quotes?.length) {
-      blocks.push({ head: '상용화 시점 언급 (원문 인용)' })
-      for (const q of an.quotes.slice(0, 3)) blocks.push({ runs: [{ text: `「${String(q.text ?? '').slice(0, 90)}」`, color: COLOR.ink }, { text: ` — ${q.source ?? ''}`, color: COLOR.sub }] })
-    }
-    blocks.push({ runs: [{ text: `숫자는 테크브리프 특허 · 논문 DB에서 규칙으로 센 값 (AI가 만든 숫자 아님)${an.attention || an.surges?.length ? ' · 관심도 · 급증은 네이버 검색 관심도' : ''}${an.at ? ` · 분석 ${String(an.at).slice(0, 10)}` : ''}`, color: COLOR.sub }] })
+  // 11/17 (40 문서 R4): 기술 시계열 재료(v3 묶음)는 다음 장 「기술 시계열」로 — 한 장에 그래프 3개를 넣으니 축 · 글이 겹쳤음
+  const drawBlocks = (els, y, leftW, blocks) => {
     for (const b of blocks) {
       const h = b.head ? LH(SIZE.sub) + 0.08 : bulletHeight(leftW, runsText(b.runs)) + 0.05
       if (y + h > BOTTOM) break
@@ -633,21 +610,96 @@ export function reportPages(saved, extra = {}) {
         y += LH(SIZE.sub) + 0.08
       } else y += bulletLine(els, M, y, leftW, b.runs) + 0.05
     }
+  }
+  // 연도별 수: 0인 해는 빠져 오므로 0으로 채우고 끝난 해까지 최근 12개
+  const fillYears = (list, last) => {
+    const have = new Map((list ?? []).filter((p) => p.y <= last).map((p) => [p.y, p.n]))
+    if (!have.size) return []
+    const from = Math.min(...have.keys())
+    return Array.from({ length: last - from + 1 }, (_, i) => ({ y: from + i, n: have.get(from + i) ?? 0 })).slice(-12)
+  }
+  for (const an of (report.analysis ?? []).filter((x) => x && (x.patentYears?.length || x.competitors || x.stage || x.papers))) {
+    const last = new Date(saved.createdAt ?? Date.now()).getFullYear() - 1
+    const leftW = 4.3
     const cx = M + leftW + 0.25
     const cw = CW - leftW - 0.25
-    const last = new Date(saved.createdAt ?? Date.now()).getFullYear() - 1
-    const py = (an.patentYears ?? []).filter((p) => p.y <= last).slice(-12)
-    const patKind = chooseChart('trend', py.length)
-    // 논문 연도별 수가 있으면 맨 위에 하나 더 (세 그래프가 칸을 나눠 씀)
-    // 편수 0인 해는 빠져 오므로 0으로 채운다
-    const papHave = new Map((an.papers?.years ?? []).filter((p) => p.y <= last).map((p) => [p.y, p.n]))
-    const papFrom = papHave.size ? Math.min(...papHave.keys()) : last + 1
-    const papY = Array.from({ length: Math.max(0, last - papFrom + 1) }, (_, i) => ({ y: papFrom + i, n: papHave.get(papFrom + i) ?? 0 })).slice(-12)
-    const slots = papY.length >= 2 ? [1.2, 3.15, 5.1] : [null, 1.2, 4.1]
-    const slotH = papY.length >= 2 ? 1.85 : 2.75
-    if (papY.length >= 2) {
+    const cv = an.competitors
+    {
+      const els = []
+      chrome(els, meta, `${meta.title}  |  유첨 2. 분석 자료`)
+      const y = pageTitle(els, `분석 자료 · ${an.keyword}`)
+      const blocks = []
+      if (an.stage?.stage) blocks.push({ head: '기술 단계 (규칙 판정)' }, { runs: [{ text: `[${an.stage.stage}] `, bold: true, color: COLOR.accent }, { text: an.stage.why ?? '' }] })
+      if (an.stage?.thin) blocks.push({ runs: [{ text: '논문이 적어 참고용', color: COLOR.sub }] })
+      if (cv?.verdict) blocks.push({ head: '자사 판정 (세부 기술 × 경쟁사 특허)' }, { runs: [{ text: `[${cv.verdict}] `, bold: true, color: COLOR.accent }, { text: `${cv.name} — ${cv.years}` }] })
+      if (an.owners?.length) blocks.push({ head: '특허 출원인 상위' }, { runs: [{ text: an.owners.slice(0, 5).map((o) => `${o.word} ${o.count ?? ''}건`.trim()).join(' · ') }] })
+      if (an.quotes?.length) {
+        blocks.push({ head: '상용화 시점 언급 (원문 인용)' })
+        for (const q of an.quotes.slice(0, 3)) blocks.push({ runs: [{ text: `「${String(q.text ?? '').slice(0, 90)}」`, color: COLOR.ink }, { text: ` — ${q.source ?? ''}`, color: COLOR.sub }] })
+      }
+      blocks.push({ runs: [{ text: '숫자는 테크브리프 특허 · 논문 DB에서 규칙으로 센 값 (AI가 만든 숫자 아님)', color: COLOR.sub }] })
+      drawBlocks(els, y, leftW, blocks)
+      const py = fillYears(an.patentYears, last)
+      const patKind = chooseChart('trend', py.length)
+      chartBox(els, cx, 1.2, cw, 2.75, {
+        title: `「${an.keyword}」 특허 공개 수 (연도별)`,
+        kind: patKind,
+        labels: py.map((p) => String(p.y)),
+        values: py.map((p) => p.n),
+        xTitle: '연도',
+        yTitle: '특허 수 (건)',
+        unit: '건',
+        empty: '특허 자료 없음',
+        reason: `연도에 따른 변화(추이)라 ${CHART_NAME[patKind]}`,
+        source: '테크브리프 디스플레이 특허 DB (같은 발명은 한 번 · 첫 공개 연도)',
+        asOf: `${last}년까지`,
+      })
+      const comp = cv ? [{ name: '분야 전체', ratio: cv.field?.ratio }, ...(cv.companies ?? []).filter((c) => !c.unsure)].filter((c) => c.ratio != null) : []
+      const compKind = chooseChart('rank', comp.length)
+      chartBox(els, cx, 4.1, cw, BOTTOM - 4.1, {
+        title: cv ? `${cv.name} 특허 증가 배수 (회사별)` : '경쟁사 특허 증가 배수',
+        kind: compKind,
+        labels: comp.map((c) => (c.own ? `${c.name} (자사)` : c.name)),
+        values: comp.map((c) => c.ratio),
+        xTitle: '회사',
+        yTitle: '앞 3년 대비 (배)',
+        unit: '배',
+        empty: '경쟁사 특허 자료 없음',
+        reason: `회사별 값을 나란히 비교하므로 ${CHART_NAME[compKind]}`,
+        source: '테크브리프 디스플레이 특허 DB · 세부 기술 CPC',
+        asOf: cv?.years ?? '-',
+      })
+      pages.push({ kind: 'analysis', label: `유첨 2 분석 자료 · ${an.keyword}`, els })
+    }
+
+    // 기술 시계열 (v3 묶음이 있는 보고서만): 논문 추이 · 늘어난 세부 주제 · 연구 폭 · 관심 대 실질 · 급증 · 신호 — 담당자 양식 PPT 유첨 5와 같은 내용
+    const papY = fillYears(an.papers?.years, last)
+    const pp = an.papers
+    const up = (an.rising ?? []).filter((x) => x.recent >= 2)
+    const br = an.breadth
+    if (papY.length >= 2 || up.length || br?.institutions || an.attention || an.signal) {
+      const els = []
+      chrome(els, meta, `${meta.title}  |  유첨 2. 기술 시계열`)
+      const y = pageTitle(els, `기술 시계열 · ${an.keyword}`)
+      const blocks = []
+      if (pp?.recent != null) {
+        const span = String(pp.span ?? '').split(' 대 ')[0] || '최근 3년'
+        blocks.push({ head: '논문 추이' }, { runs: [{ text: `${span} ${pp.recent}편` }, ...(pp.recent >= 10 && pp.growth != null ? [{ text: ` · 앞 3년의 ${pp.growth}배${pp.relGrowth != null ? ` (분야 전체보다 ${pp.relGrowth}배)` : ''}`, bold: true }] : [{ text: ` (앞 3년 ${pp.before ?? '-'}편 — 편수가 적어 배수는 쓰지 않음)`, color: COLOR.sub }])] })
+      }
+      if (up.length) {
+        blocks.push({ head: '최근 논문에서 늘어난 세부 주제' })
+        for (const x of up.slice(0, 4)) blocks.push({ runs: [{ text: `${x.name} ` }, { text: `${x.before}→${x.recent}편`, bold: true }] })
+        if (an.makers?.length) blocks.push({ runs: [{ text: '주요 기업: ', bold: true }, { text: an.makers.slice(0, 4).join(' · ') }] })
+      }
+      if (br?.institutions) blocks.push({ head: `연구 폭 (${br.years})` }, { runs: [{ text: `논문 낸 기관 ${br.institutions}곳${br.companyShare != null ? ` · 기업 저자 ${Math.round(br.companyShare * 100)}%` : ''}${br.fwci != null ? ` · FWCI ${br.fwci}(참고)` : ''}` }] })
+      if (an.attention?.label || an.surges?.length || an.signal?.score != null) blocks.push({ head: '관심 신호 (네이버 검색 관심도 · AI 입력 안 함)' })
+      if (an.attention?.label) blocks.push({ runs: [{ text: an.attention.label, bold: true }, { text: ` — ${an.attention.basis}`, color: COLOR.sub }] })
+      for (const x of an.surges ?? []) blocks.push({ runs: [{ text: `예상 밖 급증 ${x.t}: `, bold: true }, { text: `예상 최대 ${x.hi} → 실제 ${x.v}` }] })
+      if (an.signal?.score != null) blocks.push({ runs: [{ text: '요즘 뜨는 기술 신호: ', bold: true }, { text: `${an.signal.score}점 · ${an.signal.grade}${an.signal.stage ? ` · ${an.signal.stage}` : ''}` }] })
+      blocks.push({ runs: [{ text: `규칙으로 센 값 (AI가 만든 숫자 아님)${an.at ? ` · 분석 ${String(an.at).slice(0, 10)}` : ''} · 판단 기준 33 문서`, color: COLOR.sub }] })
+      drawBlocks(els, y, leftW, blocks)
       const papKind = chooseChart('trend', papY.length)
-      chartBox(els, cx, slots[0], cw, slotH, {
+      chartBox(els, cx, 1.2, cw, BOTTOM - 1.2, {
         title: `「${an.keyword}」 논문 수 (연도별)`,
         kind: papKind,
         labels: papY.map((p) => String(p.y)),
@@ -657,39 +709,11 @@ export function reportPages(saved, extra = {}) {
         unit: '편',
         empty: '논문 자료 없음',
         reason: `연도에 따른 변화(추이)라 ${CHART_NAME[papKind]}`,
-        source: `테크브리프 논문 DB (OpenAlex)${an.papers.relGrowth && an.papers.recent >= 10 ? ` · 앞 3년 대비 ${an.papers.growth}배, 분야 대비 ${an.papers.relGrowth}배` : ''}`,
+        source: an.papers?.basis === 'openalex' ? 'OpenAlex 논문 수 (기술 단계 판정과 같은 값)' : '테크브리프 논문 DB (디스플레이 논문)',
         asOf: `${last}년까지`,
       })
+      pages.push({ kind: 'analysis', label: `유첨 2 기술 시계열 · ${an.keyword}`, els })
     }
-    chartBox(els, cx, slots[1], cw, slotH, {
-      title: `「${an.keyword}」 특허 공개 수 (연도별)`,
-      kind: patKind,
-      labels: py.map((p) => String(p.y)),
-      values: py.map((p) => p.n),
-      xTitle: '연도',
-      yTitle: '특허 수 (건)',
-      unit: '건',
-      empty: '특허 자료 없음',
-      reason: `연도에 따른 변화(추이)라 ${CHART_NAME[patKind]}`,
-      source: '테크브리프 디스플레이 특허 DB (같은 발명은 한 번 · 첫 공개 연도)',
-      asOf: `${last}년까지`,
-    })
-    const comp = cv ? [{ name: '분야 전체', ratio: cv.field?.ratio }, ...(cv.companies ?? []).filter((c) => !c.unsure)].filter((c) => c.ratio != null) : []
-    const compKind = chooseChart('rank', comp.length)
-    chartBox(els, cx, slots[2], cw, BOTTOM - slots[2], {
-      title: cv ? `${cv.name} 특허 증가 배수 (회사별)` : '경쟁사 특허 증가 배수',
-      kind: compKind,
-      labels: comp.map((c) => (c.own ? `${c.name} (자사)` : c.name)),
-      values: comp.map((c) => c.ratio),
-      xTitle: '회사',
-      yTitle: '앞 3년 대비 (배)',
-      unit: '배',
-      empty: '경쟁사 특허 자료 없음',
-      reason: `회사별 값을 나란히 비교하므로 ${CHART_NAME[compKind]}`,
-      source: '테크브리프 디스플레이 특허 DB · 세부 기술 CPC',
-      asOf: cv?.years ?? '-',
-    })
-    pages.push({ kind: 'analysis', label: `유첨 2 분석 자료 · ${an.keyword}`, els })
   }
 
   // ════ 5쪽 근거 기사 (부록) ════

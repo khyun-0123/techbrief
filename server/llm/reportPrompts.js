@@ -35,20 +35,22 @@ const bullets = {
   required: ['bullets'],
 }
 
+// 칸 순서 = AI가 쓰는 순서. 11/17: 원문 본문을 붙이면 gemma4가 "headline": 뒤에서 빈칸만 끝없이 써 240초 시간 초과(3번 연속, 40 문서 3장)
+// → 섹션(사실)을 먼저 쓰고 헤드라인(결론)을 뒤에 쓰게 바꿈. 같은 입력 2번 모두 40초 안에 정상. 저장 형식은 같음
 export const REPORT_SCHEMA = {
   type: 'object',
   properties: {
     title: { type: 'string' },
-    // ① 헤드라인: 결론 핵심 문장 하나 (담당자 회신 11/10)
-    headline: {
-      type: 'object',
-      properties: { text: { type: 'string' }, refs: { type: 'array', items: { type: 'integer' } }, kind: { type: 'string', enum: ['fact', 'ai'] } },
-      required: ['text', 'refs', 'kind'],
-    },
     sections: {
       type: 'object',
       properties: Object.fromEntries(SECTION_KEYS.map((k) => [k, bullets])),
       required: SECTION_KEYS,
+    },
+    // ① 헤드라인: 결론 핵심 문장 하나 (담당자 회신 11/10) — 섹션을 쓴 뒤에 쓴다
+    headline: {
+      type: 'object',
+      properties: { text: { type: 'string' }, refs: { type: 'array', items: { type: 'integer' } }, kind: { type: 'string', enum: ['fact', 'ai'] } },
+      required: ['text', 'refs', 'kind'],
     },
     // 한 줄 요약 (11/17, 보고서팀 담당자 양식 summary 칸): 본문 전체를 한 문장으로, 헤드라인과 다른 문장. 예전 보고서에는 없음
     oneLine: { type: 'string' },
