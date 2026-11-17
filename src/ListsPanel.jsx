@@ -5,6 +5,8 @@ import { useState } from 'react'
 const GROUPS = [
   ['own', '자사·자회사', '「자사·자회사 자료 제외」에 쓰여요', '예: LG디스플레이'],
   ['competitors', '경쟁사', '중요도의 경쟁사 언급에 쓰여요', '예: 삼성디스플레이'],
+  // 11/17 R10: 점수에는 안 들어감. 특허 출원인으로 세려면 server/suppliers.js 사전에 있는 이름이어야 함
+  ['suppliers', '소부장 기업', '키워드 분석의 특허 출원인 · 자료의 「소부장 언급」 표시에 쓰여요 (중요도 점수에는 안 들어가요)', '예: 덕산네오룩스'],
 ]
 
 // onChange가 없으면 보기만
@@ -56,7 +58,7 @@ function ListsPanel({ lists }) {
   return (
     <details className="lists-panel">
       <summary>
-        회사 <span className="list-count">자사 {lists.own.length} · 경쟁사 {lists.competitors.length}</span>
+        회사 <span className="list-count">자사 {lists.own.length} · 경쟁사 {lists.competitors.length}{lists.suppliers ? ` · 소부장 ${lists.suppliers.length}` : ''}</span>
       </summary>
       {GROUPS.map(([key, label, hint, placeholder]) => (
         <ChipList
@@ -65,7 +67,7 @@ function ListsPanel({ lists }) {
           label={label}
           hint={hint}
           placeholder={placeholder}
-          words={lists[key]}
+          words={lists[key] ?? []}
         />
       ))}
       <p className="hint">팀이 같이 쓰는 목록이라 관리자가 정해요.</p>
@@ -82,7 +84,7 @@ export function ListsEditor({ lists, onSave }) {
       label={label}
       hint={hint}
       placeholder={placeholder}
-      words={lists[key]}
+      words={lists[key] ?? []}
       onChange={(next) => onSave({ ...lists, [key]: next })}
     />
   ))

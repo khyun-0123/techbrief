@@ -1,5 +1,6 @@
 // 자사·자회사, 경쟁사, 관심 기술 목록 (13 문서 F6). 사용자가 화면에서 고치고 팀이 같이 쓴다 (DB app_settings)
 import { getKeywords, getSetting, setSetting } from '../db/store.js'
+import { DEFAULT_SUPPLIERS } from '../suppliers.js'
 
 const KEY = 'org_lists'
 const MAX = 40
@@ -10,6 +11,8 @@ export const DEFAULT_LISTS = {
   own: ['LG디스플레이', 'LGD', '엘지디스플레이', 'LG Display'],
   competitors: (process.env.COMPETITORS ?? '삼성디스플레이,BOE,CSOT,티엔마,샤프,JDI').split(','),
   interests: [],
+  // 소부장 기업 (11/17 R10, server/suppliers.js): 특허 출원인 · 기사 언급 표시. 중요도 점수에는 안 씀
+  suppliers: DEFAULT_SUPPLIERS,
 }
 
 function cleanList(list) {
@@ -22,6 +25,7 @@ function normalize(input = {}) {
     own: cleanList(input.own ?? DEFAULT_LISTS.own),
     competitors: cleanList(input.competitors ?? DEFAULT_LISTS.competitors),
     interests: cleanList(input.interests ?? DEFAULT_LISTS.interests),
+    suppliers: cleanList(input.suppliers ?? DEFAULT_LISTS.suppliers),
   }
 }
 

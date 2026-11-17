@@ -29,6 +29,13 @@ export function buildTagDict(groups) {
   return [...seen.values()].sort((a, b) => b.key.length - a.key.length)
 }
 
+// 사전의 말 중 글에 처음 나오는 것 (영문 · 숫자 말은 앞뒤 경계 — 「3M」이 「3mm」에 안 걸리게). 소부장 언급 표시 (11/17 R10)
+export function mentionOf(text, dict) {
+  const raw = String(text ?? '').toLowerCase()
+  const flat = norm(raw)
+  return dict.find((d) => (d.re ? d.re.test(raw) : flat.includes(d.key)))?.term ?? null
+}
+
 // 기사 하나의 핵심어 (전부). 화면은 앞 몇 개만 보여 준다
 export function tagsOf(article, summary, dict) {
   const raw = `${article.title ?? ''} ${article.description ?? ''} ${summary?.headline ?? ''}`.toLowerCase()
