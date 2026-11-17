@@ -293,10 +293,13 @@ async function buildReportEntry(body) {
     if (bad.length) b.numCheck = bad
   }
   // ④ 출처: AI가 아니라 서버가 센다 (담당자 회신: 수집 기간과 기사 수)
-  const dates = picked.map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite).sort((a, b) => a - b)
+  // 수집 기간은 기사 날짜만, 논문은 연도 범위를 따로 (11/17, 40 문서 R8)
+  const dates = picked.filter((a) => !a.paper).map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite).sort((a, b) => a - b)
+  const paperYears = picked.filter((a) => a.paper).map((a) => new Date(a.publishedAt).getFullYear()).filter(Number.isFinite).sort((a, b) => a - b)
   const day = (t) => new Date(t + 9 * 3600_000).toISOString().slice(0, 10)
   const sources = {
     period: dates.length ? `${day(dates[0])} ~ ${day(dates[dates.length - 1])}` : null,
+    ...(paperYears.length ? { papers: paperYears[0] === paperYears.at(-1) ? `${paperYears[0]}` : `${paperYears[0]}~${paperYears.at(-1)}` } : {}),
     articles: picked.length,
     analysis: facts.length ? [...new Set(facts.map((f) => f.source))] : [],
     topics,
@@ -307,7 +310,7 @@ async function buildReportEntry(body) {
     id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
     articleKey: articles.map((a) => String(a.id ?? '')).sort().join('|'),
     // analysis: 유첨 그래프용 분석 묶음 (규칙 숫자, 화면 전용 — report와 함께 저장돼 다시 열어도 보인다)
-    report: { title, direction, headline, ...(typeof data.oneLine === 'string' && data.oneLine.trim() ? { oneLine: data.oneLine.trim().slice(0, 80) } : {}), sections, sources, analysis: bundles.map((b) => ({ keyword: b.keyword, stage: b.stage, patentYears: b.patentYears, competitors: b.competitors, owners: b.owners, quotes: b.quotes })), warnings: [...reportWarnings(sections), ...(headline?.numCheck?.length ? [`헤드라인 숫자가 근거와 달라요 (${headline.numCheck.join(', ')}) — 확인하세요`] : []), ...(headline && !headline.refs.length ? ['헤드라인에 근거 번호가 없어요 — AI 해설로 보고 확인하세요'] : []), ...(data.warnings ?? [])] },
+    report: { title, direction, headline, ...(typeof data.oneLine === 'string' && data.oneLine.trim() ? { oneLine: data.oneLine.trim().slice(0, 80) } : {}), sections, sources, analysis: bundles.map((b) => ({ keyword: b.keyword, at: b.at, stage: b.stage, patentYears: b.patentYears, competitors: b.competitors, owners: b.owners, quotes: b.quotes, papers: b.papers, rising: b.rising, makers: b.makers, breadth: b.breadth, attention: b.attention, surges: b.surges, signal: b.signal })), warnings: [...reportWarnings(sections), ...(headline?.numCheck?.length ? [`헤드라인 숫자가 근거와 달라요 (${headline.numCheck.join(', ')}) — 확인하세요`] : []), ...(headline && !headline.refs.length ? ['헤드라인에 근거 번호가 없어요 — AI 해설로 보고 확인하세요'] : []), ...(data.warnings ?? [])] },
     model,
     createdAt,
     periodLabel: body.periodLabel ?? '오늘',
@@ -872,6 +875,17 @@ async function handleApiInner(req, res) {
       if (!entry) return send(res, 404, { error: '보고서를 찾지 못했어요.' })
       const { reportToTemplate, topicTrendItems } = await import('./reportToTemplate.js')
       const { renderPptx } = await import('../scripts/report-template.mjs')
+      // 예전 보고서(11/17 전)는 분석 묶음에 논문 추이 · 연구 폭 등이 없음 → 지금 묶음(3일 기억)으로 채우고 「분석 기준일」을 그 묶음 날짜로 (40 문서 R6)
+      const r0 = entry.report ?? {}
+      const kws = (r0.analysis?.length ? r0.analysis.map((a) => a.keyword) : (r0.sources?.topics ?? [])).filter(Boolean).slice(0, 2)
+      const fresh = await Promise.all(kws.map((k) => Promise.race([prepareBundle(k).catch(() => null), new Promise((ok) => setTimeout(() => ok(null), 15_000))])))
+      const analysis = kws.map((k, i) => {
+        const old = r0.analysis?.find((a) => a.keyword === k)
+        const b = fresh[i]
+        if (old?.papers || !b) return old
+        return { ...(old ?? {}), keyword: k, at: b.at, stage: old?.stage ?? b.stage, patentYears: old?.patentYears?.length ? old.patentYears : b.patentYears, competitors: old?.competitors ?? b.competitors, owners: old?.owners ?? b.owners, quotes: old?.quotes ?? b.quotes, papers: b.papers, rising: b.rising, makers: b.makers, breadth: b.breadth, attention: b.attention, surges: b.surges, signal: b.signal }
+      }).filter(Boolean)
+      if (analysis.length) entry.report = { ...r0, analysis }
       // 추이 그래프: 보고서 주제어가 든 모은 기사 수 → 없으면 맞는 수집 키워드 (11/17)
       const [topicItems, trendItems] = await Promise.all([topicTrendItems(entry, query).catch(() => []), getTrends().then((t) => t.items).catch(() => [])])
       const data = reportToTemplate(entry, { topicItems, trendItems })

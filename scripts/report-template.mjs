@@ -46,6 +46,7 @@ const COL_X = [M, M + CELL_W + GAP]
 const IN_W = CELL_W - 2 * PAD
 const ROWS_SRC = 20 // 유첨 3 표 줄 수 (한 장)
 const ROWS_SUM = 11 // 유첨 4 표 줄 수 (한 장)
+const T5 = { textW: 4.2 } // 유첨 5 왼쪽 글 칸 폭
 
 const base = { fontFace: FONT.latin, color: C.ink, margin: 0, valign: 'top', paraSpaceBefore: 0, paraSpaceAfter: 0, isTextBox: true }
 const ph = (name, pos, size, prompt, opts = {}) => ({
@@ -111,6 +112,11 @@ function defineLayouts(pres) {
   ])
   appendix('유첨 3', '유첨 3. 출처 목록', [ph('omitted', { x: M, y: L.foot - 0.32, w: CW, h: LH(SIZE.note) }, SIZE.note, '외 N건 (한 장을 넘어 생략 · 본문에 쓴 번호는 모두 실음)', { color: C.sub })])
   appendix('유첨 4', '유첨 4. 기사 원문 요약', [ph('omitted', { x: M, y: L.foot - 0.32, w: CW, h: LH(SIZE.note) }, SIZE.note, '외 N건 (한 장을 넘어 생략 · 본문에 쓴 번호는 모두 실음)', { color: C.sub })])
+  // 유첨 5 기술 시계열 (11/17, 40 문서 R5 — 양식 확장): 왼쪽 판정 글, 오른쪽 논문 · 특허 연도별 그래프
+  appendix('유첨 5', '유첨 5. 기술 시계열', [
+    ph('timeline_text', { x: M, y: top, w: T5.textW, h: L.foot - 0.1 - top }, SIZE.note, '기술 단계 [성장 · 상용화 진입 등] — 판정 이유\n관심 대 실질 · 연구 폭 · 떠오르는 세부 주제 · 예상 밖 급증 · 요즘 뜨는 기술 신호\n※ 규칙으로 센 숫자 (AI가 만든 숫자 아님)'),
+    ph('timeline_caption', { x: M + T5.textW + 0.25, y: L.foot - 0.1 - 2 * LH(SIZE.note), w: CW - T5.textW - 0.25, h: 2 * LH(SIZE.note) }, SIZE.note, '출처: 테크브리프 논문 DB(OpenAlex) · 디스플레이 특허 DB | 끝난 해까지\n그래프: 꺾은선(구간 12개 넘음) · 세로막대 — 연도에 따른 추이', { color: C.sub }),
+  ])
   const chartW = (CW - 0.25) / 2
   appendix('유첨 2', '유첨 2. 트렌드 그래프', [
     ph('caption_trend', { x: M + 0.15, y: L.foot - 0.12 - 3 * LH(SIZE.note) - 0.1, w: chartW - 0.3, h: 3 * LH(SIZE.note) }, SIZE.note, '데이터 기간: … | 단위: 건\n출처: …\n그래프: 세로막대(구간 12개 이하) · 꺾은선(넘으면)', { color: C.sub }),
@@ -315,6 +321,40 @@ export function build(data) {
   s4.addTable([head(['번호', '제목', '요약 (1~2줄)']), ...sumRows], tableOpts([0.5, 3.1, 5.4], [0.27, ...Array(ROWS_SUM).fill(0.45)]))
   put(s4, 'omitted', sumPick.omitted ? `외 ${sumPick.omitted}건 (한 장을 넘어 생략 · 본문에 쓴 번호는 모두 실음)` : '')
   s4.addNotes(`유첨 4. appendix.summaries를 표에 붙여 넣는다 (번호 | 제목 | 요약 1~2줄). 발췌문 · 초록으로 만든 요약은 앞에 「발췌문 기준」 · 「초록 기준」. 표는 ${ROWS_SUM}줄 고정 — 넘치면 「외 N건」.`)
+
+  // ════ 유첨 5. 기술 시계열 (키워드마다 한 장, 최대 2장 · 빈 양식은 틀 한 장) ════
+  const tls = filled ? (data?.appendix?.timeline ?? []).slice(0, 2) : [null]
+  for (const t of tls) {
+    const s6 = pres.addSlide({ masterName: '유첨 5', sectionTitle: '유첨' })
+    const lines = []
+    if (t) {
+      lines.push([{ text: `「${t.keyword}」 기술 단계  `, options: { bold: true } }, { text: `[${t.stage ?? '판정 없음'}]`, options: { bold: true, color: C.accent } }])
+      if (t.why) lines.push(Object.assign([{ text: t.why }], { sub: true }))
+      for (const l of t.lines ?? []) {
+        lines.push([{ text: l.head, options: { bold: true } }])
+        lines.push(Object.assign([{ text: l.text }], { sub: true }))
+      }
+      lines.push([{ text: t.note ?? '규칙으로 센 숫자 (AI가 만든 숫자 아님)', options: { color: C.sub } }])
+    }
+    put(s6, 'timeline_text', lines.length ? bullets(lines, SIZE.note) : '')
+    const rx = M + T5.textW + 0.25
+    const rw = CW - T5.textW - 0.25
+    const capH = 2 * LH(SIZE.note) + 0.1
+    const gh = (L.foot - 0.1 - capH - top - 0.1) / 2
+    const blank = { labels: [' ', '  ', '   ', '    '], values: [0, 0, 0, 0] }
+    for (const [i, [title, series, unit]] of [
+      ['논문 수 (연도별)', t?.papers ?? blank, '논문 수 (편)'],
+      ['특허 수 (연도별 · 같은 발명 한 번)', t?.patents ?? blank, '특허 수 (건)'],
+    ].entries()) {
+      const y = top + i * (gh + 0.1)
+      s6.addShape(pres.ShapeType.roundRect, { x: rx, y, w: rw, h: gh, rectRadius: 0.06, line: { color: C.line, width: 1 }, fill: { color: C.white }, objectName: `그래프 칸 ${title}` })
+      s6.addText(title, { ...base, x: rx + 0.12, y: y + 0.08, w: rw - 0.24, h: LH(SIZE.body), fontSize: SIZE.body, bold: true, objectName: `그래프 제목 ${title}` })
+      if (series.labels?.length >= 2) addBarOrLine(s6, pres, trendKind(series.labels.length), { x: rx + 0.08, y: y + 0.12 + LH(SIZE.body), w: rw - 0.16, h: gh - 0.2 - LH(SIZE.body) }, series.labels, series.values, '연도', unit)
+      else s6.addText('자료 부족 — 그래프 없이 씀', { ...base, x: rx + 0.12, y: y + 0.2 + LH(SIZE.body), w: rw - 0.24, h: LH(SIZE.note), fontSize: SIZE.note, color: C.sub })
+    }
+    put(s6, 'timeline_caption', t ? `출처: ${t.source ?? '테크브리프 논문 DB(OpenAlex) · 디스플레이 특허 DB'} | ${t.as_of ?? ''}\n그래프: 연도에 따른 추이 — 구간 12개 이하 세로막대 · 넘으면 꺾은선` : '')
+    s6.addNotes('유첨 5. appendix.timeline(키워드마다: stage · why · lines[head, text] · papers · patents)을 붙여 넣는다. 숫자는 규칙 계산 그대로, 관심도 · 급증은 네이버 검색 관심도라 AI 입력에 쓰지 않는다 (23 문서).')
+  }
 
   return pres
 }

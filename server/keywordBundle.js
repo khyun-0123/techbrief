@@ -10,7 +10,9 @@ import { mapMaterials } from './mapMaterials.js'
 import { patentDbReady } from './patentDb.js'
 import { cacheGet, cachePut } from './papers/index.js'
 import { queryKey } from './queryTerms.js'
+import { getTechTrends } from './techtrends.js'
 import { buildTimeline, cachedTimeline } from './timeline.js'
+import { surgeMonths } from './timesfm.js'
 
 const TTL = 3 * 86_400_000
 const running = new Map()
@@ -83,7 +85,7 @@ export async function categoryCompetitors(catId) {
 export async function prepareBundle(raw, { refresh = false } = {}) {
   const keyword = String(raw ?? '').trim().slice(0, 50)
   if (!keyword) return null
-  const key = `bundle:v2:${queryKey(keyword)}` // v2 (11/17): 11/15에 「2개국 이상 출원」을 넣고도 v1 그대로라 예전 묶음이 3일 동안 나갔음 (36 문서 2-6)
+  const key = `bundle:v3:${queryKey(keyword)}` // v3 (11/17, 40 문서 R1): 논문 추이 · 관심 대 실질 · 연구 폭 · 떠오르는 세부 주제 · 주요 기업 · 급증 · 신호 점수 // v2 (11/17): 11/15에 「2개국 이상 출원」을 넣고도 v1 그대로라 예전 묶음이 3일 동안 나갔음 (36 문서 2-6)
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return hit
@@ -96,6 +98,10 @@ export async function prepareBundle(raw, { refresh = false } = {}) {
     const quotes = await commercialQuotes(terms).catch(() => [])
     const mainCat = mat?.categories?.[0]
     const competitors = mainCat ? await categoryCompetitors(mainCat.id).catch(() => null) : null
+    const signal = await techSignal(keyword).catch(() => null)
+    // 기억해 둔 시계열에는 급증(TimesFM)이 따로 있음 → 기다리지 않고 있으면 씀 (timeline.js withSurge와 같음)
+    const surge = tl?.naver?.status === 'ok' ? (tl.naver.surge ?? (await surgeMonths(tl.naver.months, { wait: false }).catch(() => null))) : null
+    const st = tl?.stage
     const bundle = {
       keyword,
       at: new Date().toISOString(),
@@ -107,12 +113,39 @@ export async function prepareBundle(raw, { refresh = false } = {}) {
       categories: mat?.categories ?? [],
       competitors,
       quotes,
+      // ── v3 (11/17): 기술 시계열에서 더 가져오는 것 ──
+      // 논문 연도별 수 · 앞 3년 대비 성장(분야 대비)
+      papers: tl?.corpus?.years?.length
+        ? { years: tl.corpus.years.map(({ y, n }) => ({ y, n })), total: tl.corpus.total ?? null, span: st?.years ?? null, recent: st?.recentPapers ?? null, before: st?.beforePapers ?? null, growth: st?.growth ?? null, relGrowth: st?.relGrowth ?? null }
+        : null,
+      // 떠오르는 세부 주제: 최근 논문 키워드 중 앞 시기에 없던 것 · 늘어난 것
+      rising: (tl?.corpus?.rising ?? []).slice(0, 5).map((x) => ({ name: x.name, before: x.before, recent: x.recent })),
+      // 최근 시기 논문의 주요 기업
+      makers: tl?.makers?.at(-1)?.makers?.slice(0, 5) ?? [],
+      // 연구 폭: 기관 수 · 기업 저자 비율 · FWCI(참고)
+      breadth: tl?.breadth
+        ? { years: tl.breadth.years, institutions: tl.breadth.institutions ?? null, top: (tl.breadth.topInstitutions ?? []).slice(0, 3).map((x) => x.name), companyShare: st?.companyShareNow ?? null, fwci: tl.breadth.fwci?.mean ?? null }
+        : null,
+      // ⚠ 네이버 숫자 — 화면 · PPT용. AI 입력(bundleFacts · headlineSeeds)에는 넣지 않는다 (23 문서 2-2)
+      attention: st?.attention ? { label: st.attention.label, basis: st.attention.basis } : null,
+      surges: surge?.status === 'ok' ? (surge.surges ?? []).slice(-3) : [],
+      // 요즘 뜨는 기술 신호 점수 (네이버 신호가 섞인 종합 점수 — 화면 · PPT용)
+      signal,
     }
     await cachePut(key, bundle, TTL).catch(() => {})
     return bundle
   })().finally(() => running.delete(key))
   running.set(key, job)
   return job
+}
+
+// 요즘 뜨는 기술 종합 점수에서 이 키워드 (이름 · 영어 이름이 같은 것)
+const flat = (t) => String(t ?? '').toLowerCase().replace(/[\s\-·_]/g, '')
+async function techSignal(keyword) {
+  const tt = await getTechTrends({ period: 'week' })
+  const k = flat(keyword)
+  const hit = (tt.composite ?? []).find((c) => flat(c.name) === k || flat(c.en) === k || flat(c.key) === k)
+  return hit ? { score: hit.score, grade: hit.grade, stage: hit.stage ?? null, at: tt.updatedAt ?? null } : null
 }
 
 // 헤드라인 재료 (규칙, 11/12 조장: 「키워드를 헤드라인 핵심 문장으로 빼내는 게 핵심」): 결론을 만들 숫자 · 판정을 미리 골라 준다
@@ -126,6 +159,11 @@ export function headlineSeeds(b) {
   if (c?.verdict === '위협' && fastest && own) out.push(`${c.name} 특허: ${fastest.name} ${fastest.ratio}배 vs 자사 ${own.ratio}배 (분야 ${c.field.ratio}배) → 자사에 위협`)
   if (c?.verdict === '기회' && own) out.push(`${c.name} 특허: 자사 ${own.ratio}배로 경쟁사 중 가장 빠름 (분야 ${c.field.ratio}배) → 자사에 기회`)
   if (b.stage && !b.stage.thin) out.push(`${b.keyword} 기술 단계: ${b.stage.stage}`)
+  // v3: 논문이 분야보다 빠르게 늘면 · 떠오르는 세부 주제 (네이버 숫자는 넣지 않음)
+  const pp = b.papers
+  if (pp?.relGrowth >= 1.3 && pp.recent >= 10) out.push(`${b.keyword} 논문 ${String(pp.span ?? '최근 3년').split(' 대 ')[0]} ${pp.recent}편, 앞 3년의 ${pp.growth}배 (분야 전체보다 ${pp.relGrowth}배 빠름)`)
+  const up = (b.rising ?? []).filter((x) => x.recent >= 3)
+  if (up.length) out.push(`${b.keyword} 최근 논문에서 늘어난 세부 주제: ${up.slice(0, 3).map((x) => `${x.name}(${x.before}→${x.recent}편)`).join(', ')}`)
   const q = (b.quotes ?? []).find((x) => x.aiOk && x.year)
   if (q) out.push(`상용화 시점 언급: ${q.year}년 (${q.source ?? '기사'})`)
   return out
@@ -154,6 +192,16 @@ export function bundleFacts(b) {
   }
   if (b.owners?.length) {
     out.push({ title: `[분석] ${b.keyword} 특허 주요 출원인 (최근 6년)`, source: '특허 DB · 규칙 계산', description: `${b.keyword} 특허를 많이 낸 곳 (같은 발명 한 번): ${b.owners.slice(0, 6).map((o) => `${o.word} ${o.count}건`).join(', ')}` })
+  }
+  // v3 (11/17, 40 문서 R2): 떠오르는 세부 주제 · 연구 폭 (논문 DB 규칙 숫자 — 네이버 숫자 아님)
+  const up = (b.rising ?? []).filter((x) => x.recent >= 2)
+  if (up.length) {
+    out.push({ title: `[분석] ${b.keyword} 최근 논문에서 늘어난 세부 주제`, source: '논문 DB(OpenAlex) · 규칙 계산', description: `${b.keyword} 논문의 키워드 중 앞 시기보다 최근에 늘어난 것 (편수): ${up.map((x) => `${x.name} ${x.before}→${x.recent}편`).join(', ')}${b.makers?.length ? `. 최근 논문의 주요 기업: ${b.makers.join(', ')}` : ''}` })
+  }
+  const br = b.breadth
+  if (br?.institutions) {
+    const share = br.companyShare != null ? `, 기업 저자 비율 ${Math.round(br.companyShare * 100)}%` : ''
+    out.push({ title: `[분석] ${b.keyword} 연구 폭 (${br.years})`, source: '논문 DB(OpenAlex) · 규칙 계산', description: `${br.years} ${b.keyword} 논문을 낸 기관 ${br.institutions}곳${br.top?.length ? ` (많은 곳: ${br.top.join(', ')})` : ''}${share}. 기관 3곳 미만이면 신생 · 탐색으로 봄 (판단 기준 33 문서)` })
   }
   const ok = (b.quotes ?? []).filter((q) => q.aiOk)
   if (ok.length) {

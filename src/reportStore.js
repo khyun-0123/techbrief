@@ -48,7 +48,7 @@ export const APPENDIX = new Set(['tech', 'industry'])
 export function sourcesLine(saved) {
   const s = saved.report.sources
   const n = s?.articles ?? saved.articles.filter((a) => !a.supplement && !a.analysis).length
-  return [s?.period && `수집 기간 ${s.period}`, `기사 ${n}건`, ...(s?.analysis ?? []).map((x) => `분석: ${x}`)].filter(Boolean).join(' · ')
+  return [s?.period && `수집 기간 ${s.period}`, s?.papers && `논문 ${s.papers}년`, `기사 ${n}건`, ...(s?.analysis ?? []).map((x) => `분석: ${x}`)].filter(Boolean).join(' · ')
 }
 
 export function formatDate(iso, withTime = false) {

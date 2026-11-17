@@ -47,12 +47,13 @@ function keywordTrend(entry, arts, trendItems, period, topicItems) {
   const daily = new Map()
   let from = ''
   if (matched.length) {
-    const end = Date.parse(`${dayKey(entry.createdAt ?? Date.now())}T00:00:00Z`)
+    // 끝난 날까지 (11/17 렌더 확인: 보고서를 만든 날은 반나절이라 「전일 대비 -88.6%」처럼 보였음)
+    const end = Date.parse(`${dayKey(entry.createdAt ?? Date.now())}T00:00:00Z`) - DAY
     const first = news.length ? Math.min(...news.map((a) => Date.parse(a.publishedAt))) : end - 7 * DAY
     const start = Math.max(Date.parse(`${dayKey(first)}T00:00:00Z`) - 3 * DAY, end - 181 * DAY)
     for (let t = start; t <= end; t += DAY) daily.set(dayKey(t), 0)
     for (const it of matched) for (const pt of it.news) if (daily.has(pt.t)) daily.set(pt.t, daily.get(pt.t) + pt.v)
-    from = topicTotal > 0 ? `모은 기사 중 「${matched.map((it) => it.keyword).join(', ')}」이 든 기사 수` : `수집 키워드 「${matched.map((it) => it.keyword).join(', ')}」 기사 수`
+    from = topicTotal > 0 ? `「${matched.map((it) => it.keyword).join(', ')}」 든 모은 기사 수` : `수집 키워드 「${matched.map((it) => it.keyword).join(', ')}」 기사 수`
   } else {
     for (const a of news) daily.set(dayKey(a.publishedAt), (daily.get(dayKey(a.publishedAt)) ?? 0) + 1)
     from = '근거 기사 발행일별 수 (맞는 수집 키워드 없음)'
@@ -111,6 +112,49 @@ function analysisIssue(an, arts) {
   }
 }
 
+// 유첨 5 기술 시계열 (11/17, 40 문서 R5): 분석 묶음 → 판정 글 · 논문 · 특허 연도별 그래프
+function timelineSlide(an, createdAt) {
+  if (!an || !(an.stage?.stage || an.papers?.years?.length || an.patentYears?.length)) return null
+  const last = new Date(createdAt ?? Date.now()).getFullYear() - 1 // 끝난 해까지
+  const series = (list) => {
+    // 논문은 편수가 0인 해가 빠져 옴 → 빈 해를 0으로 채운다 (11/17 렌더 확인: 2024년이 없었음)
+    const have = new Map((list ?? []).filter((p) => p.y <= last).map((p) => [p.y, p.n]))
+    const ys = [...have.keys()]
+    const done = ys.length ? Array.from({ length: last - Math.min(...ys) + 1 }, (_, i) => Math.min(...ys) + i).map((y) => ({ y, n: have.get(y) ?? 0 })).slice(-12) : []
+    return done.length >= 2 ? { labels: done.map((p) => String(p.y)), values: done.map((p) => p.n) } : null
+  }
+  const lines = []
+  const pp = an.papers
+  // 작은 수 보정 (11/15 팀 회의 「1건 → 5건을 500%로 강조하면 안 됨」): 최근 3년 10편 미만이면 배수를 쓰지 않음
+  if (pp?.recent != null) lines.push({ head: '논문 추이', text: `${String(pp.span ?? '').split(' 대 ')[0] || '최근 3년'} ${pp.recent}편${pp.recent >= 10 && pp.growth != null ? ` · 앞 3년의 ${pp.growth}배${pp.relGrowth != null ? ` (분야 전체보다 ${pp.relGrowth}배)` : ''}` : ` (앞 3년 ${pp.before ?? '-'}편 — 편수가 적어 배수는 쓰지 않음)`}` })
+  const up = (an.rising ?? []).filter((x) => x.recent >= 2)
+  if (up.length) lines.push({ head: '최근 논문에서 늘어난 세부 주제', text: up.slice(0, 4).map((x) => `${x.name} ${x.before}→${x.recent}편`).join(' · ') + (an.makers?.length ? ` | 주요 기업: ${an.makers.slice(0, 4).join(', ')}` : '') })
+  const br = an.breadth
+  if (br?.institutions) lines.push({ head: `연구 폭 (${br.years})`, text: `논문 낸 기관 ${br.institutions}곳${br.companyShare != null ? ` · 기업 저자 ${Math.round(br.companyShare * 100)}%` : ''}${br.fwci != null ? ` · FWCI ${br.fwci}(참고)` : ''}` })
+  const cv = an.competitors
+  if (cv?.verdict || cv?.field) {
+    const own = cv.companies?.find((c) => c.own)
+    const others = (cv.companies ?? []).filter((c) => !c.own && !c.unsure && c.ratio != null).map((c) => `${c.name} ${c.ratio}배`)
+    lines.push({ head: `세부 기술 특허 「${cv.name}」 (${cv.years})`, text: `자사 ${own?.ratio ?? '-'}배 · ${others.join(' · ') || '경쟁사 -'} · 분야 ${cv.field?.ratio ?? '-'}배${cv.verdict ? ` → 자사에 ${cv.verdict}` : ''}` })
+  }
+  if (an.attention?.label) lines.push({ head: '관심 대 실질', text: `${an.attention.label} (${an.attention.basis})` })
+  if (an.surges?.length) lines.push({ head: '예상 밖 급증 (TimesFM 1달 앞 예상 범위를 넘은 달)', text: an.surges.map((x) => `${x.t} 예상 최대 ${x.hi} → ${x.v}`).join(' · ') })
+  if (an.signal?.score != null) lines.push({ head: '요즘 뜨는 기술 신호', text: `${an.signal.score}점 · ${an.signal.grade}${an.signal.stage ? ` · ${an.signal.stage}` : ''} (50 = 평소, 75 = 2배)` })
+  const q = (an.quotes ?? []).find((x) => x.year) ?? an.quotes?.[0]
+  if (q) lines.push({ head: '상용화 시점 언급', text: `${q.year ? `${q.year}년 — ` : ''}「${cut(q.text, 70)}」 (${q.source ?? '기사'})` })
+  return {
+    keyword: an.keyword,
+    stage: an.stage?.stage ?? null,
+    why: an.stage?.why ? `${an.stage.thin ? '(논문 적어 참고용) ' : ''}${an.stage.why}` : '',
+    lines,
+    papers: series(an.papers?.years),
+    patents: series(an.patentYears),
+    source: `테크브리프 논문 DB(OpenAlex) · 디스플레이 특허 DB${an.attention || an.surges?.length ? ' · 네이버 검색 관심도' : ''}`,
+    as_of: `${last}년까지${an.at ? ` · 분석 ${ymd(an.at)}` : ''}`,
+    note: '숫자는 규칙으로 센 값 (AI가 만든 숫자 아님) · 판단 기준은 33 문서',
+  }
+}
+
 // 할 일 「무엇을 — 시점」: 앱 보고서는 시점을 「— 단기」처럼 글 끝에 붙여 씀 → 양식의 priority_or_due 칸으로 가른다
 function splitAction(text) {
   const m = String(text ?? '').match(/^(.*?)\s*[—–-]\s*([^—–-]{1,14})$/)
@@ -125,8 +169,10 @@ export async function topicTrendItems(entry, query) {
   for (const t of [...(r.sources?.topics ?? []), ...(r.analysis ?? []).map((a) => a.keyword)]) if (norm(t) && !byNorm.has(norm(t))) byNorm.set(norm(t), String(t).trim())
   const terms = [...byNorm.values()].slice(0, 3)
   if (!terms.length) return []
-  const end = new Date(entry.createdAt ?? Date.now())
-  const start = new Date(end.getTime() - 27 * DAY)
+  // 한국 날짜로 보고서를 만든 날 0시까지 (그날은 반나절이라 뺀다), 그 앞 28일
+  const created = new Date(entry.createdAt ?? Date.now())
+  const end = new Date(`${new Date(created.getTime() + 9 * 3600_000).toISOString().slice(0, 10)}T00:00:00+09:00`)
+  const start = new Date(end.getTime() - 28 * DAY)
   const out = []
   for (const term of terms) {
     const { rows } = await query(
@@ -135,7 +181,7 @@ export async function topicTrendItems(entry, query) {
         WHERE published_at >= $2 AND published_at < $3
           AND lower(regexp_replace(title || ' ' || coalesce(description, ''), '\\s+', '', 'g')) LIKE $1
         GROUP BY 1`,
-      [`%${norm(term).replace(/[%_]/g, '')}%`, new Date(`${dayKey(start)}T00:00:00+09:00`), end],
+      [`%${norm(term).replace(/[%_]/g, '')}%`, start, end],
     )
     out.push({ keyword: term, news: rows })
   }
@@ -149,8 +195,13 @@ export function reportToTemplate(entry, { trends = null, trendItems = null, topi
   const refsOf = (b) => (b.refs ?? []).map(NN)
 
   // 본문: 핵심 사실 3~5개 (사실 줄 먼저). 양식 규칙은 근거 2건 이상이지만, 앱 보고서는 1건짜리도 있어 표시만 한다
+  // 양식 규칙 (11/17, 40 문서 R7): 본문에는 근거 2건 이상인 사실을 먼저(근거 많은 순), 3개가 안 되면 1건짜리로 채우고, 남은 1건짜리는 유첨 1 「근거 1건뿐인 사실」로
   const factLines = sec('summary').filter((b) => b.kind === 'fact' || b.refs?.length)
-  const facts = factLines.slice(0, 5).map((b) => ({ text: cut(b.text, 60), refs: refsOf(b), area: INDUSTRY.test(b.text) ? '업계' : '기술' }))
+  const strong = factLines.filter((b) => (b.refs?.length ?? 0) >= 2).sort((a, b) => b.refs.length - a.refs.length)
+  const weak = factLines.filter((b) => (b.refs?.length ?? 0) < 2)
+  const bodyLines = [...strong.slice(0, 5), ...weak.slice(0, Math.max(0, 3 - strong.length))]
+  const movedOut = weak.filter((b) => !bodyLines.includes(b))
+  const facts = bodyLines.map((b) => ({ text: cut(b.text, 60), refs: refsOf(b), area: INDUSTRY.test(b.text) ? '업계' : '기술' }))
   if (facts.some((f) => f.refs.length < 2)) notes.push('핵심 사실 중 근거가 1건뿐인 줄이 있어요 (양식은 2건 이상). 확인 후 쓰세요')
   if (facts.length < 3) notes.push(`핵심 사실이 ${facts.length}개예요 (양식은 3~5개)`)
 
@@ -170,8 +221,13 @@ export function reportToTemplate(entry, { trends = null, trendItems = null, topi
 
   // 쓴 자료 (번호 = 보고서의 근거 번호 순서)
   const arts = (entry.articles ?? entry.inputs ?? []).map((a, i) => ({ ...a, no: NN(i + 1) }))
-  const media = new Set(arts.map((a) => a.source).filter(Boolean))
-  const period = r.sources?.period ? r.sources.period.replace(/-/g, '.').replace(/\s*~\s*/, '~') : ''
+  const media = new Set(arts.filter((a) => !isAnalysis(a)).map((a) => a.source).filter(Boolean)) // [분석] 줄(우리 규칙 계산)은 매체가 아님
+  // 수집 기간 = 기사 날짜만, 논문은 연도 범위를 따로 (11/17, 40 문서 R8 — 예전 보고서도 자료에서 다시 셈)
+  const newsT = arts.filter((a) => !a.paper && !isAnalysis(a)).map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite)
+  const papY = arts.filter((a) => a.paper).map((a) => new Date(a.publishedAt).getFullYear()).filter(Number.isFinite)
+  const papPart = papY.length ? `논문 ${Math.min(...papY)}${Math.max(...papY) !== Math.min(...papY) ? `~${Math.max(...papY)}` : ''}년` : ''
+  const newsPart = newsT.length ? `${ymd(Math.min(...newsT))}~${ymd(Math.max(...newsT))}` : ''
+  const period = [newsPart, papPart].filter(Boolean).join(' · ') || (r.sources?.period ? r.sources.period.replace(/-/g, '.').replace(/\s*~\s*/, '~') : '')
   const keywords = r.sources?.topics ?? []
 
   // 추이: 받은 trend가 없으면 이 보고서와 맞는 수집 키워드의 날짜별 기사 수 (없으면 근거 기사 날짜별 수)
@@ -200,7 +256,9 @@ export function reportToTemplate(entry, { trends = null, trendItems = null, topi
     }
   }
   const analysis = [issue('기술 개요', sec('tech')), issue('업계 동향 · 경쟁사', sec('industry')), ...(r.analysis ?? []).map((an) => analysisIssue(an, arts))].filter(Boolean).slice(0, 4)
-  const single = [...sec('tech'), ...sec('industry')].filter((b) => b.kind === 'fact' && b.refs?.length === 1).slice(0, 4).map((b) => ({ text: cut(b.text, 60), refs: refsOf(b) }))
+  // 이슈의 배경 · 쟁점 · 전망에 이미 쓴 줄은 「근거 1건뿐인 사실」에 다시 싣지 않는다 (11/17 렌더 확인: 같은 줄이 두 번)
+  const usedTexts = new Set(analysis.flatMap((x) => [x.background, x.point, x.outlook.replace(/ \(추정\)$/, '')]))
+  const single = [...new Set([...movedOut, ...sec('tech'), ...sec('industry')])].filter((b) => b.kind === 'fact' && b.refs?.length === 1 && !usedTexts.has(b.text)).slice(0, 4).map((b) => ({ text: cut(b.text, 60), refs: refsOf(b) }))
 
   // 유첨 4: 자료마다 요약 첫 항목 (입력에 요약이 있을 때)
   // 순서가 아니라 주소 · 제목으로 맞춘다 (11/17: 자료 11건 · 요약 입력 5건인 보고서에서 순서가 어긋남 — [분석] 줄 · 요약 없는 기사가 섞임)
@@ -235,6 +293,7 @@ export function reportToTemplate(entry, { trends = null, trendItems = null, topi
       charts: [keywordChart(inputs, period)].filter(Boolean),
       sources: arts.map((a) => ({ no: a.no, date: ymd(a.publishedAt), media: a.source ?? '', title: cut(a.title, 34), url: a.url ?? '' })),
       summaries,
+      timeline: (r.analysis ?? []).map((an) => timelineSlide(an, entry.createdAt)).filter(Boolean),
     },
     _notes: [
       ...notes,
