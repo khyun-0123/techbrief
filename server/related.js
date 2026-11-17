@@ -133,6 +133,8 @@ async function collectedDocs(center) {
 // 교차선 · 2단계 (11/14 통합, 워드클라우드팀 맵 v2의 규칙을 서버로):
 // - 교차선: 1단계 말 둘이 함께 나온 이슈 3개 이상이고 NPMI 0.15 초과 (팀 규칙 그대로)
 // - 2단계: 1단계 말(상위 14개)마다, 그 말이 든 이슈에서 함께 나온 다른 말 상위 5개 (2개 이슈 이상, 키워드 · 1단계 말 제외)
+// 교차선 기준 (맵팀 규칙): 두 말이 함께 나온 이슈 수 (11/17: 맵팀이 값을 바꾸면 여기 한 곳만. 38 문서 5장에 3 · 4일 때 차이)
+const EDGE_MIN = 3
 const CHILD_FOR = 14
 const CHILD_MAX = 5
 const GRAND_MAX = 4 // 3단계 (11/15): 2단계 말마다, 그 말이 든 이슈에서 함께 나온 다른 말 상위 4개 (2개 이슈 이상, 키워드 · 1단계 · 부모 · 형제 제외)
@@ -163,7 +165,7 @@ function linksOf(nodes, issueWords, merged) {
     for (let j = i + 1; j < lows.length; j++) {
       let both = 0
       for (let k = 0; k < N; k++) if (has[i][k] && has[j][k]) both++
-      if (both < 3) continue
+      if (both < EDGE_MIN) continue
       const pa = nodes[i].score / N
       const pb = nodes[j].score / N
       const pab = both / N

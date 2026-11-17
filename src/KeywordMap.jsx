@@ -570,6 +570,8 @@ function countOverlaps(final, view, graph, hidden, keyword, isOn) {
     }
   return n
 }
+// 1단계 말의 「함께 나온 이슈」 처음 값 (맵팀 가이드 6). 맵팀이 바꾸면 여기 한 곳만 (38 문서 5장에 6 · 5 · 4일 때 차이)
+const MIN_CO_DEFAULT = 6
 const CROWDED = 6 // 글자 · 알약 · 배지 겹침이 이만큼 이상이면 안내 (11/14 3038 실측: 1440 반 칸 ai 안경 10 · 탠덤 OLED 4 · QD-OLED 2, 크게 보기 ai 안경 4)
 
 export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, branches: rawBranches, isOn, onToggle, large = false, view: mode = 'map', onEnlarge }) {
@@ -634,7 +636,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
   const maxBranch = Math.max(3, Math.min(15, nodes.length))
   const [branchN, setBranchN] = useState(Math.min(phone ? 6 : 7, maxBranch))
   const [totalN, setTotalN] = useState(phone ? 18 : 40)
-  const [minCo, setMinCo] = useState(6)
+  const [minCo, setMinCo] = useState(MIN_CO_DEFAULT)
   const [panelOpen, setPanelOpen] = useState(false) // 가이드: 처음엔 접힘
   const [openSet, setOpenSet] = useState({}) // 손으로 펼치거나 접은 가지 { 말: true | false }. 없으면 위 3개만 펼침
   const [hover, setHover] = useState(null)
