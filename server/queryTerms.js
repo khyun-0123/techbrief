@@ -204,24 +204,26 @@ const memCounts = (globalThis.__searchCounts ??= new Map())
 const today = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10) // 한국 날짜
 const personOf = (ip, day) => createHash('sha256').update(`${day}|${ip ?? ''}`).digest('hex').slice(0, 12)
 
-export async function recordSearch(rawQuery, ip) {
+// open: 키워드 분석을 연 것 (11/17 P12). 찾은 횟수(searches)와 따로 opens로 센다. 사람 수는 같이 (그 말을 쓴 사람)
+export async function recordSearch(rawQuery, ip, { open = false } = {}) {
   const key = queryKey(rawQuery)
   if (!key) return
   const day = today()
   const person = personOf(ip, day)
   if (!dbEnabled()) {
     const k = `${key}|${day}`
-    const e = memCounts.get(k) ?? { query: key, day, searches: 0, people: new Set() }
-    e.searches += 1
+    const e = memCounts.get(k) ?? { query: key, day, searches: 0, opens: 0, people: new Set() }
+    if (open) e.opens = (e.opens ?? 0) + 1
+    else e.searches += 1
     e.people.add(person)
     memCounts.set(k, e)
     return
   }
   await query(
-    `INSERT INTO search_counts (query, day, searches, people) VALUES ($1, $2, 1, ARRAY[$3])
-     ON CONFLICT (query, day) DO UPDATE SET searches = search_counts.searches + 1,
+    `INSERT INTO search_counts (query, day, searches, opens, people) VALUES ($1, $2, $4, $5, ARRAY[$3])
+     ON CONFLICT (query, day) DO UPDATE SET searches = search_counts.searches + $4, opens = search_counts.opens + $5,
        people = CASE WHEN $3 = ANY(search_counts.people) THEN search_counts.people ELSE array_append(search_counts.people, $3) END`,
-    [key, day, person],
+    [key, day, person, open ? 0 : 1, open ? 1 : 0],
   )
 }
 
@@ -235,8 +237,9 @@ export async function frequentSearches({ days = 14, exclude = [], limit = 30 } =
     const by = new Map()
     for (const e of memCounts.values()) {
       if (e.day < since) continue
-      const x = by.get(e.query) ?? { query: e.query, searches: 0, people: 0, last_day: e.day }
+      const x = by.get(e.query) ?? { query: e.query, searches: 0, opens: 0, people: 0, last_day: e.day }
       x.searches += e.searches
+      x.opens += e.opens ?? 0
       x.people += e.people.size
       if (e.day > x.last_day) x.last_day = e.day
       by.set(e.query, x)
@@ -244,7 +247,7 @@ export async function frequentSearches({ days = 14, exclude = [], limit = 30 } =
     rows = [...by.values()]
   } else {
     ;({ rows } = await query(
-      `SELECT query, sum(searches)::int AS searches, sum(cardinality(people))::int AS people, max(day)::text AS last_day
+      `SELECT query, sum(searches)::int AS searches, sum(opens)::int AS opens, sum(cardinality(people))::int AS people, max(day)::text AS last_day
          FROM search_counts WHERE day >= $1 GROUP BY query`,
       [since],
     ))
@@ -252,9 +255,9 @@ export async function frequentSearches({ days = 14, exclude = [], limit = 30 } =
   const terms = new Map((await listQueryTerms().catch(() => [])).map((t) => [t.query, t]))
   return rows
     .filter((r) => !skip.has(r.query))
-    .sort((a, b) => b.people - a.people || b.searches - a.searches)
+    .sort((a, b) => b.people - a.people || b.searches + b.opens - (a.searches + a.opens))
     .slice(0, limit)
-    .map((r) => ({ query: r.query, searches: r.searches, people: r.people, lastDay: r.last_day, terms: terms.get(r.query)?.terms ?? null, termsSource: terms.get(r.query)?.source ?? null }))
+    .map((r) => ({ query: r.query, searches: r.searches, opens: r.opens ?? 0, people: r.people, lastDay: r.last_day, terms: terms.get(r.query)?.terms ?? null, termsSource: terms.get(r.query)?.source ?? null }))
 }
 
 export async function pruneSearchCounts() {

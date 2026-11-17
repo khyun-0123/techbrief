@@ -485,8 +485,9 @@ export async function saveQueryTermsApi(query, terms) {
 }
 
 // 기술 시계열 (11/10): 숫자 · 단계(규칙) / AI 흐름 정리
-export function fetchTimeline(query, refresh = false) {
-  return postJson('/api/timeline', { query, refresh })
+// open: 키워드 분석을 연 것으로 센다 (11/17 P12, 미리 분석 대상에 반영)
+export function fetchTimeline(query, refresh = false, { open = false } = {}) {
+  return postJson('/api/timeline', { query, refresh, open })
 }
 export function fetchTimelineStory(query, refresh = false) {
   return postJson('/api/timeline/story', { query, refresh })

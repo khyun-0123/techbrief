@@ -188,6 +188,8 @@ CREATE TABLE IF NOT EXISTS search_counts (
   people    text[] NOT NULL DEFAULT '{}',
   PRIMARY KEY (query, day)
 );
+-- 키워드 분석을 연 횟수 (11/17, 37 문서 P12 · 36 문서 3-5): 미리 분석 대상이 「찾기」만이 아니라 실제로 연 말도 따라가게
+ALTER TABLE search_counts ADD COLUMN IF NOT EXISTS opens integer NOT NULL DEFAULT 0;
 
 -- 디스플레이 논문 DB (11/10, server/papers/corpus.js): OpenAlex 디스플레이 주제 6개 논문을 미리 받아 두고 찾기는 여기서 한다
 -- 목록 받기는 100편에 $0.0001이라 (검색 1번 $0.001의 1/10) 2018년부터 다 받아도 약 $0.1. 찾기마다 API를 부르지 않는다

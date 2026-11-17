@@ -110,6 +110,7 @@ function AdminSearchTerms({ onToast }) {
             <tr>
               <th>검색어</th>
               <th>찾은 횟수</th>
+              <th>분석 연 횟수</th>
               <th>사람 · 일</th>
               <th>마지막</th>
               <th>논문 · 영문 출처 검색어</th>
@@ -122,6 +123,7 @@ function AdminSearchTerms({ onToast }) {
                   <b>{r.query}</b>
                 </td>
                 <td className="adm-nowrap">{r.searches}번</td>
+                <td className="adm-nowrap">{r.opens ? `${r.opens}번` : '-'}</td>
                 <td className="adm-nowrap">{r.people}</td>
                 <td className="adm-nowrap">{r.lastDay}</td>
                 <td>{/[가-힣]/.test(r.query) ? <TermsCell row={r} onSave={saveTerms} /> : <span className="muted">영문 그대로</span>}</td>
