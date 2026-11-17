@@ -670,6 +670,12 @@ async function handleApiInner(req, res) {
     if (req.method === 'GET' && req.url === '/api/timeline/ready') {
       return send(res, 200, await readyTimelines())
     }
+    // 기술 시계열 「최근 소식」 (11/17, 37 문서 P8): 모은 기사 중 최근 30일 그 말이 든 이슈, 자료 현황과 같은 점수 · 요약 한 줄
+    if (req.method === 'GET' && req.url.startsWith('/api/timeline/news?')) {
+      const q = new URL(req.url, 'http://x').searchParams.get('q')
+      const { timelineNews } = await import('./timelineNews.js')
+      return send(res, 200, await timelineNews(q))
+    }
     // 관리 페이지에서 미리 분석을 바로 돌릴 때 (뒤에서 돌고 바로 돌려줌)
     if (req.method === 'POST' && req.url === '/api/admin/timeline/precompute') {
       requireAdmin(req)

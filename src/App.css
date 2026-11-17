@@ -5498,6 +5498,44 @@ a.brand:focus-visible {
 .tl-rising .chip {
   padding: 0 10px;
 }
+/* 기술 시계열 「최근 소식」 (11/17 P8) */
+.tl-news {
+  margin: 12px 0 4px;
+  font-size: var(--fs-sm);
+}
+.tl-news h4 {
+  margin: 0 0 6px;
+  font-size: var(--fs-sm);
+}
+.tl-news ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tl-news li {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 8px;
+  align-items: start;
+}
+.tl-news-score {
+  padding: 1px 0;
+  border-radius: 6px;
+  background: var(--tb-color-surface-hover);
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.tl-news-score.is-high {
+  background: var(--tb-color-accent-soft);
+  color: var(--tb-color-accent);
+}
+.tl-news-sum {
+  display: block;
+  color: var(--tb-color-text-sub);
+}
 .tl-origins,
 .tl-story details {
   margin: 8px 0;
