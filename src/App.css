@@ -5088,6 +5088,12 @@ a.brand:focus-visible {
   flex-wrap: wrap;
   gap: 6px;
 }
+/* 11/18: 보고서 작업(확인 질문 · 단추 포함)은 진행 창 안에서 스크롤하지 않는다 — 요약할 자료가 많아도 「요약해서 쓰기」가 바로 보이게.
+   남은 높이는 아래 요약 목록(.progress-list)이 나눠 쓰고 스크롤한다 */
+.progress-list.report-jobs {
+  flex: 0 0 auto;
+  overflow: visible;
+}
 .report-jobs .progress-title small {
   color: var(--tb-color-text-sub);
   font-weight: 400;
