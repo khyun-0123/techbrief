@@ -11,7 +11,8 @@ import { fetchBundle, fetchRelated, fetchTimeline, fetchTimelineStory, fetchWord
 import { retryStory, useStory } from './storyJobs.js'
 import { Spark } from './KeywordTrends.jsx'
 import TechTimeline from './TechTimeline.jsx'
-import { PeriodSeg, Seg } from './Dropdown.jsx'
+import { Seg } from './Dropdown.jsx'
+import FlowSteps from './FlowSteps.jsx'
 
 const THIS_YEAR = new Date().getFullYear() // 올해는 안 끝나 줄어 보이므로 그래프에서 뺀다
 // 11/14 통합: 임시 맵(ScopeMap)을 워드클라우드팀 맵 v2 이식본(KeywordMap.jsx)으로 바꿈 — 분할 칸 왼쪽에 들어감
@@ -158,7 +159,7 @@ function Glance({ job, stage, keyword }) {
 // 대시보드 「키워드 분석」 패널 안(검색창 아래)에 펼쳐진다. 기간은 「자료 찾기 →」로 자료 현황에서 찾을 때만 쓴다
 const MAX_SCOPE_TERMS = 30 // server/scopeSearch.js MAX_TERMS와 같게 (거르기용, 네이버는 앞 6개만 따로 부름)
 
-function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, periods = [], period, onPeriod }) {
+function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [related, setRelated] = useState(null)
@@ -296,23 +297,19 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
   return (
     <div className="ka" aria-label={`「${keyword}」 분석`}>
       <div className="ka-head">
-        <p className="ka-for">
-          <b>{keyword}</b> — 연관 키워드에서 볼 범위를 고르고 기술의 흐름을 확인한 뒤 자료를 찾아요
-        </p>
+        {/* 11/17 조장 (39 문서 C6): 지금 단계 + 다음으로 가는 진한 단추 하나. 기간(오늘 · 최근 7일 · 전체)은 맵과 상관없어 자료 현황 단계로 옮김 (C5) */}
+        <FlowSteps current={1} note={picked.length ? `「${keyword}」 + ${picked.length}개` : `「${keyword}」`} />
         <div className="ka-actions">
-          {periods.length > 0 && (
-            <PeriodSeg value={period} onChange={(v) => onPeriod?.(v)} label="자료 찾을 기간" options={periods} />
-          )}
-          {onAutoReport && related && (
-            <button type="button" className="btn" onClick={() => onAutoReport({ query: keyword, terms: picked })} title="고른 범위의 자료를 중요도로 자동으로 골라 보고서까지 — 만들기 전에 확인 창이 떠요">
-              자동으로 보고서 만들기
-            </button>
-          )}
           <span className="ka-flash" aria-live="polite" key={flash?.at}>
             {flash?.text}
           </span>
+          {onAutoReport && related && (
+            <button type="button" className="btn-text ka-auto" onClick={() => onAutoReport({ query: keyword, terms: picked })} title="고른 범위의 자료를 중요도로 자동으로 골라 보고서까지 — 만들기 전에 확인 창이 떠요">
+              바로 보고서까지 (자동)
+            </button>
+          )}
           <button type="button" className="btn primary" onClick={findScope} title={picked.length ? `「${keyword}」 자료 중 ${picked.join(' · ')}이(가) 든 것만` : `「${keyword}」 자료 전부`}>
-            {picked.length ? `「${keyword}」 + ${picked.length}개로 자료 찾기 →` : `「${keyword}」 자료 찾기 →`}
+            자료 고르기 →
           </button>
         </div>
       </div>

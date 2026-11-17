@@ -43,7 +43,7 @@ function fitInLines(widths, moreW, avail, gap, lines) {
   return 1
 }
 
-function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, onGoReports, stats, keywords, favorites, recent, periods, period, onPeriod, onSearch, onScopeSearch, onAutoReport, onGoCollect, onRemember }) {
+function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, onGoReports, stats, keywords, favorites, recent, onSearch, onScopeSearch, onAutoReport, onGoCollect, onRemember }) {
   const [text, setText] = useState('')
   const [focus, setFocus] = useState(null) // 분석 중인 말 (없으면 검색창 + 미리 분석된 키워드 + 요즘 뜨는 기술)
   const [ready, setReady] = useState([]) // 미리 분석해 둔 말 (11/10): 검색 전에도 분석이 어떤 모양인지 보이게
@@ -201,9 +201,12 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
         </div>
         <div className="header-actions">
           <span className="header-count">{stats.collectedLabel}</span>
-          <button type="button" className="btn primary" onClick={onGoCollect}>
-            자료 현황으로 →
-          </button>
+          {/* 11/17 (39 문서 C6): 분석 중에는 숨김 — 같은 곳으로 가는 진한 단추(「자료 고르기 →」)가 분석 칸에 있어 둘이 됐음 */}
+          {!focus && (
+            <button type="button" className="btn primary" onClick={onGoCollect}>
+              자료 현황으로 →
+            </button>
+          )}
         </div>
       </header>
 
@@ -338,7 +341,7 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
           </details>
         )}
         {/* key: 키워드가 바뀌면 새로 그린다 (고른 범위 · 받은 값 초기화) */}
-        {focus && <KeywordAnalysis key={focus} keyword={focus} onSearch={onSearch} onScopeSearch={onScopeSearch} onAutoReport={onAutoReport} periods={periods} period={period} onPeriod={onPeriod} />}
+        {focus && <KeywordAnalysis key={focus} keyword={focus} onSearch={onSearch} onScopeSearch={onScopeSearch} onAutoReport={onAutoReport} />}
       </section>
       {/* 첫 화면(분석 전)에만: 최근 중요 기사 · 최근 내 보고서 (11/15 시안 A) */}
       {!focus && <DashHome issues={homeIssues} reports={reports} onOpenReport={onOpenReport} onGoReports={onGoReports} onGoCollect={onGoCollect} />}

@@ -64,6 +64,7 @@ import { clientId, enableUsage, track, trackVisit } from './usage.js'
 import AddMaterial from './AddMaterial.jsx'
 import DataMove from './DataMove.jsx'
 import TechTimeline from './TechTimeline.jsx'
+import FlowSteps from './FlowSteps.jsx'
 import FolderBar from './FolderBar.jsx'
 import { INBOX, INBOX_FOLDER } from './folders.js'
 import { ACCESS_TITLE, paperAccess } from './paperAccess.js'
@@ -1272,9 +1273,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           keywords={keywords}
           favorites={favorites}
           recent={recent}
-          periods={PERIODS}
-          period={period}
-          onPeriod={setPeriod}
           onRemember={(q) => saveRecent([q, ...recent.filter((r) => r !== q)].slice(0, RECENT_MAX))}
           onAutoReport={startAutoReport}
           onScopeSearch={(scope) => {
@@ -1339,11 +1337,16 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           <header className="page-header with-actions">
             <div>
               <h1>자료 현황</h1>
-              <p>
-                {isSample
-                  ? '키워드로 자료를 모아 보여 줘요. 아직 수집 전이라 샘플 자료를 보여 줘요.'
-                  : '전문매체 · 기업 발표 · 학회 · 논문 · 뉴스에서 모은 자료예요. 같은 소식은 하나로 묶었어요.'}
-              </p>
+              {/* 11/17 (39 문서 C6): 대시보드 분석에서 범위를 골라 왔으면 지금 단계를 보여 준다. 다음 단계는 「선별·요약으로 →」 */}
+              {search?.scope ? (
+                <FlowSteps current={2} note={`「${search.scope.query}」${search.scope.terms?.length ? ` + ${search.scope.terms.length}개` : ''} · 「선별 추가」로 담기`} />
+              ) : (
+                <p>
+                  {isSample
+                    ? '키워드로 자료를 모아 보여 줘요. 아직 수집 전이라 샘플 자료를 보여 줘요.'
+                    : '전문매체 · 기업 발표 · 학회 · 논문 · 뉴스에서 모은 자료예요. 같은 소식은 하나로 묶었어요.'}
+                </p>
+              )}
             </div>
             <div className="header-actions">
               <span className="header-count">
