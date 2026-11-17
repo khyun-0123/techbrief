@@ -14,7 +14,7 @@ import { searchPapers } from './papers/index.js'
 import { bestPassage, dbCandidates, inputCandidates, rewriteWithPassages, termsOf } from './reinforce.js'
 import { dbEnabled } from './db/index.js'
 import { saveReport } from './db/store.js'
-import { PRIORITY, withQueueContext } from './llm/client.js'
+import { cancelAi, PRIORITY, withQueueContext } from './llm/client.js'
 import { summarizeArticle } from './summarize.js'
 import { lookupWiki } from './wiki.js'
 import { kindOfBullet } from './reportShared.js'
@@ -110,7 +110,8 @@ export function cancelJob(id, who) {
     job.finishedAt = new Date().toISOString()
     job.waiter?.(null)
   } else if (job.status === 'running') {
-    job.cancel = true // 지금 단계가 끝나면 멈춘다
+    job.cancel = true
+    cancelAi(job.id) // 11/17: AI가 쓰는 중이어도 바로 멈춤 (예전엔 그 단계가 끝날 때까지 돎)
   }
   return pub(job)
 }
@@ -122,7 +123,7 @@ async function pump() {
   G.running = next
   try {
     // 대기열 보기: 이 보고서 작업의 AI 호출은 만든 브라우저 · 보고서 제목으로 보인다 (pump를 부른 다른 요청의 브라우저가 아니라)
-    await withQueueContext({ client: next.clientId, label: next.title }, () => run(next))
+    await withQueueContext({ client: next.clientId, label: next.title, jobId: next.id }, () => run(next))
   } catch (err) {
     next.status = err.cancelled ? 'cancelled' : 'error'
     next.error = err.cancelled ? null : err.message

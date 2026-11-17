@@ -2,6 +2,16 @@
 import { useEffect, useState } from 'react'
 
 export const WHO_LABEL = { mine: '내 작업', auto: '자동', other: '다른 사람' }
+// AI 순서 단계 (server/llm/client.js PRIORITY, 05 문서 「AI 순서」)
+export const STEP_LABEL = { 1: '바로 기다림', 2: '요약', 3: '보고서', 4: '흐름 정리', 5: '자동 · 중요', 6: '자동', 7: '미리 분석' }
+
+// 기다리는 일 순서 바꾸기 (11/17): 일반 화면은 내 작업끼리, 관리 페이지는 모든 일 (서버가 관리 페이지에서 보낸 요청인지 가림)
+export async function moveQueueJob(id, action) {
+  const res = await fetch('/api/queue/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action }) })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}
 export const FILTERS = [
   ['all', '전체'],
   ['mine', '내 작업'],
@@ -48,7 +58,9 @@ export function queueRows(data) {
     const r = data.running
     rows.push({ key: 'run', who: r.who, kind: r.kindLabel, title: r.label ?? r.kindLabel, state: `처리 중 · ${seconds(r.runningMs)}`, busy: true })
   }
-  data.waiting.forEach((w, i) => rows.push({ key: `w${i}`, who: w.who, kind: w.kindLabel, title: w.label ?? w.kindLabel, state: `대기 ${i + 1}번째` }))
+  data.waiting.forEach((w, i) =>
+    rows.push({ key: `w${w.id ?? i}`, id: w.id, mine: w.mine, step: w.priority, manual: w.manual, demoted: w.demoted, who: w.who, kind: w.kindLabel, title: w.label ?? w.kindLabel, state: `대기 ${i + 1}번째`, waiting: true }),
+  )
   // 보고서 작업: AI를 부르는 단계는 위 줄에도 보이므로, 여기서는 작업 단위로 한 줄
   data.reports.forEach((j, i) =>
     rows.push({

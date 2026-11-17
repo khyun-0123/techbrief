@@ -9439,3 +9439,29 @@ a.dash-home-t:hover,
   white-space: nowrap;
   cursor: help;
 }
+
+/* AI 대기열 순서 바꾸기 (11/17, QueueView.jsx) */
+.queue-step {
+  color: var(--tb-color-text-sub);
+}
+.queue-move {
+  display: inline-flex;
+  grid-column: 2 / span 2;
+  justify-self: start;
+  gap: 4px;
+  margin-top: 4px;
+}
+.queue-move button {
+  min-width: 28px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-button);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.queue-move button:hover {
+  background: var(--tb-color-surface-hover);
+}

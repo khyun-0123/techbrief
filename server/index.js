@@ -48,7 +48,7 @@ import { searchPaperArticles } from './searchPapers.js'
 import { activeJobs, addJob, answerJob, cancelJob, listJobs, setDraftBuilder } from './reportJobs.js'
 import { sourceStatus } from './sourceGuard.js'
 import { patentDbStatus } from './patentDb.js'
-import { chatJson, llmProviders, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, withQueueContext } from './llm/client.js'
+import { chatJson, llmProviders, moveJob, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, withQueueContext } from './llm/client.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
   buildMergeMessages,
@@ -630,6 +630,12 @@ async function handleApiInner(req, res) {
       return send(res, 200, await collect(keywords))
     }
     // AI 대기열 (11/15): 지금 처리 중 · 기다리는 AI 요청, 보고서 작업, 자동 요약 대기 — 오른쪽 아래 창과 관리 페이지 「운영」
+    // 기다리는 AI 일 순서 바꾸기 (11/17): 일반 화면은 내 작업끼리, 관리 페이지에서 보낸 요청은 모든 일의 단계 (adminHere, 11/08 원칙)
+    if (req.method === 'POST' && req.url === '/api/queue/move') {
+      const { id, action } = await readJson(req)
+      const viewer = clientOf(req)
+      return send(res, 200, moveJob(id, String(action), { viewer, admin: Boolean(adminHere(req)) }))
+    }
     if (req.method === 'GET' && req.url === '/api/queue') {
       const viewer = clientOf(req)
       return send(res, 200, { ...queueList(viewer), reports: activeJobs(viewer), backlog: backlogBrief(), at: new Date().toISOString() })

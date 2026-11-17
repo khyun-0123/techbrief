@@ -14,7 +14,7 @@ function QueueCard() {
     <section className="adm-card">
       <h2>AI 대기열</h2>
       <p className="adm-desc">지금 AI가 처리 중인 일과 기다리는 일이에요. 「내 작업」은 이 브라우저에서 시킨 것, 「자동」은 자동 요약 · 미리 분석, 「다른 사람」은 다른 브라우저에서 시킨 것이에요. 사람이 시킨 일이 자동 작업보다 먼저 처리돼요.</p>
-      <QueueView data={data} />
+      <QueueView data={data} admin />
     </section>
   )
 }
