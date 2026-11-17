@@ -291,9 +291,23 @@ async function setBacklog(list) {
   return backlog.length
 }
 
+// AI 연결이 안 될 때 다시 시도 (같은 프로세스에 하나만)
+const RETRY_MIN = 5
+const retry = (globalThis.__summaryRetry ??= { timer: null })
+function scheduleRetry() {
+  if (retry.timer) return
+  retry.timer = setTimeout(() => {
+    retry.timer = null
+    if (!worker && backlog.length) worker = withQueueContext({ client: null, label: null }, runWorker).finally(() => (worker = null))
+  }, RETRY_MIN * 60_000)
+  retry.timer.unref?.()
+}
+
 async function runWorker() {
   if (!(await pingModel())) {
-    stats.note = 'AI 모델에 연결되지 않아 자동 요약을 멈춤 (다음 최신화 때 다시 시도)'
+    // 11/17: 예전엔 다음 최신화(2시간 뒤)까지 쉬었다 → 맥미니 인터넷이 잠깐 끊겨도 자동 요약이 2시간 멈춤. 5분 뒤 다시
+    stats.note = `AI 모델에 연결되지 않아 자동 요약을 잠시 멈춤 (${RETRY_MIN}분 뒤 다시 시도)`
+    scheduleRetry()
     return saveBacklogStatus()
   }
   if (schedulerMode() === 'off') return
