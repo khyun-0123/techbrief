@@ -549,6 +549,15 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
                               <dd>{owners.join(', ')}</dd>
                             </div>
                           )}
+                          {/* 세부 기술 분류 (11/17 R11, keywordBundle.js categoryMix): 이 말 특허가 걸친 분류 · 분류 전체 특허 추이 */}
+                          {bundle?.categoryMix?.items?.length > 0 && (
+                            <div>
+                              <dt>세부 기술 분류 (특허)</dt>
+                              <dd title={bundle.categoryMix.span ? `괄호 안 배수: 그 분류 전체 특허 ${bundle.categoryMix.span}` : undefined}>
+                                {bundle.categoryMix.items.map((x) => `${x.name} ${x.share}%${x.ratio != null ? ` (분류 특허 ${x.ratio}배)` : ''}`).join(' · ')}
+                              </dd>
+                            </div>
+                          )}
                           {/* 소부장 기업 특허 (11/17 R10, server/suppliers.js): 관리 페이지 「회사 › 소부장 기업」 목록 */}
                           {bundle?.suppliers?.items?.length > 0 && (
                             <div>
