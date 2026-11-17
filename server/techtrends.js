@@ -140,7 +140,7 @@ async function extractTerms(limit = 400) {
     const batch = rows.slice(i, i + BATCH)
     let data
     try {
-      ;({ data } = await chatJson({ messages: termPrompt(batch.map((r) => clean(r.title))), schema: TERM_SCHEMA, schemaName: 'tech_terms', kind: 'terms', priority: PRIORITY.BACKGROUND, timeoutMs: 180_000 }))
+      ;({ data } = await chatJson({ messages: termPrompt(batch.map((r) => clean(r.title))), schema: TERM_SCHEMA, schemaName: 'tech_terms', kind: 'terms', priority: PRIORITY.PRECOMPUTE, timeoutMs: 180_000 }))
     } catch (err) {
       if (!(err instanceof PreemptedError)) console.warn(`[techtrends] 용어 찾기 실패: ${err.message}`)
       break // 다음 차례에 같은 기사부터 다시
@@ -216,7 +216,7 @@ async function reviewTerms() {
         ],
         schema: REVIEW_SCHEMA,
         schemaName: 'term_review',
-        priority: PRIORITY.BACKGROUND,
+        priority: PRIORITY.PRECOMPUTE,
         timeoutMs: 180_000,
       }))
     } catch (err) {
@@ -308,7 +308,7 @@ async function discoverPapers() {
     ],
     schema: PAPER_SCHEMA,
     schemaName: 'paper_terms',
-    priority: PRIORITY.BACKGROUND,
+    priority: PRIORITY.PRECOMPUTE,
     timeoutMs: 180_000,
   })
   const byKw = new Map(rising.map((x) => [x.kw.toLowerCase(), x]))
@@ -362,7 +362,7 @@ async function discoverSearch() {
     const part = list.slice(i, i + 100)
     let data
     try {
-      ;({ data } = await chatJson({ messages: termPrompt(part.map((x) => `${x.kw} (월 검색 ${x.n}회)`)), schema: TERM_SCHEMA, schemaName: 'tech_terms', kind: 'terms', priority: PRIORITY.BACKGROUND, timeoutMs: 180_000 }))
+      ;({ data } = await chatJson({ messages: termPrompt(part.map((x) => `${x.kw} (월 검색 ${x.n}회)`)), schema: TERM_SCHEMA, schemaName: 'tech_terms', kind: 'terms', priority: PRIORITY.PRECOMPUTE, timeoutMs: 180_000 }))
     } catch (err) {
       if (!(err instanceof PreemptedError)) console.warn(`[techtrends] 검색어 후보 실패: ${err.message}`)
       return // 다음 차례에 처음부터

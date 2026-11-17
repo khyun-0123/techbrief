@@ -110,16 +110,26 @@ export function selectProvider(id) {
 }
 
 // 맥미니 메모리가 넉넉하지 않아 요청을 한 번에 하나씩 보낸다.
-// 기다리는 요청은 우선순위가 높은 것(숫자가 작은 것)부터, 같으면 먼저 온 순서로 꺼낸다.
-// 돌고 있는 것이 자동 요약(BACKGROUND)이고 사람 요청이 오면 자동 요약을 끊는다 (22 문서 3-3, 11/06 조장 결정)
-// - 끊긴 요약은 저장되지 않는다 (요약은 AI 응답이 끝까지 와야만 저장) → 「요약 안 됨」 그대로
-// - 끊긴 요청은 PreemptedError로 끝나고, 자동 요약 쪽(refresh.js)이 대기열 맨 앞에 다시 넣는다
-// 사람 요청 · 승인 요약끼리는 끊지 않는다 (13 문서 F1)
+// 기다리는 요청은 우선순위가 높은 것(숫자가 작은 것)부터 꺼낸다.
+// 같은 단계 안에서는 사람(브라우저)마다 번갈아 (11/17): 한 사람이 요약 10건을 걸어도 다른 사람 일이 10건 뒤로 밀리지 않게. 같은 사람 것은 먼저 온 순서
+// 예전(11/06 조장 결정, 22 문서 3-3): 사람 요청이 오면 돌고 있는 자동 요약을 끊었다 → 11/17 바뀜: 끊지 않음 (끊으면 하던 일이 버려짐)
+// PreemptedError는 예전 기록 · 다른 코드 호환용으로 남김
+// AI 순서 (11/17 정함, 41 문서 S5). 기준: ① 사람이 화면에서 기다리는가 ② 짧은 일 먼저 (최근 7일 실측 중앙값)
+// 1~4는 사람 일, 5~7은 자동 일. 11/17: 돌고 있는 일은 끊지 않는다 (자동 요약 한 건 약 20초만 기다리면 됨). 보고서 작업만 사람이 「취소」로 바로 멈출 수 있다 (cancelAi)
+// 기다리는 일의 순서는 대기열 창에서 바꿀 수 있다 (moveJob): 일반 화면은 내 작업끼리, 관리 페이지는 모든 작업의 단계
 export const PRIORITY = {
-  USER: 1, // 사람이 누른 요약·보고서
-  APPROVED: 2, // AI 추천을 위해 사람이 승인한 요약
-  BACKGROUND: 3, // 자동 최신화의 미리 요약
+  WAIT: 1, // 사람이 화면에서 바로 기다리는 짧은 일: 검색어 영문 표기 · 보고서 근거 보충(4.7초) · 섹션 다시 쓰기
+  SUMMARY: 2, // 사람이 누르거나 선별한 요약 (19.8초)
+  REPORT: 3, // 보고서 쓰기 · 보고서에 쓸 자료 요약 (58초, 진행 칸으로 기다림)
+  STORY: 4, // 사람이 연 키워드의 AI 흐름 정리 (37초, 분석을 열면 저절로 시작 — 누른 일보다 뒤)
+  AUTO_IMPORTANT: 5, // 자동 요약 중 「중요」
+  AUTO: 6, // 자동 요약 나머지
+  PRECOMPUTE: 7, // 미리 분석 흐름 정리 · 요즘 뜨는 기술 용어
 }
+// 예전 이름 (다른 코드가 아직 쓰면): USER = 사람 요약, BACKGROUND = 자동 요약
+PRIORITY.USER = PRIORITY.SUMMARY
+PRIORITY.BACKGROUND = PRIORITY.AUTO
+export const isHuman = (p) => p < PRIORITY.AUTO_IMPORTANT
 
 // 사람 요청에 자리를 내주느라 끊긴 자동 요약. 실패가 아니다 (다시 요약해야 함)
 export class PreemptedError extends Error {
@@ -135,6 +145,7 @@ let running = null // 지금 처리 중인 요청의 우선순위
 let runningAbort = null // 지금 처리 중인 요청을 끊는 스위치 (AbortController)
 let runningMeta = null // 지금 처리 중인 요청의 보이는 정보 { kind, label, client, priority, enqueuedAt, startedAt }
 let seq = 0
+const lastServed = new Map() // 브라우저 번호 → 마지막으로 AI를 쓴 때 (같은 단계 안 번갈아 주기)
 
 // ── 대기열 보기 (11/15): 누가 · 무엇을 기다리는지 ──
 // 요청마다 { client(브라우저 번호), label(무슨 작업) }을 함께 들고 다닌다. API 요청 하나가 시작될 때 server/index.js가 넣고,
@@ -145,27 +156,57 @@ export function withQueueContext(ctx, fn) {
 }
 const KIND_LABEL = { summary: '기사 요약', report: '보고서 쓰기', translate: '검색어 영문 표기', timeline: '기술 흐름 정리', reinforce: '보고서 근거 보충', section: '보고서 섹션 다시 쓰기', terms: '요즘 뜨는 기술 용어', test: '모델 시험' }
 
+// 순서 규칙 시험용 (AI를 부르지 않고 가짜 일로 대기열만 돌려 봄)
+export const enqueueForTest = (task, priority, meta) => enqueue(task, priority, meta)
+
 // task(signal): signal이 끊기면 AI 서버 요청도 끊는다
-function enqueue(task, priority = PRIORITY.USER, meta = {}) {
+function enqueue(task, priority = PRIORITY.SUMMARY, meta = {}) {
   return new Promise((resolve, reject) => {
-    waiting.push({ priority, order: seq++, task, resolve, reject, meta: { ...meta, priority, enqueuedAt: Date.now() } })
-    if (running === PRIORITY.BACKGROUND && priority < PRIORITY.BACKGROUND && runningAbort) {
-      console.log('[llm] 사람 요청이 와서 자동 요약을 멈추고 뒤로 보냄')
-      runningAbort.abort(new PreemptedError())
+    // 키워드를 연달아 열 때 (11/17): 같은 사람이 새 키워드의 흐름 정리를 걸면, 그 사람의 아직 시작 안 한 흐름 정리는 맨 뒤 단계로 내린다
+    // 취소하지 않음 — 한가할 때 정리해 기억해 두므로 다시 열면 바로 보임. 지금 보는 키워드가 먼저
+    if (priority === PRIORITY.STORY && meta.client) {
+      for (const j of waiting) {
+        if (j.priority === PRIORITY.STORY && j.meta.client === meta.client && !j.meta.manual) Object.assign(j, { priority: PRIORITY.PRECOMPUTE, meta: { ...j.meta, priority: PRIORITY.PRECOMPUTE, demoted: true } })
+      }
     }
+    // id는 바뀌지 않는 번호(순서 바꾸기 · 화면이 가리킴), order는 같은 단계 안 순번(순서 바꾸기로 바뀜)
+    const n = seq++
+    waiting.push({ id: n, priority, order: n, task, resolve, reject, meta: { ...meta, priority, enqueuedAt: Date.now() } })
     pump()
   })
 }
 
+// 다음에 처리할 일: 가장 높은 단계 → 그 안에서 가장 오래 못 받은 사람 → 먼저 온 것 (order가 작은 것)
+function pickNext(list, served) {
+  const top = Math.min(...list.map((j) => j.priority))
+  const servedAt = (j) => served.get(j.meta.client ?? '') ?? 0
+  let next = -1
+  for (let i = 0; i < list.length; i += 1) {
+    const a = list[i]
+    if (a.priority !== top) continue
+    const b = list[next]
+    if (!b || servedAt(a) < servedAt(b) || (servedAt(a) === servedAt(b) && a.order < b.order)) next = i
+  }
+  return next
+}
+// 지금 상태로 처리될 순서 (화면의 「대기 n번째」가 실제 순서와 같게)
+function plannedOrder() {
+  const list = [...waiting]
+  const served = new Map(lastServed)
+  const out = []
+  let t = Date.now()
+  while (list.length) {
+    const j = list.splice(pickNext(list, served), 1)[0]
+    served.set(j.meta.client ?? '', (t += 1))
+    out.push(j)
+  }
+  return out
+}
+
 async function pump() {
   if (running !== null || waiting.length === 0) return
-  let next = 0
-  for (let i = 1; i < waiting.length; i += 1) {
-    const a = waiting[i]
-    const b = waiting[next]
-    if (a.priority < b.priority || (a.priority === b.priority && a.order < b.order)) next = i
-  }
-  const job = waiting.splice(next, 1)[0]
+  const job = waiting.splice(pickNext(waiting, lastServed), 1)[0]
+  lastServed.set(job.meta.client ?? '', Date.now())
   running = job.priority
   runningMeta = { ...job.meta, startedAt: Date.now() }
   const controller = new AbortController()
@@ -189,26 +230,69 @@ async function pump() {
 // who: mine(내가 시킨 것) · auto(자동 — 자동 요약 · 미리 분석 등 우선순위가 가장 낮은 일, 또는 브라우저 번호가 없는 일) · other(다른 사람)
 function publicMeta(m, viewer) {
   if (!m) return null
-  const auto = m.priority === PRIORITY.BACKGROUND || !m.client
+  const auto = !isHuman(m.priority) || !m.client
   return {
     kind: m.kind,
     kindLabel: KIND_LABEL[m.kind] ?? 'AI 작업',
     label: m.label ?? null,
     who: auto ? 'auto' : viewer && m.client === viewer ? 'mine' : 'other',
     priority: m.priority,
+    mine: Boolean(viewer && m.client === viewer), // 순서 바꾸기는 내 작업만 (일반 화면)
+    manual: Boolean(m.manual),
+    demoted: Boolean(m.demoted),
     waitedMs: (m.startedAt ?? Date.now()) - m.enqueuedAt,
     runningMs: m.startedAt ? Date.now() - m.startedAt : null,
   }
 }
 export function queueList(viewer) {
-  const order = [...waiting].sort((a, b) => a.priority - b.priority || a.order - b.order)
-  return { running: publicMeta(runningMeta, viewer), waiting: order.map((j) => publicMeta(j.meta, viewer)) }
+  return { running: publicMeta(runningMeta, viewer), waiting: plannedOrder().map((j) => ({ ...publicMeta(j.meta, viewer), id: j.id })) }
+}
+
+// 기다리는 일 순서 바꾸기 (11/17). id = 대기열 번호(queueList의 id)
+// - 일반 화면: 내 작업끼리만 자리를 바꾼다 (up · down) — 다른 사람 일을 건너뛰지 않게, 내 일들의 자리(단계 · 순번) 묶음은 그대로
+// - 관리 페이지(admin): 모든 일의 단계를 하나 올리기 · 내리기(up · down), 맨 앞(first: 1단계 · 가장 먼저)
+let frontSeq = 0
+export function moveJob(id, action, { viewer = null, admin = false } = {}) {
+  const job = waiting.find((j) => j.id === Number(id))
+  if (!job) throw Object.assign(new Error('이미 시작했거나 끝난 작업이에요.'), { status: 404 })
+  const setStep = (j, p) => Object.assign(j, { priority: p, meta: { ...j.meta, priority: p, manual: true } })
+  if (admin) {
+    if (action === 'first') {
+      setStep(job, PRIORITY.WAIT)
+      job.order = -(++frontSeq)
+    } else if (action === 'up') setStep(job, Math.max(PRIORITY.WAIT, job.priority - 1))
+    else if (action === 'down') setStep(job, Math.min(PRIORITY.PRECOMPUTE, job.priority + 1))
+    else throw Object.assign(new Error('알 수 없는 동작이에요.'), { status: 400 })
+    return queueList(viewer)
+  }
+  if (!viewer || job.meta.client !== viewer) throw Object.assign(new Error('내 작업만 순서를 바꿀 수 있어요.'), { status: 403 })
+  const mine = plannedOrder().filter((j) => j.meta.client === viewer)
+  const i = mine.indexOf(job)
+  const other = action === 'up' ? mine[i - 1] : action === 'down' ? mine[i + 1] : null
+  if (!other) return queueList(viewer)
+  // 두 일의 단계 · 순번을 맞바꾼다
+  const a = { priority: job.priority, order: job.order }
+  setStep(job, other.priority)
+  job.order = other.order
+  setStep(other, a.priority)
+  other.order = a.order
+  return queueList(viewer)
+}
+
+// 보고서 작업 취소 (11/17): 그 작업의 AI 일을 기다리는 중이면 빼고, 돌고 있으면 바로 멈춘다. 다른 일은 끊지 않는다
+export function cancelAi(jobId) {
+  if (!jobId) return
+  const reason = Object.assign(new Error('취소했어요'), { cancelled: true })
+  for (let i = waiting.length - 1; i >= 0; i -= 1) {
+    if (waiting[i].meta.jobId === jobId) waiting.splice(i, 1)[0].reject(reason)
+  }
+  if (runningMeta?.jobId === jobId && runningAbort && !runningAbort.signal.aborted) runningAbort.abort(reason)
 }
 
 // 대기 상황 (자동 최신화 화면에 "사용자 요청 먼저 처리 중"을 보여 줄 때 쓴다)
 export function queueStatus() {
-  const ahead = waiting.filter((j) => j.priority < PRIORITY.BACKGROUND).length
-  return { running, waiting: waiting.length, userFirst: ahead + (running !== null && running < PRIORITY.BACKGROUND ? 1 : 0) }
+  const ahead = waiting.filter((j) => isHuman(j.priority)).length
+  return { running, waiting: waiting.length, userFirst: ahead + (running !== null && isHuman(running) ? 1 : 0) }
 }
 
 // Ollama는 OpenAI 호환 주소(/v1)로 부르면 입력을 약 2,000토큰까지만 읽는다 (실측: 더 긴 입력은 앞부분이 잘림).
@@ -305,12 +389,12 @@ async function callChat(cfg, { messages, schema, schemaName, report = false, tim
 // report·timeoutMs는 선택 (보고서는 *_REPORT_MODEL과 더 긴 시간), priority는 PRIORITY 중 하나 (기본: 사람 요청)
 // AI 서버는 요청한 순간에 고른 곳을 쓴다 (기다리는 동안 상단에서 바꿔도 그대로)
 // label: 대기열에 보일 작업 이름 (기사 제목 · 키워드 등, 선택). 없으면 요청 맥락(withQueueContext)의 label
-export async function chatJson({ messages, schema, schemaName = 'result', report, timeoutMs, priority = PRIORITY.USER, provider, kind: callKind, label }) {
+export async function chatJson({ messages, schema, schemaName = 'result', report, timeoutMs, priority = PRIORITY.SUMMARY, provider, kind: callKind, label }) {
   let cfg = config(provider)
   // callKind: 요약 · 보고서가 아닌 호출의 이름 (translate 검색어 영문 표기 · timeline 흐름 정리 · reinforce 근거 보충 · section 섹션 다시 쓰기 · terms 뜨는 기술, 11/11)
   const kind = provider ? 'test' : callKind ?? (report ? 'report' : 'summary')
   const ctx = queueContext.getStore() ?? {}
-  const meta = { kind, label: String(label ?? ctx.label ?? '').slice(0, 120) || null, client: ctx.client ?? null }
+  const meta = { kind, label: String(label ?? ctx.label ?? '').slice(0, 120) || null, client: ctx.client ?? null, jobId: ctx.jobId ?? null }
   return enqueue(async (signal) => {
     // 사용 현황(17 문서 4장)에 AI 호출 수·실패·걸린 시간을 남긴다. 대기열에서 기다린 시간은 빼고 잰다
     const startedAt = Date.now()
@@ -319,7 +403,7 @@ export async function chatJson({ messages, schema, schemaName = 'result', report
       try {
         result = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs, signal })
       } catch (err) {
-        const alt = !provider && priority === PRIORITY.USER && !signal.aborted && reachable(err) ? fallbackId(cfg.id) : null
+        const alt = !provider && isHuman(priority) && !signal.aborted && reachable(err) ? fallbackId(cfg.id) : null
         if (!alt) throw err
         recordAiCall(kind, false, Date.now() - startedAt, { provider: cfg.id, model: (report && cfg.reportModel) || cfg.model })
         console.warn(`[llm] ${cfg.label} 실패(${err.message.slice(0, 80)}) → ${alt}로 한 번 다시`)

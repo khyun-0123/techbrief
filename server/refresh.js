@@ -338,7 +338,7 @@ async function runWorker() {
       await saveBacklogStatus()
       try {
         // 사람이 누른 요약이 있으면 그것부터 처리된다 (자동 요약은 가장 낮은 우선순위). 이미 요약됐으면 바로 넘어감
-        const result = await summarizeArticle(article, article.related, { priority: PRIORITY.BACKGROUND, refresh: Boolean(item.redo) })
+        const result = await summarizeArticle(article, article.related, { priority: item.important ? PRIORITY.AUTO_IMPORTANT : PRIORITY.AUTO, refresh: Boolean(item.redo) })
         if (!result.cached) {
           stats.done += 1
           summarizedInPass = true

@@ -105,7 +105,7 @@ async function translate(q) {
 async function translateLlm(q) {
   const { data } = await chatJson({
     kind: 'translate',
-    priority: PRIORITY.USER,
+    priority: PRIORITY.WAIT, // 찾기 결과가 이것을 기다림
     timeoutMs: 60_000,
     schema: SCHEMA,
     schemaName: 'search_terms',

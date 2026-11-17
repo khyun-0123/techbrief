@@ -42,11 +42,11 @@ export function idOf(article) {
 
 // 저장된 요약이 있으면 그대로 (cached: true), 없으면 AI로 만들어 저장한다
 // 같은 이슈 기사들(related)도 이 요약을 함께 쓰게 해 둔다 → 다시 요약하지 않음
-// priority: 사람이 누른 요약은 PRIORITY.USER(기본), 자동 최신화는 PRIORITY.BACKGROUND
+// priority: 사람이 누른 요약은 PRIORITY.SUMMARY(기본), 보고서 작업 안은 REPORT, 자동 최신화는 AUTO_IMPORTANT · AUTO (llm/client.js)
 // 원문 기반 (11/07 결정): 대표 기사의 원문 본문을 가져와 함께 보낸다. 못 가져오면 지금처럼 발췌문으로 (「발췌문 기준」 표시)
 // select: 「선별 추가」로 들어온 요청 → 원문을 DB에 저장(선별한 기사만, 90일). 예전 발췌문 요약이면 원문으로 다시 요약
 const BODY_MAX = 4_000 // 요약에 넣는 본문 길이(글자). 같은 이슈 기사 요약문과 함께 문맥 안에 들어가게
-export async function summarizeArticle(article, related = [], { refresh = false, priority = PRIORITY.USER, select = false } = {}) {
+export async function summarizeArticle(article, related = [], { refresh = false, priority = PRIORITY.SUMMARY, select = false } = {}) {
   const id = idOf(article)
   const saved = refresh ? null : await getSummary(id)
   if (saved && !(select && saved.summary?.basisSource !== 'fulltext')) return { ...saved, cached: true }
@@ -88,7 +88,7 @@ export async function summarizeOnly(article, related = [], { provider } = {}) {
     messages: buildSummaryMessages(articles),
     schema: SUMMARY_SCHEMA,
     schemaName: 'article_summary',
-    priority: PRIORITY.USER,
+    priority: PRIORITY.SUMMARY,
     provider,
   })
   return { summary: checkBasis(data, articles), model, usage: usage ?? null, ms: Date.now() - started }

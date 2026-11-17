@@ -48,7 +48,7 @@ import { searchPaperArticles } from './searchPapers.js'
 import { activeJobs, addJob, answerJob, cancelJob, listJobs, setDraftBuilder } from './reportJobs.js'
 import { sourceStatus } from './sourceGuard.js'
 import { patentDbStatus } from './patentDb.js'
-import { chatJson, llmProviders, modelName, pingModel, providerLabel, queueList, selectProvider, withQueueContext } from './llm/client.js'
+import { chatJson, llmProviders, moveJob, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, withQueueContext } from './llm/client.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
   buildMergeMessages,
@@ -242,6 +242,7 @@ function draftReport(articles, opts) {
     schemaName: 'report_draft',
     report: true,
     timeoutMs: REPORT_TIMEOUT_MS,
+    priority: PRIORITY.REPORT,
   })
 }
 
@@ -260,6 +261,7 @@ async function draftLongReport(articles, opts) {
     schemaName: 'report_draft',
     report: true,
     timeoutMs: REPORT_TIMEOUT_MS,
+    priority: PRIORITY.REPORT,
   })
   const notes = parts.flatMap((p) => p.warnings ?? [])
   return { ...merged, data: { ...merged.data, warnings: [...new Set([...(merged.data.warnings ?? []), ...notes])] } }
@@ -368,6 +370,7 @@ async function handleReportSection(req, res) {
     kind: 'section',
     report: true,
     timeoutMs: REPORT_TIMEOUT_MS,
+    priority: PRIORITY.WAIT, // 보고서 화면에서 섹션 하나를 다시 쓰는 동안 사람이 기다림
   })
   const bullets = cleanBullets(data.bullets, articles)
   if (body.reportId && dbEnabled()) await updateReportSection(body.reportId, body.key, bullets)
@@ -627,6 +630,12 @@ async function handleApiInner(req, res) {
       return send(res, 200, await collect(keywords))
     }
     // AI 대기열 (11/15): 지금 처리 중 · 기다리는 AI 요청, 보고서 작업, 자동 요약 대기 — 오른쪽 아래 창과 관리 페이지 「운영」
+    // 기다리는 AI 일 순서 바꾸기 (11/17): 일반 화면은 내 작업끼리, 관리 페이지에서 보낸 요청은 모든 일의 단계 (adminHere, 11/08 원칙)
+    if (req.method === 'POST' && req.url === '/api/queue/move') {
+      const { id, action } = await readJson(req)
+      const viewer = clientOf(req)
+      return send(res, 200, moveJob(id, String(action), { viewer, admin: Boolean(adminHere(req)) }))
+    }
     if (req.method === 'GET' && req.url === '/api/queue') {
       const viewer = clientOf(req)
       return send(res, 200, { ...queueList(viewer), reports: activeJobs(viewer), backlog: backlogBrief(), at: new Date().toISOString() })
