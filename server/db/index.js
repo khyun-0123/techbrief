@@ -2,8 +2,10 @@
 // DATABASE_URL이 없으면 DB 없이 동작한다 (서버 메모리 + 브라우저 저장소). 팀원 PC에 DB가 없어도 앱은 돌아간다
 import pg from 'pg'
 
-let pool = null
-let ready = null // 테이블 준비 Promise
+// 연결 묶음(pool)은 프로세스에 하나만 (11/17): Vite가 서버 코드를 고칠 때마다 같은 프로세스에서 이 파일을 새로 읽어
+// 묶음(최대 5개)을 또 만들었음 → 1초 안에 몇 번 다시 켜지면 DB 계정 한도(20개)를 넘어 「too many connections」(serve.log 515번)
+// → globalThis에 두고 다시 읽혀도 같은 묶음을 쓴다. 테이블 준비(SCHEMA)는 글이 바뀌었을 때만 다시 돈다
+const shared = (globalThis.__techbriefDb ??= { pool: null, schema: null, ready: null })
 
 export function dbEnabled() {
   return Boolean(process.env.DATABASE_URL)
@@ -229,13 +231,22 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 export async function db() {
   if (!dbEnabled()) return null
-  if (!pool) {
-    pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 })
-    pool.on('error', (err) => console.error('[db] 연결 오류:', err.message))
-    ready = pool.query(SCHEMA).then(() => console.log('[db] 테이블 준비 완료'))
+  if (!shared.pool) {
+    shared.pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 })
+    shared.pool.on('error', (err) => console.error('[db] 연결 오류:', err.message))
   }
-  await ready
-  return pool
+  if (shared.schema !== SCHEMA) {
+    shared.schema = SCHEMA
+    shared.ready = shared.pool
+      .query(SCHEMA)
+      .then(() => console.log('[db] 테이블 준비 완료'))
+      .catch((err) => {
+        shared.schema = null // 다음 호출 때 다시
+        throw err
+      })
+  }
+  await shared.ready
+  return shared.pool
 }
 
 export async function query(text, params) {
