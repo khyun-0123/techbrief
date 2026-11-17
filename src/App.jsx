@@ -21,6 +21,7 @@ import {
   fetchLists,
   fetchMaterials,
   fetchTechTrends,
+  fetchTechVerdicts,
   fetchSelection,
   fetchRefresh,
   fetchReports,
@@ -37,6 +38,7 @@ import {
 import AutoReportDialog from './AutoReportDialog.jsx'
 import GuideTour from './GuideTour.jsx'
 import Dropdown, { PeriodSeg, Seg } from './Dropdown.jsx'
+import VerdictBadge from './VerdictBadge.jsx'
 import { byRank, pickMaterials, periodLabelOf } from './autoPick.js'
 import { buildTagDict, mentionOf, tagsOf, techTermNames } from './hashtags.js'
 import { collectedView, isLow, isOwnOnly } from './articleFilter.js'
@@ -228,6 +230,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const features = useMemo(() => enabledFeatures(featureStates, mode), [featureStates, mode])
   const paging = features.has('articlesPaging')
   const [techTerms, setTechTerms] = useState([]) // 핵심어 사전용 기술 용어
+  const [techVerdicts, setTechVerdicts] = useState([]) // 자사 위협 · 기회 판정이 난 기술 (11/17, 긍정·중립·부정 대신)
   const [tagsOpen, setTagsOpen] = useState(() => new Set()) // 「+N」을 눌러 키워드를 모두 펼친 기사
   const [abstractOpen, setAbstractOpen] = useState(() => new Set()) // 「초록 전체 보기」를 누른 논문
   const [lists, setLists] = useState(null) // 자사·경쟁사·관심 기술 (「수집 설정」 칸 실험 기능에서 보기만)
@@ -369,6 +372,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       .then(setLists)
       .catch(() => {})
     // 핵심어 사전에 넣을 요즘 뜨는 기술 용어 (하루 한 번 갱신되는 값, 실패하면 빼고)
+    fetchTechVerdicts()
+      .then((d) => setTechVerdicts(d.items ?? []))
+      .catch(() => {})
     fetchTechTrends()
       .then((d) => setTechTerms(techTermNames(d)))
       .catch(() => {})
@@ -710,6 +716,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     [keywords, lists, techTerms],
   )
   const supplierDict = useMemo(() => buildTagDict([lists?.suppliers]), [lists])
+  // 자료에 나온 기술 중 위협 · 기회 판정이 난 것 (긴 말 먼저, 영문은 앞뒤 경계)
+  const verdictDict = useMemo(() => buildTagDict([techVerdicts.map((v) => v.term)]), [techVerdicts])
+  const verdictOf = (a) => {
+    const term = mentionOf(`${a.title} ${a.description ?? ''}`, verdictDict)
+    return term ? techVerdicts.find((v) => v.term === term) : null
+  }
   // 요약 본문을 아직 안 받은 자료는 목록에 실린 가벼운 요약(제목 · 핵심어 · 감성)으로
   const liteOf = (a) => aiSummaries[a.id]?.summary ?? a.summaryLite
   const tagsFor = (a) => tagsOf(a, liteOf(a), tagDict)
@@ -1678,6 +1690,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                                   {a.aiAllowed === false && ' · AI 안 씀'}
                                 </span>
                               )}
+                              <VerdictBadge verdict={verdictOf(a)} />
                               {a.url ? (
                                 <a className="title-link" href={a.url} target="_blank" rel="noreferrer" title="원문 열기 (새 창)" onClick={() => track('open', a.title)}>
                                   <TitleWithIcon title={a.title} terms={hlTerms} />

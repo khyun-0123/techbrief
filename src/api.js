@@ -393,6 +393,13 @@ export async function fetchTrends() {
 }
 
 // 요즘 뜨는 기술 (25 문서): 기간별 출처마다 순위 + 종합. period: week | lastweek | month | custom(from, to)
+// 자료 목록의 「자사 위협 · 기회 기술」 (11/17, server/techVerdicts.js)
+export async function fetchTechVerdicts() {
+  const res = await fetch('/api/tech-verdicts')
+  if (!res.ok) throw new Error('위협 · 기회 판정을 불러오지 못했어요')
+  return res.json()
+}
+
 export async function fetchTechTrends({ period = 'week', from, to } = {}) {
   const q = new URLSearchParams({ period, ...(from && { from }), ...(to && { to }) })
   const res = await fetch(`/api/tech-trends?${q}`)
