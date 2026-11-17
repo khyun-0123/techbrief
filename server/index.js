@@ -14,7 +14,7 @@ import { relatedWords, wordArticles } from './related.js'
 import { checkRule, DEFAULT_RULE, describeRule, loadImportanceRule, PARTS as IMPORTANCE_PARTS, previewRule, ruleHistory, saveImportanceRule } from './importanceRule.js'
 import { kiwiStatus } from './kiwi.js'
 import { fillMap, mapMaterials } from './mapMaterials.js'
-import { allCategoryCompetitors, bundleFacts, categoryCompetitors, headlineSeeds, prepareBundle, THREAT_FACTOR } from './keywordBundle.js'
+import { allCategoryCompetitors, bundleFacts, categoryCompetitors, categoryTrends, headlineSeeds, prepareBundle, THREAT_FACTOR } from './keywordBundle.js'
 import { scopeSearch } from './scopeSearch.js'
 import { popularPapers } from './papers/journals.js'
 import { getTechTrends, startTechTrends } from './techtrends.js'
@@ -696,6 +696,10 @@ async function handleApiInner(req, res) {
     // 세부 카테고리 × 경쟁사 특허 (11/12, 대시보드 「이번 주 한눈에」 · keywordBundle.js). 7일 기억, 특허 DB를 다시 받으면 다시 셈
     // 요즘 뜨는 기술 옆 자사 위협 · 기회 (11/14 조장): 기술 용어 → 그 말이 든 특허가 가장 많은 세부 기술(CPC) → 경쟁사 특허 판정
     // 특허 10건 미만이면 연결이 약해 판정하지 않음. 값은 mapMaterials(24시간) · categoryCompetitors(7일) 기억을 그대로 씀
+    // 세부 기술 카테고리 9개의 해마다 특허 수 · 앞 3년 대비 (11/17 R11, 7일 기억)
+    if (req.method === 'GET' && req.url === '/api/category-trends') {
+      return send(res, 200, (await categoryTrends()) ?? { items: [] })
+    }
     if (req.method === 'GET' && req.url.startsWith('/api/trend-verdicts?')) {
       const terms = (new URL(req.url, 'http://x').searchParams.get('terms') ?? '').split('|').map((t) => t.trim()).filter(Boolean).slice(0, 20)
       const one = async (term) => {

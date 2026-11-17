@@ -109,8 +109,39 @@ export async function categoryCompetitors(catId) {
   return out
 }
 
+// ── 세부 기술 카테고리 추이 (11/17, 35 문서 R11): 9개 카테고리 모두 해마다 특허 수 · 앞 3년 대비 (분야 = 그 카테고리 전체) ──
+// 키워드가 아니라 카테고리 단위 — 「이 기술이 걸친 분야가 커지는 중인가」. 특허 DB를 다시 받으면 다시 셈 (7일 기억)
+// 논문은 CPC 같은 분류가 없어 카테고리로 나누지 않는다 (한계, 41 문서 R11)
+export async function categoryTrends() {
+  if (!dbEnabled()) return null
+  const meta = await patentDbReady().catch(() => null)
+  if (!meta) return null
+  const key = `cat-trends:v1:${meta.at}`
+  const hit = await cacheGet(key).catch(() => null)
+  if (hit) return hit
+  const last = new Date().getFullYear() - 1
+  const from = last - 7
+  const cols = DISPLAY_CATEGORIES.map((c, i) => `bool_or(x ~ $${i + 3}) AS c${i}`).join(', ')
+  const { rows } = await query(
+    `WITH m AS (SELECT p.pub / 10000 AS y, ${cols} FROM display_patents p, unnest(p.cpc) x WHERE p.pub >= $1 AND p.pub < $2 GROUP BY p.family, p.pub)
+     SELECT y, ${DISPLAY_CATEGORIES.map((_, i) => `count(*) FILTER (WHERE c${i})::int AS n${i}`).join(', ')} FROM m GROUP BY y ORDER BY y`,
+    [from * 10000, (last + 1) * 10000, ...DISPLAY_CATEGORIES.map((c) => c.cpc)],
+  )
+  const ratio = (before, now) => (before + now >= RATIO_MIN ? Math.round(((now + RATIO_PRIOR) / (before + RATIO_PRIOR)) * 100) / 100 : null)
+  const items = DISPLAY_CATEGORIES.map((c, i) => {
+    const years = rows.map((r) => ({ y: Number(r.y), n: r[`n${i}`] }))
+    const sum = (a, b) => years.filter((x) => x.y >= a && x.y <= b).reduce((s, x) => s + x.n, 0)
+    const before = sum(last - 5, last - 3)
+    const now = sum(last - 2, last)
+    return { id: c.id, name: c.name, years, before, now, ratio: ratio(before, now) }
+  })
+  const out = { span: `${last - 5}~${last - 3} → ${last - 2}~${last}`, items, at: new Date().toISOString() }
+  await cachePut(key, out, 7 * 86_400_000).catch(() => {})
+  return out
+}
+
 // ── 묶음 만들기 ──
-const bundleKey = (keyword) => `bundle:v7:${queryKey(keyword)}` // v7 (11/17 R10): 소부장 기업 특허 · v5 (11/17): 특허 비교 회사 = 관리 페이지 경쟁사 목록
+const bundleKey = (keyword) => `bundle:v8:${queryKey(keyword)}` // v8 (11/17 R11): 세부 기술 분류 비중 · 분류 추이 · v7 (11/17 R10): 소부장 기업 특허 · v5 (11/17): 특허 비교 회사 = 관리 페이지 경쟁사 목록
 // 기억해 둔 묶음만 (만들지 않음): 11/17 전 보고서 미리보기에 기술 시계열을 채울 때 (화면이 기다리지 않게)
 export async function cachedBundle(raw) {
   const keyword = String(raw ?? '').trim().slice(0, 50)
@@ -145,6 +176,8 @@ export async function prepareBundle(raw, { refresh = false } = {}) {
       owners: mat?.patents ?? [],
       paperKeywords: (mat?.papers ?? []).map((p) => p.word),
       categories: mat?.categories ?? [],
+      // 세부 기술 분류 (11/17 R11): 이 키워드 특허가 걸친 카테고리 비중 + 그 카테고리 전체 특허 추이 (categoryTrends)
+      categoryMix: categoryMix(mat?.categories, await categoryTrends().catch(() => null)),
       competitors,
       // 소부장 기업 특허 (11/17 R10, suppliers.js): 이 키워드 특허를 낸 소재 · 부품 · 장비 회사 (관리 페이지 목록)
       suppliers: await supplierPatents(tl?.terms, (await getLists().catch(() => null))?.suppliers).catch(() => null),
@@ -182,6 +215,19 @@ async function techSignal(keyword) {
   const k = flat(keyword)
   const hit = (tt.composite ?? []).find((c) => flat(c.name) === k || flat(c.en) === k || flat(c.key) === k)
   return hit ? { score: hit.score, grade: hit.grade, stage: hit.stage ?? null, at: tt.updatedAt ?? null } : null
+}
+
+// 키워드 특허의 카테고리 비중 (mapMaterials categories: 그 말 특허 중 카테고리마다 건수) + 카테고리 전체 추이
+function categoryMix(categories, trends) {
+  const list = (categories ?? []).filter((c) => c.count > 0)
+  const total = list.reduce((s, c) => s + c.count, 0)
+  if (!total) return null
+  const tr = new Map((trends?.items ?? []).map((t) => [t.id, t]))
+  return {
+    total,
+    span: trends?.span ?? null,
+    items: list.slice(0, 4).map((c) => ({ id: c.id, name: c.name, count: c.count, share: Math.round((c.count / total) * 100), ratio: tr.get(c.id)?.ratio ?? null })),
+  }
 }
 
 // 헤드라인 재료 (규칙, 11/12 조장: 「키워드를 헤드라인 핵심 문장으로 빼내는 게 핵심」): 결론을 만들 숫자 · 판정을 미리 골라 준다
@@ -225,6 +271,10 @@ export function bundleFacts(b) {
       source: '디스플레이 특허 DB (Google Patents, CC BY 4.0) · 규칙 계산',
       description: `${b.keyword} 특허가 가장 많이 속한 세부 카테고리 「${c.name}」의 특허(같은 발명 한 번, ${c.years}): 분야 전체 ${c.field.before}→${c.field.now}건(${c.field.ratio}배), ${line}.${c.verdict ? ` 규칙 판정: 자사에 ${c.verdict}.` : ''}`,
     })
+  }
+  if (b.categoryMix?.items?.length) {
+    const m = b.categoryMix
+    out.push({ title: `[분석] ${b.keyword} 세부 기술 분류 (특허 CPC)`, source: '디스플레이 특허 DB · 규칙 계산', description: `${b.keyword} 특허 ${m.total}건이 걸친 세부 기술 (한 특허가 여러 분류에 걸칠 수 있음): ${m.items.map((x) => `${x.name} ${x.count}건(${x.share}%)${x.ratio != null ? ` — 분류 전체 특허 ${m.span} ${x.ratio}배` : ''}`).join(', ')}` })
   }
   if (b.suppliers?.items?.length) {
     out.push({ title: `[분석] ${b.keyword} 소부장 기업 특허 (${b.suppliers.years})`, source: '특허 DB · 규칙 계산', description: `${b.keyword} 특허를 낸 소재 · 부품 · 장비 회사 (디스플레이 특허, 같은 발명 한 번): ${b.suppliers.items.slice(0, 6).map((x) => `${x.name}(${x.kind}) ${x.count}건`).join(', ')}` })
