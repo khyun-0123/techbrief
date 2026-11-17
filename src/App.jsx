@@ -302,11 +302,18 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const reloadArticles = useCallback(async () => {
     const result = await fetchArticles()
     if (result.articles.length === 0) return
+    // 11/17: 서버가 배점 · 기준을 한 번만 보내므로(rule) 자료마다 다시 붙인다 (scoreParts.max · high · weight · noise를 쓰는 곳 그대로)
+    if (result.rule) {
+      for (const a of result.articles) {
+        if (a.scoreParts && !a.paper) a.scoreParts = { weight: 1, noise: 1, ...a.scoreParts, max: result.rule.max, high: result.rule.high }
+      }
+    }
     // 화면에는 서버가 준 기사 전부 (최근 7일). 브라우저 저장은 용량 때문에 최신 MAX_SAVED개만 (서버가 꺼졌을 때 보여 줄 용도)
     // 예전에는 화면도 400개로 잘라서, 빠짐없이 수집한 뒤로는 최근 몇 시간 치만 보였다
     setFetched(result.articles)
     setCollectedAt(result.lastCollectedAt)
-    save(ARTICLES_KEY, result.articles.slice(0, MAX_SAVED))
+    // 브라우저에는 첫 화면(대시보드 「최근 중요 자료」 · 머리 숫자)용 가벼운 목록만 (11/17 조장: 지금 보이는 것만 저장)
+    save(ARTICLES_KEY, result.articles.slice(0, MAX_SAVED).map(({ id, url, title, source, keyword, publishedAt, importance, importanceLevel, relevance, sameIssue, tier, own, groupId }) => ({ id, url, title, source, keyword, publishedAt, importance, importanceLevel, relevance, sameIssue, tier, own, groupId })))
     save(COLLECTED_AT_KEY, result.lastCollectedAt)
   }, [])
 

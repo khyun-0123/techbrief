@@ -1,5 +1,5 @@
 // 만든 보고서 보관함 (localStorage). 새 보고서가 앞에 온다
-import { load } from './utils.js'
+import { load, save } from './utils.js'
 
 const REPORTS_KEY = 'techbrief-reports'
 const OLD_REPORT_KEY = 'techbrief-report' // 데모 1차의 '마지막 초안' 하나
@@ -12,12 +12,16 @@ export function loadReports() {
   const old = load(OLD_REPORT_KEY, null)
   const migrated = old?.report ? [{ ...old, id: old.createdAt }] : []
   saveReports(migrated)
-  localStorage.removeItem(OLD_REPORT_KEY)
+  try {
+    localStorage.removeItem(OLD_REPORT_KEY)
+  } catch {
+    // 저장소를 못 쓰면 그대로
+  }
   return migrated
 }
 
 export function saveReports(list) {
-  localStorage.setItem(REPORTS_KEY, JSON.stringify(list.slice(0, MAX_REPORTS)))
+  save(REPORTS_KEY, list.slice(0, MAX_REPORTS)) // DB가 없을 때만 쓰임. 저장 못 해도 화면은 계속 (11/17)
 }
 
 // 보고서가 어떤 기사들로 만들어졌는지 비교할 때 쓰는 열쇠
