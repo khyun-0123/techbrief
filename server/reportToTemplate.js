@@ -286,7 +286,13 @@ export function reportToTemplate(entry, { trends = null, trendItems = null, topi
     judgment,
     actions,
     trend,
-    source: { period, article_count: r.sources?.articles ?? arts.length, media_count: media.size, keywords },
+    // article_count = 기사만 (11/17: 논문 10편을 「기사 10건」으로 적었음). counts = 「기사 a · 논문 b · 우리 분석 c」 (양식 출처 줄에 그대로)
+    source: (() => {
+      const nA = arts.filter((a) => isAnalysis(a)).length
+      const nP = arts.filter((a) => a.paper && !isAnalysis(a)).length
+      const nN = arts.length - nA - nP
+      return { period, article_count: nN, media_count: media.size, keywords, counts: [`기사 ${nN}건`, nP && `논문 ${nP}편`, nA && `우리 분석 ${nA}`].filter(Boolean).join(' · ') }
+    })(),
     one_line_summary: cutWords(r.oneLine ?? '', 50),
     appendix: {
       analysis,

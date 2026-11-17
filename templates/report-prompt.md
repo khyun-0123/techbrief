@@ -134,6 +134,7 @@
   }
 }
 - [B]의 facts.text · actions.what에는 근거 번호를 넣지 않는다 (refs · priority_or_due에 따로). [A]에는 문장 끝에 붙인다
+- (11/17 개발팀) 앱에서 내려받을 때는 서버가 `source.counts`(「기사 a건 · 논문 b편 · 우리 분석 c」)와 `appendix.timeline`(유첨 5 기술 시계열 — 규칙 계산)을 더 채운다. AI가 쓰지 않는 칸이라 이 프롬프트 출력에는 없어도 된다. 바뀐 것: [report-team-changes.md](report-team-changes.md)
 
 # 자체 검증 — 출력 전에 확인하고, 어긋나면 고친 뒤 마지막에 결과를 한 줄씩 보고한다
 [ ] 칸 크기 표의 길이를 넘는 칸 없음
