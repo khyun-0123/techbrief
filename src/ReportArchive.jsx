@@ -56,9 +56,14 @@ function Mark({ text, q }) {
 
 
 // initialId가 있으면(진행 창 「보고서함에서 보기」) 그 보고서를 바로 연다. 없으면 목록부터
-// 분석 키워드 칩: ① 주제 키워드(11/12부터 저장) ② 근거 기사의 해시태그(자료 현황과 같은 규칙)에서 많이 나온 것. 3개까지
+// 분석 키워드 칩: ① 주제 키워드(11/12부터 저장) · 분석 묶음 키워드 ② 없을 때만(11/12 전 보고서) 근거 자료의 해시태그에서 많이 나온 것. 3개까지
+// 11/17 조장: 「추천 키워드가 임의로 들어간 것 같다 — 분석 키워드 기준으로」 → 분석 키워드가 있으면 해시태그를 섞지 않는다
+function analysisKeywordsOf(r) {
+  return [...new Set([...(r.report?.sources?.topics ?? []), ...(r.report?.analysis ?? []).map((a) => a.keyword)].filter(Boolean))]
+}
 function keywordsOf(r, tagsFor) {
-  const topics = r.report.sources?.topics ?? []
+  const topics = analysisKeywordsOf(r)
+  if (topics.length) return topics.slice(0, 3)
   const count = new Map()
   if (tagsFor) for (const a of r.inputs ?? []) for (const t of tagsFor(a) ?? []) count.set(t, (count.get(t) ?? 0) + 1)
   const tags = [...count].sort((a, b) => b[1] - a[1]).map(([t]) => t)
@@ -298,9 +303,17 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
   // ── 목록 화면 (11/13: 왼쪽 메뉴 + 표 + 미리보기 창) ──
   // 11/14 디자인: 다른 화면과 같은 머리말 · 여백 규칙(20 문서 6장), 기간은 알약 버튼, 키워드는 지우기 · 자주 나온 키워드, 작업은 글자 버튼
   const allChecked = results.length > 0 && results.every((r) => checked.includes(r.id))
+  // 자주 나온 키워드 (11/17): 보고서마다 분석 키워드만 센다. 분석 키워드가 하나도 없을 때(11/12 전 보고서만 있을 때)만 해시태그로
   const kwCount = new Map()
-  for (const r of base) for (const k of kwOf(r)) kwCount.set(k, (kwCount.get(k) ?? 0) + 1)
-  const topKw = [...kwCount].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k]) => k)
+  const anyTopic = base.some((r) => analysisKeywordsOf(r).length)
+  const kwShown = new Map() // 대소문자 · 띄어쓰기만 다른 말은 하나로 (「AI 안경」 · 「ai 안경」), 처음 본 표기로 보여 줌
+  for (const r of base)
+    for (const k of anyTopic ? analysisKeywordsOf(r) : kwOf(r)) {
+      const key = norm(k)
+      if (!kwShown.has(key)) kwShown.set(key, k)
+      kwCount.set(key, (kwCount.get(key) ?? 0) + 1)
+    }
+  const topKw = [...kwCount].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([key]) => kwShown.get(key))
   return (
     <main className="page page-wide mr-page">
       <header className="page-header with-actions">
