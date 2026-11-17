@@ -261,7 +261,10 @@ async function buildBacklog() {
   for (const id of [...searchExtras.keys()]) if (done[id]) searchExtras.delete(id)
   const ids = new Set(candidates.map((a) => a.id))
   // 11/17: 예전 모양 요약(11/07 전, 예전 앱이 만든 것)도 다시 만든다 — 새 기사 요약을 다 한 뒤에 (sortBacklog)
-  const redo = (a) => Boolean(done[a.id]) && isOutdatedSummary(done[a.id].summary)
+  // 11/18: 예전 모델(qwen3 등)로 만든 요약도 — 형식은 새것이어도 모델이 지금 요약 모델(LLM_SUMMARY_MODEL)과 다르면 다시 (11/17 확인: 21일 안 119건이 빠져 있었음)
+  const current = process.env.LLM_SUMMARY_MODEL
+  const oldModel = (d) => Boolean(current && d?.model && d.model !== current)
+  const redo = (a) => Boolean(done[a.id]) && (isOutdatedSummary(done[a.id].summary) || oldModel(done[a.id]))
   return sortBacklog([
     ...candidates.filter((a) => !done[a.id] || redo(a)).map((a) => ({ article: a, important: (a.importance ?? 0) >= cut, ...(redo(a) ? { redo: true } : {}) })),
     ...[...searchExtras.values()].filter((e) => !ids.has(e.article.id)),
