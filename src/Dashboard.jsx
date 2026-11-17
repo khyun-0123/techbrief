@@ -57,7 +57,6 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
   const readyMeasureRef = useRef(null)
   const [readyFit, setReadyFit] = useState(READY_SHOWN)
   const exampleManual = useRef(false)
-  const exampleExtra = useRef(null) // 펼쳤을 때 늘어나는 높이 (펼쳐 있을 때 잼)
   // 요즘 뜨는 기술 (11/14 조장): 왼쪽 작은 막대 + 「펼쳐 보기」로 왼쪽에서 나오는 판, 자사 위협 · 기회 설명 창
   const [drawer, setDrawer] = useState(false)
   const [drawerClosing, setDrawerClosing] = useState(false) // 11/17: 닫을 때도 미끄러져 들어가게 (끝나면 drawer를 끔)
@@ -115,28 +114,8 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     ro.observe(box)
     return () => ro.disconnect()
   }, [focus, ready])
-  useLayoutEffect(() => {
-    if (focus) return undefined
-    const det = exampleRef.current
-    const body = document.querySelector('.dash-home-body.is-articles')
-    if (!det || !body) return undefined
-    const MIN_ROWS = 4
-    const decide = () => {
-      if (exampleManual.current) return
-      if (getComputedStyle(body).maxHeight !== 'none') return setExampleOpen(true)
-      // 모두 offsetHeight · clientHeight(배율 전 CSS 픽셀)로 잰다 — 작은 노트북 zoom에서도 단위가 같게
-      const row = body.querySelector('li')?.offsetHeight || 52
-      const summaryH = det.querySelector('summary')?.offsetHeight ?? 0
-      if (det.open) exampleExtra.current = det.offsetHeight - summaryH
-      const room = det.open ? body.clientHeight : body.clientHeight - (exampleExtra.current ?? Infinity)
-      setExampleOpen(Math.floor(room / row) >= MIN_ROWS)
-    }
-    decide()
-    const ro = new ResizeObserver(decide)
-    ro.observe(body)
-    ro.observe(det)
-    return () => ro.disconnect()
-  }, [focus])
+  // 11/17 조장 (39 문서 C11): 「분석하면 이렇게 보여요」 도식을 늘 펼쳐 크게 — 아래 최근 중요 자료 · 내 보고서는 한 줄짜리로 줄였다.
+  // 예전(11/15): 아래 목록이 4건보다 적게 보이면 예시를 자동으로 접었음
   useEffect(() => {
     let alive = true
     fetchReadyTimelines()

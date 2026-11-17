@@ -5969,8 +5969,24 @@ a.brand:focus-visible {
 }
 .kp-map,
 .kp-line {
-  width: 120px;
-  height: 36px;
+  width: 100%;
+  height: 88px; /* 11/17 (39 문서 C11): 도식을 크게 (예전 120×36) */
+}
+.kp-map text {
+  fill: var(--tb-color-text-sub);
+  font-size: 11px;
+}
+.kp-map text.center-label {
+  fill: var(--tb-color-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+.kp-line .area {
+  fill: var(--tb-color-bg-strong);
+  stroke: none;
+}
+.kp-line circle {
+  fill: var(--tb-color-text);
 }
 .kp-map line {
   stroke: var(--tb-color-line);
@@ -9399,4 +9415,22 @@ a.dash-home-t:hover,
 }
 .mr-menu .mr-menu-link:hover {
   background: var(--tb-color-surface-hover);
+}
+
+/* 11/17 조장 (39 문서 C11): 대시보드 첫 화면 — 분석 도식을 크게, 아래 두 칸은 한 줄짜리로 (제목 · 출처/날짜를 한 줄에) */
+@media (min-width: 901px) {
+  .dash-home-list li {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: 6px 0;
+  }
+  .dash-home-list .dash-home-t {
+    grid-row: 1;
+    grid-column: 2;
+  }
+  .dash-home-list .dash-home-m {
+    grid-row: 1;
+    grid-column: 3;
+    max-width: 220px;
+    font-size: var(--fs-xs);
+  }
 }
