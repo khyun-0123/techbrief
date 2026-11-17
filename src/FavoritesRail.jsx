@@ -27,7 +27,7 @@ function QueryItem({ q, active, starred, onSearch, onStar, onRemove, removeLabel
       >
         {starred ? '★' : '☆'}
       </button>
-      <button type="button" className="fav-go" onClick={() => onSearch(q)} title={`'${q}' 뉴스·논문에서 찾기`}>
+      <button type="button" className="fav-go" onClick={() => onSearch(q)} title={`'${q}' 논문 · 뉴스에서 찾기`}>
         {q}
       </button>
       {onRemove && (
@@ -85,7 +85,7 @@ function FavoritesRail({ keywords = [], favorites, recent, active, onSearch, onT
           </span>
         </button>
         {recentOnly.length === 0 ? (
-          <p className="fav-empty">「뉴스·논문에서 찾기」로 찾은 말이 여기에 쌓여요</p>
+          <p className="fav-empty">「논문 · 뉴스에서 찾기」로 찾은 말이 여기에 쌓여요</p>
         ) : (
           <ul className="fav-list">
             {recentOnly.map((q) => (

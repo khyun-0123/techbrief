@@ -53,7 +53,7 @@ function BadgesAndChips() {
             <Badge tone="accent">AI 사용</Badge>
             <Badge>AI 안 씀</Badge>
             <Badge tone="warning">AI 보충 · 확인 필요</Badge>
-            <Badge tone="success">기사 근거</Badge>
+            <Badge tone="success">자료 근거</Badge>
           </div>
         </div>
         <div>

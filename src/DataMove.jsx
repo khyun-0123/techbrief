@@ -13,12 +13,12 @@ import { load } from './utils.js'
 const CLIENT_KEY = 'techbrief.clientId' // usage.js와 같음
 // 옮길 브라우저 저장 항목 (키 → 설명)
 const KEYS = {
-  'techbrief-selected': '선별한 기사',
-  'techbrief-included': '보고서에 넣으려고 체크한 기사',
+  'techbrief-selected': '선별한 자료',
+  'techbrief-included': '보고서에 넣으려고 체크한 자료',
   'techbrief-folders': '폴더',
-  'techbrief-folder-of': '기사별 폴더',
+  'techbrief-folder-of': '자료별 폴더',
   'techbrief-target-folder': '담을 폴더',
-  'techbrief-extra-articles': '찾기로 담은 기사',
+  'techbrief-extra-articles': '찾기로 담은 자료',
   'techbrief-recent-searches': '최근 검색어',
   'techbrief-report-input': '보고서 제목 · 방향 · 조사 수준',
   'techbrief-cleanup-asked': '선별 정리를 물어본 보고서',

@@ -47,7 +47,7 @@ function FolderBar({ label, folders, counts, checked, active, allOption, onPick,
             onClick={() => onPick(f.id)}
           >
             <span aria-hidden="true">▤</span> {f.name} <span className="folder-count">{counts[f.id] ?? 0}</span>
-            {checked?.[f.id] > 0 && <span className="folder-checked" title="보고서에 넣으려고 체크한 기사">✓{checked[f.id]}</span>}
+            {checked?.[f.id] > 0 && <span className="folder-checked" title="보고서에 넣으려고 체크한 자료">✓{checked[f.id]}</span>}
           </button>
         ))}
         {adding ? (
@@ -90,7 +90,7 @@ function FolderBar({ label, folders, counts, checked, active, allOption, onPick,
                 className="danger-text"
                 onClick={(e) => {
                   e.currentTarget.closest('details').open = false
-                  if (window.confirm(`「${activeFolder.name}」 폴더를 지울까요? 안의 기사는 「미분류」로 옮겨요.`)) onDelete(activeFolder.id)
+                  if (window.confirm(`「${activeFolder.name}」 폴더를 지울까요? 안의 자료는 「미분류」로 옮겨요.`)) onDelete(activeFolder.id)
                 }}
               >
                 폴더 지우기

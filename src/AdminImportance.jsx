@@ -113,7 +113,7 @@ export default function AdminImportance({ onToast, onChanged }) {
             }}
             className="adm-imp-input"
           />
-          <small>이 점수 이상이면 목록에 「중요」 배지가 붙고, 「뉴스·논문에서 찾기」 결과 중 이 점수 이상 뉴스는 자동으로 요약돼요 — 낮추면 AI 요약이 늘어나요. 기본 {data.defaults.high}점.</small>
+          <small>이 점수 이상이면 목록에 「중요」 배지가 붙고, 「논문 · 뉴스에서 찾기」 결과 중 이 점수 이상 뉴스는 자동으로 요약돼요 — 낮추면 AI 요약이 늘어나요. 기본 {data.defaults.high}점.</small>
         </label>
         {error && <p className="adm-error">{error}</p>}
         <div className="adm-actions">

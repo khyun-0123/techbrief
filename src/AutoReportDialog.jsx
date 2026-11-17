@@ -7,8 +7,8 @@ import { Seg } from './Dropdown.jsx'
 
 const LEVELS = [
   ['selected', '선택한 자료만', '가장 빨라요'],
-  ['owned', '보유 자료까지', '근거 없는 줄을 모은 기사 · 원문으로 보충'],
-  ['research', '추가 자료 조사까지', '네이버 · 논문을 새로 찾아 보충, 가장 오래 걸림'],
+  ['owned', '보유 자료까지', '근거 없는 줄을 모은 자료 · 원문으로 보충'],
+  ['research', '추가 자료 조사까지', '논문 · 뉴스를 새로 찾아 보충, 가장 오래 걸림'],
 ]
 const WHY = { important: '중요', fill: '채움', term: '고른 말' }
 const SUMMARY_SEC = 25 // 요약 한 건 평균 (summaryQueue.js 기본값과 같음)

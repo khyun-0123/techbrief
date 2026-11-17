@@ -1163,10 +1163,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         <span className="topbar-side">
           {/* 오늘 수집 · 선별 숫자 (11/08: 대시보드 숫자 칸을 메뉴 막대로 옮김). 누르면 그 화면으로 */}
           <span className="topbar-stats">
-            <button type="button" onClick={() => setScreen('collect')} title="오늘(24시간) 모은 이슈 · 기사 — 자료 현황으로">
-              오늘 이슈 <strong>{todayIssues.length}</strong> · 기사 <strong>{countArticles(todayIssues)}</strong>
+            <button type="button" onClick={() => setScreen('collect')} title="오늘(24시간) 모은 이슈 · 자료 — 자료 현황으로">
+              오늘 이슈 <strong>{todayIssues.length}</strong> · 자료 <strong>{countArticles(todayIssues)}</strong>
             </button>
-            <button type="button" onClick={() => setScreen('select')} title="선별한 기사 — 선별·요약으로">
+            <button type="button" onClick={() => setScreen('select')} title="선별한 자료 — 선별·요약으로">
               선별 <strong>{selectedIds.length}</strong>
             </button>
           </span>
@@ -1218,7 +1218,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               ? '일반 사용자에게는 점검 화면이 보여요. 관리자는 여기서 그대로 확인할 수 있어요.'
               : isTest && ops.mode === 'ai_off'
                 ? '일반 사용자는 요약·보고서를 쓸 수 없어요. 관리자는 그대로 쓸 수 있어요.'
-                : ops.message || (ops.mode === 'ai_off' ? '기사 보기와 찾기는 그대로 쓸 수 있어요.' : '')}
+                : ops.message || (ops.mode === 'ai_off' ? '자료 보기와 찾기는 그대로 쓸 수 있어요.' : '')}
             {!isTest && ops.until && ` · ${ops.until} 재개 예정`}
           </span>
           {isTest && <a href="/admin#ops">운영 설정 →</a>}
@@ -1334,8 +1334,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               <h1>자료 현황</h1>
               <p>
                 {isSample
-                  ? '키워드로 기사를 모아 보여 줘요. 아직 수집 전이라 샘플 기사를 보여 줘요.'
-                  : '네이버 뉴스와 전문매체 · 기업 발표 · 학회에서 모은 기사예요. 같은 이슈 기사는 하나로 묶었어요.'}
+                  ? '키워드로 자료를 모아 보여 줘요. 아직 수집 전이라 샘플 자료를 보여 줘요.'
+                  : '전문매체 · 기업 발표 · 학회 · 논문 · 뉴스에서 모은 자료예요. 같은 소식은 하나로 묶었어요.'}
               </p>
             </div>
             <div className="header-actions">
@@ -1356,7 +1356,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 className="btn primary"
                 onClick={() => setScreen('select')}
                 disabled={selectedIds.length === 0}
-                title={selectedIds.length === 0 ? '목록에서 「선별 추가」를 눌러 기사를 고르세요' : undefined}
+                title={selectedIds.length === 0 ? '목록에서 「선별 추가」를 눌러 자료를 고르세요' : undefined}
               >
                 선별·요약으로 →
               </button>
@@ -1391,12 +1391,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   <input
                     type="search"
                     placeholder="자료 찾기 (제목·키워드)"
-                    aria-label="기사 찾기"
+                    aria-label="자료 찾기"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
                   <button type="submit" className="btn outline" disabled={!query.trim() || search?.loading}>
-                    {search?.loading ? '찾는 중…' : '뉴스·논문에서 찾기'}
+                    {search?.loading ? '찾는 중…' : '논문 · 뉴스에서 찾기'}
                   </button>
                 </form>
                 <PeriodSeg value={period} onChange={changePeriod} options={PERIODS} title={search ? '바꾸면 이 기간으로 다시 찾아요' : undefined} />
@@ -1438,20 +1438,20 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                     {search.articles && ` · 뉴스 ${search.newsCount ?? 0}건${search.collectedCount ? ` · 모아 둔 1·2차 출처 ${search.collectedCount}건` : ''} · 논문 ${search.paperCount ?? 0}건`}
                     {search.paperNote && <span className="search-note"> · {search.paperNote}</span>}
                     {search.newsNote && <span className="search-note" role="status"> · {search.newsNote}</span>}
-                    {search.articles && ` · 이슈 ${visible.length}개 · 기사 ${countArticles(visible)}건`}
+                    {search.articles && ` · 이슈 ${visible.length}개 · 자료 ${countArticles(visible)}건`}
                     {search.loading && ' · 찾는 중…'}
                     {search.truncated && (
                       <span className="search-note">
-                        {' '}· 기사가 많아 {new Date(search.oldestAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} 이후 것만 가져왔어요. 더 구체적인 말로 찾아보세요
+                        {' '}· 뉴스가 많아 {new Date(search.oldestAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} 이후 것만 가져왔어요. 더 구체적인 말로 찾아보세요
                       </span>
                     )}
-                    <span className="search-note"> · 수집 목록에는 쌓이지 않아요. 선별·요약하면 그 기사만 남아요</span>
+                    <span className="search-note"> · 자료 현황에는 쌓이지 않아요. 선별하면 그 자료만 남아요</span>
                   </span>
                   <button type="button" className="btn" onClick={() => setTimelineQuery(search.query)} title="이 기술의 배경 · 성장 · 적용 · 전망을 논문 · 특허 · 검색 관심도로 봐요">
                     기술 시계열
                   </button>
                   <button type="button" className="btn" onClick={closeSearch}>
-                    모은 기사로 돌아가기
+                    모은 자료로 돌아가기
                   </button>
                 </div>
               ) : null}
@@ -1485,17 +1485,17 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               <div className="list-tools">
                 {search ? null : (
                   <span className="list-count">
-                    이슈 {visible.length}개 · 기사 {countArticles(visible)}건
-                    {q && <span className="search-note"> · 모은 기사에서 찾는 중. 없으면 「뉴스·논문에서 찾기」</span>}
+                    이슈 {visible.length}개 · 자료 {countArticles(visible)}건
+                    {q && <span className="search-note"> · 모은 자료에서 찾는 중. 없으면 「논문 · 뉴스에서 찾기」</span>}
                   </span>
                 )}
-                <label className="own-toggle" title="지금 정렬은 그대로 두고, AI 요약이 있는 기사를 위로 올려요">
+                <label className="own-toggle" title="지금 정렬은 그대로 두고, AI 요약이 있는 자료를 위로 올려요">
                   <input type="checkbox" checked={summarizedFirst} onChange={(e) => toggleSummarizedFirst(e.target.checked)} />
-                  요약된 기사 먼저 <span className="own-count">{listed.filter(hasSummary).length}건</span>
+                  요약된 자료 먼저 <span className="own-count">{listed.filter(hasSummary).length}건</span>
                 </label>
-                <label className="own-toggle" title="키워드 이야기가 한두 줄뿐이거나, 제목이 주식·쇼핑·생활 등 다른 주제이고 기술 내용이 없는 기사예요 (기본은 숨김)">
+                <label className="own-toggle" title="키워드 이야기가 한두 줄뿐이거나, 제목이 주식·쇼핑·생활 등 다른 주제이고 기술 내용이 없는 자료예요 (기본은 숨김)">
                   <input type="checkbox" checked={showLow} onChange={(e) => toggleShowLow(e.target.checked)} />
-                  관련도 낮은 기사도 보기 <span className="own-count">{lowCount}건</span>
+                  관련도 낮은 자료도 보기 <span className="own-count">{lowCount}건</span>
                 </label>
                 {features.has('sentiment') && (
                 <Dropdown
@@ -1513,9 +1513,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   ]}
                 />
                 )}
-                <label className="own-toggle" title="자사·자회사만 나온 기사를 숨겨요. 경쟁사도 함께 나오면 남겨요">
+                <label className="own-toggle" title="자사·자회사만 나온 자료를 숨겨요. 경쟁사도 함께 나오면 남겨요">
                   <input type="checkbox" checked={excludeOwn} onChange={(e) => toggleExcludeOwn(e.target.checked)} />
-                  자사·자회사 기사 제외 <span className="own-count">{ownCount}건</span>
+                  자사·자회사 자료 제외 <span className="own-count">{ownCount}건</span>
                 </label>
               </div>
               {search?.error && <p className="ai-error search-error" role="alert">{search.error}</p>}
@@ -1526,13 +1526,13 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 <p className="empty">
                   {search
                     ? search.loading
-                      ? '뉴스 · 논문에서 찾는 중이에요…'
+                      ? '논문 · 뉴스에서 찾는 중이에요…'
                       : search.error
                         ? '찾지 못했어요. 잠시 뒤 다시 찾아보세요.'
                         : search.period !== 'all'
-                          ? '이 기간에는 찾은 기사가 없어요.'
-                          : '찾은 기사가 없어요. 다른 말로 찾아보세요.'
-                    : '조건에 맞는 기사가 없어요. 기간을 넓히거나 「뉴스·논문에서 찾기」를 눌러 보세요.'}
+                          ? '이 기간에는 찾은 자료가 없어요.'
+                          : '찾은 자료가 없어요. 다른 말로 찾아보세요.'
+                    : '조건에 맞는 자료가 없어요. 기간을 넓히거나 「논문 · 뉴스에서 찾기」를 눌러 보세요.'}
                   {search?.articles && search.period !== 'all' && (
                     <button type="button" className="btn outline empty-action" onClick={() => changePeriod('all')}>
                       전체 기간으로 다시 찾기
@@ -1554,7 +1554,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                       <th>제목</th>
                       <th className="center">출처</th>
                       <th className="center">발행</th>
-                      <th className="center" title="기사 제목 · 내용에 나온 우리 용어(수집 키워드 · 회사 · 뜨는 기술)와 요약 핵심어. 누르면 그 말로 걸러요">키워드</th>
+                      <th className="center" title="제목 · 내용에 나온 우리 용어(수집 키워드 · 회사 · 뜨는 기술)와 요약 핵심어. 누르면 그 말로 걸러요">키워드</th>
                       <th className="center">작업</th>
                     </tr>
                   </thead>
@@ -1578,7 +1578,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                               )}
                               {a.relevance === 'low' && <span className="badge-low">관련 낮음</span>}
                               {a.roundup && (
-                                <span className="badge-low" title="여러 소식을 모은 기사예요. 아래 문장이 키워드 관련 꼭지예요">
+                                <span className="badge-low" title="여러 소식을 모은 글이에요. 아래 문장이 키워드 관련 꼭지예요">
                                   모음 기사
                                 </span>
                               )}
@@ -1665,7 +1665,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                                     같은 이슈 기사 {a.sameIssue}건 {groupOpen ? '▴' : '▾'}
                                   </button>
                                 ) : (
-                                  <span className="same-issue">같은 이슈 기사 {a.sameIssue}건</span>
+                                  <span className="same-issue">같은 소식 {a.sameIssue}건</span>
                                 ))}
                               {(reasons.length > 0 || sort === 'importance') && (
                                 <span className="why-important" title={scoreTitle(a)}>
@@ -1773,7 +1773,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                                 ))}
                               </ul>
                               {a.sameIssue > a.related.length && (
-                                <p className="hint">외 {a.sameIssue - a.related.length}건 · 제목이 비슷한 기사를 48시간 안에서 묶었어요</p>
+                                <p className="hint">외 {a.sameIssue - a.related.length}건 · 제목이 비슷한 자료를 48시간 안에서 묶었어요</p>
                               )}
                             </td>
                           </tr>

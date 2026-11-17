@@ -161,7 +161,7 @@ function SelectSummary({
           {candidates.length > 0 && (
             <div className="segmented select-pane-switch" role="group" aria-label="보는 칸">
               <button type="button" aria-pressed={pane === 'list'} onClick={() => setPane('list')}>
-                선별 기사 <span className="select-pane-n">{candidates.length}</span>
+                선별 자료 <span className="select-pane-n">{candidates.length}</span>
               </button>
               <button type="button" aria-pressed={pane === 'report'} onClick={() => setPane('report')}>
                 보고서 <span className="select-pane-n">{reportArticles.length}</span>
@@ -205,9 +205,9 @@ function SelectSummary({
         </section>
       ) : (
         <div className={`select-report show-${pane}`}>
-          <section className="panel panel-flush select-list" aria-label="선별 기사">
+          <section className="panel panel-flush select-list" aria-label="선별 자료">
             <div className="select-list-head">
-              <h2>선별 기사</h2>
+              <h2>선별 자료</h2>
               <Seg
                 value={sort}
                 onChange={setSort}

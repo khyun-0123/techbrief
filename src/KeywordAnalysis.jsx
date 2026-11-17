@@ -76,7 +76,7 @@ function MapWait({ startedAt }) {
     <div className="km-wait">
       <WaitSteps
         steps={[
-          ['now', '뉴스 · 모은 기사에서 함께 나온 말 세기 (형태소 분석)'],
+          ['now', '모은 자료 · 뉴스에서 함께 나온 말 세기 (형태소 분석)'],
           ['next', '볼 범위 추천 개수 고르기'],
         ]}
       />
@@ -339,10 +339,10 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
                   <>
                     <KeywordMap keyword={keyword} issues={related.issues} nodes={nodes} edges={related.edges} branches={related.children} isOn={isOn} onToggle={toggle} view={mapView} onView={setMapView} onEnlarge={() => setBigMap(true)} />
                     {relWord && (
-                      <section className="ka-rel" aria-live="polite" aria-label={`「${relWord}」 관련 기사`}>
+                      <section className="ka-rel" aria-live="polite" aria-label={`「${relWord}」 관련 자료`}>
                         <div className="ka-rel-head">
-                          <b>「{relWord}」 관련 기사</b>
-                          <span className="hint">「{keyword}」와 함께 나온 기사 · 제목에 그 말이 든 것 먼저</span>
+                          <b>「{relWord}」 관련 자료</b>
+                          <span className="hint">「{keyword}」와 함께 나온 자료 · 제목에 그 말이 든 것 먼저</span>
                           <button type="button" className="btn-text" onClick={() => setRelWord(null)}>
                             숨기기
                           </button>
@@ -350,7 +350,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
                         {relArticles?.word !== relWord ? (
                           <p className="hint">찾는 중…</p>
                         ) : relArticles.error ? (
-                          <p className="hint">관련 기사를 못 불러왔어요 ({relArticles.error})</p>
+                          <p className="hint">관련 자료를 못 불러왔어요 ({relArticles.error})</p>
                         ) : relArticles.articles.length ? (
                           <ol className="ka-rel-list">
                             {relArticles.articles.map((a) => (
@@ -366,7 +366,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport, perio
                             ))}
                           </ol>
                         ) : (
-                          <p className="hint">「{keyword}」와 「{relWord}」가 함께 나온 기사가 아직 없어요.</p>
+                          <p className="hint">「{keyword}」와 「{relWord}」가 함께 나온 자료가 아직 없어요.</p>
                         )}
                       </section>
                     )}
