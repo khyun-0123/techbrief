@@ -30,6 +30,8 @@ ALTER TABLE articles ADD COLUMN IF NOT EXISTS section text;
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS group_id text;
 -- 네이버가 「...」로 자른 제목을 원문 페이지 제목(og:title)으로 채운 것 (collector/titles.js). 없으면 title을 쓴다
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS full_title text;
+-- 「찾기」로 받은 네이버 기사 (11/17 · 37 문서 P2-3): 자료 현황 · 요즘 뜨는 기술 · 추이 · 맵 DB 쪽에는 넣지 않고, 다시 찾을 때 같은 점수를 쓰려고 남긴다. 수집 키워드로 다시 모이면 false
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS from_search boolean NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS articles_published_idx ON articles (published_at DESC);
 CREATE INDEX IF NOT EXISTS articles_keyword_idx ON articles (keyword, published_at DESC);
 

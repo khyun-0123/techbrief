@@ -36,17 +36,22 @@ async function knownUrls(urls) {
 }
 
 // 여러 건을 한 번에 넣는다. 이미 있는 기사는 마지막으로 본 시각만 갱신 (inserted로 새 기사 수를 센다)
-async function saveToDb(articles) {
+// fromSearch (11/17 · P2-3): 「찾기」로 받은 기사. 이미 있는 기사는 그대로 두고, 찾기로만 있던 기사를 수집이 다시 모으면 수집 기사로 바꾼다(키워드도 수집 키워드로)
+async function saveToDb(articles, { fromSearch = false } = {}) {
   if (articles.length === 0) return 0
   const cols = ['id', 'url', 'title', 'description', 'source', 'keyword', 'published_at', 'section']
   const values = cols.map((c) => articles.map((a) => (c === 'published_at' ? a.publishedAt : a[c] ?? null)))
   const { rows } = await query(
-    `INSERT INTO articles (id, url, title, description, source, keyword, published_at, section)
-     SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::timestamptz[], $8::text[])
-     ON CONFLICT (url) DO UPDATE SET last_seen_at = now(), title = EXCLUDED.title, description = EXCLUDED.description,
-       section = coalesce(EXCLUDED.section, articles.section)
+    `INSERT INTO articles (id, url, title, description, source, keyword, published_at, section, from_search)
+     SELECT *, $9::boolean FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::timestamptz[], $8::text[])
+     ON CONFLICT (url) DO UPDATE SET last_seen_at = now(),
+       title = CASE WHEN EXCLUDED.from_search THEN articles.title ELSE EXCLUDED.title END,
+       description = CASE WHEN EXCLUDED.from_search THEN articles.description ELSE EXCLUDED.description END,
+       section = coalesce(EXCLUDED.section, articles.section),
+       keyword = CASE WHEN articles.from_search AND NOT EXCLUDED.from_search THEN EXCLUDED.keyword ELSE articles.keyword END,
+       from_search = articles.from_search AND EXCLUDED.from_search
      RETURNING (xmax = 0) AS inserted`,
-    values,
+    [...values, fromSearch],
   )
   return rows.filter((r) => r.inserted).length
 }
@@ -57,8 +62,9 @@ async function loadRecentFromDb(days) {
     `SELECT a.id, a.url, a.title, a.description, a.source, a.keyword, a.published_at, a.section, a.group_id, a.full_title,
             left(t.body, $2) AS body
        FROM articles a LEFT JOIN article_texts t ON t.article_id = a.id
-      WHERE a.published_at > now() - make_interval(days => $1)
-         OR (a.section = 'feed:crossref' AND a.published_at > now() - make_interval(days => $3))
+      WHERE NOT a.from_search
+        AND (a.published_at > now() - make_interval(days => $1)
+         OR (a.section = 'feed:crossref' AND a.published_at > now() - make_interval(days => $3)))
       ORDER BY a.published_at, a.id`,
     [days, BODY_FOR_RELEVANCE, PAPER_KEYWORD_DAYS], // 논문은 키워드 논문 기간(30일)까지 목록에 (11/09)
   )
@@ -546,7 +552,8 @@ async function computeList({ regroup = false, days = LIST_DAYS } = {}) {
 }
 
 // 「기사 찾기」: 등록 키워드와 상관없이 네이버에서 바로 찾는다
-// 수집이 아니라 찾아보기라서 DB에 쌓지 않는다 (추이 집계에도 넣지 않음). 요약하면 요약만 저장된다
+// 11/17 (37 문서 P2-3): 찾은 기사도 DB에 남긴다(`from_search`). 자료 현황 · 추이 · 요즘 뜨는 기술 · 맵 DB 쪽에는 섞지 않고,
+// 같은 기사를 다시 찾을 때 저장한 점수를 써서 자료 현황 · 찾기 · 맵에서 점수가 같게. 보관 기간은 관리 페이지 「네이버 기사 보관」(21일 / 지우지 않음)
 // period (18 문서): 네이버 검색 API에는 기간 조건이 없다
 // - 'all': 정확도순 100건 (기간 제한 없음)
 // - 'today'·'week': 최신순으로 100건씩 넘겨 받다가 기간을 벗어나면 멈춘다. 호출 한도를 생각해 최대 SEARCH_PAGES쪽까지
@@ -584,7 +591,13 @@ export async function searchArticles(query, { period = 'all' } = {}) {
   const articles = items.map((item, i) => ({ ...toArticle(item, q), rank: i + 1 })).filter((a) => a.url && a.title)
   const unique = [...new Map(articles.map((a) => [a.url, a])).values()]
   const issues = toIssues(unique, await getLists(), await scoreContext())
-  if (dbEnabled()) await linkToCollected(issues)
+  if (dbEnabled()) {
+    await linkToCollected(issues)
+    // 찾은 기사를 남기고(수집 담당 앱만이 아니라 찾은 앱에서 바로), 모은 기사와 이어지지 않은 이슈의 점수도 저장 (다음 찾기 · 맵에서 같은 점수)
+    saveToDb(unique, { fromSearch: true })
+      .then(() => saveScores(issues.filter((i) => !i.linked)))
+      .catch((err) => console.warn(`[search] 찾은 기사 저장 실패: ${err.message}`))
+  }
   // truncated일 때 실제로 어디까지 가져왔는지 (예: '반도체' 7일 → 최신 500건이 약 7시간치)
   const oldestAt = truncated ? items.map((i) => new Date(i.pubDate).toISOString()).sort()[0] : null
   return { query: q, period, fetched: items.length, truncated, oldestAt, articles: issues, newsError }
@@ -624,7 +637,10 @@ export async function searchCollected(searchText, terms = [], { period = 'all' }
     const hit = raw.find((w) => text.includes(w.toLowerCase().replace(/\s+/g, ''))) ?? raw[0]
     return { ...r, keyword: hit, publishedAt: published_at.toISOString(), groupId: null, collected: true, ...(full_title ? { fullTitle: full_title } : {}) }
   })
-  return { articles: toIssues(stored, await getLists(), await scoreContext()) }
+  // 11/17 (P2-3): 관련도는 검색어 기준이지만 중요도는 자료 현황과 같게 — 같은 글이 찾기 · 자료 현황에서 다른 점수로 보였음
+  const issues = toIssues(stored, await getLists(), await scoreContext())
+  await linkToCollected(issues).catch(() => {})
+  return { articles: issues }
 }
 
 // 찾기 결과 중 이미 모은 기사와 같은 이슈인 것은 그 이슈의 요약(summaryId)과 점수를 함께 쓴다
@@ -639,8 +655,15 @@ async function linkToCollected(issues) {
     const rep = byId.get(issue.id) ?? reps.find((r) => sameIssue(key, r))?.rep
     if (!rep) continue
     issue.summaryId = rep.id
-    if ((rep.importance ?? 0) > (issue.importance ?? 0)) {
-      Object.assign(issue, { importance: rep.importance, importanceLevel: rep.importanceLevel, scoreParts: rep.scoreParts })
-    }
+    issue.linked = true // 자료 현황 이슈와 이어짐 (`collected`는 「1·2차 출처」 뜻이라 따로)
+    // 11/17 (P2-3): 같은 이슈면 자료 현황 점수를 그대로 (예전: 더 높을 때만 → 찾기와 자료 현황 점수가 달랐음)
+    Object.assign(issue, { importance: rep.importance, importanceLevel: rep.importanceLevel, scoreParts: rep.scoreParts })
+  }
+  // 자료 현황(7일)에 없는 이슈: 전에 찾거나 모아서 저장해 둔 점수가 있으면 그것 (최신성만 지금 기준으로 다시)
+  const rest = issues.filter((i) => !i.linked)
+  const stored = await storedScores(rest.map((i) => i.id)).catch(() => new Map())
+  for (const issue of rest) {
+    const s = stored.get(issue.id)
+    if (s) Object.assign(issue, { importance: s.score, importanceLevel: s.level, scoreParts: s.parts ?? issue.scoreParts, storedScore: true })
   }
 }

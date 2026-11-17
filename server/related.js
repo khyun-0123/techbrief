@@ -123,7 +123,8 @@ async function collectedDocs(center) {
             coalesce(a.description, '') || ' ' || coalesce((SELECT string_agg(v->>'text', ' ') FROM jsonb_each(s.content->'items') AS e(key, v)), '') AS description
        FROM articles a
        LEFT JOIN summaries s ON s.article_id = a.id
-      WHERE lower(regexp_replace(coalesce(a.full_title, a.title) || ' ' || coalesce(a.description, '') || ' ' || coalesce(s.content::text, ''), '\\s+', '', 'g')) LIKE $1
+      WHERE NOT a.from_search -- 찾기로 받은 기사는 묶음 번호가 없어 같은 소식을 여러 번 센다 → 네이버 결과(아래)가 같은 규칙으로 대신 (11/17)
+        AND lower(regexp_replace(coalesce(a.full_title, a.title) || ' ' || coalesce(a.description, '') || ' ' || coalesce(s.content::text, ''), '\\s+', '', 'g')) LIKE $1
       ORDER BY a.published_at DESC LIMIT 1000`,
     [k],
   )
