@@ -12,6 +12,7 @@ import { englishTerms, openAlexQuery } from './queryTerms.js'
 import { isCompetitorTech, keywordPapers } from './papers/journals.js'
 import { corpusReady, paperScore2, searchCorpus } from './papers/corpus.js'
 import { kciReady, searchKci } from './papers/kci.js'
+import { saveKeywordPapers, storedKeywordPapers } from './papers/keywordStore.js'
 
 const DAYS = { today: 90, week: 365, all: 365 * 3 } // 논문은 하루 · 일주일 안에 거의 없어 넓게
 const LIMIT = 100
@@ -68,6 +69,8 @@ export async function searchPaperArticles(query, period = 'all', terms = null) {
   const from = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10)
   let works
   let provider
+  let storedAdded = 0
+  let storedOnly = false
   const rows = !(await corpusReady()) ? [] : await searchCorpus(t.terms, { from, to }).catch((err) => {
     console.warn(`[papers] 논문 DB 찾기 실패: ${err.message}`)
     return []
@@ -76,8 +79,24 @@ export async function searchPaperArticles(query, period = 'all', terms = null) {
     works = rows.map(fromCorpus)
     provider = 'corpus'
   } else {
-    ;({ works, provider } = await keywordPapers(en, { from, to, limit: LIMIT }))
-    works = works.filter((w) => !w.retracted)
+    // 11/17 D2 (papers/keywordStore.js): 받은 논문은 키워드마다 저장, 예전에 받아 둔 것과 합친다. OpenAlex가 막히면 저장해 둔 것만으로
+    let fetchErr = null
+    let fresh = []
+    try {
+      ;({ works: fresh, provider } = await keywordPapers(en, { from, to, limit: LIMIT }))
+      fresh = fresh.filter((w) => !w.retracted)
+    } catch (err) {
+      fetchErr = err
+    }
+    if (fresh.length) saveKeywordPapers(query, fresh, provider).catch((err) => console.warn(`[papers] 키워드 논문 저장 실패: ${err.message}`))
+    const stored = await storedKeywordPapers(query, { from, to }).catch(() => [])
+    const seen = new Set(fresh.map((w) => (w.doi || w.title || '').toLowerCase()))
+    const extra = stored.filter((w) => !seen.has((w.doi || w.title || '').toLowerCase()))
+    if (fetchErr && !extra.length) throw fetchErr
+    storedAdded = extra.length
+    storedOnly = Boolean(fetchErr)
+    works = [...fresh, ...extra]
+    provider = provider ?? 'stored'
   }
   // 국내 논문 (11/17, KCI · 39 문서 D1): 키가 있으면 한글 검색어로 20편까지 더한다 (DOI · 제목이 같으면 한 번)
   let kciCount = 0
@@ -128,5 +147,7 @@ export async function searchPaperArticles(query, period = 'all', terms = null) {
   if (provider === 'corpus') notes.push(`우리 논문 DB ${rows.length}편 중 중요도 순`)
   if (noAbstract) notes.push(`논문 ${noAbstract}편은 초록을 받지 못했어요 (출판사가 공개하지 않음)`)
   if (kciCount) notes.push(`국내 논문(KCI) ${kciCount}편 더함`)
+  if (storedOnly) notes.push(`논문 검색(OpenAlex)이 잠시 안 돼 예전에 받아 둔 ${storedAdded}편만 보여요`)
+  else if (storedAdded) notes.push(`예전에 이 말로 받아 둔 논문 ${storedAdded}편 더함`)
   return { articles, provider, note: notes.join(' · ') || null, terms: t.terms }
 }

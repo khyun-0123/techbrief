@@ -16,6 +16,7 @@ import { patentDbReady, titlesReady } from './patentDb.js'
 import { relatedWords } from './related.js'
 import { mapMaterials } from './mapMaterials.js'
 import { prepareBundle } from './keywordBundle.js'
+import { searchPaperArticles } from './searchPapers.js'
 
 // 맵 · 맵 재료 · 보고서용 묶음 (하나가 실패해도 나머지는 계속)
 async function warmExtras(query) {
@@ -24,10 +25,12 @@ async function warmExtras(query) {
     ['맵', () => relatedWords(query, { background: true })],
     ['맵 재료', () => mapMaterials(query)],
     ['보고서 묶음', () => prepareBundle(query)],
+    // 11/17 D2: 디스플레이 논문 DB에 적은 말은 OpenAlex에서 받아 키워드마다 저장 (papers/keywordStore.js, 한 말 약 $0.001 · 6시간 기억)
+    ['키워드 논문', () => searchPaperArticles(query, 'all')],
   ]) {
     try {
       const r = await job()
-      if (name !== '보고서 묶음' && r && !r.cached) n += 1 // 새로 만든 맵 · 맵 재료 수 (묶음은 기억 여부를 돌려주지 않아 세지 않음)
+      if (!['보고서 묶음', '키워드 논문'].includes(name) && r && !r.cached) n += 1 // 새로 만든 맵 · 맵 재료 수 (묶음은 기억 여부를 돌려주지 않아 세지 않음)
     } catch (err) {
       console.warn(`[timeline-jobs] ${name} ${query}: ${err.message}`)
     }
