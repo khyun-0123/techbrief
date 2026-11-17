@@ -1,6 +1,7 @@
 // 요약 API. 보통은 npm run dev 하나로 화면과 같은 포트(PORT)에서 열린다 (vite.config.js).
 // API만 따로 시험할 때: npm run server. 키는 .env.local에서 읽고 브라우저로 보내지 않는다
 import { createServer } from 'node:http'
+import { gzipSync } from 'node:zlib'
 import { pathToFileURL } from 'node:url'
 import { collect, getSources, listArticles, markListStale, saveSources, searchArticles, searchCollected } from './collector/index.js'
 import { englishTerms, frequentSearches, listQueryTerms, pruneSearchCounts, recordSearch, setQueryTerms } from './queryTerms.js'
@@ -91,9 +92,20 @@ const REPORT_CHUNK = 8
 
 const MAX_BODY = 1_000_000 // 보고서 요청·보고서함 옮기기에는 기사 요약 여러 건이 들어간다
 
+// 큰 응답은 gzip으로 (11/17: 압축 없이 보내 첫 화면 자료 목록이 5.1MB → gzip 1.3MB). 브라우저가 gzip을 받는다고 할 때만
+const GZIP_MIN = 32 * 1024
+const acceptsGzip = (res) => /\bgzip\b/.test(String(res.req?.headers?.['accept-encoding'] ?? ''))
+function sendBody(res, status, body, headers = {}, gz = null) {
+  const base = { 'Content-Type': 'application/json; charset=utf-8', Vary: 'Accept-Encoding', ...headers }
+  if (acceptsGzip(res) && Buffer.byteLength(body) >= GZIP_MIN) {
+    res.writeHead(status, { ...base, 'Content-Encoding': 'gzip' })
+    return res.end(gz ?? gzipSync(body, { level: 6 }))
+  }
+  res.writeHead(status, base)
+  return res.end(body)
+}
 function send(res, status, data, headers = {}) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', ...headers })
-  res.end(JSON.stringify(data))
+  return sendBody(res, status, JSON.stringify(data), headers)
 }
 
 async function readJson(req, max = MAX_BODY) {
@@ -843,13 +855,14 @@ async function handleApiInner(req, res) {
     if (req.method === 'GET' && req.url === '/api/articles') {
       // 11/17 (39 문서 B): 화면용으로 가볍게 — 미리 계산한 목록마다 한 번만 만들어 두고 그대로 보낸다
       const list = await listArticles()
-      let body = lightCache.get(list)
-      if (!body) {
-        body = JSON.stringify(lightList(list))
-        lightCache.set(list, body)
+      // 목록마다 한 번만 글로 만들고 · 압축해 둔다 (압축은 처음 받을 때 한 번, 약 0.1초)
+      let cached = lightCache.get(list)
+      if (!cached) {
+        cached = { body: JSON.stringify(lightList(list)), gz: null }
+        lightCache.set(list, cached)
       }
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-      return res.end(body)
+      if (acceptsGzip(res) && !cached.gz) cached.gz = gzipSync(cached.body, { level: 6 })
+      return sendBody(res, 200, cached.body, {}, cached.gz)
     }
     if (req.method === 'GET' && req.url === '/api/keywords') {
       return send(res, 200, { stored: dbEnabled(), keywords: dbEnabled() ? await getKeywords() : [] })
