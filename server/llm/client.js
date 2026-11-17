@@ -355,7 +355,8 @@ export async function pingModel() {
     const { baseUrl, apiKey, pingPath } = config()
     const res = await fetch(`${baseUrl}${pingPath}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
-      signal: AbortSignal.timeout(6000),
+      // 11/17: 6초 → 15초. 맥미니 /models 첫 응답이 3.7~6.3초로 느려지자 「연결 안 됨」으로 나와 자동 요약이 멈췄음 (refresh.js runWorker)
+      signal: AbortSignal.timeout(15_000),
     })
     return res.ok
   } catch {
