@@ -12,6 +12,7 @@ import { cacheGet, cachePut } from './papers/index.js'
 import { queryKey } from './queryTerms.js'
 import { getTechTrends } from './techtrends.js'
 import { getLists } from './collector/lists.js'
+import { supplierPatents } from './suppliers.js'
 import { buildTimeline, cachedTimeline } from './timeline.js'
 import { surgeMonths } from './timesfm.js'
 
@@ -109,7 +110,7 @@ export async function categoryCompetitors(catId) {
 }
 
 // ── 묶음 만들기 ──
-const bundleKey = (keyword) => `bundle:v5:${queryKey(keyword)}` // v5 (11/17): 특허 비교 회사 = 관리 페이지 경쟁사 목록
+const bundleKey = (keyword) => `bundle:v7:${queryKey(keyword)}` // v7 (11/17 R10): 소부장 기업 특허 · v5 (11/17): 특허 비교 회사 = 관리 페이지 경쟁사 목록
 // 기억해 둔 묶음만 (만들지 않음): 11/17 전 보고서 미리보기에 기술 시계열을 채울 때 (화면이 기다리지 않게)
 export async function cachedBundle(raw) {
   const keyword = String(raw ?? '').trim().slice(0, 50)
@@ -145,6 +146,8 @@ export async function prepareBundle(raw, { refresh = false } = {}) {
       paperKeywords: (mat?.papers ?? []).map((p) => p.word),
       categories: mat?.categories ?? [],
       competitors,
+      // 소부장 기업 특허 (11/17 R10, suppliers.js): 이 키워드 특허를 낸 소재 · 부품 · 장비 회사 (관리 페이지 목록)
+      suppliers: await supplierPatents(tl?.terms, (await getLists().catch(() => null))?.suppliers).catch(() => null),
       quotes,
       // ── v3 (11/17): 기술 시계열에서 더 가져오는 것 ──
       // 논문 연도별 수 · 앞 3년 대비 성장(분야 대비). 연도별 수는 단계 판정이 쓴 값(long, OpenAlex)과 같게 — 11/17 시험에서 디스플레이 논문 모음(corpus) 수를 그려 글(2편)과 그래프(8편)가 달랐음
@@ -222,6 +225,9 @@ export function bundleFacts(b) {
       source: '디스플레이 특허 DB (Google Patents, CC BY 4.0) · 규칙 계산',
       description: `${b.keyword} 특허가 가장 많이 속한 세부 카테고리 「${c.name}」의 특허(같은 발명 한 번, ${c.years}): 분야 전체 ${c.field.before}→${c.field.now}건(${c.field.ratio}배), ${line}.${c.verdict ? ` 규칙 판정: 자사에 ${c.verdict}.` : ''}`,
     })
+  }
+  if (b.suppliers?.items?.length) {
+    out.push({ title: `[분석] ${b.keyword} 소부장 기업 특허 (${b.suppliers.years})`, source: '특허 DB · 규칙 계산', description: `${b.keyword} 특허를 낸 소재 · 부품 · 장비 회사 (디스플레이 특허, 같은 발명 한 번): ${b.suppliers.items.slice(0, 6).map((x) => `${x.name}(${x.kind}) ${x.count}건`).join(', ')}` })
   }
   if (b.owners?.length) {
     out.push({ title: `[분석] ${b.keyword} 특허 주요 출원인 (최근 6년)`, source: '특허 DB · 규칙 계산', description: `${b.keyword} 특허를 많이 낸 곳 (같은 발명 한 번): ${b.owners.slice(0, 6).map((o) => `${o.word} ${o.count}건`).join(', ')}` })

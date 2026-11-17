@@ -549,6 +549,13 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
                               <dd>{owners.join(', ')}</dd>
                             </div>
                           )}
+                          {/* 소부장 기업 특허 (11/17 R10, server/suppliers.js): 관리 페이지 「회사 › 소부장 기업」 목록 */}
+                          {bundle?.suppliers?.items?.length > 0 && (
+                            <div>
+                              <dt>소부장 기업 특허 ({bundle.suppliers.years})</dt>
+                              <dd>{bundle.suppliers.items.slice(0, 4).map((x) => `${x.name}(${x.kind}) ${x.count}건`).join(', ')}</dd>
+                            </div>
+                          )}
                           {data.corpus?.rising?.length > 0 && (
                             <div>
                               <dt>새로 늘어난 핵심어</dt>

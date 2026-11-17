@@ -35,7 +35,7 @@ import AutoReportDialog from './AutoReportDialog.jsx'
 import GuideTour from './GuideTour.jsx'
 import Dropdown, { PeriodSeg, Seg } from './Dropdown.jsx'
 import { byRank, pickMaterials, periodLabelOf } from './autoPick.js'
-import { buildTagDict, tagsOf } from './hashtags.js'
+import { buildTagDict, mentionOf, tagsOf } from './hashtags.js'
 import SettingsMenu from './SettingsMenu.jsx'
 import { buildBundleHtml } from './exportBundle.js'
 import SelectToggle from './SelectToggle.jsx'
@@ -129,7 +129,7 @@ function TitleWithIcon({ title, terms }) {
 
 // 왜 중요한지 (13 문서 F7). 보도량(같은 이슈 N건)과 최신성(발행 칸)은 이미 줄에 보이므로
 // 선별에 도움이 되는 전문 매체·경쟁사·관심 기술·기술 소식만 글로 보여 준다. 점수 전체는 마우스를 올리면
-function importanceReasons(a) {
+function importanceReasons(a, supplierDict = []) {
   // 직접 추가한 자료는 사람이 고른 자료라 「중요」로 둔다 (11/17 P7, server/materials.js)
   if (a.material) return ['직접 추가한 자료']
   // 논문 (찾기 결과, server/papers/corpus.js paperScore2, 11/10): 기업 저자 · 인용 상위 · 전문지
@@ -150,6 +150,9 @@ function importanceReasons(a) {
   if (p.newWords?.length) out.push(`${p.newWords.map((w) => w.trim()).join('·')} 소식`)
   if (p.rerun) out.push('예전에 나온 소식')
   if (p.competitorName) out.push(`경쟁사 ${p.competitorName} 언급`)
+  // 소부장 기업 (11/17 R10): 점수와 상관없이 이유로만 보여 줌 (관리 페이지 「회사 › 소부장 기업」)
+  const supplier = mentionOf(`${a.title} ${a.description ?? ''}`, supplierDict)
+  if (supplier) out.push(`소부장 ${supplier} 언급`)
   if (p.interestName) out.push(`관심 기술 ${p.interestName}`)
   if (p.bizWords?.length) out.push(`${p.bizWords.join('·')}`)
   if (p.tier === 1) out.push('1차 출처')
@@ -673,9 +676,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const q = query.trim().toLowerCase()
   // 핵심어 해시태그 (hashtags.js): 사전은 목록이 바뀔 때만 다시 만든다
   const tagDict = useMemo(
-    () => buildTagDict([keywords, lists?.own, lists?.competitors, lists?.interests, techTerms]),
+    () => buildTagDict([keywords, lists?.own, lists?.competitors, lists?.interests, lists?.suppliers, techTerms]),
     [keywords, lists, techTerms],
   )
+  const supplierDict = useMemo(() => buildTagDict([lists?.suppliers]), [lists])
   // 요약 본문을 아직 안 받은 자료는 목록에 실린 가벼운 요약(제목 · 핵심어 · 감성)으로
   const liteOf = (a) => aiSummaries[a.id]?.summary ?? a.summaryLite
   const tagsFor = (a) => tagsOf(a, liteOf(a), tagDict)
@@ -1593,7 +1597,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                       const ai = aiSummaries[a.id]
                       const open = openSummaryId === a.id && ai
                       const groupOpen = openGroupId === a.id && a.related?.length > 0
-                      const reasons = importanceReasons(a)
+                      const reasons = importanceReasons(a, supplierDict)
                       const job = queue.jobs.find((j) => j.id === a.id)
                       return (
                         <Fragment key={a.id}>
