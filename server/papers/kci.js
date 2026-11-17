@@ -1,6 +1,6 @@
 // KCI(한국학술지인용색인, 한국연구재단) 국내 논문 찾기 (11/17, 39 문서 D1) — 키는 .env.local KCI_API_KEY
-// - 요청: https://open.kci.go.kr/po/openapi/openApiSearch.kci?apiCode=articleSearch&key=…&title=…&displayCount(최대 100)
-//   (11/17 키 없이 불러 「필수 요청 파라미터가 없음 => key」로 주소 확인. 받는 값은 KCI 포털 openDataView dtstSeqNo=1)
+// - 요청: https://open.kci.go.kr/po/openapi/openApiSearch.kci?apiCode=articleSearch&key=…&title=…&displayCount(최대 100)&sortNm=pubiYr&sortDir=desc
+//   (공식 「KCI Open API Service 활용가이드」 11/17 조장 공유: title 필수 · dateFrom/dateTo YYYYMM · sortNm title|author|pubiYr · 오류 「등록되지 않은 key 입니다.」 「사용기간이 종료되었습니다.」)
 // - 응답은 XML: outputData/record → journalInfo(journal-name · pub-year · pub-mon) · articleInfo(article-id, article-title · author-group · abstract-group · doi · url · citation-count)
 // - 한도 · 저장 · AI 입력 조건은 공식 페이지에 안 적힘 (23 문서 「조사 · 미확인」) → 제목 · 저자 · 초록 · 링크만 쓰고 원문은 받지 않는다
 // - 키가 없으면 조용히 빠진다 (kciReady)
@@ -23,6 +23,8 @@ export async function searchKci(query, { from = null, to = null, limit = 20, bac
   u.searchParams.set('key', process.env.KCI_API_KEY)
   u.searchParams.set('title', String(query).trim().slice(0, 100))
   u.searchParams.set('displayCount', String(Math.min(100, Math.max(1, limit))))
+  u.searchParams.set('sortNm', 'pubiYr') // 제목에 검색어가 든 논문 중 최근 것부터 (관련도 정렬은 없음)
+  u.searchParams.set('sortDir', 'desc')
   if (from) u.searchParams.set('dateFrom', from.slice(0, 7).replace('-', ''))
   if (to) u.searchParams.set('dateTo', to.slice(0, 7).replace('-', ''))
   const res = await guardedFetch('kci', u, { signal: AbortSignal.timeout(TIMEOUT_MS) }, { background })
@@ -59,3 +61,9 @@ export function parseKci(xml) {
     }
   }).filter((w) => w.title)
 }
+
+// ── OAI-PMH (11/17 조사, 아직 쓰지 않음) ──
+// https://open.kci.go.kr/oai/request — 키 없이 전체 논문 메타데이터(oai_kci: 학술지 · 제목 · 저자 · 초록 · 연구분야 · 피인용)를 받는 통로
+// - 기본 접속 이름(curl)은 KCI 웹 방화벽이 막음(400), 이름을 밝히면 열림 (11/17 실측)
+// - from/until은 「KCI가 기록을 고친 날」(datestamp)이라 한 주(11/9~16)에 184,001건 · 분야 순서로 나옴 → 키워드로 고를 수 없어 전부 훑어야 함 (한 쪽 100건 약 4초)
+// - 그래서 키워드별 미리 모으기는 위 Open API(키)로 하고, OAI-PMH는 데모 뒤 「연구분야(공학 > 전자 · 재료 · 물리) 한 번 채우기」 후보 (39 문서 3-1)
