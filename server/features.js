@@ -32,7 +32,7 @@ export const FEATURES = [
 FEATURES.push({
   key: 'articlesPaging',
   label: '자료 현황 한 쪽씩 받기',
-  desc: '첫 화면이 자료 전체(약 4MB) 대신 오늘 숫자 · 중요 자료만 받고, 자료 현황은 서버에서 한 쪽씩 받아요. 긍정·부정 거르기는 이때 안 돼요',
+  desc: '첫 화면이 자료 전체(약 4MB) 대신 오늘 숫자 · 중요 자료만 받고, 자료 현황은 서버에서 한 쪽씩 받아요. 거르기 · 찾기 규칙은 예전과 같아요',
   default: 'test',
 })
 export const FEATURE_STATES = ['off', 'test', 'all']

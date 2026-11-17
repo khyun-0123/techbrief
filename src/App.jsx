@@ -38,8 +38,8 @@ import AutoReportDialog from './AutoReportDialog.jsx'
 import GuideTour from './GuideTour.jsx'
 import Dropdown, { PeriodSeg, Seg } from './Dropdown.jsx'
 import { byRank, pickMaterials, periodLabelOf } from './autoPick.js'
-import { buildTagDict, mentionOf, tagsOf } from './hashtags.js'
-import { collectedView, isLow, isOwnOnly } from './articleFilter.js'
+import { buildTagDict, mentionOf, tagsOf, techTermNames } from './hashtags.js'
+import { collectedView, isLow, isOwnOnly, sentimentLabel, sentimentOf as pickSentiment } from './articleFilter.js'
 import SettingsMenu from './SettingsMenu.jsx'
 import { buildBundleHtml } from './exportBundle.js'
 import SelectToggle from './SelectToggle.jsx'
@@ -61,7 +61,7 @@ import ListsPanel from './ListsPanel.jsx'
 import LogoMark from './Logo.jsx'
 import RefreshPanel from './RefreshPanel.jsx'
 import TestTools from './TestTools.jsx'
-import SentimentBadge, { sentimentLabel, sentimentOf as pickSentiment } from './SentimentBadge.jsx'
+import SentimentBadge from './SentimentBadge.jsx'
 import SummaryItems from './SummaryItems.jsx'
 import { formatPublished, load, save } from './utils.js'
 import { clientId, enableUsage, track, trackVisit } from './usage.js'
@@ -372,7 +372,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       .catch(() => {})
     // 핵심어 사전에 넣을 요즘 뜨는 기술 용어 (하루 한 번 갱신되는 값, 실패하면 빼고)
     fetchTechTrends()
-      .then((d) => setTechTerms([...new Set([...(d.composite ?? []), ...(d.sources ?? []).flatMap((s) => s.ranking ?? [])].map((r) => r.name).filter(Boolean))]))
+      .then((d) => setTechTerms(techTermNames(d)))
       .catch(() => {})
     fetchMaterials(clientId())
       .then(setMaterials)
@@ -746,8 +746,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       })()
     : paging
       ? null
-      : collectedView(collected, { maxHours, source, q, sort, summarizedFirst, showLow, excludeOwn, hasSummary, textFor: (a) => `${a.title} ${a.keyword} ${tagsFor(a).join(' ')}` })
-  const visible = view ? view.visible.filter(sentimentOk) : []
+      : collectedView(collected, { maxHours, source, q, sort, summarizedFirst, showLow, excludeOwn, hasSummary, sentiment: features.has('sentiment') ? sentimentFilter : 'all', summaryFor: liteOf, textFor: (a) => `${a.title} ${a.keyword} ${tagsFor(a).join(' ')}` })
+  const visible = view ? (listed ? view.visible.filter(sentimentOk) : view.visible) : []
   // 한 쪽씩 보기: 개수 · 쪽은 서버 값
   const serverList = !view && paging
   const visibleCount = serverList ? (serverPage?.total ?? 0) : visible.length
@@ -763,7 +763,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   }, [listKey])
 
   // 한 쪽씩 보기 (11/17 B2): 거르기 · 쪽이 바뀌면 서버에서 그 쪽만 받는다. 검색어는 치는 동안 0.3초 기다림
-  const pageQuery = paging && !searchArticles ? new URLSearchParams({ period, source, q, sort, sf: summarizedFirst ? '1' : '0', low: showLow ? '1' : '0', own: excludeOwn ? '1' : '0', page: String(page), size: String(pageSize) }).toString() : ''
+  const pageQuery = paging && !searchArticles ? new URLSearchParams({ period, source, q, sort, sf: summarizedFirst ? '1' : '0', low: showLow ? '1' : '0', own: excludeOwn ? '1' : '0', sentiment: features.has('sentiment') ? sentimentFilter : 'all', page: String(page), size: String(pageSize) }).toString() : ''
   useEffect(() => {
     if (!pageQuery) return undefined
     let alive = true

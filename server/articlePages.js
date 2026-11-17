@@ -3,13 +3,14 @@
 // 켜면: 대시보드는 /api/articles/home(오늘 숫자 · 48시간 중요 30건)만, 자료 현황은 /api/articles/page로 한 쪽씩,
 //       선별해 둔 자료는 /api/articles/by-ids로 필요한 것만
 // - 거르기 · 정렬은 화면과 같은 함수(src/articleFilter.js collectedView)
-// - 검색어는 제목 · 키워드 · 해시태그(서버 사전: 자동 수집 키워드 · 회사 목록)로 맞춘다. 화면은 「요즘 뜨는 기술」 용어도 사전에 넣어 조금 다를 수 있음
-// - 긍정 · 중립 · 부정 거르기(실험 기능 sentiment)는 한 쪽씩 보기에서는 쓰지 않는다
+// - 검색어는 제목 · 키워드 · 해시태그로 맞춘다. 사전은 화면과 같음: 자동 수집 키워드 · 회사 목록 · 「요즘 뜨는 기술」 용어(techTermNames)
+// - 긍정 · 중립 · 부정 거르기도 같은 함수 (요약 본문은 서버 목록의 summaryLite 기준)
 import { collectedView, PERIOD_HOURS } from '../src/articleFilter.js'
-import { buildTagDict, tagsOf } from '../src/hashtags.js'
+import { buildTagDict, tagsOf, techTermNames } from '../src/hashtags.js'
 import { getKeywords } from './db/store.js'
 import { getLists } from './collector/lists.js'
 import { listMaterials } from './materials.js'
+import { getTechTrends } from './techtrends.js'
 
 const HOME_MAX = 30
 const SIZES = new Set([10, 20, 30, 50, 100])
@@ -21,10 +22,10 @@ const countArticles = (list) => list.reduce((n, a) => n + 1 + (a.sameIssue ?? 0)
 async function prepare(light) {
   let d = derived.get(light)
   if (d) return d
-  const [keywords, lists] = await Promise.all([getKeywords().catch(() => []), getLists().catch(() => null)])
+  const [keywords, lists, trends] = await Promise.all([getKeywords().catch(() => []), getLists().catch(() => null), getTechTrends({ period: 'week' }).catch(() => null)])
   // 화면 App.jsx gathered와 같음: 자동 수집 키워드에 해당하는 기사 + 1·2차 출처
   const gathered = light.articles.filter((a) => keywords.includes(a.keyword) || a.keyword === '1·2차 출처')
-  const dict = buildTagDict([keywords, lists?.own, lists?.competitors, lists?.interests, lists?.suppliers])
+  const dict = buildTagDict([keywords, lists?.own, lists?.competitors, lists?.interests, lists?.suppliers, techTermNames(trends)])
   d = { gathered, dict, keywords }
   derived.set(light, d)
   return d
@@ -64,6 +65,7 @@ export async function articlesPage(light, params, clientId = null) {
     summarizedFirst: params.get('sf') === '1',
     showLow: params.get('low') === '1',
     excludeOwn: params.get('own') === '1',
+    sentiment: ['긍정', '중립', '부정'].includes(params.get('sentiment')) ? params.get('sentiment') : 'all',
     textFor: (a) => `${a.title} ${a.keyword} ${tagsOf(a, a.summaryLite, dict).map((t) => t.term ?? t).join(' ')}`,
   })
   const pageCount = Math.max(1, Math.ceil(visible.length / size))
