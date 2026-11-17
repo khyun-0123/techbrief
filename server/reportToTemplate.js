@@ -102,7 +102,7 @@ export function reportToTemplate(entry, { trends = null, dept = '' } = {}) {
     actions,
     trend,
     source: { period, article_count: r.sources?.articles ?? arts.length, media_count: media.size, keywords },
-    one_line_summary: '',
+    one_line_summary: cut(r.oneLine ?? '', 50),
     appendix: {
       analysis,
       single_facts: single,
@@ -110,6 +110,6 @@ export function reportToTemplate(entry, { trends = null, dept = '' } = {}) {
       sources: arts.map((a) => ({ no: a.no, date: ymd(a.publishedAt), media: a.source ?? '', title: cut(a.title, 34), url: a.url ?? '' })),
       summaries,
     },
-    _notes: [...notes, '한 줄 요약 칸은 앱 보고서에 없어 비워 둠 (헤드라인과 다른 문장으로 채워 주세요)', ...(dept ? [] : ['작성부서는 비워 둠'])],
+    _notes: [...notes, ...(r.oneLine ? [] : ['한 줄 요약 칸은 이 보고서에 없어 비워 둠 (11/17 전 보고서, 헤드라인과 다른 문장으로 채워 주세요)']), ...(dept ? [] : ['작성부서는 비워 둠'])],
   }
 }

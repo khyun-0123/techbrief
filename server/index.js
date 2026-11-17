@@ -305,7 +305,7 @@ async function buildReportEntry(body) {
     id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
     articleKey: articles.map((a) => String(a.id ?? '')).sort().join('|'),
     // analysis: 유첨 그래프용 분석 묶음 (규칙 숫자, 화면 전용 — report와 함께 저장돼 다시 열어도 보인다)
-    report: { title, direction, headline, sections, sources, analysis: bundles.map((b) => ({ keyword: b.keyword, stage: b.stage, patentYears: b.patentYears, competitors: b.competitors, owners: b.owners, quotes: b.quotes })), warnings: [...reportWarnings(sections), ...(headline?.numCheck?.length ? [`헤드라인 숫자가 근거와 달라요 (${headline.numCheck.join(', ')}) — 확인하세요`] : []), ...(headline && !headline.refs.length ? ['헤드라인에 근거 번호가 없어요 — AI 해설로 보고 확인하세요'] : []), ...(data.warnings ?? [])] },
+    report: { title, direction, headline, ...(typeof data.oneLine === 'string' && data.oneLine.trim() ? { oneLine: data.oneLine.trim().slice(0, 80) } : {}), sections, sources, analysis: bundles.map((b) => ({ keyword: b.keyword, stage: b.stage, patentYears: b.patentYears, competitors: b.competitors, owners: b.owners, quotes: b.quotes })), warnings: [...reportWarnings(sections), ...(headline?.numCheck?.length ? [`헤드라인 숫자가 근거와 달라요 (${headline.numCheck.join(', ')}) — 확인하세요`] : []), ...(headline && !headline.refs.length ? ['헤드라인에 근거 번호가 없어요 — AI 해설로 보고 확인하세요'] : []), ...(data.warnings ?? [])] },
     model,
     createdAt,
     periodLabel: body.periodLabel ?? '오늘',
