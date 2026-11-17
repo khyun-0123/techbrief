@@ -4,7 +4,7 @@
 // 그래프는 단위가 서로 달라 따로 그린다 (한 축에 겹치지 않음). 네이버 검색 관심도는 약관상 그래프로만 (AI에 넣지 않음)
 import { useEffect, useState } from 'react'
 import { fetchTimeline, fetchTimelineStory } from './api.js'
-import { retryStory } from './storyJobs.js'
+import { retryStory, useStory } from './storyJobs.js'
 import { Spark } from './KeywordTrends.jsx'
 
 const SECTION_LABEL = { background: '배경 · 왜 나왔나', growth: '성장 · 어떻게 커졌나', application: '적용 · 어디에 쓰이나', outlook: '전망', research: '우리가 볼 것 · 연구 제안' }
@@ -24,8 +24,10 @@ const pct = (v) => (v == null ? '-' : `${Math.round(v * 100)}%`)
 const doiUrl = (p) => (p.doi ? `https://doi.org/${p.doi}` : null)
 
 // initialData: 대시보드 「키워드 분석」이 이미 받은 값이 있으면 다시 받지 않는다
-// job: 대시보드에서 이미 시작한 AI 흐름 정리 ({ status: running · done · error, story, error }). 없으면 이 창에서 버튼으로 시작
-function TechTimeline({ query, onClose, initialData = null, job = null }) {
+// job: 대시보드에서 이미 시작한 AI 흐름 정리 ({ status: running · done · error, story, error }).
+// 11/17 조장 「기술 시계열은 키워드 기준」: job 없이 열어도(자료 현황 「기술 시계열」) 숫자를 받으면 대시보드와 같은 방식(useStory)으로
+// 그 키워드의 정리를 불러온다 — 미리 만들어 둔 것은 바로, 없으면 만든다. 예전엔 버튼을 눌러야만 보여 자료 현황에서만 「요약이 없다」고 보였음
+function TechTimeline({ query, onClose, initialData = null, job: givenJob = null }) {
   const [data, setData] = useState(initialData)
   const [error, setError] = useState('')
   const [own, setOwn] = useState(null) // 이 창에서 「다시 정리」로 새로 받은 값 (있으면 job보다 먼저)
@@ -55,6 +57,8 @@ function TechTimeline({ query, onClose, initialData = null, job = null }) {
     }
   }
 
+  const autoJob = useStory(givenJob ? null : query, Boolean(data) && !givenJob)
+  const job = givenJob ?? autoJob
   const story = own ?? (job?.status === 'done' ? job.story : null)
   const loading = storyState === 'loading' || (!own && job?.status === 'running')
   const shownError = storyError || (!own && storyState !== 'loading' && job?.status === 'error' ? job.error : '')
