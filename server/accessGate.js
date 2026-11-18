@@ -13,6 +13,8 @@ const MAX_TRIES = 10
 const tries = new Map() // ip → { n, since }
 
 const code = () => String(process.env.ACCESS_CODE ?? '').trim()
+// 코드 없이도 내려 주는 공개 파일: 브라우저 탭 아이콘뿐 (막으면 브라우저가 주소 첫 글자를 대신 띄움, 11/18)
+const PUBLIC_PATHS = new Set(['/favicon.svg'])
 export const accessGateOn = () => code().length > 0
 const tokenOf = (c) => createHash('sha256').update(`techbrief-access|${c}`).digest('hex')
 
@@ -28,7 +30,7 @@ function sameToken(a, b) {
 
 const page = (msg = '') => `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>테크브리프 · 접속 코드</title>
+<title>테크브리프 · 접속 코드</title><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3">
 <style>
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f6f5f3; color: #1c2533; font-family: Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; }
   form { width: min(360px, calc(100vw - 32px)); padding: 28px 24px; background: #fff; border: 1px solid #e3e0da; border-radius: 16px; box-shadow: 0 10px 30px rgba(28,37,51,.08); }
@@ -60,6 +62,7 @@ export async function accessGate(req, res, next) {
   if (!accessGateOn()) return next()
   const want = tokenOf(code())
   if (sameToken(readCookie(req, COOKIE), want)) return next()
+  if ((req.method === 'GET' || req.method === 'HEAD') && PUBLIC_PATHS.has(String(req.url ?? '').split('?')[0])) return next()
 
   if (req.method === 'POST' && req.url === '/__access') {
     const ip = clientIp(req) ?? 'unknown'
