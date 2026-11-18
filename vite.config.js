@@ -26,6 +26,11 @@ function summaryApi() {
   }
 }
 
+// 바깥 주소로 들어오는 요청 허용 (11/18, 43 문서): Vite는 모르는 주소(Host)로 온 요청을 「Blocked request」로 막는다
+// - 기본: Tailscale Funnel(*.ts.net) · Railway 기본 주소(*.up.railway.app). 회사 도메인 등은 ALLOWED_HOSTS=a.com,b.com 으로 더한다
+// - localhost · 127.0.0.1은 Vite가 늘 허용 (공용 서버 포트 포워딩은 그대로)
+const allowedHosts = () => ['.ts.net', '.up.railway.app', ...String(process.env.ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean)]
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   // .env.local의 값(접속 키 포함)을 서버 쪽에서만 쓰도록 process.env에 넣는다. 브라우저 코드로는 가지 않는다
@@ -34,16 +39,19 @@ export default defineConfig(({ mode }) => {
   }
   return {
     plugins: [react(), summaryApi()],
-    // 운영 모드(vite preview): 같은 PORT, 이 컴퓨터 안에서만 받음 — 밖에서는 Tailscale Funnel · Cloudflare Tunnel이 들여보냄 (43 문서)
+    // 운영 모드(vite preview): 같은 PORT. 기본은 이 컴퓨터 안에서만 받음 — 밖에서는 Tailscale Funnel이 들여보냄 (43 문서)
+    // Railway처럼 앞단 프록시가 다른 컴퓨터면 HOST=0.0.0.0 (그곳은 PORT도 Railway가 정해 줌)
     preview: {
       port: Number(process.env.PORT ?? 4173),
       strictPort: true,
-      host: '127.0.0.1',
+      host: process.env.HOST || '127.0.0.1',
+      allowedHosts: allowedHosts(),
     },
     server: {
       // 공용 서버에서는 계정마다 배정된 PORT를 쓴다 (예: user38 → 3038)
       port: Number(process.env.PORT ?? 5173),
       strictPort: true,
+      allowedHosts: allowedHosts(),
       // 개발 서버는 프로젝트 폴더의 파일을 주소로 그대로 내려 준다 (예: /gcp-key.json → 11/08 실제로 열렸음).
       // 화면이 쓰지 않는 키 · 로그 · 서버 코드 · 문서는 막는다. 앞 6줄은 Vite 기본값 (deny를 적으면 기본값이 사라져서 같이 적음)
       fs: {

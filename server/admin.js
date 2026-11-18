@@ -74,17 +74,25 @@ export function adminHere(req) {
   return page === '/admin' || page.startsWith('/admin/') ? admin : null
 }
 
-// 요청한 사람의 IP. 같은 컴퓨터의 프록시(Caddy · cloudflared 등)를 거쳐 오면 프록시가 넣어 준 원래 주소를 쓴다
-// 주의: SSH · VS Code 포트 포워딩으로 들어오면 모두 127.0.0.1로 같다 (11/08 확인)
+// 요청한 사람의 IP. 앞단 프록시가 넣어 준 원래 주소(X-Forwarded-For)를 쓴다
+// - 같은 컴퓨터의 프록시(Tailscale Funnel · Caddy · cloudflared): 127.0.0.1에서 온 요청일 때만 믿는다
+// - 다른 컴퓨터의 프록시(Railway 등): TRUST_PROXY=1일 때만 믿는다 — 안 켜면 모두 프록시 주소 하나로 보여 「내가 만든 보고서」 · 「내 작업」이 섞인다 (11/18, 43 문서)
+// - SSH · VS Code 포트 포워딩으로 들어오면 헤더가 없어 모두 127.0.0.1로 같다 (11/08 확인)
 // 맨 뒤 값을 쓴다: 프록시는 받은 X-Forwarded-For 뒤에 실제 주소를 덧붙이므로, 앞쪽 값은 사용자가 지어 보낼 수 있다 (29 문서)
+const trustProxy = () => process.env.TRUST_PROXY === '1'
 export function clientIp(req) {
   const remote = String(req.socket?.remoteAddress ?? '').replace(/^::ffff:/, '')
-  if (remote === '127.0.0.1' || remote === '::1') {
+  if (remote === '127.0.0.1' || remote === '::1' || trustProxy()) {
     const forwarded = String(req.headers['x-forwarded-for'] ?? '').split(',').at(-1).trim()
     if (forwarded) return forwarded.replace(/^::ffff:/, '').slice(0, 64)
   }
   return remote || null
 }
+
+// HTTPS로 들어온 요청인지 (앞단 프록시가 붙인 X-Forwarded-Proto 기준). 쿠키에 Secure를 붙일 때 쓴다
+export const isHttps = (req) => Boolean(req.socket?.encrypted) || String(req.headers['x-forwarded-proto'] ?? '').includes('https')
+// HTTPS 주소(Funnel · Railway)에서는 쿠키를 HTTPS로만 보내게 한다. HTTP(포트 포워딩)에서는 붙이면 쿠키가 안 실려서 붙이지 않는다
+export const secureCookie = (cookie, req) => (isHttps(req) ? `${cookie}; Secure` : cookie)
 
 export function adminOf(req) {
   const token = readCookie(req, COOKIE)

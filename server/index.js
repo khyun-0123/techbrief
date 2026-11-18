@@ -59,7 +59,7 @@ import {
   SECTION_KEYS,
   SECTION_SCHEMA,
 } from './llm/reportPrompts.js'
-import { adminConfigured, adminHere, adminOf, changeLog, clientIp, diffWords, logChange, login, logout, readCookie, requireAdmin } from './admin.js'
+import { adminConfigured, adminHere, adminOf, changeLog, clientIp, diffWords, logChange, login, logout, readCookie, requireAdmin, secureCookie } from './admin.js'
 import { backgroundAllowed, backlogBrief, queueSearchSummaries, refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
 import { featureList, FEATURES, getFeatures, saveFeatures } from './features.js'
 import { summarizeArticle, summarizeOnly } from './summarize.js'
@@ -532,10 +532,10 @@ async function handleApiInner(req, res) {
     if (req.method === 'POST' && req.url === '/api/admin/login') {
       const result = login(await readJson(req), clientIp(req))
       if (result.reset) return send(res, 200, { reset: true }) // 잠금 리셋: 로그인은 하지 않음
-      return send(res, 200, { admin: { name: result.name } }, { 'Set-Cookie': result.cookie })
+      return send(res, 200, { admin: { name: result.name } }, { 'Set-Cookie': secureCookie(result.cookie, req) })
     }
     if (req.method === 'POST' && req.url === '/api/admin/logout') {
-      return send(res, 200, { ok: true }, { 'Set-Cookie': logout(req) })
+      return send(res, 200, { ok: true }, { 'Set-Cookie': secureCookie(logout(req), req) })
     }
     // 실험 기능: 누구나 읽고(화면이 무엇을 보일지 정함), 관리자만 바꾼다
     if (req.method === 'GET' && req.url === '/api/features') {

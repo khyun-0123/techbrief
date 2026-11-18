@@ -1,10 +1,10 @@
-// 접속 코드 문 (11/18, 43 문서 · 외부 배포용). ACCESS_CODE가 있을 때만 켜진다 — 공용 서버 3038에는 없으므로 영향 없음
+// 접속 코드 문 (11/18, 43 문서 · 외부 배포용). ACCESS_CODE가 있을 때만 켜진다 — 공용 서버 3038에는 없으므로 영향 없음. 개발 모드에서도 화면 · 소스 파일 · API 앞에 선다(11/18 시험)
 // - 화면 · API · 관리 페이지 모두: 코드를 한 번 넣으면 쿠키(30일)로 통과. 없으면 코드 입력 화면(화면) 또는 401(API)
 // - 틀린 코드는 IP마다 15분에 10번까지 (그 뒤 15분 쉼)
-// - 외부 주소(Tailscale Funnel · Cloudflare Tunnel)로 들어오면 서버에는 모두 127.0.0.1로 보인다 → 「이 컴퓨터에서 온 요청은 통과」 예외를 두지 않는다
+// - 외부 주소(Tailscale Funnel · Cloudflare Tunnel)로 들어오면 서버에는 127.0.0.1에서 온 것으로 보인다 → 「이 컴퓨터에서 온 요청은 통과」 예외를 두지 않는다
 // - 코드는 화면 · 기록 어디에도 그대로 남기지 않는다 (쿠키에는 코드로 만든 해시만)
 import { createHash, timingSafeEqual } from 'node:crypto'
-import { clientIp } from './admin.js'
+import { clientIp, secureCookie } from './admin.js'
 
 const COOKIE = 'tb_access'
 const MAX_AGE = 30 * 86_400
@@ -71,8 +71,7 @@ export async function accessGate(req, res, next) {
     const form = await readForm(req)
     if (sameToken(tokenOf(String(form.get('code') ?? '').trim()), want)) {
       tries.delete(ip)
-      const secure = String(req.headers['x-forwarded-proto'] ?? '').includes('https') ? '; Secure' : ''
-      res.writeHead(303, { Location: '/', 'Set-Cookie': `${COOKIE}=${want}; Max-Age=${MAX_AGE}; Path=/; HttpOnly; SameSite=Lax${secure}` })
+      res.writeHead(303, { Location: '/', 'Set-Cookie': secureCookie(`${COOKIE}=${want}; Max-Age=${MAX_AGE}; Path=/; HttpOnly; SameSite=Lax`, req) })
       return res.end()
     }
     const cur = t && Date.now() - t.since < WINDOW_MS ? t : { n: 0, since: Date.now() }
