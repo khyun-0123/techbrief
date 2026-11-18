@@ -20,6 +20,7 @@ export const SOURCES = {
   semanticscholar: { label: 'Semantic Scholar', daily: null, restMs: null, note: '' },
   arxiv: { label: 'arXiv', daily: null, restMs: null, note: '' },
   kci: { label: 'KCI 국내 논문', daily: envNum('KCI_DAILY_LIMIT', null), restMs: 30 * 60_000, note: '한도는 공식 페이지에 안 적힘 (공공데이터포털 개발 단계 5,000회 · 23 문서) — 알면 KCI_DAILY_LIMIT' },
+  scienceon: { label: 'ScienceON 국내 논문 (KISTI)', daily: envNum('SCIENCEON_DAILY_LIMIT', 1_000), restMs: 30 * 60_000, note: '한도는 매뉴얼에 숫자가 없음 — 대량 · 짧은 시간 과다 요청은 이용 제한(매뉴얼 v2.6), 우리 기본 하루 1,000회 (SCIENCEON_DAILY_LIMIT)' },
   wikipedia: { label: 'Wikipedia', daily: null, restMs: 10 * 60_000, note: '' },
 }
 
