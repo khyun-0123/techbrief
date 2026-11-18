@@ -12,6 +12,7 @@ import { englishTerms, openAlexQuery } from './queryTerms.js'
 import { isCompetitorTech, keywordPapers } from './papers/journals.js'
 import { corpusReady, paperScore2, searchCorpus } from './papers/corpus.js'
 import { kciReady, searchKci } from './papers/kci.js'
+import { scienceonReady, searchScienceon } from './papers/scienceon.js'
 import { saveKeywordPapers, storedKeywordPapers } from './papers/keywordStore.js'
 
 const DAYS = { today: 90, week: 365, all: 365 * 3 } // 논문은 하루 · 일주일 안에 거의 없어 넓게
@@ -46,8 +47,8 @@ function pick(scored) {
   const byScore = [...scored].sort((a, b) => b.score - a.score)
   const yearAgo = Date.now() - 365 * 86_400_000
   const recent = byScore.filter((x) => Date.parse(x.w.date) >= yearAgo).slice(0, RECENT_SLOTS)
-  // 국내 논문(KCI, 11/17): 인용 백분위 같은 점수 재료가 없어 점수순으로는 늘 밀림 → 받은 것은 모두 자리를 남긴다 (최대 20편)
-  const domestic = byScore.filter((x) => x.w.provider === 'kci')
+  // 국내 논문(KCI 11/17 · ScienceON 11/18): 인용 백분위 같은 점수 재료가 없어 점수순으로는 늘 밀림 → 받은 것은 모두 자리를 남긴다 (각 최대 20편)
+  const domestic = byScore.filter((x) => x.w.provider === 'kci' || x.w.provider === 'scienceon')
   const chosen = new Set([...domestic, ...recent])
   for (const x of byScore) {
     if (chosen.size >= LIMIT) break
@@ -98,18 +99,30 @@ export async function searchPaperArticles(query, period = 'all', terms = null) {
     works = [...fresh, ...extra]
     provider = provider ?? 'stored'
   }
-  // 국내 논문 (11/17, KCI · 39 문서 D1): 키가 있으면 한글 검색어로 20편까지 더한다 (DOI · 제목이 같으면 한 번)
-  let kciCount = 0
-  if (kciReady()) {
-    const kci = await searchKci(query, { from, to, limit: 20 }).catch((err) => {
-      console.warn(`[papers] KCI 찾기 실패: ${err.message}`)
-      return []
-    })
+  // 국내 논문 (11/17 KCI · 39 문서 D1, 11/18 ScienceON): 키가 있으면 한글 검색어로 각 20편까지 더한다 (DOI · 제목이 같으면 한 번)
+  // ScienceON은 이용 조건상 사람이 「찾기」를 누를 때만 부르고 저장하지 않는다 (papers/scienceon.js, 23 문서)
+  const [kci, sci] = await Promise.all([
+    kciReady()
+      ? searchKci(query, { from, to, limit: 20 }).catch((err) => {
+          console.warn(`[papers] KCI 찾기 실패: ${err.message}`)
+          return []
+        })
+      : [],
+    scienceonReady()
+      ? searchScienceon(query, { from, to, limit: 20 }).catch((err) => {
+          console.warn(`[papers] ScienceON 찾기 실패: ${err.message}`)
+          return []
+        })
+      : [],
+  ])
+  const addDomestic = (list) => {
     const seen = new Set(works.flatMap((w) => [w.doi?.toLowerCase(), w.title?.toLowerCase()]).filter(Boolean))
-    const fresh = kci.filter((w) => !seen.has(w.doi?.toLowerCase()) && !seen.has(w.title.toLowerCase()))
-    kciCount = fresh.length
+    const fresh = list.filter((w) => !seen.has(w.doi?.toLowerCase()) && !seen.has(w.title.toLowerCase()))
     works = [...works, ...fresh]
+    return fresh.length
   }
+  const kciCount = addDomestic(kci)
+  const sciCount = addDomestic(sci)
   const scored = works.map((w, i) => ({ w, ...paperScore2(w, 1 - i / Math.max(1, works.length)) }))
   const articles = pick(scored).map(({ w, score, parts }) => {
     const url = w.url || (w.doi ? `https://doi.org/${w.doi}` : '')
@@ -147,6 +160,7 @@ export async function searchPaperArticles(query, period = 'all', terms = null) {
   if (provider === 'corpus') notes.push(`우리 논문 DB ${rows.length}편 중 중요도 순`)
   if (noAbstract) notes.push(`논문 ${noAbstract}편은 초록을 받지 못했어요 (출판사가 공개하지 않음)`)
   if (kciCount) notes.push(`국내 논문(KCI) ${kciCount}편 더함`)
+  if (sciCount) notes.push(`국내 논문(ScienceON · 출처 KISTI) ${sciCount}편 더함`)
   if (storedOnly) notes.push(`논문 검색(OpenAlex)이 잠시 안 돼 예전에 받아 둔 ${storedAdded}편만 보여요`)
   else if (storedAdded) notes.push(`예전에 이 말로 받아 둔 논문 ${storedAdded}편 더함`)
   return { articles, provider, note: notes.join(' · ') || null, terms: t.terms }

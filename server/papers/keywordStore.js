@@ -14,7 +14,7 @@ const keyOf = (w) => (w.doi ? `doi:${String(w.doi).toLowerCase()}` : `t:${create
 
 export async function saveKeywordPapers(rawQuery, works, provider) {
   const q = queryKey(rawQuery)
-  const list = (works ?? []).filter((w) => w?.title && !w.retracted && w.provider !== 'kci')
+  const list = (works ?? []).filter((w) => w?.title && !w.retracted && w.provider !== 'kci' && w.provider !== 'scienceon')
   if (!q || !list.length || !dbEnabled()) return 0
   const params = [q, provider ?? null]
   const tuples = list.map((w) => {
