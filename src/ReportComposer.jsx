@@ -133,6 +133,8 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
   })
   const autoTitle = autoTitleOf(topic)
   const [level, setLevel] = useState(saved0.level ?? 'owned')
+  const [summarizeNew, setSummarizeNew] = useState(typeof saved0.summarizeNew === 'boolean' ? saved0.summarizeNew : null) // null = 수준 기본값
+  const summarizeOn = summarizeNew ?? level === 'research'
   const [mode, setMode] = useState('top')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
@@ -140,7 +142,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
 
   function remember(patch) {
     try {
-      localStorage.setItem(DRAFT_INPUT_KEY, JSON.stringify({ title, direction, level, ...patch }))
+      localStorage.setItem(DRAFT_INPUT_KEY, JSON.stringify({ title, direction, level, summarizeNew, ...patch }))
     } catch {
       // 저장 공간을 못 쓰면 이번 화면에서만
     }
@@ -167,7 +169,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
     setSending(true)
     setError('')
     try {
-      const job = await createReportJob({ articles, aiSummaries, title: title.trim() || autoTitle, direction, topics: topic ? [topic] : [], level, periodLabel: periodOf(articles), mode: useAll ? 'all' : undefined, clientId: clientId() })
+      const job = await createReportJob({ articles, aiSummaries, title: title.trim() || autoTitle, direction, topics: topic ? [topic] : [], level, summarizeNew: level !== 'selected' && summarizeOn, periodLabel: periodOf(articles), mode: useAll ? 'all' : undefined, clientId: clientId() })
       track('report')
       onJobAdded?.(job)
     } catch (err) {
@@ -289,7 +291,22 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
                   </span>
                 </label>
               ))}
-              <p className="hint">요약이 안 된 자료를 써야 하면 만드는 중에 오른쪽 아래 진행 창에서 물어봐요.</p>
+              {level !== 'selected' && (
+                <label className="pre-choice">
+                  <input
+                    type="checkbox"
+                    checked={summarizeOn}
+                    onChange={(e) => {
+                      setSummarizeNew(e.target.checked)
+                      remember({ summarizeNew: e.target.checked })
+                    }}
+                  />
+                  <span>
+                    보충할 자료가 요약 안 돼 있으면 요약해서 쓰기
+                    <small>최대 6건, 한 건 약 40초 더 · 끄면 요약된 자료만 써요. 미리 정해 두면 만드는 중에 묻지 않아요</small>
+                  </span>
+                </label>
+              )}
             </fieldset>
 
             {tooMany && (

@@ -265,15 +265,21 @@ async function supplement(job, entry, gaps, research) {
   for (const g of gaps) for (const { c } of g.cands) if (!c.summarized && c.url && !need.has(c.url)) need.set(c.url, c)
   const list = [...need.values()].slice(0, MAX_NEW_SUMMARIES)
   let useNew = false
+  // 11/19: 보고서를 만들기 전에 화면에서 미리 고른 값(summarizeNew)이 있으면 묻지 않는다 — 돌려 두고 자리를 비워도 멈추지 않게.
+  // 값이 없을 때(예전 화면)만 진행 창에서 묻고, 3분 안에 답이 없으면 「아니요」
+  const preset = typeof job.body?.summarizeNew === 'boolean' ? job.body.summarizeNew : null
   if (list.length) {
-    const ans = await ask(job, {
-      kind: 'summarize',
-      count: list.length,
-      minutes: Math.max(1, Math.round((list.length * SUMMARY_MS) / 60_000)),
-      items: list.map((c) => ({ title: c.title, source: c.source, external: c.external ?? null })),
-    })
-    if (ans === null) throw Object.assign(new Error('취소했어요'), { cancelled: true })
-    useNew = ans
+    if (preset !== null) useNew = preset
+    else {
+      const ans = await ask(job, {
+        kind: 'summarize',
+        count: list.length,
+        minutes: Math.max(1, Math.round((list.length * SUMMARY_MS) / 60_000)),
+        items: list.map((c) => ({ title: c.title, source: c.source, external: c.external ?? null })),
+      })
+      if (ans === null) throw Object.assign(new Error('취소했어요'), { cancelled: true })
+      useNew = ans
+    }
     if (useNew) {
       for (const [i, c] of list.entries()) {
         checkCancel(job)
