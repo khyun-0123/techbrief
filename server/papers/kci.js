@@ -37,7 +37,8 @@ export function parseKci(xml) {
   const doc = new JSDOM(xml, { contentType: 'text/xml' }).window.document
   const msg = txt(doc, 'outputData > result > resultMsg')
   const records = [...doc.querySelectorAll('outputData > record')]
-  if (!records.length && msg && !/정상|success/i.test(msg)) throw new Error(`KCI: ${msg}`)
+  // 결과 0편이면 KCI가 「No Data」를 준다 — 실패가 아니라 빈 결과 (11/19, 하루 42번 경고로 찍혀 고침)
+  if (!records.length && msg && !/정상|success|no data/i.test(msg)) throw new Error(`KCI: ${msg}`)
   return records.map((r) => {
     const titles = [...r.querySelectorAll('article-title')]
     const pick = (lang) => titles.find((t) => t.getAttribute('lang') === lang)?.textContent?.trim() ?? ''
