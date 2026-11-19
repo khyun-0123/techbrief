@@ -9519,3 +9519,22 @@ a.dash-home-t:hover,
 .mr-view .mr-new + .mr-count {
   margin-left: 6px;
 }
+
+/* 보고서 만들기 전 미리 정하는 선택 (11/19: 만드는 중에 묻지 않게) — 자동 보고서 확인 창 · 보고서 만들기 */
+.pre-choice,
+.ar-form label.pre-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  cursor: pointer;
+}
+.pre-choice input {
+  margin-top: 3px;
+}
+.pre-choice small {
+  display: block;
+  color: var(--tb-color-text-sub);
+  margin-top: 2px;
+}

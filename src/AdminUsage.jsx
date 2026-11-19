@@ -166,6 +166,11 @@ function AdminUsage({ keywords, onAddKeyword, refresh }) {
         <Tile label="요약 요청" value={n(outcomes.summaries)} sub="사람이 요청한 것만 (자동 요약 제외)" />
         <Tile label="보고서 · 내보내기" value={`${n(outcomes.reports)} · ${n(outcomes.exports.total)}`} sub={`PDF ${outcomes.exports.pdf} · PPT ${outcomes.exports.ppt} · 복사 ${outcomes.exports.copy}`} />
         <Tile
+          label="초안 → 첫 내보내기"
+          value={outcomes.exports.review?.count ? `${outcomes.exports.review.medianMin}분` : '—'}
+          sub={outcomes.exports.review?.count ? `보고서 ${outcomes.exports.review.count}건 중앙값 · 사람 확인 시간 어림 (자리 비운 시간 포함 가능)` : '11/19부터 기록 — 아직 없어요'}
+        />
+        <Tile
           label="보고서까지 간 비율"
           value={percent(outcomes.reportClients, outcomes.selectClients)}
           sub={outcomes.selectClients ? `선별한 ${outcomes.selectClients}명 중 ${outcomes.reportClients}명` : '선별한 사람이 아직 없어요'}

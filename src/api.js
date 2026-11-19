@@ -458,7 +458,8 @@ export async function updateReportApi(entry) {
 // ── 보고서 작업 대기열 (11/08) ──
 // level: 'selected' | 'owned' | 'research' (자료 조사 수준)
 // topics: 주제 키워드 (11/12 #109) — 11/14까지 여기서 빠져 서버에 가지 않았음 → 분석 묶음 자동 포함 · 자동 제목이 동작하지 않던 원인
-export async function createReportJob({ articles, aiSummaries, title, direction, topics = [], periodLabel, mode, level, clientId }) {
+// summarizeNew: 보충에 쓸 요약 안 된 자료를 요약할지 미리 정한 값 (11/19, 없으면 만드는 중에 물음)
+export async function createReportJob({ articles, aiSummaries, title, direction, topics = [], periodLabel, mode, level, clientId, summarizeNew }) {
   return (
     await postJson('/api/report-jobs', {
       title,
@@ -468,6 +469,7 @@ export async function createReportJob({ articles, aiSummaries, title, direction,
       mode,
       level,
       clientId,
+      ...(typeof summarizeNew === 'boolean' ? { summarizeNew } : {}),
       articles: articles.map((a) => reportArticle(a, aiSummaries[a.id])),
     })
   ).job

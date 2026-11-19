@@ -136,6 +136,7 @@ function ReportJobs({ jobs, onAnswer, onCancel, onOpenReport, onHide }) {
                 ))}
                 {j.question.items.length > 4 && <li className="hint">외 {j.question.items.length - 4}건</li>}
               </ul>
+              {j.question.timeoutAt && <p className="hint">3분 안에 고르지 않으면 요약된 자료만 써서 이어 만들어요</p>}
               <div className="job-question-actions">
                 <button type="button" className="btn primary" onClick={() => onAnswer(j.id, true)}>
                   요약해서 쓰기

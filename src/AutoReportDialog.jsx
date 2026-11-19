@@ -25,6 +25,8 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
   const [off, setOff] = useState({}) // 확인 창에서 뺀 자료 { id: true }
   const [title, setTitle] = useState(`${scope.query} 동향 브리핑`)
   const [level, setLevel] = useState('owned')
+  const [summarizeNew, setSummarizeNew] = useState(null) // null = 수준 기본값 (추가 자료 조사면 켬)
+  const summarizeOn = summarizeNew ?? level === 'research'
   const chosen = (result?.picked ?? []).filter((c) => !off[c.article.id])
   const needSummary = chosen.filter((c) => !c.article.hasSummary).length
   const estMin = Math.max(1, Math.round((needSummary * SUMMARY_SEC + 60) / 60))
@@ -94,6 +96,15 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
                 <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} />
               </label>
               <Seg value={level} onChange={setLevel} label="자료 조사 수준" size="md" options={LEVELS.map(([value, label]) => ({ value, label }))} />
+              {level !== 'selected' && (
+                <label className="pre-choice">
+                  <input type="checkbox" checked={summarizeOn} onChange={(e) => setSummarizeNew(e.target.checked)} />
+                  <span>
+                    보충할 자료가 요약 안 돼 있으면 요약해서 쓰기
+                    <small>최대 6건, 한 건 약 40초 더 · 끄면 요약된 자료만 써요. 미리 정해 두면 만드는 중에 묻지 않아요</small>
+                  </span>
+                </label>
+              )}
             </div>
             <div className="ar-foot">
               <span className="hint">
@@ -102,7 +113,7 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
               <button type="button" className="btn" onClick={onClose}>
                 취소
               </button>
-              <button type="button" className="btn primary" disabled={!chosen.length} onClick={() => onStart({ articles: chosen.map((c) => c.article), title: title.trim() || `${scope.query} 동향 브리핑`, level })}>
+              <button type="button" className="btn primary" disabled={!chosen.length} onClick={() => onStart({ articles: chosen.map((c) => c.article), title: title.trim() || `${scope.query} 동향 브리핑`, level, summarizeNew: level !== 'selected' && summarizeOn })}>
                 이대로 만들기 →
               </button>
             </div>

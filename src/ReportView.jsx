@@ -6,7 +6,7 @@
 import { useState } from 'react'
 import { exportPptx, printReport } from './reportExport.js'
 import { analysisUrl, APPENDIX, evidenceLabel, formatDate, kindOf, SECTIONS, sourcesLine } from './reportStore.js'
-import { track } from './usage.js'
+import { secondsSince, track } from './usage.js'
 import { ACCESS_LABEL, ACCESS_TITLE, paperAccess } from './paperAccess.js'
 
 // 시사점 및 제언의 표시 (담당자 회신: 자사에 기회인지 위협인지, 할 일은 무엇인지)
@@ -29,7 +29,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
     setExportError('')
     try {
       await exportPptx(saved)
-      track('export', 'ppt')
+      track('export', 'ppt', secondsSince(saved))
     } catch (err) {
       setExportError(`PPT를 만들지 못했어요: ${err.message}`)
     } finally {
@@ -74,7 +74,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
                   type="button"
                   onClick={(e) => {
                     e.currentTarget.closest('details').open = false
-                    track('export', 'pdf')
+                    track('export', 'pdf', secondsSince(saved))
                     printReport(saved)
                   }}
                 >
@@ -98,7 +98,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
                 type="button"
                 className="btn"
                 onClick={() => {
-                  track('export', 'pdf')
+                  track('export', 'pdf', secondsSince(saved))
                   printReport(saved)
                 }}
                 title="인쇄 창에서 'PDF로 저장'을 고르세요"

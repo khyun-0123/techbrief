@@ -16,7 +16,7 @@ import { exportPptx, loadReportExtra, printReport } from './reportExport.js'
 import { SlideFrame } from './ReportSlide.jsx'
 import { reportPages } from './reportSlides.js'
 import { copyText, toPlainText } from './reportStore.js'
-import { clientId, track } from './usage.js'
+import { clientId, secondsSince, track } from './usage.js'
 import ReportView from './ReportView.jsx'
 import { load } from './utils.js'
 
@@ -216,10 +216,10 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
     run(async () => {
       if (kind === 'pptx') {
         await exportPptx(r)
-        track('export', 'pptx')
+        track('export', 'ppt', secondsSince(r)) // 예전엔 'pptx'라 서버가 버렸음 (11/19)
       } else {
         await copyText(toPlainText(r))
-        track('export', 'copy')
+        track('export', 'copy', secondsSince(r))
       }
     }, kind === 'pptx' ? 'PPT(4:3)를 내려받았어요.' : '텍스트를 복사했어요.')
 
@@ -239,7 +239,7 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
 
   async function handleCopy() {
     await copyText(toPlainText(open))
-    track('export', 'copy')
+    track('export', 'copy', secondsSince(open))
     setNotice('복사했어요.')
   }
 

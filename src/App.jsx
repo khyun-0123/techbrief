@@ -975,7 +975,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       setAutoRun((r) => (r?.scope === scope ? { step: 'error', scope, error: err.message } : r))
     }
   }
-  function beginAutoReport({ articles, title, level }) {
+  function beginAutoReport({ articles, title, level, summarizeNew }) {
     const scope = autoRun.scope
     const folderName = `${scope.query} · 자동`.slice(0, 40)
     const folderId = folders.find((f) => f.name === folderName)?.id ?? createFolder(folderName)
@@ -985,7 +985,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     }
     setFolderOf((prev) => ({ ...prev, ...Object.fromEntries(articles.map((a) => [a.id, folderId])) }))
     autoSending.current = false
-    setAutoRun({ step: 'summarizing', scope, articles, title, level, folderName })
+    setAutoRun({ step: 'summarizing', scope, articles, title, level, summarizeNew, folderName })
     track('report', 'auto')
   }
   // 요약 진행: 대기열에 남아 있지 않고 요약이 있으면 끝, 대기열이 오류면 실패
@@ -1008,7 +1008,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     if (autoRun?.step !== 'summarizing' || !autoProgress?.finished || autoSending.current) return
     autoSending.current = true
     const { ready } = autoProgress
-    const { scope, title, level } = autoRun
+    const { scope, title, level, summarizeNew } = autoRun
     ;(async () => {
       if (!ready.length) {
         setAutoRun((r) => ({ ...r, step: 'error', error: '요약된 자료가 없어 보고서를 만들지 못했어요. 선별·요약에서 요약 오류를 확인해 주세요.' }))
@@ -1023,6 +1023,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           direction: scope.terms.length ? `${scope.query} — ${scope.terms.join(' · ')} 중심` : '',
           topics: [scope.query],
           level,
+          summarizeNew,
           periodLabel: periodLabelOf(ready),
           mode: ready.length > 10 ? 'all' : undefined,
           clientId: clientId(),

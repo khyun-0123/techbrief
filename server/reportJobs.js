@@ -177,12 +177,21 @@ async function externalCandidates(terms) {
   return out
 }
 
+// 답이 없으면 이 시간 뒤 「아니요」(요약된 자료만 쓰기)로 넘어간다 (11/19): 탭을 닫거나 질문을 못 보면
+// 작업이 끝없이 기다리고, 보고서 작업은 한 번에 하나라 서버의 다른 보고서까지 모두 멈췄음
+const ASK_TIMEOUT_MS = 3 * 60_000
+
 function ask(job, question) {
   job.status = 'need_confirm'
-  job.question = question
+  job.question = { ...question, timeoutAt: new Date(Date.now() + ASK_TIMEOUT_MS).toISOString() }
   step(job, '확인 기다리는 중')
   return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      console.warn(`[report-job] ${job.id} 답이 없어 ${ASK_TIMEOUT_MS / 60_000}분 뒤 요약된 자료만 씀`)
+      job.waiter?.(false)
+    }, ASK_TIMEOUT_MS)
     job.waiter = (ans) => {
+      clearTimeout(timer)
       job.waiter = null
       job.question = null
       if (ans !== null) job.status = 'running'
@@ -256,15 +265,21 @@ async function supplement(job, entry, gaps, research) {
   for (const g of gaps) for (const { c } of g.cands) if (!c.summarized && c.url && !need.has(c.url)) need.set(c.url, c)
   const list = [...need.values()].slice(0, MAX_NEW_SUMMARIES)
   let useNew = false
+  // 11/19: 보고서를 만들기 전에 화면에서 미리 고른 값(summarizeNew)이 있으면 묻지 않는다 — 돌려 두고 자리를 비워도 멈추지 않게.
+  // 값이 없을 때(예전 화면)만 진행 창에서 묻고, 3분 안에 답이 없으면 「아니요」
+  const preset = typeof job.body?.summarizeNew === 'boolean' ? job.body.summarizeNew : null
   if (list.length) {
-    const ans = await ask(job, {
-      kind: 'summarize',
-      count: list.length,
-      minutes: Math.max(1, Math.round((list.length * SUMMARY_MS) / 60_000)),
-      items: list.map((c) => ({ title: c.title, source: c.source, external: c.external ?? null })),
-    })
-    if (ans === null) throw Object.assign(new Error('취소했어요'), { cancelled: true })
-    useNew = ans
+    if (preset !== null) useNew = preset
+    else {
+      const ans = await ask(job, {
+        kind: 'summarize',
+        count: list.length,
+        minutes: Math.max(1, Math.round((list.length * SUMMARY_MS) / 60_000)),
+        items: list.map((c) => ({ title: c.title, source: c.source, external: c.external ?? null })),
+      })
+      if (ans === null) throw Object.assign(new Error('취소했어요'), { cancelled: true })
+      useNew = ans
+    }
     if (useNew) {
       for (const [i, c] of list.entries()) {
         checkCancel(job)
