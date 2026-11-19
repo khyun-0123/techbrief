@@ -177,12 +177,21 @@ async function externalCandidates(terms) {
   return out
 }
 
+// 답이 없으면 이 시간 뒤 「아니요」(요약된 자료만 쓰기)로 넘어간다 (11/19): 탭을 닫거나 질문을 못 보면
+// 작업이 끝없이 기다리고, 보고서 작업은 한 번에 하나라 서버의 다른 보고서까지 모두 멈췄음
+const ASK_TIMEOUT_MS = 3 * 60_000
+
 function ask(job, question) {
   job.status = 'need_confirm'
-  job.question = question
+  job.question = { ...question, timeoutAt: new Date(Date.now() + ASK_TIMEOUT_MS).toISOString() }
   step(job, '확인 기다리는 중')
   return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      console.warn(`[report-job] ${job.id} 답이 없어 ${ASK_TIMEOUT_MS / 60_000}분 뒤 요약된 자료만 씀`)
+      job.waiter?.(false)
+    }, ASK_TIMEOUT_MS)
     job.waiter = (ans) => {
+      clearTimeout(timer)
       job.waiter = null
       job.question = null
       if (ans !== null) job.status = 'running'
