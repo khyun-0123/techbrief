@@ -7,6 +7,7 @@ import { dbEnabled, query } from './db/index.js'
 export const CLIENT_TYPES = ['visit', 'search', 'select', 'summary', 'open', 'report', 'export']
 // 서버가 직접 남기는 종류는 'ai' 하나: AI 호출 (자동 요약 포함, 비용 가늠)
 const EXPORT_FORMATS = ['pdf', 'ppt', 'copy']
+const REVIEW_MAX_S = 30 * 86_400 // export value(초) 상한
 
 export const KEEP_DAYS = 90 // 원본 기록 보관 기간 (17 문서 4-2)
 const DETAIL_MAX = 80
@@ -56,12 +57,15 @@ export async function recordClientEvent(body) {
   if (tooMany(clientId)) return false
   let detail = clean(body?.detail)
   if (type === 'export' && !EXPORT_FORMATS.includes(detail)) return false
+  // export만: 보고서 초안이 만들어지고 몇 초 뒤에 내보냈는지 (사람 확인 시간 어림, 11/19). 30일 넘거나 이상한 값은 버림
+  const v = Number(body?.value)
+  const value = type === 'export' && Number.isInteger(v) && v >= 0 && v <= REVIEW_MAX_S ? v : null
   if (type === 'visit') {
     // 방문은 브라우저당 하루 한 번
     if (await visitedToday(clientId)) return false
     detail = ''
   }
-  await insert(type, detail, clientId)
+  await insert(type, detail, clientId, value)
   return true
 }
 
@@ -130,6 +134,25 @@ function top(list, n) {
 const ofType = (events, type) => events.filter((e) => e.type === type)
 const clientsOf = (events) => new Set(events.map((e) => e.client_id).filter(Boolean))
 
+// 사람 확인 시간 어림 (11/19): 보고서 초안이 만들어진 뒤 「처음」 내보내기까지.
+// 기록에 보고서 번호가 없어서, 내보낸 시각 − value(초) = 초안 시각으로 같은 보고서를 묶는다 (브라우저별, 10초 단위)
+// 하루(24시간) 넘게 지나 내보낸 것은 다시 연 것으로 보고 뺀다. 확인 · 수정 말고 자리를 비운 시간도 들어갈 수 있는 어림값
+function reviewTimes(exports) {
+  const first = new Map()
+  for (const e of exports) {
+    const v = e.value == null ? NaN : Number(e.value)
+    if (!Number.isFinite(v) || v > 86_400) continue
+    const made = Math.round((new Date(e.created_at).getTime() / 1000 - v) / 10)
+    const key = `${e.client_id}|${made}`
+    if (!first.has(key) || v < first.get(key)) first.set(key, v)
+  }
+  const vals = [...first.values()].sort((a, b) => a - b)
+  if (!vals.length) return { count: 0, medianMin: null }
+  const mid = vals.length >> 1
+  const median = vals.length % 2 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2
+  return { count: vals.length, medianMin: Math.round(median / 6) / 10 }
+}
+
 // keywords: 지금 자동 수집 키워드 (검색어 Top에서 「자동 수집에 없음」 표시용)
 export async function usageStats(days, keywords = []) {
   const period = [1, 7, 30].includes(days) ? days : 7
@@ -170,6 +193,7 @@ export async function usageStats(days, keywords = []) {
   const selectors = clientsOf(ofType(user, 'select'))
   const reporters = [...clientsOf(ofType(user, 'report'))].filter((c) => selectors.has(c))
   const exports = ofType(user, 'export')
+  const review = reviewTimes(exports)
 
   // 시스템: AI 호출
   const ai = ofType(events, 'ai')
@@ -203,6 +227,7 @@ export async function usageStats(days, keywords = []) {
         pdf: exports.filter((e) => e.detail === 'pdf').length,
         ppt: exports.filter((e) => e.detail === 'ppt').length,
         copy: exports.filter((e) => e.detail === 'copy').length,
+        review,
       },
       selectClients: selectors.size,
       reportClients: reporters.length,

@@ -26,17 +26,26 @@ export function clientId() {
 }
 
 // type: search · select · summary · open · report · export(pdf|ppt|copy) · visit
+// value: 숫자 하나 (export는 보고서 초안이 만들어지고 몇 초 뒤에 내보냈는지 — 사람 확인 시간, 11/19)
 // 기록 실패는 사용에 영향이 없어야 하므로 기다리지 않고, 오류도 무시한다
-export function track(type, detail = '') {
+export function track(type, detail = '', value) {
   if (!enabled) return
   const id = clientId()
   if (!id) return
   fetch('/api/usage', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type, detail: String(detail ?? '').slice(0, 80), clientId: id }),
+    body: JSON.stringify({ type, detail: String(detail ?? '').slice(0, 80), clientId: id, ...(Number.isFinite(value) ? { value } : {}) }),
     keepalive: true,
   }).catch(() => {})
+}
+
+// 보고서 초안이 만들어진 뒤 지난 초 (createdAt이 없거나 이상하면 undefined → 기록하지 않음)
+export function secondsSince(saved) {
+  const t = Date.parse(saved?.createdAt ?? '')
+  if (!Number.isFinite(t)) return undefined
+  const s = Math.round((Date.now() - t) / 1000)
+  return s >= 0 ? s : undefined
 }
 
 // 방문: 브라우저당 하루 한 번 (서버도 한 번 더 거른다)
