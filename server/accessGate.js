@@ -64,6 +64,11 @@ async function readForm(req) {
 
 // Vite(개발 · 운영 모드) 미들웨어: 통과면 next(), 아니면 여기서 답한다
 export async function accessGate(req, res, next) {
+  // 11/20: 배포 서비스(Railway)가 살아 있는지 보는 주소. 코드 없이 열리고 「ok」만 준다 — 모델 · DB 같은 내부 정보는 /api/health(코드 필요)에만
+  if ((req.method === 'GET' || req.method === 'HEAD') && String(req.url ?? '').split('?')[0] === '/healthz') {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' })
+    return res.end(req.method === 'HEAD' ? undefined : 'ok')
+  }
   await loadCredentials()
   if (!accessGateOn()) return next()
   const want = storedAccessToken() ?? tokenOf(code())
