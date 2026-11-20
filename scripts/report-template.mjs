@@ -20,6 +20,12 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const FONT = { latin: 'Arial Narrow', ea: 'LG 스마트체' }
 const SIZE = { title: 18, sub: 14, body: 11, note: 10 }
 const C = { ink: '111111', sub: '555555', line: 'DDDDDD', accent: 'A50034', pink: 'FDECF0', gray: 'F2F2F3', opp: '1A7F37', threat: 'B54708', white: 'FFFFFF' }
+// 11/20: 관리 페이지 「보고서 양식」에서 바꾼 글꼴 · 강조색 (서버 server/reportStyle.js). 칸 자리 · 글자 크기는 이 양식에 고정이라 따르지 않는다
+export function setTemplateStyle(style) {
+  if (style?.fonts?.ea) FONT.ea = style.fonts.ea
+  if (style?.fonts?.latin) FONT.latin = style.fonts.latin
+  if (/^[0-9A-F]{6}$/i.test(style?.accent ?? '')) C.accent = style.accent.toUpperCase()
+}
 const LH = (pt) => (pt * 1.35) / 72
 
 // ── 자리 (인치) ──
@@ -372,6 +378,9 @@ export async function fixFonts(buf) {
         xml = xml.replace(/(<\/a:r>)<a:pPr[^>]*?(?:\/>|>(?:<a:buNone\/>)?<\/a:pPr>)/g, '$1')
         xml = xml.replace(new RegExp(`<a:ea typeface="${FONT.latin}"[^>]*/>`, 'g'), ea).replace(new RegExp(`(<a:latin typeface="${FONT.latin}"[^>]*/>)(?!<a:ea)`, 'g'), `$1${ea}`)
         if (n.includes('/theme/')) xml = xml.replace(/(<a:(?:major|minor)Font>\s*<a:latin typeface=")[^"]*(")/g, `$1${FONT.latin}$2`).replace(/(<a:(?:major|minor)Font>\s*<a:latin[^>]*\/>\s*<a:ea typeface=")[^"]*(")/g, `$1${FONT.ea}$2`)
+        if (n.includes('/theme/')) xml = xml.replace(/<a:font script="Hang" typeface="[^"]*"\/>/g, `<a:font script="Hang" typeface="${FONT.ea}"/>`)
+        // 11/20: 글 조각 언어를 한국어로 (src/reportExport.js koreanLang과 같음) — en-US면 한국어 PowerPoint 글꼴 칸에 Arial Narrow만 보임
+        xml = xml.replace(/ lang="en-US"(?! altLang)/g, ' lang="ko-KR" altLang="en-US"')
         zip.file(n, xml)
       }),
   )

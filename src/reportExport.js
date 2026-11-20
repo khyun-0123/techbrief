@@ -2,7 +2,7 @@
 // 자리 · 글자 크기는 reportSlides.js가 정한 값 그대로 (화면 미리보기 · PDF와 같은 모양)
 // 글꼴: 글자마다 latin = Arial Narrow, ea(한글) = LG 스마트체 — pptxgenjs는 한 글꼴만 넣으므로 파일을 만든 뒤 XML에서 ea를 바꾼다
 // 장식 이미지 · 아이콘 · 애니메이션 없음. 글자 크기 18/14/11/10pt만 (자동 줄이기도 쓰지 않음)
-import { COLOR, FONT, LH, PAGE, PIE_COLORS, reportPages } from './reportSlides.js'
+import { COLOR, FONT, LH, lineGap, PAGE, PIE_COLORS, reportPages, SIZE } from './reportSlides.js'
 
 function fileName(saved, ext) {
   const date = (saved.createdAt ?? new Date().toISOString()).slice(0, 10)
@@ -13,16 +13,23 @@ function fileName(saved, ext) {
 const runOpts = (r) => ({ ...(r.color ? { color: r.color } : {}), ...(r.bold ? { bold: true } : {}) })
 
 // 모든 XML의 글꼴 지정: latin = Arial Narrow, ea = LG 스마트체 (ea가 없는 곳 · 테마에도 넣는다)
+// 11/20: 글 조각 언어를 한국어(ko-KR, 보조 en-US)로 — pptxgenjs가 모두 en-US로 넣어, 한국어 PowerPoint가 글꼴 칸에
+// 영문 글꼴(Arial Narrow)만 보여 주고 「LG 스마트체」가 안 보였다. 한국어 PowerPoint가 직접 저장한 파일과 같은 표기
+export const koreanLang = (xml) => xml.replace(/ lang="en-US"(?! altLang)/g, ' lang="ko-KR" altLang="en-US"')
 function fixFonts(xml) {
   const ea = `<a:ea typeface="${FONT.ea}"/>`
-  return xml
-    .replace(new RegExp(`<a:ea typeface="${FONT.latin}"[^>]*/>`, 'g'), ea)
-    .replace(new RegExp(`(<a:latin typeface="${FONT.latin}"[^>]*/>)(?!<a:ea)`, 'g'), `$1${ea}`)
+  return koreanLang(
+    xml
+      .replace(new RegExp(`<a:ea typeface="${FONT.latin}"[^>]*/>`, 'g'), ea)
+      .replace(new RegExp(`(<a:latin typeface="${FONT.latin}"[^>]*/>)(?!<a:ea)`, 'g'), `$1${ea}`),
+  )
 }
+// 테마: 본문 · 제목 글꼴 + 한글(Hang) 대체 글꼴도 LG 스마트체 (예전엔 맑은 고딕이 남아 있었음)
 function fixTheme(xml) {
   return xml
     .replace(/(<a:(?:major|minor)Font>\s*<a:latin typeface=")[^"]*(")/g, `$1${FONT.latin}$2`)
     .replace(/(<a:(?:major|minor)Font>\s*<a:latin[^>]*\/>\s*<a:ea typeface=")[^"]*(")/g, `$1${FONT.ea}$2`)
+    .replace(/<a:font script="Hang" typeface="[^"]*"\/>/g, `<a:font script="Hang" typeface="${FONT.ea}"/>`)
 }
 
 // .pptx 파일 내용(ArrayBuffer)을 만든다. 화면에서는 exportPptx가 내려받기로 넘긴다
@@ -46,7 +53,7 @@ export async function buildPptx(saved, { PptxGenJS, JSZip, extra } = {}) {
       if (el.t === 'text') {
         slide.addText(
           el.runs.map((r) => ({ text: r.text, options: { ...runOpts(r), ...(r.size ? { fontSize: r.size } : {}), ...(r.link ? { hyperlink: { url: r.link } } : {}) } })),
-          { ...base, x: el.x, y: el.y, w: el.w, h: el.h, fontSize: el.size, lineSpacing: el.size * 1.35, color: el.color ?? COLOR.ink, bold: Boolean(el.bold), align: el.align ?? 'left' },
+          { ...base, x: el.x, y: el.y, w: el.w, h: el.h, fontSize: el.size, lineSpacing: el.size * lineGap(), color: el.color ?? COLOR.ink, bold: Boolean(el.bold), align: el.align ?? 'left' },
         )
       } else if (el.t === 'rect') {
         slide.addShape(el.radius ? S.roundRect : S.rect, {
@@ -65,7 +72,7 @@ export async function buildPptx(saved, { PptxGenJS, JSZip, extra } = {}) {
       } else if (el.t === 'line') {
         slide.addShape(S.line, { x: el.x, y: el.y, w: el.w, h: 0, line: { color: el.color ?? COLOR.line, width: 0.75 } })
       } else if (el.t === 'pageno') {
-        slide.addText(`${el.no} / ${deck.pages.length}`, { ...base, x: PAGE.w - PAGE.m - 1, y: PAGE.h - 0.42, w: 1, h: LH(10), fontSize: 10, lineSpacing: 13.5, color: COLOR.ink, bold: true, align: 'right' })
+        slide.addText(`${el.no} / ${deck.pages.length}`, { ...base, x: PAGE.w - PAGE.m - 1, y: PAGE.h - 0.42, w: 1, h: LH(SIZE.note), fontSize: SIZE.note, lineSpacing: SIZE.note * lineGap(), color: COLOR.ink, bold: true, align: 'right' })
       } else if (el.t === 'table') {
         const cell = (text, opts = {}) => ({ text, options: { fontFace: FONT.latin, fontSize: el.size, color: COLOR.ink, valign: 'middle', ...opts } })
         slide.addTable(

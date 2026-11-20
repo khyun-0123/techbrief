@@ -36,11 +36,28 @@ export const COLOR = {
 export const PIE_COLORS = ['A50034', 'D9577E', 'F2A7BC', '6B6B6B', 'B5B5B5']
 export const SUPPLEMENT_LABEL = { data: '우리 자료', wiki: '위키백과', 'data+wiki': '우리 자료 · 위키백과' }
 
-export const LH = (pt) => (pt * 1.35) / 72 // 줄 높이 (인치)
-const M = PAGE.m
-const CW = PAGE.w - 2 * M
+let LINE = 1.35 // 줄 간격 (글자 크기의 몇 배)
+export const LH = (pt) => (pt * LINE) / 72 // 줄 높이 (인치)
+export const lineGap = () => LINE
+let M = PAGE.m
+let CW = PAGE.w - 2 * M
 const FOOT_Y = PAGE.h - 0.42 // 쪽 아래 줄 (제목 · 쪽 번호)
 const BOTTOM = FOOT_Y - 0.12 // 내용이 내려올 수 있는 끝
+
+// ── 보고서 양식 (11/20, 관리 페이지 「보고서 양식」 · server/reportStyle.js) ──
+// 글꼴 · 글자 크기 · 강조색 · 여백 · 줄 간격을 관리자가 정한다. 화면이 켜질 때 /api/report-style을 받아 여기에 넣고,
+// 그 뒤 그리는 미리보기 · PDF · PPT가 모두 이 값을 쓴다. 쪽 크기(4:3, 10×7.5in)는 담당자 양식이라 바꾸지 않는다
+export function applyReportStyle(style) {
+  if (!style) return
+  if (style.fonts) Object.assign(FONT, style.fonts)
+  if (style.sizes) Object.assign(SIZE, style.sizes)
+  if (/^[0-9A-Fa-f]{6}$/.test(style.accent ?? '')) COLOR.accent = style.accent.toUpperCase()
+  if (Number.isFinite(style.margin)) PAGE.m = style.margin
+  if (Number.isFinite(style.lineGap)) LINE = style.lineGap
+  M = PAGE.m
+  CW = PAGE.w - 2 * M
+}
+export const currentReportStyle = () => ({ fonts: { ...FONT }, sizes: { ...SIZE }, accent: COLOR.accent, margin: PAGE.m, lineGap: LINE })
 
 // ── 글자 폭 어림 (한글 1em, 영문 · 숫자는 Arial Narrow라 좁게) → 줄 수 ──
 function units(text) {
@@ -391,7 +408,8 @@ export function reportPages(saved, extra = {}) {
       els.push(text(M + 0.15, y, CW - 0.15, n * LH(SIZE.body), SIZE.body, [{ text: '방향: ', bold: true }, { text: meta.direction }]))
       y += n * LH(SIZE.body) + 0.12
     }
-    const hlLines = Math.min(2, linesOf(headline, SIZE.title, CW - 0.4))
+    // 11/20: 3줄까지는 칸을 늘려 글이 칸 밖으로 나가지 않게 (관리 페이지에서 제목 글자를 키우면 2줄을 넘기 쉬움). 2줄 넘음 표시(hlOver)는 그대로
+    const hlLines = Math.min(3, linesOf(headline, SIZE.title, CW - 0.4))
     const hlH = hlLines * LH(SIZE.title) + 0.22
     els.push(rect(M, y, CW, hlH, { fill: COLOR.pink, radius: 0.1 }))
     els.push(rect(M + 0.15, y + 0.13, 0.07, hlH - 0.26, { fill: COLOR.accent }))

@@ -17,6 +17,7 @@ import { checkRule, DEFAULT_RULE, describeRule, loadImportanceRule, PARTS as IMP
 import { kiwiStatus } from './kiwi.js'
 import { fillMap, mapMaterials } from './mapMaterials.js'
 import { allCategoryCompetitors, bundleFacts, categoryTrends, headlineSeeds, ownerOf, prepareBundle, termVerdict } from './keywordBundle.js'
+import { DEFAULT_STYLE, describeStyle, getReportStyle, LAYOUT_FIELDS, reportStyleHistory, saveReportStyle, SIZE_FIELDS } from './reportStyle.js'
 import { checkOwnerPatterns, DEFAULT_JUDGE, describeJudge, judgeHistory, judgeRule, loadJudgeSettings, RULE_FIELDS, saveJudgeRule, saveOwner } from './judgeSettings.js'
 import { scopeSearch } from './scopeSearch.js'
 import { popularPapers } from './papers/journals.js'
@@ -920,6 +921,20 @@ async function handleApiInner(req, res) {
       return send(res, 200, { password: 'env' })
     }
     // 판정 기준 · 회사 특허 이름 (11/20, judgeSettings.js): 코드로 고치던 숫자를 관리 페이지에서 — 관리자만
+    // 보고서 양식 (11/20): 글꼴 · 글자 크기 · 강조색 · 여백 · 줄 간격. 읽기는 누구나(화면이 보고서를 그릴 때), 바꾸기는 관리자만
+    if (req.method === 'GET' && req.url === '/api/report-style') {
+      return send(res, 200, { style: await getReportStyle() })
+    }
+    if (req.method === 'GET' && req.url === '/api/admin/report-style') {
+      requireAdmin(req)
+      return send(res, 200, { style: await getReportStyle(), defaults: DEFAULT_STYLE, sizeFields: SIZE_FIELDS, layoutFields: LAYOUT_FIELDS, history: await reportStyleHistory() })
+    }
+    if (req.method === 'PUT' && req.url === '/api/admin/report-style') {
+      const admin = requireAdmin(req)
+      const out = await saveReportStyle(await readJson(req), admin)
+      await logChange(admin, '보고서 양식', describeStyle(out.style))
+      return send(res, 200, out)
+    }
     if (req.method === 'GET' && req.url === '/api/admin/judge') {
       requireAdmin(req)
       await loadJudgeSettings({ fresh: true })
@@ -1098,7 +1113,8 @@ async function handleApiInner(req, res) {
       const entry = list.find((e) => String(e.id) === String(id))
       if (!entry) return send(res, 404, { error: '보고서를 찾지 못했어요.' })
       const { reportToTemplate, topicTrendItems } = await import('./reportToTemplate.js')
-      const { renderPptx } = await import('../scripts/report-template.mjs')
+      const { renderPptx, setTemplateStyle } = await import('../scripts/report-template.mjs')
+      setTemplateStyle(await getReportStyle()) // 11/20: 관리 페이지 「보고서 양식」의 글꼴 · 강조색 (칸 자리 · 글자 크기는 양식 고정)
       // 예전 보고서(11/17 전)는 분석 묶음에 논문 추이 · 연구 폭 등이 없음 → 지금 묶음(3일 기억)으로 채우고 「분석 기준일」을 그 묶음 날짜로 (40 문서 R6)
       const r0 = entry.report ?? {}
       const kws = (r0.analysis?.length ? r0.analysis.map((a) => a.keyword) : (r0.sources?.topics ?? [])).filter(Boolean).slice(0, 2)

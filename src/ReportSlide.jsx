@@ -3,7 +3,7 @@
 // 글꼴: 영문 · 숫자 Arial Narrow, 한글 LG 스마트체 (그 PC에 있으면). 글자 크기는 pt 그대로
 import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { COLOR, PAGE, PIE_COLORS, reportPages } from './reportSlides.js'
+import { COLOR, FONT, lineGap, PAGE, PIE_COLORS, reportPages, SIZE } from './reportSlides.js'
 
 const PX = 96
 export const SLIDE_W = PAGE.w * PX
@@ -237,7 +237,7 @@ function El({ el, total }) {
       return <div className="rs-line" style={{ ...pos, borderTopColor: hex(el.color) }} />
     case 'pageno':
       return (
-        <div className="rs-text rs-pageno" style={{ right: px(PAGE.m), top: px(PAGE.h - 0.42), fontSize: '10pt', fontWeight: 700 }}>
+        <div className="rs-text rs-pageno" style={{ right: px(PAGE.m), top: px(PAGE.h - 0.42), fontSize: `${SIZE.note}pt`, fontWeight: 700 }}>
           {el.no} / {total}
         </div>
       )
@@ -268,7 +268,7 @@ function El({ el, total }) {
 export function ReportSlide({ deck, index }) {
   const page = deck.pages[index]
   return (
-    <div className="rs-slide">
+    <div className="rs-slide" style={{ fontFamily: `'${FONT.latin}', '${FONT.ea}', 'LG Smart', 'LG Smart UI', 'Pretendard Variable', Pretendard, sans-serif`, '--rs-lh': lineGap() }}>
       {page.els.map((el, i) => (
         <El key={i} el={el} total={deck.pages.length} />
       ))}
