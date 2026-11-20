@@ -33,6 +33,7 @@ import AdminSources from './AdminSources.jsx'
 import AdminSearchTerms from './AdminSearchTerms.jsx'
 import AdminImportance from './AdminImportance.jsx'
 import AdminJudge from './AdminJudge.jsx'
+import AdminReportStyle from './AdminReportStyle.jsx'
 import AdminSecurity from './AdminSecurity.jsx'
 import AdminLlmModels from './AdminLlmModels.jsx'
 import AdminManual from './AdminManual.jsx'
@@ -45,6 +46,7 @@ const SECTIONS = [
   ['targets', '수집 대상', '무엇을 모으고, 어떤 회사·기술을 중요하게 볼지 정해요. 다음 최신화부터 반영되고, 이미 모은 기사는 그대로예요.'],
   ['importance', '중요도 기준', '중요도 다섯 칸의 배점과 「중요」 기준 점수를 정해요. 미리보기로 몇 건이 바뀌는지 보고 저장하면 다음 목록부터 반영돼요.'],
   ['judge', '판정 기준', '기술 단계와 「자사 위협 · 기회」를 정하는 숫자, 회사마다 특허를 찾는 이름을 정해요. 저장하면 다음 분석부터 반영돼요.'],
+  ['reportStyle', '보고서 양식', '보고서의 글꼴 · 글자 크기 · 강조색 · 여백을 정해요. 화면 미리보기 · PDF · PPT에 모두 적용돼요.'],
   ['refresh', '자동 최신화', '언제 기사를 모으고, 자동 요약을 할지 정해요.'],
   ['llm', 'AI 모델', '요약·보고서에 쓸 AI 서버를 골라요. 모든 사용자에게 바로 적용돼요.'],
   ['features', '실험 기능', '새 기능을 테스트 페이지에서 먼저 써 보고, 괜찮으면 모두에게 켜요.'],
@@ -822,6 +824,7 @@ function AdminApp() {
         )}
 
         {section === 'guide' && <AdminManual onToast={toastText} />}
+        {section === 'reportStyle' && <AdminReportStyle onToast={(t) => (toastText(t), fetchAdminLog().then(setLog).catch(() => {}))} />}
         {section === 'judge' && <AdminJudge onToast={(t) => (toastText(t), fetchAdminLog().then(setLog).catch(() => {}))} />}
         {section === 'security' && <AdminSecurity onToast={(t) => (toastText(t), fetchAdminLog().then(setLog).catch(() => {}))} />}
         {section === 'importance' && (

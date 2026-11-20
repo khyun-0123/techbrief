@@ -48,10 +48,18 @@ class Guard extends Component {
   }
 }
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <Guard>
-      <Page />
-    </Guard>
-  </StrictMode>,
+// 보고서 양식(글꼴 · 글자 크기 · 여백 …, 관리 페이지에서 정함)을 먼저 받아 두고 그린다 (11/20). 1.5초 넘게 걸리거나 실패하면 처음 값으로
+const styleReady = Promise.race([
+  Promise.all([import('./api.js'), import('./reportSlides.js')]).then(([api, slides]) => api.fetchReportStyle().then(slides.applyReportStyle)),
+  new Promise((ok) => setTimeout(ok, 1500)),
+]).catch(() => {})
+
+styleReady.then(() =>
+  createRoot(document.getElementById('root')).render(
+    <StrictMode>
+      <Guard>
+        <Page />
+      </Guard>
+    </StrictMode>,
+  ),
 )

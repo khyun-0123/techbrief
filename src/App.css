@@ -7433,7 +7433,7 @@ a.brand:focus-visible {
 .rs-text {
   position: absolute;
   margin: 0;
-  line-height: 1.35;
+  line-height: var(--rs-lh, 1.35);
   white-space: pre-wrap;
 }
 
@@ -7473,7 +7473,7 @@ a.brand:focus-visible {
   position: absolute;
   border-collapse: collapse;
   table-layout: fixed;
-  line-height: 1.35;
+  line-height: var(--rs-lh, 1.35);
 }
 
 .rs-table th,

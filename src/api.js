@@ -596,6 +596,14 @@ async function adminCall(path, method = 'GET', body) {
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
   return data
 }
+// 보고서 양식 (11/20): 화면이 켜질 때 받아 reportSlides.js에 넣는다. 못 받으면 처음 값 그대로
+export async function fetchReportStyle() {
+  const res = await fetch('/api/report-style')
+  if (!res.ok) throw new Error('보고서 양식을 불러오지 못했어요')
+  return (await res.json()).style
+}
+export const fetchReportStyleAdmin = () => adminCall('/api/admin/report-style')
+export const saveReportStyleApi = (style) => adminCall('/api/admin/report-style', 'PUT', style)
 export const fetchJudge = () => adminCall('/api/admin/judge')
 export const saveJudge = (rule) => adminCall('/api/admin/judge', 'PUT', rule)
 export const checkOwner = (like) => adminCall('/api/admin/judge/owner-check', 'POST', { like })

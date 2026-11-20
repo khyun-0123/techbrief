@@ -2,7 +2,7 @@
 // 자리 · 글자 크기는 reportSlides.js가 정한 값 그대로 (화면 미리보기 · PDF와 같은 모양)
 // 글꼴: 글자마다 latin = Arial Narrow, ea(한글) = LG 스마트체 — pptxgenjs는 한 글꼴만 넣으므로 파일을 만든 뒤 XML에서 ea를 바꾼다
 // 장식 이미지 · 아이콘 · 애니메이션 없음. 글자 크기 18/14/11/10pt만 (자동 줄이기도 쓰지 않음)
-import { COLOR, FONT, LH, PAGE, PIE_COLORS, reportPages } from './reportSlides.js'
+import { COLOR, FONT, LH, lineGap, PAGE, PIE_COLORS, reportPages, SIZE } from './reportSlides.js'
 
 function fileName(saved, ext) {
   const date = (saved.createdAt ?? new Date().toISOString()).slice(0, 10)
@@ -53,7 +53,7 @@ export async function buildPptx(saved, { PptxGenJS, JSZip, extra } = {}) {
       if (el.t === 'text') {
         slide.addText(
           el.runs.map((r) => ({ text: r.text, options: { ...runOpts(r), ...(r.size ? { fontSize: r.size } : {}), ...(r.link ? { hyperlink: { url: r.link } } : {}) } })),
-          { ...base, x: el.x, y: el.y, w: el.w, h: el.h, fontSize: el.size, lineSpacing: el.size * 1.35, color: el.color ?? COLOR.ink, bold: Boolean(el.bold), align: el.align ?? 'left' },
+          { ...base, x: el.x, y: el.y, w: el.w, h: el.h, fontSize: el.size, lineSpacing: el.size * lineGap(), color: el.color ?? COLOR.ink, bold: Boolean(el.bold), align: el.align ?? 'left' },
         )
       } else if (el.t === 'rect') {
         slide.addShape(el.radius ? S.roundRect : S.rect, {
@@ -72,7 +72,7 @@ export async function buildPptx(saved, { PptxGenJS, JSZip, extra } = {}) {
       } else if (el.t === 'line') {
         slide.addShape(S.line, { x: el.x, y: el.y, w: el.w, h: 0, line: { color: el.color ?? COLOR.line, width: 0.75 } })
       } else if (el.t === 'pageno') {
-        slide.addText(`${el.no} / ${deck.pages.length}`, { ...base, x: PAGE.w - PAGE.m - 1, y: PAGE.h - 0.42, w: 1, h: LH(10), fontSize: 10, lineSpacing: 13.5, color: COLOR.ink, bold: true, align: 'right' })
+        slide.addText(`${el.no} / ${deck.pages.length}`, { ...base, x: PAGE.w - PAGE.m - 1, y: PAGE.h - 0.42, w: 1, h: LH(SIZE.note), fontSize: SIZE.note, lineSpacing: SIZE.note * lineGap(), color: COLOR.ink, bold: true, align: 'right' })
       } else if (el.t === 'table') {
         const cell = (text, opts = {}) => ({ text, options: { fontFace: FONT.latin, fontSize: el.size, color: COLOR.ink, valign: 'middle', ...opts } })
         slide.addTable(
