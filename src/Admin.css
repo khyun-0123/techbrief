@@ -41,6 +41,8 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
+  overflow-y: auto; /* 11/20: 낮은 창(노트북 · 확대)에서 메뉴 아래쪽(접속 · 보안 · 변경 기록 · 로그아웃)이 잘려 못 누르던 것 */
+  overscroll-behavior: contain;
   padding: 22px 14px;
   background: var(--adm-side);
   color: var(--adm-side-ink);
@@ -917,6 +919,7 @@
   .adm-side {
     position: static;
     height: auto;
+    overflow: visible;
     gap: 10px;
     padding: 14px 16px;
   }

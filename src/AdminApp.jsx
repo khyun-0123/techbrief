@@ -271,7 +271,7 @@ function LoginPage({ configured, onLogin }) {
           ) : (
             <>
               <h1>관리자 비밀번호가 없어요</h1>
-              <p className="adm-login-sub">서버의 .env.local에 ADMIN_PASSWORD를 넣고 서버를 다시 켜 주세요.</p>
+              <p className="adm-login-sub">서버 설정 파일에 관리자 비밀번호(ADMIN_PASSWORD)를 넣고 서버를 다시 켜 주세요.</p>
             </>
           )}
         </div>
@@ -734,7 +734,7 @@ function AdminApp() {
           <section className="adm-card">
             <h2>요약·보고서에 쓸 AI 서버</h2>
             <p className="adm-desc">
-              지금 {health.modelReachable ? <span className="adm-state ok">연결됨</span> : <span className="adm-state bad">연결 안 됨</span>} · 서버를 다시 켜도 이 선택이 유지돼요. 설정이 없는 서버는 .env.local에 값을 넣어야 고를 수 있어요.
+              지금 {health.modelReachable ? <span className="adm-state ok">연결됨</span> : <span className="adm-state bad">연결 안 됨</span>} · 서버를 다시 켜도 이 선택이 유지돼요. 「설정 없음」 서버는 서버 설정 파일에 주소 · 열쇠를 넣어야 고를 수 있어요 (팀에 요청).
             </p>
             <div className="adm-choices">
               {health.llm.providers.map((p) => (
