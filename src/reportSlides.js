@@ -408,7 +408,8 @@ export function reportPages(saved, extra = {}) {
       els.push(text(M + 0.15, y, CW - 0.15, n * LH(SIZE.body), SIZE.body, [{ text: '방향: ', bold: true }, { text: meta.direction }]))
       y += n * LH(SIZE.body) + 0.12
     }
-    const hlLines = Math.min(2, linesOf(headline, SIZE.title, CW - 0.4))
+    // 11/20: 3줄까지는 칸을 늘려 글이 칸 밖으로 나가지 않게 (관리 페이지에서 제목 글자를 키우면 2줄을 넘기 쉬움). 2줄 넘음 표시(hlOver)는 그대로
+    const hlLines = Math.min(3, linesOf(headline, SIZE.title, CW - 0.4))
     const hlH = hlLines * LH(SIZE.title) + 0.22
     els.push(rect(M, y, CW, hlH, { fill: COLOR.pink, radius: 0.1 }))
     els.push(rect(M + 0.15, y + 0.13, 0.07, hlH - 0.26, { fill: COLOR.accent }))
