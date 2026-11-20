@@ -324,7 +324,10 @@ function AdminOps({ ops, onOps, onToast, health, refreshRunning, dirtyCount }) {
                 <p>보통 10초 안에 다시 켜지고, 이 페이지가 저절로 새로고침돼요.</p>
                 <ul>
                   {refreshRunning && <li>지금 기사를 모으는 중이에요 — 끊기고 다음 최신화 때 이어서 해요</li>}
-                  <li>진행 중인 요약 · 보고서 만들기가 끊겨요 (사용자는 다시 누르면 돼요)</li>
+                  <li>
+                    {server?.resumable > 0 ? `만들던 보고서 ${server.resumable}건은` : '만들던 보고서는'} 다시 켜진 뒤 같은 순서로 이어서 만들어요 (만드는 중이던 것은 처음부터)
+                  </li>
+                  <li>사람이 누른 요약은 끊겨요 — 다시 누르면 돼요. 자동 요약 · 미리 분석은 저절로 다시 해요</li>
                   <li>모든 관리자 로그인이 풀려요 — 다시 로그인해 주세요</li>
                   <li>로그인 잠금(5번 틀림)도 풀려요</li>
                 </ul>

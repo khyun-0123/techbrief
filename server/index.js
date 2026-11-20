@@ -47,7 +47,7 @@ import {
 } from './db/store.js'
 import { reinforceBullet } from './reinforce.js'
 import { searchPaperArticles } from './searchPapers.js'
-import { activeJobs, addJob, answerJob, cancelJob, listJobs, setDraftBuilder } from './reportJobs.js'
+import { activeJobs, addJob, answerJob, cancelJob, listJobs, resumableCount, setDraftBuilder } from './reportJobs.js'
 import { sourceStatus } from './sourceGuard.js'
 import { patentDbStatus } from './patentDb.js'
 import { chatJson, llmProviders, moveJob, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, setModelOverrides, withQueueContext } from './llm/client.js'
@@ -505,7 +505,7 @@ async function handleApiInner(req, res) {
         modelReachable,
         db,
         llm: llmProviders(),
-        server: { startedAt: STARTED_AT, supervised: SUPERVISED },
+        server: { startedAt: STARTED_AT, supervised: SUPERVISED, resumable: resumableCount() }, // resumable: 다시 켜진 뒤 이어서 할 보고서 작업 수 (11/20)
         sources, // 외부 출처 오늘 호출 수 · 한도 · 쉬는 중 (sourceGuard.js, 키는 없음)
         patentDb, // 디스플레이 특허 DB 건수 · 받은 날 (patentDb.js)
         kiwi: kiwiStatus().status, // 형태소 분석기 (kiwi.js): ready · loading · missing(모델 없음 → 예전 규칙) · idle(아직 안 씀)
