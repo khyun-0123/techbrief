@@ -171,12 +171,18 @@ export class PreemptedError extends Error {
   }
 }
 
-const waiting = []
-let running = null // 지금 처리 중인 요청의 우선순위
-let runningAbort = null // 지금 처리 중인 요청을 끊는 스위치 (AbortController)
-let runningMeta = null // 지금 처리 중인 요청의 보이는 정보 { kind, label, client, priority, enqueuedAt, startedAt }
-let seq = 0
-const lastServed = new Map() // 브라우저 번호 → 마지막으로 AI를 쓴 때 (같은 단계 안 번갈아 주기)
+// 11/20: 대기열을 globalThis에 둔다 — 서버 코드를 고치면 Vite가 같은 프로세스에서 이 파일을 다시 읽는데,
+// 예전에는 대기열이 새로 비어 「AI 대기열이 다 날아간」 것처럼 보이고, 예전 대기열은 뒤에서 따로 돌아 두 줄이 동시에 AI를 불렀다
+const Q = (globalThis.__aiQueue ??= {
+  waiting: [],
+  running: null, // 지금 처리 중인 요청의 우선순위
+  runningAbort: null, // 지금 처리 중인 요청을 끊는 스위치 (AbortController)
+  runningMeta: null, // 지금 처리 중인 요청의 보이는 정보 { kind, label, client, priority, enqueuedAt, startedAt }
+  seq: 0,
+  lastServed: new Map(), // 브라우저 번호 → 마지막으로 AI를 쓴 때 (같은 단계 안 번갈아 주기)
+})
+const waiting = Q.waiting
+const lastServed = Q.lastServed
 
 // ── 대기열 보기 (11/15): 누가 · 무엇을 기다리는지 ──
 // 요청마다 { client(브라우저 번호), label(무슨 작업) }을 함께 들고 다닌다. API 요청 하나가 시작될 때 server/index.js가 넣고,
@@ -201,7 +207,7 @@ function enqueue(task, priority = PRIORITY.SUMMARY, meta = {}) {
       }
     }
     // id는 바뀌지 않는 번호(순서 바꾸기 · 화면이 가리킴), order는 같은 단계 안 순번(순서 바꾸기로 바뀜)
-    const n = seq++
+    const n = Q.seq++
     waiting.push({ id: n, priority, order: n, task, resolve, reject, meta: { ...meta, priority, enqueuedAt: Date.now() } })
     pump()
   })
@@ -235,13 +241,13 @@ function plannedOrder() {
 }
 
 async function pump() {
-  if (running !== null || waiting.length === 0) return
+  if (Q.running !== null || waiting.length === 0) return
   const job = waiting.splice(pickNext(waiting, lastServed), 1)[0]
   lastServed.set(job.meta.client ?? '', Date.now())
-  running = job.priority
-  runningMeta = { ...job.meta, startedAt: Date.now() }
+  Q.running = job.priority
+  Q.runningMeta = { ...job.meta, startedAt: Date.now() }
   const controller = new AbortController()
-  runningAbort = controller
+  Q.runningAbort = controller
   try {
     const value = await job.task(controller.signal)
     // 끊겼는데 응답이 이미 와 있었던 경우도 끊긴 것으로 본다 (저장 여부를 한 가지 기준으로)
@@ -250,9 +256,9 @@ async function pump() {
   } catch (err) {
     job.reject(controller.signal.aborted ? controller.signal.reason : err)
   } finally {
-    running = null
-    runningAbort = null
-    runningMeta = null
+    Q.running = null
+    Q.runningAbort = null
+    Q.runningMeta = null
     pump()
   }
 }
@@ -276,7 +282,7 @@ function publicMeta(m, viewer) {
   }
 }
 export function queueList(viewer) {
-  return { running: publicMeta(runningMeta, viewer), waiting: plannedOrder().map((j) => ({ ...publicMeta(j.meta, viewer), id: j.id })) }
+  return { running: publicMeta(Q.runningMeta, viewer), waiting: plannedOrder().map((j) => ({ ...publicMeta(j.meta, viewer), id: j.id })) }
 }
 
 // 기다리는 일 순서 바꾸기 (11/17). id = 대기열 번호(queueList의 id)
@@ -317,13 +323,13 @@ export function cancelAi(jobId) {
   for (let i = waiting.length - 1; i >= 0; i -= 1) {
     if (waiting[i].meta.jobId === jobId) waiting.splice(i, 1)[0].reject(reason)
   }
-  if (runningMeta?.jobId === jobId && runningAbort && !runningAbort.signal.aborted) runningAbort.abort(reason)
+  if (Q.runningMeta?.jobId === jobId && Q.runningAbort && !Q.runningAbort.signal.aborted) Q.runningAbort.abort(reason)
 }
 
 // 대기 상황 (자동 최신화 화면에 "사용자 요청 먼저 처리 중"을 보여 줄 때 쓴다)
 export function queueStatus() {
   const ahead = waiting.filter((j) => isHuman(j.priority)).length
-  return { running, waiting: waiting.length, userFirst: ahead + (running !== null && isHuman(running) ? 1 : 0) }
+  return { running: Q.running, waiting: waiting.length, userFirst: ahead + (Q.running !== null && isHuman(Q.running) ? 1 : 0) }
 }
 
 // Ollama는 OpenAI 호환 주소(/v1)로 부르면 입력을 약 2,000토큰까지만 읽는다 (실측: 더 긴 입력은 앞부분이 잘림).

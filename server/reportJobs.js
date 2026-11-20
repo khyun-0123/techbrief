@@ -6,7 +6,9 @@
 //   owned:    초안에서 'AI 해설'로 나온 줄(근거 없음)을 우리 자료(모은 기사 · 저장 원문 · 직접 추가 자료 · 위키백과)로 보충
 //   research: owned + 바깥에서 새로 찾기(네이버 뉴스 · 논문)
 // - 보충에 '아직 요약 안 된 기사'가 필요하면 시간이 걸리므로 사용자에게 묻는다 (need_confirm → 답 → 계속)
-// - 작업은 서버 메모리에만 둔다 (서버를 다시 켜면 진행 중인 작업은 사라짐, 만든 보고서는 보고서함에 남음)
+// - 11/20: 끝나지 않은 작업(기다림 · 만드는 중)은 바뀔 때마다 DB(app_settings report_jobs_snapshot)에 적어 둔다.
+//   서버를 다시 켜거나 재부팅해도 켜질 때 그 기록으로 같은 순서 그대로 다시 넣는다. 만드는 중이던 것은 처음부터 다시
+//   (이미 끝난 요약은 DB에 있어 빨리 지나감). 같은 작업이 다시 켜기를 MAX_RESUMES번 넘게 겪으면 그만둔다 (그 작업이 서버를 멈춘 원인일 수 있어서)
 import { randomUUID } from 'node:crypto'
 import { searchArticles } from './collector/index.js'
 import { DISPLAY_TOPICS } from './papers/journals.js'
@@ -14,7 +16,7 @@ import { searchPapers } from './papers/index.js'
 import { bestPassage, dbCandidates, inputCandidates, rewriteWithPassages, termsOf } from './reinforce.js'
 import { knownTerms } from './queryTerms.js'
 import { dbEnabled } from './db/index.js'
-import { saveReport } from './db/store.js'
+import { getSetting, saveReport, setSetting } from './db/store.js'
 import { cancelAi, PRIORITY, withQueueContext } from './llm/client.js'
 import { summarizeArticle } from './summarize.js'
 import { lookupWiki } from './wiki.js'
@@ -33,12 +35,73 @@ const KEEP_MS = 6 * 3600_000 // 끝난 작업을 목록에 두는 시간
 const PASSAGE_MAX = 600
 
 // 서버 코드를 고치면 Vite가 같은 프로세스에서 모듈을 다시 불러온다 → 작업 목록이 비지 않게 globalThis에 둔다
-const G = (globalThis.__reportJobs ??= { jobs: new Map(), running: null, buildDraft: null })
+const G = (globalThis.__reportJobs ??= { jobs: new Map(), running: null, buildDraft: null, restored: false, saveTimer: null })
 const jobs = G.jobs
+
+const SNAP_KEY = 'report_jobs_snapshot'
+const MAX_RESUMES = 2
+const ACTIVE = ['queued', 'running', 'need_confirm']
+
+// 끝나지 않은 작업 목록을 DB에 적는다. now가 아니면 잠깐(0.3초) 모아서 한 번에
+function persist({ now = false } = {}) {
+  if (!dbEnabled()) return Promise.resolve()
+  clearTimeout(G.saveTimer)
+  const write = () => {
+    const list = [...jobs.values()]
+      .filter((j) => ACTIVE.includes(j.status))
+      .map((j) => ({ id: j.id, clientId: j.clientId, ip: j.ip, title: j.title, level: j.level, count: j.count, createdAt: j.createdAt, resumes: j.resumes ?? 0, started: j.status !== 'queued', body: j.body }))
+    return setSetting(SNAP_KEY, { at: new Date().toISOString(), jobs: list }).catch((err) => console.warn(`[report-job] 작업 기록 실패: ${err.message}`))
+  }
+  if (now) return write()
+  return new Promise((resolve) => {
+    G.saveTimer = setTimeout(() => write().then(resolve), 300)
+  })
+}
+
+// 서버가 켜질 때 한 번: 적어 둔 작업을 다시 넣는다 (Vite가 코드만 다시 읽을 때는 목록이 메모리에 그대로라 하지 않음)
+export async function restoreJobs() {
+  if (G.restored || !dbEnabled()) return 0
+  G.restored = true
+  const snap = await getSetting(SNAP_KEY, null).catch(() => null)
+  let n = 0
+  for (const s of snap?.jobs ?? []) {
+    if (!s?.id || jobs.has(s.id) || !(s.body?.articles ?? []).length) continue
+    const resumes = (s.resumes ?? 0) + (s.started ? 1 : 0)
+    const level = LEVELS[s.level] ? s.level : 'selected'
+    const job = {
+      id: s.id,
+      clientId: s.clientId ?? null,
+      ip: s.ip ?? null,
+      title: s.title,
+      level,
+      levelLabel: LEVELS[level],
+      count: s.count ?? s.body.articles.length,
+      status: 'queued',
+      step: '서버가 다시 켜져 이어서 해요',
+      progress: 0,
+      createdAt: s.createdAt ?? new Date().toISOString(),
+      resumes,
+      restored: true,
+      body: s.body,
+    }
+    if (resumes > MAX_RESUMES) {
+      Object.assign(job, { status: 'error', step: '오류', error: '서버가 다시 켜지는 동안 여러 번 멈춰서 그만뒀어요. 다시 만들어 주세요.', finishedAt: new Date().toISOString() })
+    } else n += 1
+    jobs.set(job.id, job)
+  }
+  if (snap?.jobs?.length) console.log(`[report-job] 서버가 다시 켜져 보고서 작업 ${n}건을 이어서 해요 (기록 ${snap.jobs.length}건)`)
+  await persist({ now: true })
+  pump()
+  return n
+}
 
 export function setDraftBuilder(fn) {
   G.buildDraft = fn
+  restoreJobs().catch((err) => console.warn(`[report-job] 작업 되살리기 실패: ${err.message}`))
 }
+
+// 관리 페이지 「서버 다시 켜기」 안내: 다시 켜진 뒤 이어서 할 작업 수
+export const resumableCount = () => [...jobs.values()].filter((j) => ACTIVE.includes(j.status)).length
 
 function pub(job) {
   const { body: _b, entry: _e, waiter: _w, cancel: _c, ip: _ip, clientId: _id, ...rest } = job // IP · 브라우저 번호는 화면에 보내지 않음
@@ -83,6 +146,7 @@ export function addJob(body, clientId, ip = null) {
     body,
   }
   jobs.set(job.id, job)
+  persist()
   pump()
   return pub(job)
 }
@@ -110,6 +174,7 @@ export function cancelJob(id, who) {
     job.step = '취소됨'
     job.finishedAt = new Date().toISOString()
     job.waiter?.(null)
+    persist()
   } else if (job.status === 'running') {
     job.cancel = true
     cancelAi(job.id) // 11/17: AI가 쓰는 중이어도 바로 멈춤 (예전엔 그 단계가 끝날 때까지 돎)
@@ -122,6 +187,8 @@ async function pump() {
   const next = [...jobs.values()].find((j) => j.status === 'queued')
   if (!next) return
   G.running = next
+  next.status = 'running' // 기록에 「만드는 중」으로 남겨야 다시 켜졌을 때 횟수를 센다
+  persist({ now: true })
   try {
     // 대기열 보기: 이 보고서 작업의 AI 호출은 만든 브라우저 · 보고서 제목으로 보인다 (pump를 부른 다른 요청의 브라우저가 아니라)
     await withQueueContext({ client: next.clientId, label: next.title, jobId: next.id }, () => run(next))
@@ -133,6 +200,7 @@ async function pump() {
     if (!err.cancelled) console.warn(`[report-job] ${next.id} 실패: ${err.message}`)
   } finally {
     G.running = null
+    await persist({ now: true }) // 끝난 작업을 바로 지운다 — 늦게 지우면 다시 켜질 때 같은 보고서를 또 만듦
     pump()
   }
 }
