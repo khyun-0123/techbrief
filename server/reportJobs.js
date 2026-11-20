@@ -267,7 +267,8 @@ async function supplement(job, entry, gaps, research) {
   let useNew = false
   // 11/19: 보고서를 만들기 전에 화면에서 미리 고른 값(summarizeNew)이 있으면 묻지 않는다 — 돌려 두고 자리를 비워도 멈추지 않게.
   // 값이 없을 때(예전 화면)만 진행 창에서 묻고, 3분 안에 답이 없으면 「아니요」
-  const preset = typeof job.body?.summarizeNew === 'boolean' ? job.body.summarizeNew : null
+  // 11/20 사용자: 「추가 자료 조사까지」는 새로 찾은 자료를 요약해서 쓰는 수준이라 늘 요약 (묻지 않음)
+  const preset = job.level === 'research' ? true : typeof job.body?.summarizeNew === 'boolean' ? job.body.summarizeNew : null
   if (list.length) {
     if (preset !== null) useNew = preset
     else {

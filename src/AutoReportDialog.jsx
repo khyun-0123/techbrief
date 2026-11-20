@@ -25,8 +25,8 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
   const [off, setOff] = useState({}) // 확인 창에서 뺀 자료 { id: true }
   const [title, setTitle] = useState(`${scope.query} 동향 브리핑`)
   const [level, setLevel] = useState('owned')
-  const [summarizeNew, setSummarizeNew] = useState(null) // null = 수준 기본값 (추가 자료 조사면 켬)
-  const summarizeOn = summarizeNew ?? level === 'research'
+  const [summarizeNew, setSummarizeNew] = useState(false) // 「보유 자료까지」에서만 고름. 「추가 자료 조사까지」는 늘 요약 (11/20)
+  const summarizeOn = level === 'research' || summarizeNew
   const chosen = (result?.picked ?? []).filter((c) => !off[c.article.id])
   const needSummary = chosen.filter((c) => !c.article.hasSummary).length
   const estMin = Math.max(1, Math.round((needSummary * SUMMARY_SEC + 60) / 60))
@@ -96,7 +96,8 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
                 <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} />
               </label>
               <Seg value={level} onChange={setLevel} label="자료 조사 수준" size="md" options={LEVELS.map(([value, label]) => ({ value, label }))} />
-              {level !== 'selected' && (
+              {level === 'research' && <p className="pre-choice-note">새로 찾은 자료와 요약 안 된 보충 자료는 요약해서 써요 (한 건 약 40초 더).</p>}
+              {level === 'owned' && (
                 <label className="pre-choice">
                   <input type="checkbox" checked={summarizeOn} onChange={(e) => setSummarizeNew(e.target.checked)} />
                   <span>
