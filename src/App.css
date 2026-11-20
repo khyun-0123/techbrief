@@ -7514,6 +7514,15 @@ a.brand:focus-visible {
   body.printing-slides .print-slides .rs-slide {
     page: slides;
     break-after: page;
+    break-inside: avoid;
+  }
+  /* 마지막 쪽 뒤에 빈 쪽이 생기지 않게 */
+  body.printing-slides .print-slides .rs-slide:last-child {
+    break-after: auto;
+  }
+  /* 쪽 바깥 여백 · 스크롤 막대 폭이 더해져 7.5in를 넘지 않게 */
+  body.printing-slides {
+    margin: 0;
   }
 }
 
