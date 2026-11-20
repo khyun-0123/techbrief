@@ -311,6 +311,11 @@ export async function printSlides(saved, extra) {
   const host = document.createElement('div')
   host.className = 'print-slides'
   document.body.appendChild(host)
+  // 11/20: 인쇄하는 동안만 기본 쪽 크기를 4:3 가로(10×7.5in, 여백 0)로 — 이름 붙은 쪽(@page slides)을 따르지 않는 인쇄 창에서는
+  // 사이트 기본 A4 세로가 쓰여 쪽이 잘리고 다음 장으로 넘어갔다
+  const pageStyle = document.createElement('style')
+  pageStyle.textContent = '@page { size: 10in 7.5in; margin: 0; }'
+  document.head.appendChild(pageStyle)
   const root = createRoot(host)
   root.render(
     <>
@@ -324,6 +329,7 @@ export async function printSlides(saved, extra) {
     document.body.classList.remove('printing-slides')
     root.unmount()
     host.remove()
+    pageStyle.remove()
   }
   requestAnimationFrame(() =>
     requestAnimationFrame(() => {
