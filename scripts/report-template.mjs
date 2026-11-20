@@ -372,6 +372,9 @@ export async function fixFonts(buf) {
         xml = xml.replace(/(<\/a:r>)<a:pPr[^>]*?(?:\/>|>(?:<a:buNone\/>)?<\/a:pPr>)/g, '$1')
         xml = xml.replace(new RegExp(`<a:ea typeface="${FONT.latin}"[^>]*/>`, 'g'), ea).replace(new RegExp(`(<a:latin typeface="${FONT.latin}"[^>]*/>)(?!<a:ea)`, 'g'), `$1${ea}`)
         if (n.includes('/theme/')) xml = xml.replace(/(<a:(?:major|minor)Font>\s*<a:latin typeface=")[^"]*(")/g, `$1${FONT.latin}$2`).replace(/(<a:(?:major|minor)Font>\s*<a:latin[^>]*\/>\s*<a:ea typeface=")[^"]*(")/g, `$1${FONT.ea}$2`)
+        if (n.includes('/theme/')) xml = xml.replace(/<a:font script="Hang" typeface="[^"]*"\/>/g, `<a:font script="Hang" typeface="${FONT.ea}"/>`)
+        // 11/20: 글 조각 언어를 한국어로 (src/reportExport.js koreanLang과 같음) — en-US면 한국어 PowerPoint 글꼴 칸에 Arial Narrow만 보임
+        xml = xml.replace(/ lang="en-US"(?! altLang)/g, ' lang="ko-KR" altLang="en-US"')
         zip.file(n, xml)
       }),
   )

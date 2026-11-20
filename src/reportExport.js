@@ -13,16 +13,23 @@ function fileName(saved, ext) {
 const runOpts = (r) => ({ ...(r.color ? { color: r.color } : {}), ...(r.bold ? { bold: true } : {}) })
 
 // 모든 XML의 글꼴 지정: latin = Arial Narrow, ea = LG 스마트체 (ea가 없는 곳 · 테마에도 넣는다)
+// 11/20: 글 조각 언어를 한국어(ko-KR, 보조 en-US)로 — pptxgenjs가 모두 en-US로 넣어, 한국어 PowerPoint가 글꼴 칸에
+// 영문 글꼴(Arial Narrow)만 보여 주고 「LG 스마트체」가 안 보였다. 한국어 PowerPoint가 직접 저장한 파일과 같은 표기
+export const koreanLang = (xml) => xml.replace(/ lang="en-US"(?! altLang)/g, ' lang="ko-KR" altLang="en-US"')
 function fixFonts(xml) {
   const ea = `<a:ea typeface="${FONT.ea}"/>`
-  return xml
-    .replace(new RegExp(`<a:ea typeface="${FONT.latin}"[^>]*/>`, 'g'), ea)
-    .replace(new RegExp(`(<a:latin typeface="${FONT.latin}"[^>]*/>)(?!<a:ea)`, 'g'), `$1${ea}`)
+  return koreanLang(
+    xml
+      .replace(new RegExp(`<a:ea typeface="${FONT.latin}"[^>]*/>`, 'g'), ea)
+      .replace(new RegExp(`(<a:latin typeface="${FONT.latin}"[^>]*/>)(?!<a:ea)`, 'g'), `$1${ea}`),
+  )
 }
+// 테마: 본문 · 제목 글꼴 + 한글(Hang) 대체 글꼴도 LG 스마트체 (예전엔 맑은 고딕이 남아 있었음)
 function fixTheme(xml) {
   return xml
     .replace(/(<a:(?:major|minor)Font>\s*<a:latin typeface=")[^"]*(")/g, `$1${FONT.latin}$2`)
     .replace(/(<a:(?:major|minor)Font>\s*<a:latin[^>]*\/>\s*<a:ea typeface=")[^"]*(")/g, `$1${FONT.ea}$2`)
+    .replace(/<a:font script="Hang" typeface="[^"]*"\/>/g, `<a:font script="Hang" typeface="${FONT.ea}"/>`)
 }
 
 // .pptx 파일 내용(ArrayBuffer)을 만든다. 화면에서는 exportPptx가 내려받기로 넘긴다
