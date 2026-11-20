@@ -19,6 +19,7 @@ import { patentHistory, patternFromTerms } from './patents.js'
 import { localPatentHistory, patentDbReady, titlePatentHistory, titlesReady } from './patentDb.js'
 import { englishTerms, openAlexQuery, queryKey } from './queryTerms.js'
 import { surgeMonths } from './timesfm.js'
+import { DEFAULT_JUDGE_VERSION, judgeRule, judgeVersion, loadJudgeSettings } from './judgeSettings.js'
 
 const DAY = 86_400_000
 // 기억 열쇠. 단계 기준이 바뀌면 올린다 (v2 11/11 분야 대비, v3 11/12 특허 · 관심 대 실질, v4 11/12 기관 수 · FWCI · 성숙 규칙): 예전 단계 · 그 단계로 쓴 AI 정리는 다시 만든다 (열 때 또는 미리 분석 때)
@@ -265,11 +266,12 @@ function summarizeOwners(r) {
 // ── 단계 판정 (규칙) ──
 // 끝난 해만 비교: 최근 3년(작년까지) 대 그 앞 3년. 기업 저자 비율 변화로 상용화 쪽인지 본다
 // 분야 전체 대비 증가 기준 (rel = 그 기술 증가 ÷ 분야 전체 증가). 출발값, 여러 기술로 돌려 보고 조정
-const REL_FAST = 1.3 // 11/12: 알려진 기술 12개 검증으로 1.4 → 1.3 (QD-OLED 1.37 · 마이크로 LED 1.34가 「완만」으로 나왔음, 33 문서 3장)
-const REL_MILD = 1.15
-const REL_FLAT = 0.85
-const PEAK_DROP = 0.6
-const COMMUNITY_MIN = 3 // 최근 3년 논문 낸 기관 3곳 미만이면 아직 분야가 아님 (Porter 2019 조건 e의 「여러 그룹」, 3은 우리 판단)
+// 11/20: 아래 다섯 기준과 PAT_MIN은 관리 페이지 「판정 기준」에서 바꾼다 (judgeSettings.js). 여기 값은 기본값이고, stageOf가 부를 때마다 맞춘다
+let REL_FAST = 1.3 // 11/12: 알려진 기술 12개 검증으로 1.4 → 1.3 (QD-OLED 1.37 · 마이크로 LED 1.34가 「완만」으로 나왔음, 33 문서 3장)
+let REL_MILD = 1.15
+let REL_FLAT = 0.85
+let PEAK_DROP = 0.6
+let COMMUNITY_MIN = 3 // 최근 3년 논문 낸 기관 3곳 미만이면 아직 분야가 아님 (Porter 2019 조건 e의 「여러 그룹」, 3은 우리 판단)
 const MATURE_PAT_FACTOR = 5 // 성숙: 최근 6년 특허 100건 이상 (= 2 × 10 × 5, 우리 판단)
 const sumYears = (list, from, to) => list.filter((x) => x.y >= from && x.y <= to).reduce((a, x) => a + x.n, 0)
 // base: 분야 전체 해마다 논문 수 (없으면 예전처럼 그 기술의 증가만 본다)
@@ -278,7 +280,11 @@ const sumYears = (list, from, to) => list.filter((x) => x.y >= from && x.y <= to
 // 개발 · 상용화 신호 (11/12, 33 문서 2장): 특허를 먼저 본다 — 기술 수명 주기(TLC) 연구의 주된 재료가 특허다 (Haupt 외 2007, Gao 외 2013).
 // 특허를 못 받았을 때만 기업 저자 비율을 쓴다 (11/10 처음 값, 레퍼런스 근거 없음 → 보조)
 // PAT_MIN: 최근 3년 특허 10건 이상일 때만 판단 (Porter 외 2019의 「최소 7건」과 같은 일회성 방지, 10은 우리 판단)
-const PAT_MIN = 10
+let PAT_MIN = 10
+function syncJudgeRule() {
+  const r = judgeRule()
+  ;({ relFast: REL_FAST, relMild: REL_MILD, relFlat: REL_FLAT, peakDrop: PEAK_DROP, communityMin: COMMUNITY_MIN, patMin: PAT_MIN } = r)
+}
 // 11/12 D3: 특허가 PAT_MIN 미만이면 「판단할 만큼 없음」 → 특허 자료가 없을 때처럼 기업 저자 비율로 (적다는 것을 상용화 신호가 없다는 증거로 쓰지 않음,
 //   Porter 2019의 최소 건수 규칙은 「적으면 판단하지 않는다」는 뜻). 같은 발명을 한 번만 세면(특허 DB) 제목에 그 말이 드문 기술(탠덤 · LTPO)이 여기에 걸린다
 // patGrowth는 분야 대비(특허 분야 전체 증가로 나눈 값)일 수 있다 — 논문 rel과 같은 근거 (Ghaemmaghami, Porter 2019)
@@ -308,6 +314,7 @@ function attentionOf(naver, substanceUp) {
 }
 
 function stageOf(long, corpus, pat, base = [], naver = null, breadth = null) {
+  syncJudgeRule()
   const last = new Date().getFullYear() - 1
   const recent = sumYears(long, last - 2, last)
   const before = sumYears(long, last - 5, last - 3)
@@ -425,8 +432,9 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
   const q = String(rawQuery ?? '').trim().slice(0, 50)
   if (!q) throw Object.assign(new Error('기술 키워드를 입력해 주세요.'), { status: 400 })
   const key = `${TL_KEY}${queryKey(q)}`
+  await loadJudgeSettings()
   if (!refresh) {
-    const hit = await cacheGet(key).catch(() => null)
+    const hit = await restaged(await cacheGet(key).catch(() => null), key)
     // 11/12 D3: 디스플레이 특허 DB가 생긴 뒤에는 디스플레이 기술의 예전 특허 숫자(BigQuery 공보)를 특허 DB 숫자로 바꾼다 (단계도 다시)
     const toDb = hit && Boolean(await patentDbReady()) && (!['family', 'family-all'].includes(hit.patents?.basis) || (hit.patents?.inDisplay && Boolean(await titlesReady())))
     if (hit && !(hit.patents?.status === 'later' && !background) && !toDb) return { ...withThin(await withSurge(hit, { wait: background })), cached: true }
@@ -435,6 +443,7 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
       const pat = await patents(hit.terms, { display: hit.display, cacheOnly: background }).catch((err) => ({ status: 'error', error: err.message }))
       const out = { ...hit, patents: pat }
       out.stage = stageOf(out.long.length ? out.long : (out.corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n })), out.corpus, stagePatents(pat), out.base ?? [], out.naver, out.breadth)
+      out.judgeV = judgeVersion()
       await cachePut(key, out, pat.status === 'error' ? 10 * 60_000 : TTL).catch(() => {})
       return { ...withThin(await withSurge(out, { wait: background })), cached: false }
     }
@@ -467,6 +476,7 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
   out.base = out.long.length ? base.value ?? [] : []
   out.breadth = breadth.value ?? null
   out.stage = stageOf(basis, corpus, stagePatents(out.patents), out.base, out.naver, out.breadth)
+  out.judgeV = judgeVersion()
   if (!out.long.length && basis.length) out.stage.why += ' (OpenAlex 응답이 없어 논문 DB 기준)'
   // 디스플레이 근거가 적은 말: 다른 분야 논문이 섞일 수 있어 숫자 · 단계는 참고만, AI 흐름 정리는 하지 않는다 (11/11 검수: DDI → 유전체 · 전력 소자 논문)
   out.thin = display ? null : thinReason(corpus)
@@ -627,9 +637,23 @@ async function makeTimelineStory(rawQuery, { refresh = false, background = false
   return { ...out, cached: false }
 }
 
+// 판정 기준(관리 페이지)이 기억해 둔 값과 다르면 단계만 새 기준으로 다시 계산해 기억 (논문 · 특허는 다시 받지 않음, 11/20)
+// at도 바꿔 AI 흐름 정리가 새 단계로 다시 쓰이게 한다 (P12: 글은 어느 시계열 계산으로 썼나(tlAt)로 묶임)
+async function restaged(hit, key) {
+  if (!hit?.long || !hit.stage) return hit
+  if ((hit.judgeV ?? DEFAULT_JUDGE_VERSION) === judgeVersion()) return hit
+  const basis = hit.long.length ? hit.long : (hit.corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n }))
+  const stage = stageOf(basis, hit.corpus, stagePatents(hit.patents), hit.base ?? [], hit.naver, hit.breadth)
+  if (!hit.long.length && basis.length) stage.why += ' (OpenAlex 응답이 없어 논문 DB 기준)'
+  const out = { ...hit, stage, judgeV: judgeVersion(), at: stage.stage === hit.stage.stage ? hit.at : new Date().toISOString() }
+  await cachePut(key, out, TTL).catch(() => {})
+  return out
+}
+
 // 미리 분석해 둔 값만 꺼낸다 (부르지 않음): 대시보드 「미리 분석된 키워드」 · 미리 분석 일이 건너뛸지 볼 때
 export async function cachedTimeline(rawQuery) {
   const k = queryKey(rawQuery)
+  await loadJudgeSettings()
   const [tl, story] = await Promise.all([cacheGet(`${TL_KEY}${k}`).catch(() => null), cacheGet(`${STORY_KEY}${k}`).catch(() => null)])
-  return { timeline: tl, story }
+  return { timeline: await restaged(tl, `${TL_KEY}${k}`), story }
 }

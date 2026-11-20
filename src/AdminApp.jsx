@@ -32,18 +32,25 @@ import AdminReports from './AdminReports.jsx'
 import AdminSources from './AdminSources.jsx'
 import AdminSearchTerms from './AdminSearchTerms.jsx'
 import AdminImportance from './AdminImportance.jsx'
+import AdminJudge from './AdminJudge.jsx'
+import AdminSecurity from './AdminSecurity.jsx'
+import AdminLlmModels from './AdminLlmModels.jsx'
+import AdminManual from './AdminManual.jsx'
 import { OPS_LABEL } from './ops.js'
 
 const SECTIONS = [
   ['overview', '개요', '시스템 상태와 확인할 일을 한눈에 봐요.'],
+  ['guide', '관리 안내', '테크브리프를 맡은 분을 위한 설명서예요. 웹으로 보거나 PDF로 내려받아요.'],
   ['usage', '사용 현황', '누가 얼마나 쓰고, 무엇을 찾고, 보고서까지 이어지는지 봐요. 일반 화면에서 한 일만 세요.'],
   ['targets', '수집 대상', '무엇을 모으고, 어떤 회사·기술을 중요하게 볼지 정해요. 다음 최신화부터 반영되고, 이미 모은 기사는 그대로예요.'],
   ['importance', '중요도 기준', '중요도 다섯 칸의 배점과 「중요」 기준 점수를 정해요. 미리보기로 몇 건이 바뀌는지 보고 저장하면 다음 목록부터 반영돼요.'],
+  ['judge', '판정 기준', '기술 단계와 「자사 위협 · 기회」를 정하는 숫자, 회사마다 특허를 찾는 이름을 정해요. 저장하면 다음 분석부터 반영돼요.'],
   ['refresh', '자동 최신화', '언제 기사를 모으고, 자동 요약을 할지 정해요.'],
   ['llm', 'AI 모델', '요약·보고서에 쓸 AI 서버를 골라요. 모든 사용자에게 바로 적용돼요.'],
   ['features', '실험 기능', '새 기능을 테스트 페이지에서 먼저 써 보고, 괜찮으면 모두에게 켜요.'],
   ['reports', '보고서 관리', '모든 보고서를 보고 지워요. 오래된 보고서 자동 삭제 주기를 정해요. 일반 화면에서는 관리자도 자기 보고서만 지울 수 있어요.'],
   ['ops', '운영', '일반 화면을 점검 중 · AI 기능 정지 · 공지로 바꾸고, 서버를 다시 켜요.'],
+  ['security', '접속 · 보안', '사이트 접속 코드와 관리자 비밀번호를 바꿔요. 담당자가 바뀔 때 써요.'],
   ['log', '변경 기록', '언제 누가 무엇을 바꿨는지 최근 200건까지 남아요.'],
 ]
 const STALE_HOURS = 24 // 이 시간 넘게 수집이 없으면 경고
@@ -294,6 +301,8 @@ function AdminApp() {
   const [features, setFeatures] = useState(null) // { features: { key: state }, list }
   const [ops, setOps] = useState(null) // 일반 화면 운영 상태 (19 문서 6장)
   const [toast, setToast] = useState(readFlash) // { text, error } — 저장 뒤 새로고침했으면 결과 안내로 시작
+  // 하위 화면은 글자만 넘긴다 (11/20: 예전 「중요도 기준」은 글자를 그대로 넘겨 알림이 빈 칸이었음)
+  const toastText = (text) => setToast({ text, at: Date.now() })
   const [starting, setStarting] = useState(false)
   // 저장 전 변경: 바꾼 것만 담는다 { keywords?, lists?, refresh?, llm?, features? }. 「저장」을 눌러야 서버에 저장
   const [draft, setDraft] = useState({})
@@ -502,7 +511,7 @@ function AdminApp() {
         <div className="adm-login adm-login-single">
           <div className="adm-login-main">
             <h1>서버에 연결되지 않아요</h1>
-            <p className="adm-login-sub">npm run dev가 켜져 있는지 확인해 주세요.</p>
+            <p className="adm-login-sub">사이트(서버)가 켜져 있는지 확인해 주세요.</p>
           </div>
         </div>
       </div>
@@ -748,6 +757,17 @@ function AdminApp() {
             </div>
           </section>
         )}
+        {section === 'llm' && health?.llm && (
+          <AdminLlmModels
+            key={JSON.stringify(health.llm.providers.map((p) => [p.model, p.reportModel])) + (health.llm.fallbackSetting ?? '')}
+            llm={health.llm}
+            onToast={toastText}
+            onSaved={() => {
+              fetchHealth().then(setHealth).catch(() => {})
+              fetchAdminLog().then(setLog).catch(() => {})
+            }}
+          />
+        )}
 
         {section === 'features' && features && (
           <section className="adm-card">
@@ -801,9 +821,12 @@ function AdminApp() {
           />
         )}
 
+        {section === 'guide' && <AdminManual onToast={toastText} />}
+        {section === 'judge' && <AdminJudge onToast={(t) => (toastText(t), fetchAdminLog().then(setLog).catch(() => {}))} />}
+        {section === 'security' && <AdminSecurity onToast={(t) => (toastText(t), fetchAdminLog().then(setLog).catch(() => {}))} />}
         {section === 'importance' && (
           <AdminImportance
-            onToast={setToast}
+            onToast={toastText}
             onChanged={() => fetchAdminLog().then(setLog).catch(() => {})}
           />
         )}

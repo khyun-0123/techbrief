@@ -2,6 +2,7 @@
 // API만 따로 시험할 때: npm run server. 키는 .env.local에서 읽고 브라우저로 보내지 않는다
 import { createServer } from 'node:http'
 import { gzipSync } from 'node:zlib'
+import { readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 import { collect, getSources, listArticles, markListStale, saveSources, searchArticles, searchCollected } from './collector/index.js'
 import { englishTerms, frequentSearches, listQueryTerms, pruneSearchCounts, recordSearch, setQueryTerms } from './queryTerms.js'
@@ -15,7 +16,8 @@ import { relatedWords, wordArticles } from './related.js'
 import { checkRule, DEFAULT_RULE, describeRule, loadImportanceRule, PARTS as IMPORTANCE_PARTS, previewRule, ruleHistory, saveImportanceRule } from './importanceRule.js'
 import { kiwiStatus } from './kiwi.js'
 import { fillMap, mapMaterials } from './mapMaterials.js'
-import { allCategoryCompetitors, bundleFacts, categoryTrends, headlineSeeds, prepareBundle, termVerdict, THREAT_FACTOR } from './keywordBundle.js'
+import { allCategoryCompetitors, bundleFacts, categoryTrends, headlineSeeds, ownerOf, prepareBundle, termVerdict } from './keywordBundle.js'
+import { checkOwnerPatterns, DEFAULT_JUDGE, describeJudge, judgeHistory, judgeRule, loadJudgeSettings, RULE_FIELDS, saveJudgeRule, saveOwner } from './judgeSettings.js'
 import { scopeSearch } from './scopeSearch.js'
 import { popularPapers } from './papers/journals.js'
 import { getTechTrends, startTechTrends } from './techtrends.js'
@@ -48,7 +50,7 @@ import { searchPaperArticles } from './searchPapers.js'
 import { activeJobs, addJob, answerJob, cancelJob, listJobs, setDraftBuilder } from './reportJobs.js'
 import { sourceStatus } from './sourceGuard.js'
 import { patentDbStatus } from './patentDb.js'
-import { chatJson, llmProviders, moveJob, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, withQueueContext } from './llm/client.js'
+import { chatJson, llmProviders, moveJob, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, setModelOverrides, withQueueContext } from './llm/client.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
   buildMergeMessages,
@@ -59,7 +61,9 @@ import {
   SECTION_KEYS,
   SECTION_SCHEMA,
 } from './llm/reportPrompts.js'
-import { adminConfigured, adminHere, adminOf, changeLog, clientIp, diffWords, logChange, login, logout, readCookie, requireAdmin, secureCookie } from './admin.js'
+import { adminConfigured, adminHere, adminOf, changeLog, clientIp, diffWords, envPasswordSet, logChange, login, logout, passwordMatches, readCookie, requireAdmin, secureCookie } from './admin.js'
+import { ACCESS_COOKIE, ACCESS_MAX_AGE, envAccessCodeSet, tokenOf as accessTokenOf } from './accessGate.js'
+import { checkNewCode, clearAdminPassword, loadCredentials, saveAccessToken, saveAdminPassword, storedAccessToken, storedPassword } from './credentials.js'
 import { backgroundAllowed, backlogBrief, queueSearchSummaries, refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
 import { featureList, FEATURES, getFeatures, saveFeatures } from './features.js'
 import { summarizeArticle, summarizeOnly } from './summarize.js'
@@ -379,8 +383,12 @@ async function handleReportSection(req, res) {
 
 // 서버가 켜질 때: 관리자가 고른 AI 서버를 되살리고(17 문서 3-3) 자동 최신화 예약을 시작한다
 const LLM_SETTING = 'llm_provider'
+const LLM_MODELS = 'llm_models'
 export function startScheduler() {
-  getSetting(LLM_SETTING, null)
+  getSetting(LLM_MODELS, null) // 11/20: 관리 페이지에서 바꾼 모델 이름 · 예비 AI (서버를 다시 켜도 유지)
+    .then((v) => v && setModelOverrides(v))
+    .catch((err) => console.warn(`[llm] 저장된 모델 설정을 쓸 수 없어 설정 파일 값으로: ${err.message}`))
+    .then(() => getSetting(LLM_SETTING, null))
     .then((id) => id && selectProvider(id))
     .catch((err) => console.warn(`[llm] 저장된 AI 서버를 쓸 수 없어 기본값으로: ${err.message}`))
   startRefreshScheduler()
@@ -530,6 +538,7 @@ async function handleApiInner(req, res) {
       return send(res, 200, { configured: adminConfigured(), admin: adminOf(req) })
     }
     if (req.method === 'POST' && req.url === '/api/admin/login') {
+      await loadCredentials()
       const result = login(await readJson(req), clientIp(req))
       if (result.reset) return send(res, 200, { reset: true }) // 잠금 리셋: 로그인은 하지 않음
       return send(res, 200, { admin: { name: result.name } }, { 'Set-Cookie': secureCookie(result.cookie, req) })
@@ -615,6 +624,15 @@ async function handleApiInner(req, res) {
       await setSetting(LLM_SETTING, provider)
       await logChange(admin, 'AI 모델', providerLabel())
       return send(res, 200, result)
+    }
+    if (req.method === 'PUT' && req.url === '/api/admin/llm-models') {
+      // 모델 이름 · 예비 AI (11/20). 빈 칸은 설정 파일 값. 열쇠 · 주소는 설정 파일에만
+      const admin = requireAdmin(req)
+      const saved = setModelOverrides(await readJson(req))
+      await setSetting(LLM_MODELS, saved)
+      const desc = Object.entries(saved.models).map(([id, m]) => `${id}: ${[m.model, m.reportModel && `보고서 ${m.reportModel}`].filter(Boolean).join(' · ')}`).join(' / ')
+      await logChange(admin, 'AI 모델 이름', `${desc || '모두 설정 파일 값'} · 예비 AI ${saved.fallback ?? '설정 파일 값'}`)
+      return send(res, 200, llmProviders())
     }
     if (req.method === 'POST' && req.url === '/api/summaries') {
       return await handleSummary(req, res)
@@ -735,7 +753,7 @@ async function handleApiInner(req, res) {
     if (req.method === 'GET' && req.url.startsWith('/api/trend-verdicts?')) {
       const terms = (new URL(req.url, 'http://x').searchParams.get('terms') ?? '').split('|').map((t) => t.trim()).filter(Boolean).slice(0, 20)
       const one = async (term) => [term, await termVerdict(term).catch(() => null)]
-      return send(res, 200, { verdicts: Object.fromEntries(await Promise.all(terms.map(one))), threatFactor: THREAT_FACTOR })
+      return send(res, 200, { verdicts: Object.fromEntries(await Promise.all(terms.map(one))), threatFactor: judgeRule().threatFactor })
     }
     // 자료 목록의 「자사 위협 · 기회 기술」 표시 (11/17, server/techVerdicts.js)
     if (req.method === 'GET' && req.url === '/api/tech-verdicts') {
@@ -743,7 +761,7 @@ async function handleApiInner(req, res) {
       return send(res, 200, await techVerdicts())
     }
     if (req.method === 'GET' && req.url === '/api/category-competitors') {
-      return send(res, 200, { categories: await allCategoryCompetitors(), rule: `위협: 경쟁사 중 하나가 분야 증가의 ${THREAT_FACTOR}배 이상 · 자사는 분야보다 느림 / 기회: 자사가 경쟁사 모두보다 빠르고 분야 이상` })
+      return send(res, 200, { categories: await allCategoryCompetitors(), rule: `위협: 경쟁사 중 하나가 분야 증가의 ${judgeRule().threatFactor}배 이상 · 자사는 분야보다 느림 / 기회: 자사가 경쟁사 모두보다 빠르고 분야 이상` })
     }
     // 연관 키워드 (11/10, 대시보드 맵 재료 · related.js)
     // 맵 점의 관련 기사 3건 (11/15, related.js wordArticles)
@@ -819,6 +837,132 @@ async function handleApiInner(req, res) {
       markListStale() // 11/17: 목록 점수를 새 기준으로 다시 계산 (끝날 때까지는 기존 점수)
       await logChange(admin, '중요도 기준', `${describeRule(before)} → ${describeRule(rule)}`)
       return send(res, 200, { rule, history: await ruleHistory() })
+    }
+    // 관리 안내 (11/20, 관리자 인수인계): 웹으로 보기(HTML) · 내려받기(PDF). 기본은 저장소 docs/admin_guide 파일,
+    // 관리자가 새 판으로 바꿀 수 있게 하되 배포를 마칠 때까지는 잠근다 (서버 설정 MANUAL_UPLOAD=on일 때만 열림)
+    if (req.method === 'GET' && req.url === '/api/admin/manual') {
+      requireAdmin(req)
+      const info = async (kind) => {
+        const up = await getSetting(`manual_${kind}`, null).catch(() => null)
+        return up?.data ? { source: 'uploaded', at: up.at, size: up.size } : { source: 'bundled' }
+      }
+      return send(res, 200, { html: await info('html'), pdf: await info('pdf'), uploadOpen: process.env.MANUAL_UPLOAD === 'on' })
+    }
+    if (req.method === 'GET' && /^\/api\/admin\/manual\/(html|pdf)(\?|$)/.test(req.url)) {
+      requireAdmin(req)
+      const kind = req.url.includes('/pdf') ? 'pdf' : 'html'
+      const up = await getSetting(`manual_${kind}`, null).catch(() => null)
+      const body = up?.data ? Buffer.from(up.data, 'base64') : await readFile(new URL(`../docs/admin_guide/techbrief_admin_guide.${kind}`, import.meta.url))
+      const headers =
+        kind === 'pdf'
+          ? { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent('테크브리프_관리자_안내.pdf')}` }
+          : { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': 'sandbox allow-popups allow-modals; default-src data: \'unsafe-inline\'' } // 올린 HTML이 스크립트를 돌리지 못하게
+      res.writeHead(200, { ...headers, 'Cache-Control': 'no-store' })
+      return res.end(body)
+    }
+    if (req.method === 'PUT' && /^\/api\/admin\/manual\/(html|pdf)$/.test(req.url)) {
+      const admin = requireAdmin(req)
+      if (process.env.MANUAL_UPLOAD !== 'on') throw Object.assign(new Error('관리 안내 파일 바꾸기는 배포를 마친 뒤 열려요.'), { status: 423 })
+      const kind = req.url.endsWith('/pdf') ? 'pdf' : 'html'
+      const { data } = await readJson(req, 12_000_000)
+      const buf = Buffer.from(String(data ?? ''), 'base64')
+      if (!buf.length || buf.length > 8_000_000) throw Object.assign(new Error('파일은 8MB까지 올릴 수 있어요.'), { status: 400 })
+      const head = buf.subarray(0, 512).toString('utf8').toLowerCase()
+      if (kind === 'pdf' ? !head.startsWith('%pdf') : !(head.includes('<!doctype html') || head.includes('<html'))) throw Object.assign(new Error(kind === 'pdf' ? 'PDF 파일이 아니에요.' : 'HTML 파일이 아니에요.'), { status: 400 })
+      await setSetting(`manual_${kind}`, { data: buf.toString('base64'), size: buf.length, at: new Date().toISOString() })
+      await logChange(admin, '관리 안내', `${kind.toUpperCase()} 파일을 새 판으로 바꿈 (${Math.round(buf.length / 1024)}KB)`)
+      return send(res, 200, { ok: true })
+    }
+    // 접속 · 보안 (11/20, credentials.js): 접속 코드 · 관리자 비밀번호를 관리 페이지에서 — 값은 보내지도 기록하지도 않음
+    if (req.method === 'GET' && req.url === '/api/admin/security') {
+      requireAdmin(req)
+      await loadCredentials({ fresh: true })
+      return send(res, 200, {
+        accessCode: storedAccessToken() ? 'admin' : envAccessCodeSet() ? 'env' : 'none',
+        password: storedPassword() ? 'admin' : envPasswordSet() ? 'env' : 'none',
+        passwordAt: storedPassword()?.at ?? null,
+      })
+    }
+    if (req.method === 'PUT' && req.url === '/api/admin/security/access-code') {
+      const admin = requireAdmin(req)
+      const { code, current } = await readJson(req)
+      if (!passwordMatches(current)) throw Object.assign(new Error('관리자 비밀번호가 맞지 않아요.'), { status: 403 })
+      const token = accessTokenOf(checkNewCode(code))
+      await saveAccessToken(token)
+      await logChange(admin, '접속 코드', '관리 페이지에서 바꿈 (예전 코드로 들어온 브라우저는 새 코드를 넣어야 함)')
+      // 바꾼 사람은 새 코드로 바로 통과 (자기 화면이 잠기지 않게)
+      return send(res, 200, { accessCode: 'admin' }, { 'Set-Cookie': secureCookie(`${ACCESS_COOKIE}=${token}; Max-Age=${ACCESS_MAX_AGE}; Path=/; HttpOnly; SameSite=Lax`, req) })
+    }
+    if (req.method === 'POST' && req.url === '/api/admin/security/access-code/reset') {
+      const admin = requireAdmin(req)
+      const { current } = await readJson(req)
+      if (!passwordMatches(current)) throw Object.assign(new Error('관리자 비밀번호가 맞지 않아요.'), { status: 403 })
+      if (!envAccessCodeSet()) throw Object.assign(new Error('설정 파일에 접속 코드가 없어 되돌리면 누구나 들어올 수 있게 돼요. 새 코드로 바꿔 주세요.'), { status: 400 })
+      await saveAccessToken(null)
+      await logChange(admin, '접속 코드', '설정 파일 값으로 되돌림')
+      return send(res, 200, { accessCode: 'env' })
+    }
+    if (req.method === 'PUT' && req.url === '/api/admin/security/password') {
+      const admin = requireAdmin(req)
+      const { current, next } = await readJson(req)
+      if (!passwordMatches(current)) throw Object.assign(new Error('지금 비밀번호가 맞지 않아요.'), { status: 403 })
+      await saveAdminPassword(next)
+      await logChange(admin, '관리자 비밀번호', '관리 페이지에서 바꿈')
+      return send(res, 200, { password: 'admin' })
+    }
+    if (req.method === 'POST' && req.url === '/api/admin/security/password/reset') {
+      const admin = requireAdmin(req)
+      const { current } = await readJson(req)
+      if (!passwordMatches(current)) throw Object.assign(new Error('지금 비밀번호가 맞지 않아요.'), { status: 403 })
+      if (!envPasswordSet()) throw Object.assign(new Error('설정 파일에 비밀번호가 없어 되돌리면 관리자로 들어올 수 없게 돼요.'), { status: 400 })
+      await clearAdminPassword()
+      await logChange(admin, '관리자 비밀번호', '설정 파일 값으로 되돌림')
+      return send(res, 200, { password: 'env' })
+    }
+    // 판정 기준 · 회사 특허 이름 (11/20, judgeSettings.js): 코드로 고치던 숫자를 관리 페이지에서 — 관리자만
+    if (req.method === 'GET' && req.url === '/api/admin/judge') {
+      requireAdmin(req)
+      await loadJudgeSettings({ fresh: true })
+      const lists = await getLists().catch(() => ({}))
+      const row = (name, role) => {
+        const o = ownerOf(name)
+        return { name, role, source: o?.source ?? 'none', like: o?.like ?? [] }
+      }
+      const companies = [...(lists.own ?? []).map((n) => row(n, 'own')), ...(lists.competitors ?? []).map((n) => row(n, 'competitor'))]
+      return send(res, 200, { rule: judgeRule(), defaults: DEFAULT_JUDGE, fields: RULE_FIELDS, history: await judgeHistory(), companies })
+    }
+    if (req.method === 'PUT' && req.url === '/api/admin/judge') {
+      const admin = requireAdmin(req)
+      await loadJudgeSettings({ fresh: true })
+      const before = judgeRule()
+      const rule = await saveJudgeRule(await readJson(req), admin?.name)
+      const { staleTechVerdicts } = await import('./techVerdicts.js')
+      staleTechVerdicts()
+      markListStale() // 자료 목록의 「자사 위협 · 기회」 표시도 새 기준으로
+      await logChange(admin, '판정 기준', `${describeJudge(before)} → ${describeJudge(rule)}`)
+      return send(res, 200, { rule, history: await judgeHistory() })
+    }
+    // 출원인 이름으로 특허 DB에서 최근 6년 몇 건이 잡히나 (저장 전 확인)
+    if (req.method === 'POST' && req.url === '/api/admin/judge/owner-check') {
+      requireAdmin(req)
+      const like = checkOwnerPatterns((await readJson(req)).like)
+      if (!like.length || !dbEnabled()) return send(res, 200, { count: null, samples: [] })
+      const since = (new Date().getFullYear() - 6) * 10000
+      const { rows } = await query(
+        `SELECT o AS name, count(*)::int AS n FROM display_patents, unnest(owners) o WHERE pub >= $1 AND o LIKE ANY($2::text[]) GROUP BY o ORDER BY n DESC LIMIT 6`,
+        [since, like],
+      )
+      return send(res, 200, { count: rows.reduce((a, r) => a + r.n, 0), samples: rows })
+    }
+    if (req.method === 'PUT' && req.url === '/api/admin/judge/owner') {
+      const admin = requireAdmin(req)
+      const { name, like } = await readJson(req)
+      const saved = await saveOwner(name, like)
+      const { staleTechVerdicts } = await import('./techVerdicts.js')
+      staleTechVerdicts()
+      markListStale()
+      await logChange(admin, '회사 특허 이름', saved.like.length ? `${saved.name}: ${saved.like.join(', ')}` : `${saved.name}: 직접 넣은 이름 지움 (기본 사전)`)
+      return send(res, 200, saved)
     }
     if (req.method === 'GET' && req.url.startsWith('/api/admin/search-terms')) {
       requireAdmin(req)

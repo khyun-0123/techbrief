@@ -6,6 +6,7 @@
 // - 모두에게 영향을 주는 설정을 바꾸는 API는 handleApi에서 requireAdmin으로 막는다 (화면에서 숨기는 것만으로는 못 막음)
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { getSetting, setSetting } from './db/store.js'
+import { matchStoredPassword, storedPassword } from './credentials.js'
 
 const COOKIE = 'tb_admin'
 const SESSION_MS = 8 * 3600_000
@@ -38,7 +39,12 @@ function adminPassword() {
 }
 
 export function adminConfigured() {
-  return Boolean(adminPassword())
+  return Boolean(adminPassword() || storedPassword())
+}
+// 11/20: 관리 페이지에서 바꾼 비밀번호(DB, scrypt)가 있으면 그것을, 없으면 설정 파일 값
+export const envPasswordSet = () => Boolean(adminPassword())
+export function passwordMatches(input) {
+  return storedPassword() ? matchStoredPassword(input) : Boolean(adminPassword()) && samePassword(input, adminPassword())
 }
 
 function samePassword(input, expected) {
@@ -154,7 +160,7 @@ export function login({ id, password }, ip = null) {
   }
   // 아이디와 비밀번호를 둘 다 비교한다 (어느 쪽이 틀렸는지는 알려 주지 않음)
   const idOk = samePassword(String(id ?? '').trim(), adminId())
-  const pwOk = samePassword(password, adminPassword())
+  const pwOk = passwordMatches(password)
   if (!idOk || !pwOk) {
     mine.fails += 1
     if (Date.now() - globalLock.since > LOCK_MS) Object.assign(globalLock, { fails: 0, since: Date.now() })

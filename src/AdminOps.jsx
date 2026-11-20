@@ -53,8 +53,8 @@ function SourcesCard({ sources, llm, patentDb }) {
     <section className="adm-card">
       <h2>외부 출처 상태 (오늘 · 이번 달)</h2>
       <p className="adm-desc">
-        한도가 알려진 출처는 한도(하루 · 월)의 80%에서 자동 수집이, 98%에서 사람이 누른 찾기도 멈춰요. BigQuery는 이번 달 읽은 양이 무료량 기준의 85%면 자동 작업, 98%면 모두 멈춰요(크레딧이 나가지 않게). 막히면(한도 · 서버 오류) 잠시 쉬고, 그동안 찾기는 이미 모은 자료 · 논문으로 보여 줘요.
-        {' '}AI 대체 서버: {llm?.fallback ? `${llm.fallback} (사람이 누른 요청만)` : '없음 (.env.local LLM_FALLBACK)'}
+        하루 · 월 사용 한도가 있는 출처는 한도의 80%가 되면 자동 수집을, 98%가 되면 사람이 누른 찾기도 멈춰요 (요금이 나가지 않게). 특허(Google)는 무료 사용량의 85% · 98%에서 같은 식으로 멈춰요. 막히면 잠시 쉬고, 그동안 찾기는 이미 모은 자료로 보여 줘요.
+        {' '}예비 AI: {llm?.fallback ? `${llm.fallback} (사람이 누른 요청만)` : '없음 — 「AI 모델」에서 정해요'}
         {llm?.lastFallback && ` · 마지막 전환 ${time(llm.lastFallback.at)} ${llm.lastFallback.from} → ${llm.lastFallback.to}`}
       </p>
       <table className="adm-table">
@@ -97,10 +97,10 @@ function SourcesCard({ sources, llm, patentDb }) {
         특허 자료 (기술 시계열 특허):{' '}
         {patentDb?.ready
           ? `디스플레이 특허 ${patentDb.rows.toLocaleString()}건 · 전 세계 특허 제목 ${(patentDb.titles ?? 0).toLocaleString()}건 · 마지막 공개일 ${String(patentDb.maxPub).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')} · 받은 날 ${new Date(patentDb.at).toLocaleDateString('ko-KR')}`
-          : '아직 없음 — 특허는 키워드마다 BigQuery로 셈 (한 번 약 26GB)'}
+          : '아직 없음 — 특허는 키워드마다 그때그때 셈'}
         {patentDb?.loading && ' · 받는 중'}
         {patentDb?.lastError && ` · 마지막 받기 실패: ${patentDb.lastError}`}
-        {' '}(같은 발명은 한 번. 분기에 한 번 서버에서 npm run patent-db, BigQuery 약 42GB)
+        {' '}(같은 발명은 한 번만 셈. 새로 공개된 특허는 분기마다 서버 관리자가 받아 넣어요)
       </p>
     </section>
   )
@@ -158,7 +158,7 @@ function AdminOps({ ops, onOps, onToast, health, refreshRunning, dirtyCount }) {
     const started = Date.now()
     const poll = async () => {
       if (Date.now() - started > WAIT_MS) {
-        setRestart({ phase: 'failed', error: '90초가 지나도 다시 켜지지 않았어요. 서버 PC에서 npm run serve 창을 확인해 주세요.' })
+        setRestart({ phase: 'failed', error: '90초가 지나도 다시 켜지지 않았어요. 서버 관리자에게 알려 주세요.' })
         return
       }
       try {
@@ -266,7 +266,7 @@ function AdminOps({ ops, onOps, onToast, health, refreshRunning, dirtyCount }) {
         <div className="adm-ops-head">
           <div>
             <h2>서버 다시 켜기</h2>
-            <p className="adm-desc">서버를 끄고 바로 다시 켜요. npm run을 다시 하는 것과 같아요.</p>
+            <p className="adm-desc">사이트를 끄고 바로 다시 켜요. 1분쯤 걸리고, 그동안 사이트가 잠깐 멈춰요.</p>
           </div>
           <button
             type="button"
@@ -282,18 +282,18 @@ function AdminOps({ ops, onOps, onToast, health, refreshRunning, dirtyCount }) {
           <dd>{server ? `${formatAt(server.startedAt)} · ${uptime(server.startedAt)}` : '—'}</dd>
           <dt>실행 방식</dt>
           <dd>
-            {!server ? '—' : server.supervised ? 'npm run serve · 여기서 다시 켤 수 있어요' : 'npm run dev · 여기서 다시 켤 수 없어요'}
+            {!server ? '—' : server.supervised ? '여기서 다시 켤 수 있어요' : '개발용으로 켠 서버 · 여기서 다시 켤 수 없어요'}
           </dd>
         </dl>
         {server && !server.supervised && (
-          <p className="adm-alert-inline">서버 PC에서 npm run dev 대신 <code>npm run serve</code>로 켜면 이 버튼을 쓸 수 있어요. (npm run dev로 켠 서버는 끄면 다시 켜 줄 것이 없어 막아 뒀어요)</p>
+          <p className="adm-alert-inline">개발용으로 켠 서버라 여기서 끄면 다시 켜 줄 것이 없어 막아 뒀어요. 서버 관리자에게 운영용(<code>npm run serve</code>)으로 켜 달라고 해 주세요.</p>
         )}
         {dirtyCount > 0 && <p className="adm-alert-inline">저장하지 않은 변경 {dirtyCount}개를 먼저 저장하거나 되돌려 주세요.</p>}
         <h3 className="adm-sub">이럴 때 써요</h3>
         <ul className="adm-ops-list">
-          <li>머지 뒤 서버 코드(server/)가 바뀌었을 때 — 화면 코드는 저절로 반영되지만 서버 코드는 다시 켜야 해요</li>
-          <li>.env.local(AI · 네이버 키, 관리자 비밀번호)을 바꿨을 때</li>
-          <li>「수집 중」이나 AI 대기열이 오래 풀리지 않을 때, DB를 껐다 켠 뒤 연결이 끊겼을 때</li>
+          <li>프로그램을 새 판으로 바꾼 뒤 (서버 관리자가 업데이트했을 때)</li>
+          <li>서버 설정 파일(외부 서비스 열쇠 등)을 바꾼 뒤</li>
+          <li>「수집 중」이나 AI 대기열이 오래 풀리지 않을 때</li>
         </ul>
         <p className="adm-note">서버가 아예 꺼져 있으면 이 페이지도 열리지 않아요. 그때는 서버 PC에서 직접 켜야 해요.</p>
       </section>

@@ -5,6 +5,7 @@
 // - 코드는 화면 · 기록 어디에도 그대로 남기지 않는다 (쿠키에는 코드로 만든 해시만)
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { clientIp, secureCookie } from './admin.js'
+import { loadCredentials, storedAccessToken } from './credentials.js'
 
 const COOKIE = 'tb_access'
 const MAX_AGE = 30 * 86_400
@@ -15,8 +16,12 @@ const tries = new Map() // ip → { n, since }
 const code = () => String(process.env.ACCESS_CODE ?? '').trim()
 // 코드 없이도 내려 주는 공개 파일: 브라우저 탭 아이콘뿐 (막으면 브라우저가 주소 첫 글자를 대신 띄움, 11/18)
 const PUBLIC_PATHS = new Set(['/favicon.svg'])
-export const accessGateOn = () => code().length > 0
-const tokenOf = (c) => createHash('sha256').update(`techbrief-access|${c}`).digest('hex')
+// 11/20: 관리 페이지에서 바꾼 코드(DB, 해시만)가 있으면 그것을, 없으면 설정 파일 ACCESS_CODE
+export const accessGateOn = () => code().length > 0 || Boolean(storedAccessToken())
+export const tokenOf = (c) => createHash('sha256').update(`techbrief-access|${c}`).digest('hex')
+export const envAccessCodeSet = () => code().length > 0
+export const ACCESS_COOKIE = COOKIE
+export const ACCESS_MAX_AGE = MAX_AGE
 
 function readCookie(req, name) {
   const m = String(req.headers.cookie ?? '').match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`))
@@ -59,8 +64,9 @@ async function readForm(req) {
 
 // Vite(개발 · 운영 모드) 미들웨어: 통과면 next(), 아니면 여기서 답한다
 export async function accessGate(req, res, next) {
+  await loadCredentials()
   if (!accessGateOn()) return next()
-  const want = tokenOf(code())
+  const want = storedAccessToken() ?? tokenOf(code())
   if (sameToken(readCookie(req, COOKIE), want)) return next()
   if ((req.method === 'GET' || req.method === 'HEAD') && PUBLIC_PATHS.has(String(req.url ?? '').split('?')[0])) return next()
 

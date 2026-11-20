@@ -6,8 +6,13 @@
 import { useEffect, useState } from 'react'
 import { fetchCategoryCompetitors } from './api.js'
 
-const SHOWN = ['sdc', 'lgd', 'boe']
-const SELF = 'lgd'
+// 11/20: 자사는 서버가 알려 준 own(관리 페이지 「자사」), 열은 자사 + 경쟁사 앞 두 곳 (삼성D · BOE가 있으면 먼저)
+const PREFER = ['sdc', 'boe']
+const shownOf = (companies = []) => {
+  const own = companies.find((c) => c.own)
+  const rivals = companies.filter((c) => !c.own && !c.unsure).sort((a, b) => (PREFER.indexOf(a.id) + 1 || 9) - (PREFER.indexOf(b.id) + 1 || 9)).slice(0, 2)
+  return [own, ...rivals].filter(Boolean).map((c) => c.id) // 예전과 같은 순서: 자사 · 삼성D · BOE
+}
 const FAST = 1.2 // 분야보다 1.2배 이상 빠름
 const SLOW = 0.85 // 분야의 0.85배 미만
 const pace = (r, field) => (r == null || !field ? '' : r / field >= FAST ? 'up' : r / field < SLOW ? 'down' : '')
@@ -50,7 +55,9 @@ export default function CategoryGlance() {
     }
   }, [])
   const rows = (data?.categories ?? []).filter((c) => c.field?.before > 0)
-  const head = rows[0]?.companies.filter((c) => SHOWN.includes(c.id)) ?? []
+  const SHOWN = shownOf(rows[0]?.companies)
+  const SELF = rows[0]?.companies.find((c) => c.own)?.id
+  const head = SHOWN.map((id) => rows[0]?.companies.find((c) => c.id === id)).filter(Boolean)
   return (
     <section className="panel cg" aria-labelledby="cg-title">
       <div className="cg-head">
@@ -96,8 +103,8 @@ export default function CategoryGlance() {
                     <Verdict v={r.verdict} />
                   </td>
                   <td className="cg-num cg-field">{fmt(r.field.ratio)}</td>
-                  {r.companies
-                    .filter((c) => SHOWN.includes(c.id))
+                  {SHOWN.map((id) => r.companies.find((c) => c.id === id))
+                    .filter(Boolean)
                     .map((c) => (
                       <td key={c.id} className={c.id === SELF ? 'cg-num cg-self' : 'cg-num'} title={`${c.before.toLocaleString()} → ${c.now.toLocaleString()}건`}>
                         <Ratio value={c.ratio} field={r.field.ratio} />
