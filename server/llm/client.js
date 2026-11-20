@@ -9,6 +9,35 @@ import { recordAiCall } from '../usage.js'
 const TIMEOUT_MS = 120_000 // 요약 기본값. 보고서처럼 긴 출력은 호출할 때 늘린다
 
 const PROVIDER_IDS = ['local', 'openrouter', 'exaone']
+// 11/20 관리자 인수인계: 모델 이름 · 예비 AI를 관리 페이지에서 (DB llm_models, index.js가 켤 때 · 저장할 때 setModelOverrides)
+// 비어 있는 칸은 설정 파일(.env.local) 값을 쓴다. 주소 · 열쇠(API 키)는 여기서 바꾸지 않는다 (설정 파일에만)
+const OV = (globalThis.__techbriefLlmOverrides ??= { models: {}, fallback: undefined })
+const MODEL_RE = /^[\w.:/@+-]{2,120}$/
+export function checkModelOverrides(input) {
+  const models = {}
+  for (const id of PROVIDER_IDS) {
+    const m = input?.models?.[id] ?? {}
+    const out = {}
+    for (const k of ['model', 'reportModel']) {
+      const v = String(m[k] ?? '').trim()
+      if (!v) continue
+      if (!MODEL_RE.test(v)) throw Object.assign(new Error(`모델 이름 「${v}」에 쓸 수 없는 글자가 있어요.`), { status: 400 })
+      out[k] = v
+    }
+    if (Object.keys(out).length) models[id] = out
+  }
+  const fb = input?.fallback
+  const fallback = fb === undefined || fb === null || fb === '' ? undefined : fb === 'none' || PROVIDER_IDS.includes(fb) ? fb : undefined
+  return { models, fallback }
+}
+export function setModelOverrides(v) {
+  const c = checkModelOverrides(v)
+  OV.models = c.models
+  OV.fallback = c.fallback
+  return c
+}
+export const modelOverrides = () => ({ models: OV.models, fallback: OV.fallback ?? null })
+const ov = (id, k) => OV.models[id]?.[k] || undefined
 
 function providerConfig(id) {
   // K-EXAONE 2.5 (docs.exaone.ai): OpenAI 호환 /v1/chat/completions, 모델 k-exaone_v2.5. 늘 먼저 추론하고(끌 수 없음)
@@ -20,8 +49,8 @@ function providerConfig(id) {
       label: 'EXAONE API',
       baseUrl: process.env.EXAONE_BASE_URL || 'https://api.exaone.ai/v1',
       apiKey: process.env.EXAONE_API_KEY,
-      model: process.env.EXAONE_MODEL || 'k-exaone_v2.5',
-      reportModel: process.env.EXAONE_REPORT_MODEL,
+      model: ov('exaone', 'model') || process.env.EXAONE_MODEL || 'k-exaone_v2.5',
+      reportModel: ov('exaone', 'reportModel') || process.env.EXAONE_REPORT_MODEL,
       numCtx: 0,
       reasoningEffort: process.env.EXAONE_REASONING_EFFORT || 'low',
       pingPath: '/models',
@@ -34,8 +63,8 @@ function providerConfig(id) {
       label: 'OpenRouter',
       baseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
       apiKey: process.env.OPENROUTER_API_KEY,
-      model: process.env.OPENROUTER_MODEL,
-      reportModel: process.env.OPENROUTER_REPORT_MODEL,
+      model: ov('openrouter', 'model') || process.env.OPENROUTER_MODEL,
+      reportModel: ov('openrouter', 'reportModel') || process.env.OPENROUTER_REPORT_MODEL,
       numCtx: 0,
       reasoningEffort: '',
       pingPath: '/key', // OpenRouter의 /models는 키 없이도 열려 있어 키 확인용 주소를 쓴다
@@ -47,8 +76,8 @@ function providerConfig(id) {
     label: '맥미니',
     baseUrl: process.env.LLM_BASE_URL,
     apiKey: process.env.LLM_API_KEY,
-    model: process.env.LLM_SUMMARY_MODEL,
-    reportModel: process.env.LLM_REPORT_MODEL,
+    model: ov('local', 'model') || process.env.LLM_SUMMARY_MODEL,
+    reportModel: ov('local', 'reportModel') || process.env.LLM_REPORT_MODEL,
     numCtx: Number(process.env.LLM_NUM_CTX) || 0,
     reasoningEffort: process.env.LLM_REASONING_EFFORT || '',
     pingPath: '/models',
@@ -80,7 +109,7 @@ function config(id = currentId()) {
 // 대체 AI 서버 (11/12, 33 문서 6장 W19): 지금 서버가 연결 실패 · 시간 초과 · 5xx · 429면 「사람이 누른 요청만」 한 번 다시 보낸다
 // LLM_FALLBACK(local|openrouter|exaone)이 있을 때만. 자동 요약 같은 뒤에서 도는 일은 넘기지 않는다 (유료 모델 비용이 쌓이지 않게)
 function fallbackId(primary) {
-  const id = process.env.LLM_FALLBACK
+  const id = OV.fallback !== undefined ? OV.fallback : process.env.LLM_FALLBACK // 관리 페이지 값 먼저 ('none' = 쓰지 않음)
   if (!PROVIDER_IDS.includes(id) || id === primary) return null
   return isReady(providerConfig(id)) ? id : null
 }
@@ -92,10 +121,12 @@ export function llmProviders() {
   return {
     current: currentId(),
     fallback: fallbackId(currentId()),
+    fallbackSetting: OV.fallback ?? null,
+    envFallback: process.env.LLM_FALLBACK || null,
     lastFallback,
     providers: PROVIDER_IDS.map((id) => {
       const c = providerConfig(id)
-      return { id, label: c.label, model: c.model ?? '', ready: isReady(c) }
+      return { id, label: c.label, model: c.model ?? '', reportModel: c.reportModel ?? '', ready: isReady(c), envModel: { local: process.env.LLM_SUMMARY_MODEL, openrouter: process.env.OPENROUTER_MODEL, exaone: process.env.EXAONE_MODEL || 'k-exaone_v2.5' }[id] ?? '', envReportModel: { local: process.env.LLM_REPORT_MODEL, openrouter: process.env.OPENROUTER_REPORT_MODEL, exaone: process.env.EXAONE_REPORT_MODEL }[id] ?? '' }
     }),
   }
 }

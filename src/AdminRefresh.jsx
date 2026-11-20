@@ -25,7 +25,7 @@ function AdminRefresh({ status, starting, disabled, onRun, onSave, keywords = []
         <h2>
           ① 기사 모으기 <span className="adm-tag adm-tag-muted">AI 안 씀</span>
         </h2>
-        <p className="adm-desc">네이버 뉴스에서 키워드별 새 기사(제목 · 150자 발췌 · 링크)를 언제 DB에 모을지 정해요. 앱이 켜져 있을 때만 돌아요.</p>
+        <p className="adm-desc">자동 수집 키워드마다 새 기사 · 자료를 언제 모을지 정해요. 사이트가 켜져 있을 때만 돌아요.</p>
 
         <span className="adm-field-label">주기</span>
         <div className="adm-segment adm-segment-wide" role="radiogroup" aria-label="자동 최신화 주기">
@@ -128,7 +128,7 @@ function AdminRefresh({ status, starting, disabled, onRun, onSave, keywords = []
             ]}
           />
           <small>
-            네이버 검색 API로 모은 기사만이에요(네이버 이용 조건은 21일 보관, 23 문서). 1·2차 출처(전문매체 · 기업 RSS)는 원래 사이트에서 받아 해당 없어요. 요약된 기사는 보고서 근거라 남아요. 「지우지 않음」이면 1년 뒤에 정리해요. 다음 최신화 때 적용돼요.
+            네이버 뉴스 검색으로 모은 기사에만 해당돼요 (네이버 이용 조건: 21일 보관). 전문매체 · 기업 발표 자료는 해당 없고, 요약된 기사는 보고서 근거라 남아요. 「지우지 않음」이면 1년 뒤에 정리해요. 다음 최신화 때 적용돼요.
           </small>
         </label>
       </section>
@@ -172,9 +172,9 @@ function AdminRefresh({ status, starting, disabled, onRun, onSave, keywords = []
               <dd className={status.lastResult.error ? 'bad' : undefined}>{resultText(status.lastResult)}</dd>
             </div>
           )}
-          {status.lastResult && !running && (
+          {status.lastResult && !running && !status.lastResult.runner && (
             <div className="adm-status-wide">
-              <dt>돌린 앱</dt>
+              <dt>수집한 곳</dt>
               <dd className={status.lastResult.runner ? undefined : 'bad'}>{runnerText(status.lastResult)}</dd>
             </div>
           )}

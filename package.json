@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "server": "node --env-file-if-exists=.env.local server/index.js",
     "patent-db": "node --env-file-if-exists=.env.local scripts/patent-db.mjs",
+    "admin-reset": "node --env-file-if-exists=.env.local scripts/admin-reset.mjs",
     "storybook": "storybook dev -p ${STORYBOOK_PORT:-6006} --no-open",
     "build-storybook": "storybook build -o storybook-static",
     "kiwi-model": "node scripts/kiwi-model.mjs",

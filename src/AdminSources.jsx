@@ -22,12 +22,12 @@ function CorpusLine({ c }) {
   const JOB = { backfill: '처음 받기', recent: '최근 60일', citations: '최근 3년 인용 수' }
   return (
     <p className="adm-desc">
-      <b>디스플레이 논문 DB</b> {c.papers.toLocaleString()}편 (초록 {c.withAbstract.toLocaleString()}편 · {c.first ?? '-'} ~ {c.last ?? '-'})
+      <b>디스플레이 논문 모음</b> {c.papers.toLocaleString()}편 (초록 {c.withAbstract.toLocaleString()}편 · {c.first ?? '-'} ~ {c.last ?? '-'})
       {c.busy ? ` · ${JOB[c.phase] ?? '받는 중'}…` : c.backfillDone ? ` · 처음 받기 끝 (${c.backfillDone})` : c.backfillTotal ? ` · 처음 받기 중 (전체 약 ${c.backfillTotal.toLocaleString()}편, 남은 예산에 맞춰 이어 받음)` : ' · 아직 안 받음 (서버가 켜지고 3분 뒤 시작)'}
       {c.lastRun && ` · 마지막 ${JOB[c.lastJob] ?? c.lastJob} ${formatAt(c.lastRun)} ${c.lastSaved ?? 0}편`}
       {c.stopped && <span className="adm-state bad"> · {c.stopped}</span>}
       {c.error && <span className="adm-state bad"> · 오류 {c.error}</span>}
-      . 「논문 · 뉴스에서 찾기」는 이 DB에서 먼저 찾고, 맞는 논문이 적으면 아래 출처로 찾아요.
+      . 「논문 · 뉴스에서 찾기」는 이 모음에서 먼저 찾고, 맞는 논문이 적으면 아래 출처로 찾아요.
     </p>
   )
 }

@@ -8672,7 +8672,10 @@ button.ka-auto-note {
 }
 @media (max-width: 720px) {
   .guide-btn-text {
-    display: none; /* 휴대폰: 상단바가 좁아 「?」만 */
+    display: none; /* 휴대폰: 상단바가 좁아 「안내」만 (11/20: 「?」 빼고 이름만) */
+  }
+  .guide-btn::after {
+    content: '안내';
   }
 }
 /* 맵 점의 관련 기사 칸 (11/15, 마인드맵 가이드 「관련 기사」): 맵 바로 아래, 3건 · 원문은 새 탭 */
@@ -9537,4 +9540,10 @@ a.dash-home-t:hover,
   display: block;
   color: var(--tb-color-text-sub);
   margin-top: 2px;
+}
+
+.pre-choice-note {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--tb-color-text-sub);
 }

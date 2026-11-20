@@ -588,3 +588,22 @@ export async function fetchWordArticles(center, word) {
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
   return data
 }
+
+// ── 관리자 인수인계 (11/20): 판정 기준 · 회사 특허 이름 · 접속 · 보안 · AI 모델 이름 · 관리 안내 ──
+async function adminCall(path, method = 'GET', body) {
+  const res = await fetch(path, body === undefined ? { method } : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data
+}
+export const fetchJudge = () => adminCall('/api/admin/judge')
+export const saveJudge = (rule) => adminCall('/api/admin/judge', 'PUT', rule)
+export const checkOwner = (like) => adminCall('/api/admin/judge/owner-check', 'POST', { like })
+export const saveOwnerApi = (name, like) => adminCall('/api/admin/judge/owner', 'PUT', { name, like })
+export const fetchSecurity = () => adminCall('/api/admin/security')
+export const saveAccessCode = (code, current) => adminCall('/api/admin/security/access-code', 'PUT', { code, current })
+export const resetAccessCode = (current) => adminCall('/api/admin/security/access-code/reset', 'POST', { current })
+export const saveAdminPasswordApi = (current, next) => adminCall('/api/admin/security/password', 'PUT', { current, next })
+export const resetAdminPassword = (current) => adminCall('/api/admin/security/password/reset', 'POST', { current })
+export const saveLlmModels = (v) => adminCall('/api/admin/llm-models', 'PUT', v)
+export const fetchManualInfo = () => adminCall('/api/admin/manual')

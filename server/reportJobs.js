@@ -12,6 +12,7 @@ import { searchArticles } from './collector/index.js'
 import { DISPLAY_TOPICS } from './papers/journals.js'
 import { searchPapers } from './papers/index.js'
 import { bestPassage, dbCandidates, inputCandidates, rewriteWithPassages, termsOf } from './reinforce.js'
+import { knownTerms } from './queryTerms.js'
 import { dbEnabled } from './db/index.js'
 import { saveReport } from './db/store.js'
 import { cancelAi, PRIORITY, withQueueContext } from './llm/client.js'
@@ -243,9 +244,16 @@ async function supplement(job, entry, gaps, research) {
   // 1) 줄마다 후보 모으기
   step(job, `보충할 자료 찾는 중 (AI 해설 ${gaps.length}줄)`, 40)
   const inputPool = await inputCandidates(inputs)
+  // 11/20: 모아 둔 기사 후보는 보고서 주제어(예: 마이크로LED)가 든 것만 — 흔한 낱말 두 개만 겹쳐도 후보가 돼
+  // 마이크로LED 보고서에 「[르포] 삼전닉스…」 같은 반도체 기사가 올라오던 것. 띄어쓰기 · 대소문자는 무시하고 비교
+  const squash = (x) => String(x ?? '').toLowerCase().replace(/\s+/g, '')
+  const topics = job.body?.topics ?? []
+  const english = (await Promise.all(topics.map((t) => knownTerms(t).catch(() => [])))).flat() // 저장된 영문 이름 (AI 안 부름) — 영문 기사도 남게
+  const topicKeys = [...new Set([...topics, ...english].map(squash))].filter((t) => t.length >= 2)
+  const onTopic = (c) => !topicKeys.length || topicKeys.some((t) => squash(`${c.title ?? ''} ${c.text ?? ''}`).includes(t))
   for (const g of gaps) {
     g.terms = termsOf(g.text)
-    const owned = await dbCandidates(g.terms).catch(() => [])
+    const owned = (await dbCandidates(g.terms).catch(() => [])).filter(onTopic)
     const ext = job.level === 'research' ? await externalCandidates(g.terms) : []
     const pool = [...inputPool, ...owned, ...ext]
     g.cands = pool
@@ -267,7 +275,8 @@ async function supplement(job, entry, gaps, research) {
   let useNew = false
   // 11/19: 보고서를 만들기 전에 화면에서 미리 고른 값(summarizeNew)이 있으면 묻지 않는다 — 돌려 두고 자리를 비워도 멈추지 않게.
   // 값이 없을 때(예전 화면)만 진행 창에서 묻고, 3분 안에 답이 없으면 「아니요」
-  const preset = typeof job.body?.summarizeNew === 'boolean' ? job.body.summarizeNew : null
+  // 11/20 사용자: 「추가 자료 조사까지」는 새로 찾은 자료를 요약해서 쓰는 수준이라 늘 요약 (묻지 않음)
+  const preset = job.level === 'research' ? true : typeof job.body?.summarizeNew === 'boolean' ? job.body.summarizeNew : null
   if (list.length) {
     if (preset !== null) useNew = preset
     else {

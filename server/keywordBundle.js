@@ -15,6 +15,7 @@ import { getLists } from './collector/lists.js'
 import { supplierPatents } from './suppliers.js'
 import { buildTimeline, cachedTimeline } from './timeline.js'
 import { surgeMonths } from './timesfm.js'
+import { customOwners, judgeRule, judgeVersion, loadJudgeSettings, ownersVersion } from './judgeSettings.js'
 
 const TTL = 3 * 86_400_000
 const running = new Map()
@@ -50,14 +51,25 @@ const OWNER_DICT = [
 ]
 const flatName = (t) => String(t ?? '').toLowerCase().replace(/[\s·.()-]/g, '')
 const dictOf = (name) => OWNER_DICT.find((d) => d.names.some((n) => flatName(n) === flatName(name)))
-// 자사(LG디스플레이) + 관리 페이지 경쟁사 목록. 목록을 못 읽으면 예전 4곳
+// 11/20: 관리 페이지 「판정 기준 › 회사 특허 이름」에 넣은 출원인 이름이 있으면 그것을 먼저 (코드 사전에 없는 회사도 비교 가능)
+export function ownerOf(name) {
+  const custom = Object.entries(customOwners()).find(([k]) => flatName(k) === flatName(name))
+  if (custom?.[1]?.like?.length) return { id: `c-${flatName(custom[0])}`, names: [custom[0]], like: custom[1].like, source: 'custom' }
+  const d = dictOf(name)
+  return d ? { ...d, source: 'dict' } : null
+}
+// 자사 + 관리 페이지 경쟁사 목록. 목록을 못 읽으면 예전 4곳
+// 11/20: 자사는 관리 페이지 「자사 · 자회사」 목록에서 출원인 이름을 찾을 수 있는 첫 회사 (예전: LG디스플레이로 고정). 못 찾으면 LG디스플레이
 export async function compareCompanies() {
+  await loadJudgeSettings()
   const lists = await getLists().catch(() => null)
   const wanted = lists?.competitors?.length ? lists.competitors : ['삼성디스플레이', 'BOE', 'CSOT']
-  const out = [{ ...OWNER_DICT[0], name: 'LG디스플레이 (자사)', own: true }]
+  const ownName = (lists?.own ?? []).find((n) => ownerOf(n))
+  const ownD = ownName ? ownerOf(ownName) : { ...OWNER_DICT[0], source: 'dict' }
+  const out = [{ ...ownD, name: `${ownName ?? 'LG디스플레이'} (자사)`, own: true }]
   const unmatched = []
   for (const name of wanted) {
-    const d = dictOf(name)
+    const d = ownerOf(name)
     if (!d) unmatched.push(name)
     else if (!out.some((x) => x.id === d.id)) out.push({ ...d, name: d.id === 'csot' ? 'CSOT' : String(name).trim() })
   }
@@ -65,26 +77,27 @@ export async function compareCompanies() {
 }
 // 위협 · 기회 (규칙, [우리 판단] — 33 문서): 경쟁사 중 누군가 분야보다 1.5배 이상 빠르고 자사가 분야보다 느리면 위협,
 // 자사가 확실한 경쟁사 모두보다 빠르고 분야 이상이면 기회
-export const THREAT_FACTOR = 1.5
+export const THREAT_FACTOR = 1.5 // 기본값. 계산은 관리 페이지 「판정 기준」 값 (judgeRule().threatFactor, 11/20)
 // 작은 수 보정 (11/15 팀 회의: 「1건 → 5건을 500% 늘었다고 강조하면 안 됨 — 근원값을 보고 가중해서」):
 // - 앞 · 뒤 기간 합이 RATIO_MIN건 미만이면 비율을 내지 않음(「건수 적음」, 판정에서 뺌) — Porter 외 2019 「최소 7건」과 같은 일회성 방지, 10은 timeline.js PAT_MIN과 맞춤
 // - 비율은 양쪽에 RATIO_PRIOR건씩 더해 계산 (가법 보정 · 작은 표본일수록 1배 쪽으로 당겨짐): 1→5건 = 5배가 아니라 (5+5)/(1+5) = 1.67배, 100→500건은 4.9배로 거의 그대로
-export const RATIO_MIN = 10
-export const RATIO_PRIOR = 5
+export const RATIO_MIN = 10 // 기본값 — 계산은 judgeRule().patMin (기술 단계의 특허 최소 건수와 같은 값)
+export const RATIO_PRIOR = 5 // 기본값 — 계산은 judgeRule().ratioPrior
 // 한 말의 자사 위협 · 기회 판정 (11/14 「요즘 뜨는 기술」 옆 표시 · 11/17 자료 목록 표시가 같이 씀)
 // 그 말 특허가 가장 많은 세부 분류 → 경쟁사 특허 비교. 맵 재료는 8초까지만 기다림
 // 판정하지 않는 경우 (연결이 약함):
 // - 그 분류 특허 10건 미만
 // - 11/17: 그 말 특허 중 그 분류 비율이 45% 미만 — 「LED」(26%, 조명 등 여러 분야) · 「키오스크」(15%)처럼 한 분류로 대표할 수 없는 말 [우리 판단, 33 문서 W32]
 // - 11/17: 「디스플레이 특허 안에서만」 센 말 (디스플레이 논문이 적은 말 — 키오스크 · UTG)
-export const VERDICT_SHARE_MIN = 0.45
+export const VERDICT_SHARE_MIN = 0.45 // 기본값 — 계산은 judgeRule().shareMin
 export async function termVerdict(term) {
   const m = await Promise.race([mapMaterials(term), new Promise((res) => setTimeout(() => res(null), 8_000))]).catch(() => null)
   const cat = m?.categories?.[0]
   if (!cat || cat.count < 10) return null
   if (m.basis === '디스플레이 특허 안에서만') return null
   const share = m.patentTotal ? cat.count / m.patentTotal : 0
-  if (share < VERDICT_SHARE_MIN) return null
+  await loadJudgeSettings()
+  if (share < judgeRule().shareMin) return null
   const comp = await categoryCompetitors(cat.id).catch(() => null)
   return comp ? { category: { id: cat.id, name: cat.name, patents: cat.count, share: Math.round(share * 100) / 100 }, verdict: comp.verdict, competitors: comp } : null
 }
@@ -96,7 +109,7 @@ export async function categoryCompetitors(catId) {
   const meta = await patentDbReady().catch(() => null)
   if (!meta) return null
   const { companies: COMPANIES, unmatched } = await compareCompanies()
-  const key = `cat-competitors:v4:${catId}:${meta.at}:${COMPANIES.map((c) => c.id).join(',')}` // v2: 작은 수 보정 · v3: 2개국 이상 출원 비율 (11/15) · v4: 관리 페이지 경쟁사 목록 (11/17)
+  const key = `cat-competitors:v5:${catId}:${meta.at}:${COMPANIES.map((c) => c.id).join(',')}:${judgeVersion()}:${ownersVersion()}` // v2: 작은 수 보정 · v3: 2개국 이상 출원 비율 (11/15) · v4: 관리 페이지 경쟁사 목록 (11/17)
   const hit = await cacheGet(key).catch(() => null)
   if (hit) return hit
   const last = new Date().getFullYear() - 1
@@ -115,12 +128,13 @@ export async function categoryCompetitors(catId) {
   )
   const r = rows[0]
   if (!r?.fb) return null
-  const ratio = (before, now) => (before + now >= RATIO_MIN ? Math.round(((now + RATIO_PRIOR) / (before + RATIO_PRIOR)) * 100) / 100 : null)
+  const { patMin, ratioPrior } = judgeRule() // 11/20 관리 페이지 「판정 기준」
+  const ratio = (before, now) => (before + now >= patMin ? Math.round(((now + ratioPrior) / (before + ratioPrior)) * 100) / 100 : null)
   const field = ratio(r.fb, r.fr)
   const companies = COMPANIES.map((c, i) => ({ id: c.id, name: c.name, own: Boolean(c.own), unsure: Boolean(c.unsure), before: r[`b${i}`], now: r[`r${i}`], ratio: ratio(r[`b${i}`], r[`r${i}`]), intl: r[`r${i}`] ? Math.round((r[`i${i}`] / r[`r${i}`]) * 100) / 100 : null }))
   const sure = companies.filter((c) => !c.unsure && !c.own && c.ratio != null)
   const own = companies.find((c) => c.own)
-  const threat = own?.ratio != null && field != null && sure.some((c) => c.ratio >= THREAT_FACTOR * field) && own.ratio < field
+  const threat = own?.ratio != null && field != null && sure.some((c) => c.ratio >= judgeRule().threatFactor * field) && own.ratio < field
   const chance = own?.ratio != null && field != null && sure.every((c) => own.ratio > c.ratio) && own.ratio >= field
   const out = { id: cat.id, name: cat.name, years: `${last - 5}~${last - 3} → ${last - 2}~${last}`, field: { before: r.fb, now: r.fr, ratio: field, intl: r.fr ? Math.round((r.fi / r.fr) * 100) / 100 : null }, companies, verdict: threat ? '위협' : chance ? '기회' : null, ...(unmatched.length ? { unmatched } : {}) }
   await cachePut(key, out, 7 * 86_400_000).catch(() => {})
@@ -134,7 +148,8 @@ export async function categoryTrends() {
   if (!dbEnabled()) return null
   const meta = await patentDbReady().catch(() => null)
   if (!meta) return null
-  const key = `cat-trends:v1:${meta.at}`
+  await loadJudgeSettings()
+  const key = `cat-trends:v2:${meta.at}:${judgeVersion()}`
   const hit = await cacheGet(key).catch(() => null)
   if (hit) return hit
   const last = new Date().getFullYear() - 1
@@ -145,7 +160,8 @@ export async function categoryTrends() {
      SELECT y, ${DISPLAY_CATEGORIES.map((_, i) => `count(*) FILTER (WHERE c${i})::int AS n${i}`).join(', ')} FROM m GROUP BY y ORDER BY y`,
     [from * 10000, (last + 1) * 10000, ...DISPLAY_CATEGORIES.map((c) => c.cpc)],
   )
-  const ratio = (before, now) => (before + now >= RATIO_MIN ? Math.round(((now + RATIO_PRIOR) / (before + RATIO_PRIOR)) * 100) / 100 : null)
+  const { patMin, ratioPrior } = judgeRule() // 11/20 관리 페이지 「판정 기준」
+  const ratio = (before, now) => (before + now >= patMin ? Math.round(((now + ratioPrior) / (before + ratioPrior)) * 100) / 100 : null)
   const items = DISPLAY_CATEGORIES.map((c, i) => {
     const years = rows.map((r) => ({ y: Number(r.y), n: r[`n${i}`] }))
     const sum = (a, b) => years.filter((x) => x.y >= a && x.y <= b).reduce((s, x) => s + x.n, 0)

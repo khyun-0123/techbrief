@@ -50,7 +50,7 @@ const TOUR_STEPS = [
   {
     target: '[data-tour="guide"]',
     title: '다시 보려면',
-    body: ['이 안내는 언제든 위 「? 사용 안내」에서 다시 볼 수 있어요.'],
+    body: ['이 안내는 언제든 위 「사용 안내」에서 다시 볼 수 있어요.'],
   },
 ]
 

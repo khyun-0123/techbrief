@@ -5,7 +5,8 @@
 // - AI를 쓰지 않아 네이버 기사에도 붙일 수 있다 (약관: 네이버 문장을 AI에 넣지 않음)
 // - 1시간 기억. 다시 계산하는 동안에는 예전 값을 보낸다
 import { getKeywords } from './db/store.js'
-import { termVerdict, THREAT_FACTOR } from './keywordBundle.js'
+import { termVerdict } from './keywordBundle.js'
+import { judgeRule } from './judgeSettings.js'
 import { getTechTrends } from './techtrends.js'
 
 const TTL = 3600_000
@@ -38,7 +39,12 @@ async function compute() {
       })
     })
   }
-  return { items, checked: terms.length, rule: `위협: 경쟁사 중 하나가 분야 증가의 ${THREAT_FACTOR}배 이상 · 자사는 분야보다 느림 / 기회: 자사가 경쟁사 모두보다 빠르고 분야 이상`, at: new Date().toISOString() }
+  return { items, checked: terms.length, rule: `위협: 경쟁사 중 하나가 분야 증가의 ${judgeRule().threatFactor}배 이상 · 자사는 분야보다 느림 / 기회: 자사가 경쟁사 모두보다 빠르고 분야 이상`, at: new Date().toISOString() }
+}
+
+// 판정 기준 · 회사 특허 이름을 바꾸면 다음 요청 때 다시 계산 (그동안은 예전 값, 11/20)
+export function staleTechVerdicts() {
+  state.at = 0
 }
 
 export async function techVerdicts() {

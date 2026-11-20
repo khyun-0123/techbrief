@@ -133,8 +133,8 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
   })
   const autoTitle = autoTitleOf(topic)
   const [level, setLevel] = useState(saved0.level ?? 'owned')
-  const [summarizeNew, setSummarizeNew] = useState(typeof saved0.summarizeNew === 'boolean' ? saved0.summarizeNew : null) // null = 수준 기본값
-  const summarizeOn = summarizeNew ?? level === 'research'
+  const [summarizeNew, setSummarizeNew] = useState(saved0.summarizeNew === true) // 「보유 자료까지」에서만 고름. 「추가 자료 조사까지」는 늘 요약 (11/20)
+  const summarizeOn = level === 'research' || summarizeNew
   const [mode, setMode] = useState('top')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
@@ -291,7 +291,8 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
                   </span>
                 </label>
               ))}
-              {level !== 'selected' && (
+              {level === 'research' && <p className="pre-choice-note">새로 찾은 자료와 요약 안 된 보충 자료는 요약해서 써요 (한 건 약 40초 더).</p>}
+              {level === 'owned' && (
                 <label className="pre-choice">
                   <input
                     type="checkbox"

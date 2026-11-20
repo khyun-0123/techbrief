@@ -1306,7 +1306,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             title="화면 둘러보기 — 처음 쓰는 방법을 차례로 보여 줘요"
             aria-label="사용 안내"
           >
-            ?<span className="guide-btn-text"> 사용 안내</span>
+            <span className="guide-btn-text">사용 안내</span>
           </button>
           <SettingsMenu admin={admin} reportCount={liveReports.filter((r) => r.mine).length} selectedCount={selectedIds.length} onBundle={downloadBundle} onMove={() => setShowMove(true)} />
         </span>

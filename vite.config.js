@@ -27,9 +27,9 @@ function summaryApi() {
 }
 
 // 바깥 주소로 들어오는 요청 허용 (11/18, 43 문서): Vite는 모르는 주소(Host)로 온 요청을 「Blocked request」로 막는다
-// - 기본: Tailscale Funnel(*.ts.net) · Railway 기본 주소(*.up.railway.app). 회사 도메인 등은 ALLOWED_HOSTS=a.com,b.com 으로 더한다
+// - 기본: Tailscale Funnel(*.ts.net) · Railway 기본 주소(*.up.railway.app) · Railway 헬스체크(healthcheck.railway.app, /healthz). 회사 도메인 등은 ALLOWED_HOSTS=a.com,b.com 으로 더한다
 // - localhost · 127.0.0.1은 Vite가 늘 허용 (공용 서버 포트 포워딩은 그대로)
-const allowedHosts = () => ['.ts.net', '.up.railway.app', ...String(process.env.ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean)]
+const allowedHosts = () => ['.ts.net', '.up.railway.app', 'healthcheck.railway.app', ...String(process.env.ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean)]
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
