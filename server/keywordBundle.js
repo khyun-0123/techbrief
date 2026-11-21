@@ -7,13 +7,16 @@ import { dbEnabled, query } from './db/index.js'
 import { commercialQuotes } from './commercial.js'
 import { DISPLAY_CATEGORIES } from './displayCategories.js'
 import { mapMaterials } from './mapMaterials.js'
-import { patentDbReady } from './patentDb.js'
+import { createHash } from 'node:crypto'
+import { patentDbReady, toPg } from './patentDb.js'
+import { patternFromTerms } from './patents.js'
+import { techCpcVersion, techRuleFor, techWhere } from './techCpc.js'
 import { cacheGet, cachePut } from './papers/index.js'
 import { queryKey } from './queryTerms.js'
 import { getTechTrends } from './techtrends.js'
 import { getLists } from './collector/lists.js'
 import { supplierPatents } from './suppliers.js'
-import { buildTimeline, cachedTimeline } from './timeline.js'
+import { buildTimeline, cachedTimeline, techStale } from './timeline.js'
 import { surgeMonths } from './timesfm.js'
 import { customOwners, judgeRule, judgeVersion, loadJudgeSettings, ownersVersion } from './judgeSettings.js'
 
@@ -92,6 +95,12 @@ export const RATIO_PRIOR = 5 // 기본값 — 계산은 judgeRule().ratioPrior
 export const VERDICT_SHARE_MIN = 0.45 // 기본값 — 계산은 judgeRule().shareMin
 export async function termVerdict(term) {
   const m = await Promise.race([mapMaterials(term), new Promise((res) => setTimeout(() => res(null), 8_000))]).catch(() => null)
+  // 11/21: 「기술 ↔ CPC 연결표」가 켜진 기술은 그 기술 특허 안에서 비교 (건수가 판정 최소에 못 미치면 예전처럼 넓은 분류로)
+  const rule = await techRuleFor([term, ...(m?.terms ?? [])]).catch(() => null)
+  if (rule) {
+    const comp = await techCompetitors(rule, m?.terms ?? []).catch(() => null)
+    if (comp?.field?.ratio != null) return { category: { id: comp.id, name: comp.name, patents: comp.field.before + comp.field.now, share: 1, tech: true }, verdict: comp.verdict, competitors: comp }
+  }
   const cat = m?.categories?.[0]
   if (!cat || cat.count < 10) return null
   if (m.basis === '디스플레이 특허 안에서만') return null
@@ -105,26 +114,52 @@ export async function termVerdict(term) {
 export async function categoryCompetitors(catId) {
   const cat = DISPLAY_CATEGORIES.find((c) => c.id === catId)
   if (!cat || !dbEnabled()) return null
+  return competitorsWhere({ id: cat.id, name: cat.name, cacheId: catId, where: (at) => ({ sql: `EXISTS (SELECT 1 FROM unnest(cpc) x WHERE x ~ $${at})`, params: [cat.cpc] }) })
+}
+
+// 11/21 (techCpc.js): 「기술 ↔ CPC 연결표」가 켜진 기술은 넓은 분류(OLED 소자 전체) 대신 그 기술 특허 안에서 회사별로 비교한다
+// 그 기술 특허 = 제목(영문 검색어) OR 그 기술 CPC − 빼는 제목. 분야 = 그 기술 특허 전체 (누가 그 기술 안에서 빠른가)
+export async function techCompetitors(rule, terms = []) {
+  if (!rule || !dbEnabled()) return null
+  const pattern = patternFromTerms(terms)
+  const titlePg = pattern ? toPg(pattern.toLowerCase()) : null
+  const cacheId = `tech:${rule.id}:${techCpcVersion()}:${createHash('sha1').update(titlePg ?? '').digest('hex').slice(0, 8)}`
+  return competitorsWhere({
+    id: `tech:${rule.id}`,
+    name: rule.name,
+    cacheId,
+    tech: true,
+    where: (at) => {
+      if (!titlePg) return techWhere(rule, at)
+      const w = techWhere(rule, at + 1, `lower(title) ~ $${at}`)
+      return { sql: w.sql, params: [titlePg, ...w.params] }
+    },
+  })
+}
+
+// where(at): 비교할 특허를 고르는 SQL 조건 · 자리표시자는 at번부터
+async function competitorsWhere({ id, name, cacheId, where, tech = false }) {
   // 특허 DB를 다시 받으면(분기 · 11/13 CPC 전체 코드) 다시 센다
   const meta = await patentDbReady().catch(() => null)
   if (!meta) return null
   const { companies: COMPANIES, unmatched } = await compareCompanies()
-  const key = `cat-competitors:v5:${catId}:${meta.at}:${COMPANIES.map((c) => c.id).join(',')}:${judgeVersion()}:${ownersVersion()}` // v2: 작은 수 보정 · v3: 2개국 이상 출원 비율 (11/15) · v4: 관리 페이지 경쟁사 목록 (11/17)
+  const key = `cat-competitors:v5:${cacheId}:${meta.at}:${COMPANIES.map((c) => c.id).join(',')}:${judgeVersion()}:${ownersVersion()}` // v2: 작은 수 보정 · v3: 2개국 이상 출원 비율 (11/15) · v4: 관리 페이지 경쟁사 목록 (11/17)
   const hit = await cacheGet(key).catch(() => null)
   if (hit) return hit
   const last = new Date().getFullYear() - 1
   const [a, b] = [(last - 5) * 10000, (last - 2) * 10000]
   const cols = COMPANIES.map(
     (c, i) =>
-      `count(*) FILTER (WHERE pub >= $2 AND pub < $3 AND EXISTS (SELECT 1 FROM unnest(owners) o WHERE o LIKE ANY($${i + 5}::text[])))::int AS b${i},
-       count(*) FILTER (WHERE pub >= $3 AND pub < $4 AND EXISTS (SELECT 1 FROM unnest(owners) o WHERE o LIKE ANY($${i + 5}::text[])))::int AS r${i},
-       count(*) FILTER (WHERE pub >= $3 AND pub < $4 AND cardinality(countries) >= 2 AND EXISTS (SELECT 1 FROM unnest(owners) o WHERE o LIKE ANY($${i + 5}::text[])))::int AS i${i}`,
+      `count(*) FILTER (WHERE pub >= $1 AND pub < $2 AND EXISTS (SELECT 1 FROM unnest(owners) o WHERE o LIKE ANY($${i + 4}::text[])))::int AS b${i},
+       count(*) FILTER (WHERE pub >= $2 AND pub < $3 AND EXISTS (SELECT 1 FROM unnest(owners) o WHERE o LIKE ANY($${i + 4}::text[])))::int AS r${i},
+       count(*) FILTER (WHERE pub >= $2 AND pub < $3 AND cardinality(countries) >= 2 AND EXISTS (SELECT 1 FROM unnest(owners) o WHERE o LIKE ANY($${i + 4}::text[])))::int AS i${i}`,
   ).join(', ')
+  const w = where(4 + COMPANIES.length)
   const { rows } = await query(
-    `SELECT count(*) FILTER (WHERE pub >= $2 AND pub < $3)::int AS fb, count(*) FILTER (WHERE pub >= $3 AND pub < $4)::int AS fr,
-            count(*) FILTER (WHERE pub >= $3 AND pub < $4 AND cardinality(countries) >= 2)::int AS fi, ${cols}
-       FROM display_patents WHERE pub >= $2 AND pub < $4 AND EXISTS (SELECT 1 FROM unnest(cpc) x WHERE x ~ $1)`,
-    [cat.cpc, a, b, (last + 1) * 10000, ...COMPANIES.map((c) => c.like)],
+    `SELECT count(*) FILTER (WHERE pub >= $1 AND pub < $2)::int AS fb, count(*) FILTER (WHERE pub >= $2 AND pub < $3)::int AS fr,
+            count(*) FILTER (WHERE pub >= $2 AND pub < $3 AND cardinality(countries) >= 2)::int AS fi, ${cols}
+       FROM display_patents WHERE pub >= $1 AND pub < $3 AND ${w.sql}`,
+    [a, b, (last + 1) * 10000, ...COMPANIES.map((c) => c.like), ...w.params],
   )
   const r = rows[0]
   if (!r?.fb) return null
@@ -136,7 +171,7 @@ export async function categoryCompetitors(catId) {
   const own = companies.find((c) => c.own)
   const threat = own?.ratio != null && field != null && sure.some((c) => c.ratio >= judgeRule().threatFactor * field) && own.ratio < field
   const chance = own?.ratio != null && field != null && sure.every((c) => own.ratio > c.ratio) && own.ratio >= field
-  const out = { id: cat.id, name: cat.name, years: `${last - 5}~${last - 3} → ${last - 2}~${last}`, field: { before: r.fb, now: r.fr, ratio: field, intl: r.fr ? Math.round((r.fi / r.fr) * 100) / 100 : null }, companies, verdict: threat ? '위협' : chance ? '기회' : null, ...(unmatched.length ? { unmatched } : {}) }
+  const out = { id, name, ...(tech ? { tech: true } : {}), years: `${last - 5}~${last - 3} → ${last - 2}~${last}`, field: { before: r.fb, now: r.fr, ratio: field, intl: r.fr ? Math.round((r.fi / r.fr) * 100) / 100 : null }, companies, verdict: threat ? '위협' : chance ? '기회' : null, ...(unmatched.length ? { unmatched } : {}) }
   await cachePut(key, out, 7 * 86_400_000).catch(() => {})
   return out
 }
@@ -175,7 +210,7 @@ export async function categoryTrends() {
 }
 
 // ── 묶음 만들기 ──
-const bundleKey = (keyword) => `bundle:v8:${queryKey(keyword)}` // v8 (11/17 R11): 세부 기술 분류 비중 · 분류 추이 · v7 (11/17 R10): 소부장 기업 특허 · v5 (11/17): 특허 비교 회사 = 관리 페이지 경쟁사 목록
+const bundleKey = (keyword) => `bundle:v8:${queryKey(keyword)}:t${techCpcVersion()}` // :t (11/21) 「기술 ↔ CPC 연결표」 버전 // v8 (11/17 R11): 세부 기술 분류 비중 · 분류 추이 · v7 (11/17 R10): 소부장 기업 특허 · v5 (11/17): 특허 비교 회사 = 관리 페이지 경쟁사 목록
 // 기억해 둔 묶음만 (만들지 않음): 11/17 전 보고서 미리보기에 기술 시계열을 채울 때 (화면이 기다리지 않게)
 export async function cachedBundle(raw) {
   const keyword = String(raw ?? '').trim().slice(0, 50)
@@ -191,12 +226,15 @@ export async function prepareBundle(raw, { refresh = false } = {}) {
   }
   if (running.has(key)) return running.get(key)
   const job = (async () => {
-    const cached = (await cachedTimeline(keyword).catch(() => null))?.timeline
+    const cachedTl = (await cachedTimeline(keyword).catch(() => null))?.timeline
+    const cached = cachedTl && !(await techStale(cachedTl).catch(() => false)) ? cachedTl : null // 11/21: 연결표가 바뀐 기술은 특허를 다시 셈
     const [tl, mat] = await Promise.all([cached ?? buildTimeline(keyword, { background: true }).catch(() => null), mapMaterials(keyword).catch(() => null)])
     const terms = [keyword, ...(tl?.terms ?? mat?.terms ?? [])]
     const quotes = await commercialQuotes(terms).catch(() => [])
     const mainCat = mat?.categories?.[0]
-    const competitors = mainCat ? await categoryCompetitors(mainCat.id).catch(() => null) : null
+    const techRule = await techRuleFor(terms).catch(() => null)
+    const techComp = techRule ? await techCompetitors(techRule, tl?.terms ?? mat?.terms ?? []).catch(() => null) : null
+    const competitors = techComp?.field?.ratio != null ? techComp : mainCat ? await categoryCompetitors(mainCat.id).catch(() => null) : null
     const signal = await techSignal(keyword).catch(() => null)
     // 기억해 둔 시계열에는 급증(TimesFM)이 따로 있음 → 기다리지 않고 있으면 씀 (timeline.js withSurge와 같음)
     const surge = tl?.naver?.status === 'ok' ? (tl.naver.surge ?? (await surgeMonths(tl.naver.months, { wait: false }).catch(() => null))) : null

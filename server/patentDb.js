@@ -23,6 +23,7 @@ import { dbEnabled, query } from './db/index.js'
 import { getSetting, setSetting } from './db/store.js'
 import { accessToken, readKey } from './patents.js'
 import { checkSource, reportBytes, reportSource } from './sourceGuard.js'
+import { techWhere } from './techCpc.js'
 
 const META = 'patent_db'
 export const SINCE = 20100101
@@ -261,25 +262,27 @@ export async function patentDbReady() {
 }
 
 // BigQuery(RE2) 정규식 → PostgreSQL 정규식: 단어 경계 \b → \y (나머지 (?:) · \s · [] 는 같음)
-const toPg = (pattern) => pattern.replace(/\\b/g, '\\y')
+export const toPg = (pattern) => pattern.replace(/\\b/g, '\\y')
 
 // 기술 시계열용: patents.js patentHistory와 같은 꼴 { status, years: [{ y, n }], owners: [{ y, name, n }] }
 // 차이: 공보가 아니라 패밀리(같은 발명 한 번) · 첫 공개 연도 · 디스플레이 특허 안에서만
-export async function localPatentHistory(pattern, since = SINCE) {
+// rule (11/21, techCpc.js): 켜진 「기술 ↔ CPC 연결표」가 있으면 제목 OR 그 기술 CPC로 센다 (빼는 제목은 뺌)
+export async function localPatentHistory(pattern, since = SINCE, rule = null) {
   const meta = await patentDbReady()
   if (!meta) return { status: 'no_db' }
   await ensureTable()
+  const tech = rule ? techWhere(rule, 3, 'lower(title) ~ $1') : null
   const { rows } = await query(
     // intl (11/15 팀 회의 「해외 특허가 더 중요할 수 있다」): 같은 발명을 2개 나라(관청) 이상에 낸 특허 수 — 국제 특허군 지표
-    `WITH m AS (SELECT family, pub / 10000 AS y, owners, countries FROM display_patents WHERE pub >= $2 AND lower(title) ~ $1)
+    `WITH m AS (SELECT family, pub / 10000 AS y, owners, countries FROM display_patents WHERE pub >= $2 AND ${tech ? tech.sql : 'lower(title) ~ $1'})
      SELECT y, NULL::text AS name, count(*)::int AS n, 1 AS total, count(*) FILTER (WHERE cardinality(countries) >= 2)::int AS intl FROM m GROUP BY y
      UNION ALL
      SELECT y, o, count(*)::int, 0, 0 FROM m, unnest(m.owners) o GROUP BY y, o HAVING count(*) >= 2`,
-    [toPg(pattern.toLowerCase()), Number(since)],
+    [toPg(pattern.toLowerCase()), Number(since), ...(tech?.params ?? [])],
   )
   const years = rows.filter((r) => r.total === 1).map((r) => ({ y: Number(r.y), n: r.n, intl: r.intl })).sort((a, b) => a.y - b.y)
   const owners = rows.filter((r) => r.total === 0).map((r) => ({ y: Number(r.y), name: r.name, n: r.n }))
-  return { status: 'ok', years, owners, fieldYears: await displayFieldYears(meta), db: { at: meta.at, maxPub: meta.maxPub } }
+  return { status: 'ok', years, owners, fieldYears: await displayFieldYears(meta), db: { at: meta.at, maxPub: meta.maxPub }, ...(rule ? { tech: { id: rule.id, name: rule.name } } : {}) }
 }
 
 // 특허 분야 전체(디스플레이 특허 DB 전부)의 해마다 건수 — 분야 대비 증가용 (받은 날이 같으면 기억)

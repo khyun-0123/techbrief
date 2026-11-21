@@ -17,6 +17,7 @@ import { abstractFromIndex, bareDoi, clean, openAlexGet } from './papers/provide
 import { corpusReady, DISPLAY_MAKERS } from './papers/corpus.js'
 import { patentHistory, patternFromTerms } from './patents.js'
 import { localPatentHistory, patentDbReady, titlePatentHistory, titlesReady } from './patentDb.js'
+import { techCpcVersion, techRuleFor } from './techCpc.js'
 import { englishTerms, openAlexQuery, queryKey } from './queryTerms.js'
 import { surgeMonths } from './timesfm.js'
 import { DEFAULT_JUDGE_VERSION, judgeRule, judgeVersion, loadJudgeSettings } from './judgeSettings.js'
@@ -219,19 +220,22 @@ async function naverMonthly(word) {
 //   - 제목 파일이 없으면 디스플레이 특허 DB에서 「디스플레이 특허 안에서만」 세고, 단계 판정에는 쓰지 않는다 (stagePatents)
 //   - 둘 다 없을 때만 예전처럼 BigQuery로 전 세계 공보를 센다 (30일 기억)
 // cacheOnly: 미리 분석(뒤에서 도는 일)은 BigQuery를 부르지 않는다 → 사람이 열 때 받는다. 받아 둔 자료는 미리 분석에서도 센다
+// 11/21 techCpc.js: 켜진 「기술 ↔ CPC 연결표」에 걸리는 말은 디스플레이 특허 DB에서 제목 OR 그 기술 CPC로 센다
+//   (그 CPC는 디스플레이 분류라 DB 안 숫자가 곧 전체 — 「디스플레이 특허 안에서만」이 아님)
 async function patents(terms, { cacheOnly = false, display = false } = {}) {
   const pattern = patternFromTerms(terms)
   if (!pattern) return { status: 'no_terms' }
   const db = await patentDbReady()
-  const titles = display ? null : await titlesReady()
+  const rule = db ? await techRuleFor(terms).catch(() => null) : null
+  const titles = display || rule ? null : await titlesReady()
   if (db || titles) {
-    const source = display ? 'db' : titles ? 'titles' : 'db-only'
+    const source = rule ? `tech-${rule.id}-${techCpcVersion()}` : display ? 'db' : titles ? 'titles' : 'db-only'
     const key = `timeline-patents-local3:${source}:${pattern}` // local3: 해마다 2개국 이상 출원 수(intl, 11/15)
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return hit
-    const r = source === 'titles' ? await titlePatentHistory(pattern) : await localPatentHistory(pattern)
+    const r = source === 'titles' ? await titlePatentHistory(pattern) : await localPatentHistory(pattern, undefined, rule)
     if (r.status === 'ok') {
-      const out = { ...summarizeOwners(r), basis: source === 'titles' ? 'family-all' : 'family', inDisplay: source === 'db-only', db: r.db }
+      const out = { ...summarizeOwners(r), basis: source === 'titles' ? 'family-all' : 'family', inDisplay: source === 'db-only', db: r.db, ...(r.tech ? { tech: { ...r.tech, v: techCpcVersion() } } : {}) }
       await cachePut(key, out, 30 * DAY).catch(() => {})
       return out
     }
@@ -437,7 +441,9 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
     const hit = await restaged(await cacheGet(key).catch(() => null), key)
     // 11/12 D3: 디스플레이 특허 DB가 생긴 뒤에는 디스플레이 기술의 예전 특허 숫자(BigQuery 공보)를 특허 DB 숫자로 바꾼다 (단계도 다시)
     const toDb = hit && Boolean(await patentDbReady()) && (!['family', 'family-all'].includes(hit.patents?.basis) || (hit.patents?.inDisplay && Boolean(await titlesReady())))
-    if (hit && !(hit.patents?.status === 'later' && !background) && !toDb) return { ...withThin(await withSurge(hit, { wait: background })), cached: true }
+    // 11/21: 「기술 ↔ CPC 연결표」를 켜거나 바꾸거나 끈 기술은 특허만 다시 세고 단계도 다시
+    const techOld = hit && (await techStale(hit))
+    if (hit && !(hit.patents?.status === 'later' && !background) && !toDb && !techOld) return { ...withThin(await withSurge(hit, { wait: background })), cached: true }
     if (hit) {
       // 미리 분석해 둔 값에 특허만 채운다
       const pat = await patents(hit.terms, { display: hit.display, cacheOnly: background }).catch((err) => ({ status: 'error', error: err.message }))
@@ -648,6 +654,15 @@ async function restaged(hit, key) {
   const out = { ...hit, stage, judgeV: judgeVersion(), at: stage.stage === hit.stage.stage ? hit.at : new Date().toISOString() }
   await cachePut(key, out, TTL).catch(() => {})
   return out
+}
+
+// 기억해 둔 시계열의 특허가 지금 「기술 ↔ CPC 연결표」와 다르게 센 것인지 (켬 · 바꿈 · 끔)
+export async function techStale(tl) {
+  if (!tl?.terms || !(await patentDbReady().catch(() => null))) return false
+  const rule = await techRuleFor(tl.terms).catch(() => null)
+  const was = tl.patents?.tech
+  if (rule) return was?.id !== rule.id || was?.v !== techCpcVersion()
+  return Boolean(was)
 }
 
 // 미리 분석해 둔 값만 꺼낸다 (부르지 않음): 대시보드 「미리 분석된 키워드」 · 미리 분석 일이 건너뛸지 볼 때

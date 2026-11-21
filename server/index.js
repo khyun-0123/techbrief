@@ -937,6 +937,31 @@ async function handleApiInner(req, res) {
       await logChange(admin, '보고서 양식', describeStyle(out.style))
       return send(res, 200, out)
     }
+    // 기술 ↔ CPC 연결표 (11/21, techCpc.js): 특허 제목에 드문 기술을 CPC로도 센다. 켜고 끄고 고치기 · 켜기 전 확인
+    if (req.method === 'GET' && req.url === '/api/admin/tech-cpc') {
+      requireAdmin(req)
+      const { loadTechCpc, DEFAULT_TECHS, techCpcVersion } = await import('./techCpc.js')
+      const list = await loadTechCpc({ fresh: true })
+      return send(res, 200, { list, defaults: DEFAULT_TECHS, version: techCpcVersion() })
+    }
+    if (req.method === 'PUT' && req.url === '/api/admin/tech-cpc') {
+      const admin = requireAdmin(req)
+      const { loadTechCpc, saveTechCpc, resetTechCpc, techCpcVersion } = await import('./techCpc.js')
+      const before = (await loadTechCpc({ fresh: true })).filter((t) => t.on).map((t) => t.name)
+      const body = await readJson(req)
+      const list = body?.reset ? await resetTechCpc(admin?.name) : await saveTechCpc(body?.list, admin?.name)
+      const { staleTechVerdicts } = await import('./techVerdicts.js')
+      staleTechVerdicts()
+      markListStale() // 자료 목록의 「자사 위협 · 기회」 표시도 새 연결표로
+      const after = list.filter((t) => t.on).map((t) => t.name)
+      await logChange(admin, '기술 ↔ CPC 연결표', `켠 기술: ${before.join(', ') || '없음'} → ${after.join(', ') || '없음'}`)
+      return send(res, 200, { list, version: techCpcVersion() })
+    }
+    if (req.method === 'POST' && req.url === '/api/admin/tech-cpc/preview') {
+      requireAdmin(req)
+      const { previewTech } = await import('./techCpc.js')
+      return send(res, 200, await previewTech(await readJson(req)))
+    }
     if (req.method === 'GET' && req.url === '/api/admin/judge') {
       requireAdmin(req)
       await loadJudgeSettings({ fresh: true })

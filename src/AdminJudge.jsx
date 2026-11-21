@@ -3,6 +3,7 @@
 // 예전에는 둘 다 코드에 있어 바꾸려면 프로그램을 고쳐 다시 올려야 했다. 경쟁사를 더해도 출원인 이름이 사전에 없으면 특허 비교에서 조용히 빠졌다
 import { useCallback, useEffect, useState } from 'react'
 import { checkOwner, fetchJudge, saveJudge, saveOwnerApi } from './api.js'
+import AdminTechCpc from './AdminTechCpc.jsx'
 
 const fmtAt = (iso) => new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 const GROUPS = [
@@ -189,6 +190,8 @@ export default function AdminJudge({ onToast }) {
           {changed && <span className="muted">바뀐 값이 있어요</span>}
         </div>
       </section>
+
+      <AdminTechCpc onToast={onToast} />
 
       <section className="adm-card">
         <h2>회사 특허 이름</h2>
