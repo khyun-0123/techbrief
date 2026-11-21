@@ -134,7 +134,7 @@ const titleLine = (r) =>
 export async function extractDisplayPatents({ log = console.log, jobId: resumeJob = null } = {}) {
   if (!dbEnabled()) throw new Error('DB가 설정되지 않았어요 (DATABASE_URL)')
   const key = readKey()
-  if (!key) throw new Error('Google Cloud 키(gcp-key.json)가 없어요')
+  if (!key) throw new Error('Google Cloud 키가 없어요 (GCP_KEY_JSON 또는 gcp-key.json)')
   await ensureTable()
   const prev = await getSetting(META, null)
   let token = { value: await accessToken(key), at: Date.now() }

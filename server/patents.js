@@ -1,5 +1,5 @@
 // 특허 추이 (Google Patents Public Datasets, BigQuery) — 키워드 추이의 다섯 번째 신호 (23 문서 2-3)
-// - 키: 서비스 계정 JSON 파일 (GCP_KEY_FILE, 기본 ./gcp-key.json — git 제외, 권한 600)
+// - 키: 서비스 계정 JSON — 환경변수 GCP_KEY_JSON(Railway) 또는 파일 GCP_KEY_FILE(기본 ./gcp-key.json — git 제외, 권한 600)
 // - 한 번 집계에 약 18GB를 읽는다. BigQuery 샌드박스 무료 한도는 월 1TiB → 30일에 한 번만 받아 app_settings에 둔다
 // - 영문 제목·공개일 기준 월별 건수. 최근 몇 달은 아직 공개 안 된 출원이 있어 적게 잡힌다
 // - 특허는 07 R7상 수집·분석 대상이 아니라 "관련 특허 증가" 신호로만 쓴다
@@ -25,7 +25,27 @@ const PATTERNS = {
 }
 export const patentPatternOf = (k) => PATTERNS[String(k).trim().toLowerCase()] ?? null
 
+// 키 읽는 순서 (11/21 Railway 전환): GCP_KEY_JSON(환경변수에 키 내용) → GCP_KEY_FILE(파일 경로) → ./gcp-key.json
+// - Railway는 볼륨에 파일을 올리는 화면이 없어 키 내용을 환경변수로 넣는다. JSON 그대로 또는 base64 둘 다 받는다
+// - 키 내용은 어디에도 출력하지 않는다
+let keyCache = { raw: null, key: null }
+function parseKeyJson(raw) {
+  const text = String(raw).trim()
+  for (const candidate of [text, text.startsWith('{') ? null : Buffer.from(text, 'base64').toString('utf8')]) {
+    if (!candidate) continue
+    try {
+      const key = JSON.parse(candidate)
+      if (key && key.client_email && key.private_key && key.project_id) return key
+    } catch {}
+  }
+  return null
+}
 export function readKey() {
+  const raw = process.env.GCP_KEY_JSON
+  if (raw && raw.trim()) {
+    if (keyCache.raw !== raw) keyCache = { raw, key: parseKeyJson(raw) }
+    if (keyCache.key) return keyCache.key
+  }
   const file = path.resolve(process.env.GCP_KEY_FILE || 'gcp-key.json')
   if (!fs.existsSync(file)) return null
   try {
@@ -61,7 +81,7 @@ async function queryCounts(key, keywords) {
 // 기술 트렌드(techtrends.js)용: 아무 용어나 [{ keyword, pattern }]로 받아 한 번의 쿼리로 센다 (약 18GB 읽음)
 export async function countPatentsFor(cols) {
   const key = readKey()
-  if (!key) throw new Error('Google Cloud 키(gcp-key.json)가 없어요')
+  if (!key) throw new Error('Google Cloud 키가 없어요 (GCP_KEY_JSON 또는 gcp-key.json)')
   return countByPattern(key, cols)
 }
 
