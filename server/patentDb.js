@@ -36,7 +36,7 @@ export const SINCE = 20100101
 export const DISPLAY_CPC =
   '^(H10K(1|[5-9])|H05B33|H01L27/32|H01L51/5|H01L33|H10H|H01L25/075|H01L27/15|G09G|G09F9|G02F1/1[36]|H01L27/12|H01L29/786|H10D86|H10D30/67|G02B27/01|G02B30|G03H1|C09K11|G06F3/0412|G06F1/1652|H04M1/0268|H01J11|H01J17/49)'
 // CPC가 안 붙었어도 제목으로 넣는 말 (CPC가 놓친 것을 재기 위해 표시: cpc가 빈 줄)
-const TITLE_HINT =
+export const TITLE_HINT =
   'display|\\boled|organic light[\\s-]?emitting|liquid crystal|micro[\\s-]?led|quantum[\\s-]?dot|electroluminescen|thin[\\s-]?film transistor|electrophoretic|e-paper|electronic paper'
 
 const TABLE = `

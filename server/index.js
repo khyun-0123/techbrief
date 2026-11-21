@@ -51,6 +51,7 @@ import { searchPaperArticles } from './searchPapers.js'
 import { activeJobs, addJob, answerJob, cancelJob, listJobs, resumableCount, setDraftBuilder } from './reportJobs.js'
 import { sourceStatus } from './sourceGuard.js'
 import { fetchTitlesIfMissing, patentDbStatus } from './patentDb.js'
+import { abstractsStatus, fetchAbstractsIfWanted } from './patentAbstracts.js'
 import { chatJson, llmProviders, moveJob, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, setModelOverrides, withQueueContext } from './llm/client.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
@@ -398,6 +399,8 @@ export function startScheduler() {
   startCorpus({ allowed: backgroundAllowed }) // 디스플레이 논문 DB: 켜진 뒤 3분, 그 뒤 6시간마다 (PAPER_CORPUS=off면 안 함, papers/corpus.js)
   startPrecompute({ allowed: backgroundAllowed }) // 기술 시계열 미리 분석: 켜진 뒤 10분, 그 뒤 6시간마다 (TIMELINE_PRECOMPUTE=off면 안 함, timelineJobs.js)
   // 11/21 Railway: 특허 제목 파일이 없고 PATENT_TITLES_URL이 있으면 켜진 뒤 30초에 한 번 받아 온다 (patentDb.js)
+  // 11/21: PATENT_ABSTRACTS=fetch 이고 아직 안 받았으면 켜진 뒤 2분에 디스플레이 특허 초록을 한 번 받는다 (patentAbstracts.js, BigQuery 약 260GB — 하루 할당량을 그날만 올려야 함)
+  if (process.env.PATENT_ABSTRACTS) setTimeout(() => fetchAbstractsIfWanted().catch((err) => console.warn(`[abstracts] ${err.message}`)), 120_000)
   if (process.env.PATENT_TITLES_URL) setTimeout(() => fetchTitlesIfMissing().catch((err) => console.warn(`[patent-db] ${err.message}`)), 30_000)
   // 사용 현황 원본은 90일만 둔다: 켜질 때 한 번, 그 뒤 하루 한 번
   const prune = () => {
@@ -501,7 +504,7 @@ async function handleApiInner(req, res) {
     // 운영 상태(점검 중 · AI 정지)면 일반 사용자의 요청을 막는다. 관리 페이지에서 보낸 관리자 요청만 그대로 (19 문서 6장, 11/08 원칙)
     if (!adminHere(req)) await checkOps(req)
     if (req.method === 'GET' && req.url === '/api/health') {
-      const [modelReachable, db, sources, patentDb] = await Promise.all([pingModel(), dbStatus(), sourceStatus(), patentDbStatus().catch(() => ({ ready: false }))])
+      const [modelReachable, db, sources, patentDb, patentAbstracts] = await Promise.all([pingModel(), dbStatus(), sourceStatus(), patentDbStatus().catch(() => ({ ready: false })), abstractsStatus().catch(() => ({ ready: false }))])
       return send(res, 200, {
         ok: true,
         model: modelName(),
@@ -511,6 +514,7 @@ async function handleApiInner(req, res) {
         server: { startedAt: STARTED_AT, supervised: SUPERVISED, resumable: resumableCount() }, // resumable: 다시 켜진 뒤 이어서 할 보고서 작업 수 (11/20)
         sources, // 외부 출처 오늘 호출 수 · 한도 · 쉬는 중 (sourceGuard.js, 키는 없음)
         patentDb, // 디스플레이 특허 DB 건수 · 받은 날 (patentDb.js)
+        patentAbstracts, // 디스플레이 특허 초록 건수 · 받는 중인지 (patentAbstracts.js, 11/21)
         kiwi: kiwiStatus().status, // 형태소 분석기 (kiwi.js): ready · loading · missing(모델 없음 → 예전 규칙) · idle(아직 안 씀)
       })
     }
