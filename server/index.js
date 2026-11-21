@@ -50,7 +50,7 @@ import { reinforceBullet } from './reinforce.js'
 import { searchPaperArticles } from './searchPapers.js'
 import { activeJobs, addJob, answerJob, cancelJob, listJobs, resumableCount, setDraftBuilder } from './reportJobs.js'
 import { sourceStatus } from './sourceGuard.js'
-import { patentDbStatus } from './patentDb.js'
+import { fetchTitlesIfMissing, patentDbStatus } from './patentDb.js'
 import { chatJson, llmProviders, moveJob, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, setModelOverrides, withQueueContext } from './llm/client.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
@@ -397,6 +397,8 @@ export function startScheduler() {
   startTechTrends({ allowed: backgroundAllowed }) // 기술 트렌드: 켜진 뒤 1분, 그 뒤 하루마다 (TECH_TRENDS=off면 안 함)
   startCorpus({ allowed: backgroundAllowed }) // 디스플레이 논문 DB: 켜진 뒤 3분, 그 뒤 6시간마다 (PAPER_CORPUS=off면 안 함, papers/corpus.js)
   startPrecompute({ allowed: backgroundAllowed }) // 기술 시계열 미리 분석: 켜진 뒤 10분, 그 뒤 6시간마다 (TIMELINE_PRECOMPUTE=off면 안 함, timelineJobs.js)
+  // 11/21 Railway: 특허 제목 파일이 없고 PATENT_TITLES_URL이 있으면 켜진 뒤 30초에 한 번 받아 온다 (patentDb.js)
+  if (process.env.PATENT_TITLES_URL) setTimeout(() => fetchTitlesIfMissing().catch((err) => console.warn(`[patent-db] ${err.message}`)), 30_000)
   // 사용 현황 원본은 90일만 둔다: 켜질 때 한 번, 그 뒤 하루 한 번
   const prune = () => {
     pruneUsage().catch((err) => console.warn(`[usage] 오래된 기록 정리 실패: ${err.message}`))
