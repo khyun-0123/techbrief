@@ -12,7 +12,6 @@ import FolderBar from './FolderBar.jsx'
 import ReportComposer from './ReportComposer.jsx'
 import { INBOX } from './folders.js'
 import Dropdown, { Seg } from './Dropdown.jsx'
-import FlowSteps from './FlowSteps.jsx'
 
 const IMPORTANCE_LABEL = { high: '중요', normal: '' }
 const JOB_LABEL = { queued: '요약 대기', running: '요약 중', error: '요약 오류' }
@@ -149,7 +148,7 @@ function SelectSummary({
         <div>
           <h1>선별·요약</h1>
           {/* 11/17 (39 문서 C6): 마지막 단계 */}
-          <FlowSteps current={3} note="자료를 눌러 요약을 보고, 넣을 자료를 체크" />
+          <p>자료를 눌러 요약을 보고, 넣을 자료를 체크하세요.</p>
         </div>
         <div className="header-actions">
           {candidates.length > 0 && (

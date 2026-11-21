@@ -27,6 +27,7 @@
   --tb-color-line: var(--semantic-color-stroke-main); /* #cbc8c2 */
   --tb-color-line-soft: var(--primitive-color-warm-gray-85); /* 카드 테두리 #f0ece4 */
   --tb-color-line-focus: var(--semantic-color-stroke-main-focused); /* #5c5b5a */
+  --tb-color-line-card: var(--primitive-color-warm-gray-80); /* 카드 · 칸 테두리 #e6e1d6 (11/21: App.css가 primitive를 바로 쓰던 것을 토큰으로 — 다크 대응) */
 
   /* ── 색: 브랜드 레드 — 강조에만 (LG 사이트: 레드는 로고·선택 표시·알림처럼 작은 곳에) ── */
   --tb-color-accent: var(--semantic-color-surface-accent); /* Active Red #ea1917 — 점, 선택 표시, 새 신호 */
@@ -84,6 +85,50 @@
 
 /* 레드 안: 기본 버튼까지 Active Red (LG UI Kit 토큰 기본값) */
 [data-primary='red'] {
+  --tb-color-primary: var(--semantic-color-surface-button-primary);
+  --tb-color-primary-hover: var(--primitive-color-active-red-45);
+  --tb-color-on-primary: var(--semantic-color-on-surface-button-primary);
+}
+
+/* 다크 (11/21 팀 회의 「설정에서 라이트 · 다크 전환」, src/theme.js). 값은 LG primitive 안에서 고름 — 글자 대비 4.5:1 이상
+   맨 위 메뉴 막대(어두운 면)는 다크에서도 어둡게 둔다. 보고서 쪽(4:3 · 인쇄)은 종이라 흰 바탕 그대로 (App.css .rs-*) */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --tb-color-bg: var(--primitive-color-warm-gray-5); /* #1a1a1a */
+  --tb-color-bg-strong: var(--primitive-color-warm-gray-10); /* #262626 */
+  --tb-color-surface: var(--primitive-color-warm-gray-10); /* 카드 #262626 */
+  --tb-color-surface-hover: var(--primitive-color-warm-gray-15); /* #333 */
+  --tb-color-surface-inverse: var(--primitive-color-black); /* 메뉴 막대 · 저장 막대는 그대로 어둡게 */
+
+  --tb-color-text: var(--primitive-color-warm-gray-95); /* #faf9f5 */
+  --tb-color-text-sub: var(--primitive-color-warm-gray-65); /* #bdbab5 — 카드 위 대비 약 8.9:1 */
+  --tb-color-text-faint: var(--primitive-color-warm-gray-50); /* #94928d — 약 4.9:1 */
+  --tb-color-text-inverse: var(--primitive-color-white);
+
+  --tb-color-line: var(--primitive-color-warm-gray-30); /* #5c5b5a */
+  --tb-color-line-soft: var(--primitive-color-warm-gray-20); /* #3d3d3d */
+  --tb-color-line-focus: var(--primitive-color-warm-gray-70); /* #cbc8c2 */
+  --tb-color-line-card: var(--primitive-color-warm-gray-25); /* #4a4a49 */
+
+  --tb-color-accent: var(--primitive-color-active-red-55); /* #fd312e */
+  --tb-color-accent-soft: var(--primitive-color-active-red-15); /* #550004 */
+  --tb-color-highlight: var(--primitive-color-heritage-red-70); /* #ff84a6 — 어두운 바탕에서 강조 글자 */
+
+  --tb-color-success: var(--primitive-color-green-70); /* #46bf85 */
+  --tb-color-success-soft: var(--primitive-color-green-15); /* #002e19 */
+  --tb-color-warning: var(--primitive-color-orange-70); /* #ff8d1f */
+  --tb-color-warning-soft: var(--primitive-color-orange-15); /* #401900 */
+  --tb-color-danger: var(--primitive-color-active-red-65); /* #ff6b63 */
+  --tb-color-danger-soft: var(--primitive-color-active-red-15); /* #550004 */
+
+  --tb-color-primary: var(--primitive-color-warm-gray-90); /* 기본 버튼: 밝은 안 · 어두운 글자 */
+  --tb-color-primary-hover: var(--primitive-color-white);
+  --tb-color-on-primary: var(--primitive-color-warm-gray-10);
+
+  --tb-shadow-card: 0 1px 2px rgb(0 0 0 / 40%);
+  --tb-shadow-pop: 0 18px 40px -12px rgb(0 0 0 / 70%);
+}
+:root[data-theme='dark'][data-primary='red'] {
   --tb-color-primary: var(--semantic-color-surface-button-primary);
   --tb-color-primary-hover: var(--primitive-color-active-red-45);
   --tb-color-on-primary: var(--semantic-color-on-surface-button-primary);

@@ -108,8 +108,8 @@
 
 .stat,
 .panel {
-  background: #fff;
-  border: 1px solid var(--primitive-color-warm-gray-80);
+  background: var(--tb-color-surface);
+  border: 1px solid var(--tb-color-line-card);
   border-radius: var(--tb-radius-card);
 }
 
@@ -166,7 +166,7 @@
   flex-wrap: wrap; /* 좁으면 검색 줄 · 거르기 줄로 나눈다 */
   gap: 10px;
   padding: 16px;
-  border-bottom: 1px solid var(--primitive-color-warm-gray-80);
+  border-bottom: 1px solid var(--tb-color-line-card);
 }
 
 .filters input {
@@ -218,7 +218,7 @@ select {
   border-radius: var(--tb-radius-input);
   font: inherit;
   font-size: var(--fs-md); /* 버튼과 같은 크기 (관리 페이지와 같음) */
-  background: #fff;
+  background: var(--tb-color-surface);
 }
 
 .articles {
@@ -450,7 +450,7 @@ tr.row-open td {
   margin-right: 6px;
   border: 1px solid var(--tb-color-line);
   border-radius: var(--tb-radius-button);
-  background: #fff;
+  background: var(--tb-color-surface);
   font: inherit;
   font-size: var(--fs-md);
   cursor: pointer;
@@ -471,7 +471,7 @@ tr.row-open td {
 .btn.primary {
   border-color: var(--tb-color-primary);
   background: var(--tb-color-primary);
-  color: #fff;
+  color: var(--tb-color-on-primary);
 }
 
 .btn.primary:disabled {
@@ -630,7 +630,7 @@ tr.row-open td {
   align-items: center;
   gap: 8px;
   padding: 16px;
-  border-bottom: 1px solid var(--primitive-color-warm-gray-80);
+  border-bottom: 1px solid var(--tb-color-line-card);
 }
 
 .candidate-header h2 {
@@ -913,7 +913,7 @@ a.btn {
 .gauge {
   height: 6px;
   border-radius: var(--tb-radius-full);
-  background: var(--primitive-color-warm-gray-80);
+  background: var(--tb-color-line-card);
   overflow: hidden;
 }
 
@@ -947,8 +947,8 @@ a.btn {
   display: flex;
   flex-direction: column;
   padding: 14px 16px;
-  background: #fff;
-  border: 1px solid var(--primitive-color-warm-gray-80);
+  background: var(--tb-color-surface);
+  border: 1px solid var(--tb-color-line-card);
   border-radius: var(--tb-radius-card-s);
   box-shadow: 0 10px 30px rgba(28, 37, 51, 0.18);
 }
@@ -1392,7 +1392,7 @@ a.btn {
   border: 1px solid rgb(255 255 255 / 25%);
   border-radius: var(--tb-radius-input);
   background: rgb(255 255 255 / 8%);
-  color: var(--primitive-color-warm-gray-80);
+  color: var(--tb-color-line-card);
   font-size: 13px;
 }
 
@@ -1578,7 +1578,7 @@ a.btn {
   padding: 8px 10px;
   border: 1px solid var(--tb-color-line);
   border-radius: var(--tb-radius-input);
-  background: #fff;
+  background: var(--tb-color-surface);
   font: inherit;
   font-size: 14px;
   min-height: 40px;
@@ -1817,7 +1817,7 @@ a.btn {
   padding: 0 8px;
   border: 1px solid var(--tb-color-line);
   border-radius: var(--tb-radius-button);
-  background: #fff;
+  background: var(--tb-color-surface);
   color: var(--tb-color-text);
   font: inherit;
   font-size: 14px;
@@ -1832,7 +1832,7 @@ a.btn {
 .pager-btn.active {
   border-color: var(--tb-color-primary);
   background: var(--tb-color-primary);
-  color: #fff;
+  color: var(--tb-color-on-primary);
   font-weight: 600;
 }
 
@@ -1908,9 +1908,9 @@ a.btn {
   content: '▾ 펼치기';
   margin-left: auto;
   padding: 2px 8px;
-  border: 1px solid var(--primitive-color-warm-gray-75);
+  border: 1px solid var(--tb-color-line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--tb-color-surface);
   color: var(--tb-color-text-sub);
   font-size: 12px;
   font-weight: normal;
@@ -2308,7 +2308,7 @@ a.btn {
   }
 
   .fav-item {
-    border: 1px solid var(--primitive-color-warm-gray-80);
+    border: 1px solid var(--tb-color-line-card);
   }
   .fav-title,
   .fav-empty {
@@ -2402,7 +2402,7 @@ a.btn {
 .admin-log-table th,
 .admin-log-table td {
   padding: 6px 8px;
-  border-bottom: 1px solid var(--primitive-color-warm-gray-80);
+  border-bottom: 1px solid var(--tb-color-line-card);
   text-align: left;
   vertical-align: top;
 }
@@ -2534,7 +2534,7 @@ a.btn {
 
 .tools-result {
   padding: 16px;
-  border: 1px solid var(--primitive-color-warm-gray-80);
+  border: 1px solid var(--tb-color-line-card);
   border-radius: var(--tb-radius-card-s);
 }
 
@@ -3466,7 +3466,7 @@ a.brand:focus-visible {
   padding: 0 14px;
   border: 1px solid var(--tb-color-line);
   border-radius: var(--tb-radius-full);
-  background: #fff;
+  background: var(--tb-color-surface);
   color: var(--tb-color-text);
   font-size: var(--fs-sm);
   cursor: pointer;
@@ -3475,7 +3475,7 @@ a.brand:focus-visible {
 .tt-chip.on {
   border-color: var(--tb-color-text);
   background: var(--tb-color-text);
-  color: #fff;
+  color: var(--tb-color-surface);
   font-weight: 600;
 }
 
@@ -5578,54 +5578,6 @@ a.brand:focus-visible {
   color: var(--tb-color-text);
   font-size: var(--fs-md);
 }
-/* 진행 단계 한 줄 (11/17, FlowSteps.jsx · 39 문서 C6) */
-.flow-steps {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: var(--fs-sm);
-  color: var(--tb-color-text-faint);
-}
-.flow-steps li {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.flow-steps li + li::before {
-  content: '→';
-  margin-right: 2px;
-  color: var(--tb-color-line-strong, var(--tb-color-text-faint));
-}
-.flow-mark {
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  font-size: var(--fs-xs);
-  font-weight: 700;
-}
-.flow-steps .is-done {
-  color: var(--tb-color-text-sub);
-}
-.flow-steps .is-now {
-  color: var(--tb-color-text);
-  font-weight: 700;
-}
-.flow-steps .is-now .flow-mark {
-  border-color: var(--tb-color-text);
-  background: var(--tb-color-text);
-  color: var(--tb-color-surface);
-}
-.flow-note {
-  color: var(--tb-color-text-sub);
-  font-weight: 400;
-}
 .ka-auto {
   font-size: var(--fs-sm);
 }
@@ -5635,9 +5587,10 @@ a.brand:focus-visible {
   align-items: center;
   gap: 8px;
 }
+/* 11/21 팀 회의: 마인드맵 확대 — 맵 칸을 넓게 (예전 1 : 1) */
 .ka-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   gap: 20px;
 }
 @media (max-width: 1100px) {
@@ -6134,7 +6087,7 @@ a.brand:focus-visible {
 .scope-chip.on {
   border-color: var(--tb-color-text);
   background: var(--tb-color-text);
-  color: var(--tb-color-text-inverse);
+  color: var(--tb-color-surface);
 }
 .scope-folder {
   margin-left: auto;
@@ -6498,7 +6451,7 @@ a.brand:focus-visible {
 .pill.on {
   border-color: var(--tb-color-text);
   background: var(--tb-color-text);
-  color: var(--tb-color-text-inverse);
+  color: var(--tb-color-surface);
   font-weight: 600;
 }
 
@@ -7265,7 +7218,7 @@ a.brand:focus-visible {
   padding: 4px 10px;
   border-radius: var(--tb-radius-full);
   background: var(--tb-color-text);
-  color: var(--tb-color-text-inverse);
+  color: var(--tb-color-surface);
   font-size: var(--fs-xs);
   transform: translateX(-50%);
   pointer-events: none;
@@ -7626,7 +7579,7 @@ a.brand:focus-visible {
   padding: 2px 10px;
   border-radius: var(--tb-radius-full);
   background: var(--tb-color-text);
-  color: var(--tb-color-text-inverse);
+  color: var(--tb-color-surface);
   font-size: var(--fs-md);
 }
 .km-full-sub {
@@ -7644,7 +7597,7 @@ a.brand:focus-visible {
    그래프 영역 520px(휴대폰 420px), 흰 바탕 · 1px 옅은 테두리 · 둥근 12px. 표시 설정 창은 왼쪽 위(처음엔 접힘), 범례 왼쪽 아래, 단추 오른쪽 아래 */
 .km-stage {
   position: relative;
-  height: 520px;
+  height: 640px; /* 11/21 팀 회의: 마인드맵 확대 (예전 520px) */
   overflow: hidden;
   border: 1px solid var(--tb-color-line-soft);
   border-radius: 12px;
@@ -8799,7 +8752,7 @@ button.ka-auto-note {
 .queue-filter button[aria-pressed='true'] {
   border-color: var(--tb-color-text);
   background: var(--tb-color-text);
-  color: var(--tb-color-text-inverse);
+  color: var(--tb-color-surface);
 }
 .queue-filter-n {
   font-weight: 700;
@@ -9555,4 +9508,9 @@ a.dash-home-t:hover,
   margin: 0;
   font-size: var(--fs-sm);
   color: var(--tb-color-text-sub);
+}
+
+/* 11/21 팀 회의: 대시보드는 화면 제목 · 설명을 숨김 → 남은 도구(수집 수 · 자료 현황으로)는 예전처럼 오른쪽 */
+.page-header.is-bare {
+  justify-content: flex-end;
 }

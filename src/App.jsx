@@ -69,7 +69,6 @@ import { clientId, enableUsage, track, trackVisit } from './usage.js'
 import AddMaterial from './AddMaterial.jsx'
 import DataMove from './DataMove.jsx'
 import TechTimeline from './TechTimeline.jsx'
-import FlowSteps from './FlowSteps.jsx'
 import FolderBar from './FolderBar.jsx'
 import { INBOX, INBOX_FOLDER } from './folders.js'
 import { ACCESS_TITLE, paperAccess } from './paperAccess.js'
@@ -563,13 +562,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   // 보고서함에서 보고서를 열면: 그 보고서에 쓴 기사가 아직 선별에 있으면 정리할지 묻는다 (한 번만)
   function handleCleanup(entry, action) {
     const ids = (entry.inputs ?? []).map((a) => a.id).filter((id) => selectedIds.includes(id))
+    // 11/21 팀 회의: 「보관」 폴더로 옮기기는 없앰 (지우기 · 유지만, 확인창은 ReportArchive.jsx)
     if (action === 'remove') ids.forEach(handleExclude)
-    if (action === 'archive') {
-      let archiveId = folders.find((f) => f.name === '보관')?.id
-      if (!archiveId) archiveId = createFolder('보관')
-      setFolderOf((prev) => ({ ...prev, ...Object.fromEntries(ids.map((id) => [id, archiveId])) }))
-      setIncludedIds((prev) => prev.filter((id) => !ids.includes(id)))
-    }
   }
 
   // 보고서 고치기 (줄 빼기 · AI 보충 근거): 화면에 바로 반영하고, DB가 있으면 서버에도 저장
@@ -1434,7 +1428,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               <h1>자료 현황</h1>
               {/* 11/17 (39 문서 C6): 대시보드 분석에서 범위를 골라 왔으면 지금 단계를 보여 준다. 다음 단계는 「선별·요약으로 →」 */}
               {search?.scope ? (
-                <FlowSteps current={2} note={`「${search.scope.query}」${search.scope.terms?.length ? ` + ${search.scope.terms.length}개` : ''} · 「선별 추가」로 담기`} />
+                <p>{`「${search.scope.query}」${search.scope.terms?.length ? ` + ${search.scope.terms.length}개` : ''} 범위의 자료예요 · 「선별 추가」로 담기`}</p>
               ) : (
                 <p>
                   {isSample

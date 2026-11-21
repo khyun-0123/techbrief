@@ -226,7 +226,9 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
   const leftover = open ? (open.inputs ?? []).filter((a) => selectedIds.includes(a.id)) : []
   const askCleanup = onCleanup && open && leftover.length > 0 && !asked.includes(open.id)
 
+  // 11/21 팀 회의: 「보관 폴더로」를 없애고 「목록에서 지우기 / 유지」만. 지우기는 확인창을 한 번 거친다
   function answerCleanup(action) {
+    if (action === 'remove' && !window.confirm(`선별 목록에서 이 보고서에 쓴 기사 ${leftover.length}건을 지울까요?\n보고서에는 그대로 남아요.`)) return
     if (action !== 'keep') onCleanup(open, action)
     const next = [...asked, open.id].slice(-200)
     setAsked(next)
@@ -281,16 +283,13 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
               {askCleanup && (
                 <div className="cleanup-ask" role="status">
                   <span title="이 보고서에 쓴 자료가 아직 선별 목록에 있어요">
-                    선별에 남은 기사 <strong>{leftover.length}건</strong>
+                    선별에 남은 기사 <strong>{leftover.length}건</strong>을 목록에서 지울까요?
                   </span>
-                  <button type="button" className="cleanup-btn primary" onClick={() => answerCleanup('archive')} title="「보관」 폴더로 옮겨요 (선별에는 남음)">
-                    보관 폴더로
+                  <button type="button" className="cleanup-btn" onClick={() => answerCleanup('remove')} title="선별 목록에서 지워요 (보고서에는 그대로 남음) — 확인창이 한 번 떠요">
+                    목록에서 지우기
                   </button>
-                  <button type="button" className="cleanup-btn" onClick={() => answerCleanup('remove')} title="선별 목록에서 빼요">
-                    빼기
-                  </button>
-                  <button type="button" className="btn-text" onClick={() => answerCleanup('keep')}>
-                    그대로
+                  <button type="button" className="cleanup-btn primary" onClick={() => answerCleanup('keep')} title="선별 목록에 그대로 둬요">
+                    유지
                   </button>
                 </div>
               )}
