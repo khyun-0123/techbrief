@@ -17,6 +17,8 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { dbEnabled, query } from './db/index.js'
 import { getSetting, setSetting } from './db/store.js'
 import { accessToken, readKey } from './patents.js'
@@ -134,7 +136,7 @@ const titleLine = (r) =>
 export async function extractDisplayPatents({ log = console.log, jobId: resumeJob = null } = {}) {
   if (!dbEnabled()) throw new Error('DB가 설정되지 않았어요 (DATABASE_URL)')
   const key = readKey()
-  if (!key) throw new Error('Google Cloud 키(gcp-key.json)가 없어요')
+  if (!key) throw new Error('Google Cloud 키가 없어요 (GCP_KEY_JSON 또는 gcp-key.json)')
   await ensureTable()
   const prev = await getSetting(META, null)
   let token = { value: await accessToken(key), at: Date.now() }
@@ -365,5 +367,50 @@ export async function patentDbStatus() {
     loading: Boolean(meta.loading),
     lastBytes: meta.lastBytes ?? null,
     lastError: meta.lastError ?? null,
+    titlesFile: fs.existsSync(titlesFile()), // DB 기록과 별개로 이 서버에 파일이 실제로 있는지 (11/21 Railway)
+    titlesFetch: titlesFetchStatus(),
   }
+}
+
+// ── 제목 파일 받아 오기 (11/21 Railway 전환) ──
+// 제목 파일(약 6GB)은 DB dump에 들어가지 않는다. 새로 만들면 BigQuery를 42GB 읽어(하루 할당량 대부분) 1시간 걸리므로,
+// 다른 서버에 있는 같은 파일을 받아 온다: PATENT_TITLES_URL이 있고 이 서버에 제목 파일이 없을 때만, 켜진 뒤 뒤에서 한 번
+// - 다 받은 뒤 크기를 DB 기록(patent_db.titlesBytes)과 비교해 같을 때만 .part → 본 파일로 바꾼다 (끊기면 깨진 파일이 남지 않음)
+// - 주소에는 임시 비밀 경로가 들어 있어 로그 · 화면에 찍지 않는다. 다 받으면 변수를 지운다
+const titlesFetch = (globalThis.__techbriefTitlesFetch ??= { status: 'idle', bytes: 0, total: null, error: null, at: null })
+export const titlesFetchStatus = () => ({ ...titlesFetch })
+
+export async function fetchTitlesIfMissing({ log = console.log } = {}) {
+  const url = String(process.env.PATENT_TITLES_URL ?? '').trim()
+  if (!url || titlesFetch.status === 'running') return titlesFetchStatus()
+  const set = (patch) => (Object.assign(titlesFetch, patch), titlesFetchStatus())
+  if (fs.existsSync(titlesFile())) return set({ status: 'exists' })
+  const meta = await getSetting(META, null).catch(() => null)
+  const total = Number(meta?.titlesBytes) || null
+  if (!total) return set({ status: 'error', error: 'DB에 제목 파일 크기 기록이 없어 받은 파일을 확인할 수 없어요' })
+  fs.mkdirSync(titlesDir(), { recursive: true })
+  const free = fs.statfsSync(titlesDir())
+  if (free.bavail * free.bsize < total * 1.05) {
+    return set({ status: 'error', error: `디스크가 모자라요 (필요 ${(total / 1e9).toFixed(1)}GB)` })
+  }
+  const part = `${titlesFile()}.part`
+  Object.assign(titlesFetch, { status: 'running', bytes: 0, total, error: null, at: new Date().toISOString() })
+  log(`[patent-db] 제목 파일 받기 시작 (${(total / 1e9).toFixed(2)}GB)`)
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(3 * 3600_000) })
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+    const body = Readable.fromWeb(res.body)
+    body.on('data', (chunk) => (titlesFetch.bytes += chunk.length))
+    await pipeline(body, fs.createWriteStream(part))
+    const got = fs.statSync(part).size
+    if (got !== total) throw new Error(`크기가 달라요 (받음 ${got} · 기록 ${total})`)
+    fs.renameSync(part, titlesFile())
+    Object.assign(titlesFetch, { status: 'done', at: new Date().toISOString() })
+    log(`[patent-db] 제목 파일 받기 끝 (${(got / 1e9).toFixed(2)}GB)`)
+  } catch (err) {
+    fs.rmSync(part, { force: true })
+    Object.assign(titlesFetch, { status: 'error', error: err.message, at: new Date().toISOString() })
+    console.warn(`[patent-db] 제목 파일 받기 실패: ${err.message}`)
+  }
+  return titlesFetchStatus()
 }

@@ -61,12 +61,14 @@ function queued(series) {
 // → { status: 'ok', model, range: [{ t, lo, hi }] 최근 24달 예상 범위, surges: [{ t, v, hi }] 상한을 넘은 달 }
 // wait = false: 기억해 둔 값만 바로 돌려주고, 없으면 뒤에서 계산을 걸어 둔다 (status: 'pending' → 다음에 열 때 보임)
 const running = new Map()
+// 11/21: 기억해 둔 결과는 파이썬이 없어도 보여 준다 (Railway — 파이썬 없이 띄움). 새 계산만 못 한다
+//   같은 숫자 묶음일 때만 맞으므로 시계열을 다시 만들면(3~7일) 그 키워드는 다시 「off」가 된다
 export async function surgeMonths(months, { wait = true } = {}) {
-  if (!timesfmReady()) return { status: 'off' }
-  if (!Array.isArray(months) || months.length < MIN_MONTHS) return { status: 'short' }
+  if (!Array.isArray(months) || months.length < MIN_MONTHS) return timesfmReady() ? { status: 'short' } : { status: 'off' }
   const key = KEY + crypto.createHash('sha1').update(JSON.stringify(months)).digest('hex')
   const hit = await cacheGet(key).catch(() => null)
   if (hit) return hit
+  if (!timesfmReady()) return { status: 'off' }
   if (!running.has(key)) running.set(key, compute(months, key).finally(() => running.delete(key)))
   if (!wait) {
     running.get(key).catch((err) => console.warn(`[timesfm] ${err.message}`))
