@@ -1,16 +1,13 @@
 // 선별·요약 + 보고서 (11/08 조장: 「보고서 초안」 탭을 합침)
-// 왼쪽: 폴더별 선별 기사. 체크 = 보고서에 넣을 기사. 기사를 누르면 그 자리에서 6항목 요약이 펼쳐진다
+// 왼쪽: 키워드 태그별 선별 기사 (11/22: 폴더 → 검색어 태그, 칩을 고르면 그 키워드가 보고서 주제로). 체크 = 보고서에 넣을 기사. 기사를 누르면 그 자리에서 6항목 요약이 펼쳐진다
 // 오른쪽: 체크한 기사로 만드는 보고서 (제목 · 방향 → 초안 → 미리보기 · 줄 빼기 · AI 보충 근거 찾기)
-// 폴더 옮기기는 기사 펼침의 「폴더」 메뉴로 (끌어 놓기는 11/08에 뺌)
 import { useState } from 'react'
 import { SAMPLE_SUMMARIES } from './sampleArticles.js'
 import { AI_BLOCKED_TITLE, useOps } from './ops.js'
 import SummaryItems from './SummaryItems.jsx'
 import { formatPublished } from './utils.js'
 import AddMaterial from './AddMaterial.jsx'
-import FolderBar from './FolderBar.jsx'
 import ReportComposer from './ReportComposer.jsx'
-import { INBOX } from './folders.js'
 import Dropdown, { Seg } from './Dropdown.jsx'
 
 const IMPORTANCE_LABEL = { high: '중요', normal: '' }
@@ -28,13 +25,10 @@ function SelectSummary({
   onGoCollect,
   aiSummaries,
   queue,
-  folders,
-  folderIdOf,
-  folderCounts,
-  onMove,
-  onCreateFolder,
-  onRenameFolder,
-  onDeleteFolder,
+  tagsFor,
+  tagCounts,
+  tagList,
+  onRemoveTag,
   onMaterialAdded,
   reportArticles,
   reports,
@@ -46,13 +40,13 @@ function SelectSummary({
   const { aiBlocked } = useOps()
   const [sort, setSort] = useState('importance')
   const [openId, setOpenId] = useState(null)
-  const [folder, setFolder] = useState(null) // 보는 폴더 (null = 전체)
+  const [folder, setFolder] = useState(null) // 보는 키워드 태그 (null = 전체)
   const [showAdd, setShowAdd] = useState(false)
   // 폭 901~1100(FHD 절반 등)에서는 두 칸을 나란히 두기 좁아 하나씩 본다 (11/15 화면 틀). 그 밖의 폭에서는 CSS가 단추를 숨기고 둘 다 보인다
   const [pane, setPane] = useState('list')
-  const inFolder = (a) => folder === null || folderIdOf(a.id) === folder
-  const checkedByFolder = {}
-  for (const a of candidates) if (includedIds.includes(a.id)) checkedByFolder[folderIdOf(a.id)] = (checkedByFolder[folderIdOf(a.id)] ?? 0) + 1
+  const inFolder = (a) => folder === null || tagsFor(a).includes(folder)
+  const checkedByTag = {}
+  for (const a of candidates) if (includedIds.includes(a.id)) for (const t of tagsFor(a)) checkedByTag[t] = (checkedByTag[t] ?? 0) + 1
 
   const sorted = candidates.filter(inFolder).sort((a, b) => {
     if (sort === 'importance') {
@@ -91,10 +85,18 @@ function SelectSummary({
     return (
       <div className="candidate-detail">
         <div className="candidate-detail-tools">
-          <label className="folder-move">
-            폴더
-            <Dropdown value={folderIdOf(a.id)} onChange={(v) => onMove(a.id, v)} label="폴더" size="sm" options={folders.map((f) => ({ value: f.id, label: f.name }))} />
-          </label>
+          <span className="tag-list" aria-label="키워드 태그">
+            {tagsFor(a).map((t) => (
+              <span key={t} className="tag-chip">
+                #{t}
+                {tagsFor(a).length > 1 && (
+                  <button type="button" className="tag-x" onClick={() => onRemoveTag(a, t)} aria-label={`「${t}」 태그 빼기`} title={`「${t}」 태그만 빼요`}>
+                    ×
+                  </button>
+                )}
+              </span>
+            ))}
+          </span>
           {a.url && (
             <a href={a.url} target="_blank" rel="noreferrer">
               원문 열기 ↗
@@ -158,7 +160,7 @@ function SelectSummary({
         </div>
       )}
 
-      {showAdd && <AddMaterial folders={folders} defaultFolder={folder ?? INBOX} selectByDefault onAdded={onMaterialAdded} onClose={() => setShowAdd(false)} />}
+      {showAdd && <AddMaterial tag={folder ?? '직접 추가'} selectByDefault onAdded={onMaterialAdded} onClose={() => setShowAdd(false)} />}
 
       {candidates.length === 0 ? (
         // 빈 상태: 보고서까지 가는 3단계를 보여 준다 (11/09 디자인 정리, 28 문서 4장)
@@ -167,7 +169,7 @@ function SelectSummary({
           <ol className="select-steps">
             <li>
               <b>자료 현황에서 기사 고르기</b>
-              <span>기사 줄의 「선별 추가」를 누르면 여기로 모여요. 폴더를 골라 나눠 담을 수 있어요.</span>
+              <span>기사 줄의 「+ 선별」을 누르면 여기로 모여요. 찾던 검색어로 저절로 묶여요.</span>
             </li>
             <li>
               <b>요약 확인하기</b>
@@ -206,20 +208,17 @@ function SelectSummary({
                 ]}
               />
             </div>
-            <FolderBar
-              folders={folders}
-              counts={folderCounts}
-              checked={checkedByFolder}
-              active={folder}
-              allOption
-              onPick={setFolder}
-              onCreate={(name) => setFolder(onCreateFolder(name))}
-              onRename={onRenameFolder}
-              onDelete={(id) => {
-                onDeleteFolder(id)
-                setFolder(null)
-              }}
-            />
+            {/* 키워드 태그 칩 (11/22: 폴더 대신 — 선별할 때 찾던 검색어로 자동). 고르면 그 키워드만 보이고, 보고서 주제 키워드도 그 말로 */}
+            <div className="tag-bar" role="group" aria-label="키워드로 거르기">
+              <button type="button" className={folder === null ? 'tag-pick on' : 'tag-pick'} aria-pressed={folder === null} onClick={() => setFolder(null)}>
+                전체 <span className="tag-n">{candidates.length}</span>
+              </button>
+              {tagList.map((t) => (
+                <button key={t} type="button" className={folder === t ? 'tag-pick on' : 'tag-pick'} aria-pressed={folder === t} onClick={() => setFolder(folder === t ? null : t)} title={`「${t}」로 선별한 자료${checkedByTag[t] ? ` · 보고서 체크 ${checkedByTag[t]}건` : ''} — 고르면 보고서 주제 키워드도 「${t}」`}>
+                  #{t} <span className="tag-n">{tagCounts[t]}</span>
+                </button>
+              ))}
+            </div>
             <div className="select-list-tools">
               <label className="check-all">
                 <input
@@ -275,7 +274,7 @@ function SelectSummary({
                             {a.title}
                           </span>
                           <span className="meta">
-                            {folder === null && <span className="folder-tag">{folders.find((f) => f.id === folderIdOf(a.id))?.name}</span>}
+                            {folder === null && <span className="folder-tag">#{tagsFor(a).join(' #')}</span>}
                             <span>{a.source}</span>
                             <span>{formatPublished(a.hoursAgo)}</span>
                             {jobStatus === 'done' ? (
@@ -311,6 +310,7 @@ function SelectSummary({
             onJobAdded={onJobAdded}
             onOpenReport={onOpenReport}
             folderSummary={folderSummary}
+            tagTopic={folder}
           />
         </div>
       )}

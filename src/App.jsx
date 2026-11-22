@@ -45,7 +45,7 @@ import { collectedView, isLow, isOwnOnly } from './articleFilter.js'
 import SettingsMenu from './SettingsMenu.jsx'
 import { buildBundleHtml } from './exportBundle.js'
 import SelectToggle from './SelectToggle.jsx'
-import FavoritesRail from './FavoritesRail.jsx'
+import FavMenu from './FavMenu.jsx'
 import Highlight from './Highlight.jsx'
 import { highlightPattern } from './highlightTerms.js'
 import Pager from './Pager.jsx'
@@ -69,8 +69,6 @@ import { clientId, enableUsage, track, trackVisit } from './usage.js'
 import AddMaterial from './AddMaterial.jsx'
 import DataMove from './DataMove.jsx'
 import TechTimeline from './TechTimeline.jsx'
-import FolderBar from './FolderBar.jsx'
-import { INBOX, INBOX_FOLDER } from './folders.js'
 import { ACCESS_TITLE, paperAccess } from './paperAccess.js'
 
 const KEYWORDS_KEY = 'techbrief-keywords'
@@ -90,15 +88,17 @@ const TIER_TITLE = { 1: '1차 출처: 기업 발표·학회·논문', 2: '2차 �
 const EXTRA_KEY = 'techbrief-extra-articles' // 「기사 찾기」 결과에서 선별한 기사 (수집 목록에 없는 것)
 const MAX_SAVED = 400
 const SAVED_SUMMARIES = 200 // 브라우저에 남기는 최근 AI 요약 수 (11/17, 나머지는 서버에서 다시 받음)
-// 선별 폴더 (11/07 결정, 27 문서 2장). 브라우저에 두고 서버(selections)에도 같이 저장한다
-const FOLDERS_KEY = 'techbrief-folders'
-const FOLDER_OF_KEY = 'techbrief-folder-of'
-const TARGET_FOLDER_KEY = 'techbrief-target-folder'
-
-// 「미분류」는 항상 맨 앞에 있다
-function withInbox(list) {
-  const rest = (Array.isArray(list) ? list : []).filter((f) => f?.id && f.id !== INBOX)
-  return [INBOX_FOLDER, ...rest]
+// 선별 키워드 태그 (11/22 조장: 「폴더를 빼고 검색한 키워드로 자동으로 묶자」 — 예전 선별 폴더 11/07은 모두 지움)
+// - 선별할 때 찾고 있던 검색어(범위 찾기면 중심 키워드)가 태그. 검색 없이 모은 기사는 그 기사의 수집 키워드
+// - 다른 검색어로 또 선별하면 태그가 하나 더 붙는다(11/22 조장). 선별·요약은 태그 칩으로 거르고, 고른 태그가 보고서 주제가 된다
+// - 브라우저에 두고 서버(selections)에도 같이 저장한다
+const TAGS_KEY = 'techbrief-tags-of'
+const OLD_FOLDER_KEYS = ['techbrief-folders', 'techbrief-folder-of', 'techbrief-target-folder']
+const MAX_TAGS = 5
+// 수집 키워드 (「1·2차 출처」는 키워드가 아니라 모은 곳 이름이라 뺌)
+const keywordOfArticle = (a) => {
+  const k = String(a?.keyword || '').trim()
+  return k && k !== '1·2차 출처' ? k : null
 }
 
 // 직접 추가한 자료: 「발행」 칸에는 올린 때를 보여 준다 (논문 날짜는 제목 옆에)
@@ -237,9 +237,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [starting, setStarting] = useState(false)
   const [keywords, setKeywords] = useState(() => load(KEYWORDS_KEY, DEFAULT_KEYWORDS))
   const [selectedIds, setSelectedIds] = useState(() => load(SELECTED_KEY, []))
-  const [folders, setFolders] = useState(() => withInbox(load(FOLDERS_KEY, [])))
-  const [folderOf, setFolderOf] = useState(() => load(FOLDER_OF_KEY, {})) // { 기사 id: 폴더 id }
-  const [targetFolder, setTargetFolder] = useState(() => load(TARGET_FOLDER_KEY, INBOX)) // 자료 현황에서 「선별 추가」가 담을 폴더
+  const [selTags, setSelTags] = useState(() => load(TAGS_KEY, {})) // { 기사 id: [키워드 태그] } — 없으면 그 기사의 수집 키워드
   const [materials, setMaterials] = useState([]) // 직접 추가한 자료 (서버)
   const [showAdd, setShowAdd] = useState(false)
   const [showMove, setShowMove] = useState(false) // 내 자료 옮기기 (11/08)
@@ -394,8 +392,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     fetchSelection(id)
       .then((saved) => {
         if (saved) {
-          setFolders(withInbox(saved.folders))
-          setFolderOf(saved.folderOf ?? {})
+          setSelTags(saved.tagsOf ?? {})
           setSelectedIds(saved.selectedIds ?? [])
         }
       })
@@ -651,21 +648,24 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   }, [selectedIds])
 
   useEffect(() => {
-    save(FOLDERS_KEY, folders)
-    save(FOLDER_OF_KEY, folderOf)
-  }, [folders, folderOf])
-
+    save(TAGS_KEY, selTags)
+  }, [selTags])
+  // 예전 선별 폴더는 지운다 (11/22 조장)
   useEffect(() => {
-    save(TARGET_FOLDER_KEY, targetFolder)
-  }, [targetFolder])
+    try {
+      for (const k of OLD_FOLDER_KEYS) localStorage.removeItem(k)
+    } catch {
+      // 저장 공간을 못 쓰면 그대로
+    }
+  }, [])
 
   // 서버에도 저장 (1.5초 모았다가 한 번). 불러오기가 끝나기 전에는 빈 값으로 덮지 않게 기다린다
   useEffect(() => {
     const id = clientId()
     if (!id || !selectionLoaded.current) return undefined
-    const timer = setTimeout(() => saveSelectionApi(id, { folders, folderOf, selectedIds }).catch(() => {}), 1500)
+    const timer = setTimeout(() => saveSelectionApi(id, { folders: [], folderOf: {}, selectedIds, tagsOf: selTags }).catch(() => {}), 1500)
     return () => clearTimeout(timer)
-  }, [folders, folderOf, selectedIds])
+  }, [selTags, selectedIds])
 
   useEffect(() => {
     save(INCLUDED_KEY, includedIds)
@@ -720,6 +720,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   // 요약 본문을 아직 안 받은 자료는 목록에 실린 가벼운 요약(제목 · 핵심어 · 감성)으로
   const liteOf = (a) => aiSummaries[a.id]?.summary ?? a.summaryLite
   const tagsFor = (a) => tagsOf(a, liteOf(a), tagDict)
+  // 검색 없이 고른 자료의 태그: 수집 키워드 → 없으면 그 자료의 첫 기술 해시태그 → 「기타」
+  const tagOfArticle = (a) => keywordOfArticle(a) ?? tagsFor(a)[0] ?? '기타'
   const byId = new Map(pool.map((a) => [a.id, a]))
   // 범위 찾기 결과의 「든 말」 (모은 기사와 id가 같으면 모은 쪽 객체가 쓰이므로 찾기 결과에서 따로 꺼냄)
   const scopeHitsOf = new Map((searchArticles ?? []).map((a) => [a.id, a.scopeHits ?? []]))
@@ -972,15 +974,16 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   }
   function beginAutoReport({ articles, title, level, summarizeNew }) {
     const scope = autoRun.scope
-    const folderName = `${scope.query} · 자동`.slice(0, 40)
-    const folderId = folders.find((f) => f.name === folderName)?.id ?? createFolder(folderName)
+    const tag = scope.query
     for (const a of articles) {
-      if (!selectedIds.includes(a.id)) toggleSelected(a, folderId) // 선별 + 요약 대기열 (원문 기반 요약이 없으면)
-      else if (!aiSummaries[a.id]?.summary?.items && a.aiAllowed !== false) queue.enqueue(a, { select: true })
+      if (!selectedIds.includes(a.id)) toggleSelected(a, tag) // 선별 + 요약 대기열 (원문 기반 요약이 없으면)
+      else {
+        addTag(a, tag)
+        if (!aiSummaries[a.id]?.summary?.items && a.aiAllowed !== false) queue.enqueue(a, { select: true })
+      }
     }
-    setFolderOf((prev) => ({ ...prev, ...Object.fromEntries(articles.map((a) => [a.id, folderId])) }))
     autoSending.current = false
-    setAutoRun({ step: 'summarizing', scope, articles, title, level, summarizeNew, folderName })
+    setAutoRun({ step: 'summarizing', scope, articles, title, level, summarizeNew, tag })
     track('report', 'auto')
   }
   // 요약 진행: 대기열에 남아 있지 않고 요약이 있으면 끝, 대기열이 오류면 실패
@@ -1044,10 +1047,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   function downloadBundle() {
     const html = buildBundleHtml({
       reports: liveReports.filter((r) => r.mine),
-      folders: folders.map((f) => ({
-        name: f.name,
+      folders: tagList.map((t) => ({
+        name: t,
         articles: candidates
-          .filter((a) => folderIdOf(a.id) === f.id)
+          .filter((a) => selTagsFor(a).includes(t))
           .map((a) => ({ title: a.title, source: a.source, publishedAt: a.publishedAt, url: a.url, headline: aiSummaries[a.id]?.summary?.headline, included: included.includes(a.id) })),
       })),
     })
@@ -1066,18 +1069,20 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     setScopeTerm(null)
   }
 
-  function toggleSelected(article, folderId = targetFolder) {
+  // 지금 자료 현황에서 찾고 있는 말 = 선별할 때 붙는 태그 (범위 찾기면 중심 키워드)
+  const currentTag = (search?.scope?.query ?? search?.query ?? '').trim() || null
+  function toggleSelected(article, tag = currentTag ?? tagOfArticle(article)) {
     const { id } = article
     if (selectedIds.includes(id)) {
       setSelectedIds((prev) => prev.filter((x) => x !== id))
-      setFolderOf(({ [id]: _drop, ...rest }) => rest)
+      setSelTags(({ [id]: _drop, ...rest }) => rest)
       // 선별을 풀면 보고서 포함 목록에서도 빼고, 아직 시작 전인 요약은 취소한다
       setIncludedIds((prev) => prev.filter((x) => x !== id))
       setExtraArticles((prev) => prev.filter((x) => x.id !== id))
       queue.remove(id)
     } else {
       setSelectedIds((prev) => [...prev, id])
-      setFolderOf((prev) => ({ ...prev, [id]: folders.some((f) => f.id === folderId) ? folderId : INBOX }))
+      setSelTags((prev) => ({ ...prev, [id]: [String(tag).slice(0, 40)] }))
       track('select', article.keyword || search?.query || '')
       // 수집 목록에 없는 기사(찾기 결과)는 따로 보관해 선별·보고서에서 계속 쓸 수 있게
       if (!fetched.some((x) => x.id === id)) {
@@ -1091,42 +1096,29 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     }
   }
 
-  // 폴더로 담기 · 옮기기: 아직 선별 전이면 그 폴더로 선별, 선별한 기사면 폴더만 바꾼다 (끌어 놓기 · 폴더 메뉴)
-  // 끌어 놓기로 오는 id는 글자라서 글자로 비교한다 (샘플 기사 id는 숫자)
-  function putInFolder(articleId, folderId) {
-    const key = String(articleId)
-    const article = pool.find((x) => String(x.id) === key) ?? extraArticles.find((x) => String(x.id) === key)
-    if (!article) return
-    if (selectedIds.includes(article.id)) setFolderOf((prev) => ({ ...prev, [article.id]: folderId }))
-    else toggleSelected(article, folderId)
+  // 태그: 저장한 태그 → 없으면(예전 선별) 그 기사의 수집 키워드
+  const selTagsFor = (a) => (selTags[a.id]?.length ? selTags[a.id] : [tagOfArticle(a)])
+  // 이미 선별한 기사를 다른 검색어로 또 선별 → 태그 하나 더 (11/22 조장)
+  function addTag(article, tag) {
+    const t = String(tag ?? '').trim().slice(0, 40)
+    if (!t) return
+    setSelTags((prev) => {
+      const now = prev[article.id]?.length ? prev[article.id] : [tagOfArticle(article)]
+      return now.includes(t) ? prev : { ...prev, [article.id]: [...now, t].slice(-MAX_TAGS) }
+    })
+  }
+  // 태그 하나만 빼기 — 남은 태그가 없으면 선별에서 뺀다
+  function removeTag(article, tag) {
+    const now = selTagsFor(article)
+    const rest = now.filter((x) => x !== tag)
+    if (!rest.length) return handleExclude(article.id)
+    setSelTags((prev) => ({ ...prev, [article.id]: rest }))
   }
 
-  function createFolder(name) {
-    const id = `f-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
-    setFolders((prev) => [...prev, { id, name: name.slice(0, 40) }])
-    return id
-  }
-
-  function renameFolder(id, name) {
-    setFolders((prev) => prev.map((f) => (f.id === id ? { ...f, name: name.slice(0, 40) } : f)))
-  }
-
-  // 폴더를 지우면 안의 기사는 「미분류」로
-  function deleteFolder(id) {
-    if (id === INBOX) return
-    setFolders((prev) => prev.filter((f) => f.id !== id))
-    setFolderOf((prev) => Object.fromEntries(Object.entries(prev).map(([k, v]) => [k, v === id ? INBOX : v])))
-    if (targetFolder === id) setTargetFolder(INBOX)
-  }
-
-  const folderIdOf = (id) => (folders.some((f) => f.id === folderOf[id]) ? folderOf[id] : INBOX)
-  const folderCounts = {}
-  for (const id of selectedIds) folderCounts[folderIdOf(id)] = (folderCounts[folderIdOf(id)] ?? 0) + 1
-
-  // 직접 추가: 자료 목록에 넣고, 고르면 선별에도 담는다
-  function handleMaterialAdded(material, { select, folderId }) {
+  // 직접 추가: 자료 목록에 넣고, 고르면 선별에도 담는다 (태그: 보고 있던 키워드 → 없으면 「직접 추가」)
+  function handleMaterialAdded(material, { select, tag }) {
     setMaterials((prev) => [material, ...prev.filter((m) => m.id !== material.id)])
-    if (select && !selectedIds.includes(material.id)) toggleSelected(materialView(material), folderId)
+    if (select && !selectedIds.includes(material.id)) toggleSelected(materialView(material), tag ?? currentTag ?? '직접 추가')
   }
 
   async function handleMaterialDelete(m) {
@@ -1145,7 +1137,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
   function handleExclude(id) {
     setSelectedIds((prev) => prev.filter((x) => x !== id))
-    setFolderOf(({ [id]: _drop, ...rest }) => rest)
+    setSelTags(({ [id]: _drop, ...rest }) => rest)
     setExtraArticles((prev) => prev.filter((x) => x.id !== id))
     setIncludedIds((prev) => prev.filter((x) => x !== id))
     queue.remove(id)
@@ -1153,9 +1145,13 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
   // 보고서에는 선별 화면에서 고른 순서대로
   const reportArticles = included.map((id) => candidates.find((a) => a.id === id)).filter(Boolean)
-  // 보고서에 들어가는 기사가 어느 폴더에서 왔는지 (여러 폴더를 묶어 쓸 수 있음)
-  const reportFolders = folders
-    .map((f) => [f.name, reportArticles.filter((a) => folderIdOf(a.id) === f.id).length])
+  // 선별한 기사의 태그 목록 · 태그별 수 (선별·요약 칩)
+  const tagCounts = {}
+  for (const a of candidates) for (const t of selTagsFor(a)) tagCounts[t] = (tagCounts[t] ?? 0) + 1
+  const tagList = Object.keys(tagCounts).sort((x, y) => tagCounts[y] - tagCounts[x] || x.localeCompare(y, 'ko'))
+  // 보고서에 들어가는 기사가 어느 키워드에서 왔는지 (여러 키워드를 묶어 쓸 수 있음)
+  const reportFolders = tagList
+    .map((t) => [t, reportArticles.filter((a) => selTagsFor(a).includes(t)).length])
     .filter(([, n]) => n > 0)
     .map(([name, n]) => `${name} ${n}건`)
     .join(' · ')
@@ -1361,6 +1357,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           keywords={keywords}
           favorites={favorites}
           recent={recent}
+          onToggleFavorite={(q) => changeFavorites(favorites.includes(q) ? favorites.filter((f) => f !== q) : [...favorites, q])}
+          onRemoveRecent={(q) => saveRecent(recent.filter((r) => r !== q))}
           onRemember={(q) => saveRecent([q, ...recent.filter((r) => r !== q)].slice(0, RECENT_MAX))}
           onAutoReport={startAutoReport}
           onScopeSearch={(scope) => {
@@ -1403,13 +1401,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           onGoCollect={() => setScreen('collect')}
           aiSummaries={aiSummaries}
           queue={queue}
-          folders={folders}
-          folderIdOf={folderIdOf}
-          folderCounts={folderCounts}
-          onMove={putInFolder}
-          onCreateFolder={createFolder}
-          onRenameFolder={renameFolder}
-          onDeleteFolder={deleteFolder}
+          tagsFor={selTagsFor}
+          tagCounts={tagCounts}
+          tagList={tagList}
+          onRemoveTag={removeTag}
           onMaterialAdded={handleMaterialAdded}
           reportArticles={reportArticles}
           reports={liveReports}
@@ -1427,85 +1422,76 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           <h1 className="sr-only">자료 현황</h1>
           {refreshError && <p className="ai-error" role="alert">{refreshError}</p>}
           {/* 오늘 수집 숫자 · 키워드 추이는 대시보드로 옮김 (11/07 팀 회의) */}
-          <div className={`content with-favs collect-grid${features.has('collectPanel') ? '' : ' no-settings'}${showAdd ? ' has-add' : ''}`}>
-            {/* 검색 줄: 찾기 칸 + 「논문 · 뉴스에서 찾기」, 오른쪽 끝에 「+ 자료 추가」 (예전 위 한 줄에 있던 단추) */}
-            <div className="collect-top">
-              <form className="search-form" onSubmit={handleSearch} role="search">
-                <input
-                  type="search"
-                  placeholder="자료 찾기 (제목·키워드)"
-                  aria-label="자료 찾기"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-                <button type="submit" className="btn outline" disabled={!query.trim() || search?.loading}>
-                  {search?.loading ? '찾는 중…' : '논문 · 뉴스에서 찾기'}
-                </button>
-              </form>
-              <div className="collect-top-actions">
-                {features.has('refreshButton') && (
-                  <button type="button" className="btn" onClick={handleRefresh} disabled={starting || refreshRunning || keywords.length === 0}>
-                    {starting || refreshRunning ? '최신화 중…' : '지금 최신화'}
-                  </button>
-                )}
-                <button type="button" className={showAdd ? 'btn primary' : 'btn'} aria-expanded={showAdd} onClick={() => setShowAdd((v) => !v)}>
-                  + 자료 추가
-                </button>
-              </div>
-            </div>
-            {showAdd && <AddMaterial folders={folders} defaultFolder={targetFolder} onAdded={handleMaterialAdded} onClose={() => setShowAdd(false)} />}
-            {/* 11/22: 자동 수집 키워드는 뺌 — 즐겨찾기 · 최근 검색어만 */}
-            <FavoritesRail
-              favorites={favorites}
-              recent={recent}
-              active={search?.query}
-              onSearch={runSearch}
-              onToggleFavorite={(q) => changeFavorites(favorites.includes(q) ? favorites.filter((f) => f !== q) : [...favorites, q])}
-              onRemoveRecent={(q) => saveRecent(recent.filter((r) => r !== q))}
-            />
-            <section className="panel panel-flush list-panel">
-              {/* 「선별 추가」가 담을 폴더 (11/08: 끌어 놓기는 뺐다. 담긴 기사는 옆 폴더 메뉴로 옮김) */}
-              <FolderBar
-                label="담을 폴더"
-                folders={folders}
-                counts={folderCounts}
-                active={targetFolder}
-                onPick={(id) => setTargetFolder(id ?? INBOX)}
-                onCreate={(name) => setTargetFolder(createFolder(name))}
+          {/* 위 검색 띠 (11/22 조장 검수): 화면 폭 전체 각진 띠 — 찾기 칸 · 「논문 · 뉴스에서 찾기」 바로 옆에 기간 · 출처 · 정렬,
+              오른쪽 끝에 「최근·즐겨찾기」(대시보드와 같은 부품) · 「+ 자료 추가」. 절반 화면은 두 줄(찾기 · 단추 / 거르기) */}
+          <div className="collect-top">
+            <form className="search-form" onSubmit={handleSearch} role="search">
+              <input
+                type="search"
+                placeholder="자료 찾기 (제목·키워드)"
+                aria-label="자료 찾기"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
               />
-              <div className="filters">
-                <PeriodSeg value={period} onChange={changePeriod} options={PERIODS} title={search ? '바꾸면 이 기간으로 다시 찾아요' : undefined} />
-                <Dropdown
-                  value={source}
-                  onChange={setSource}
-                  label="출처"
-                  size="lg"
-                  className="dd-source"
-                  options={[
-                    { value: 'all', label: '모든 출처' },
-                    { value: 'material', label: `직접 추가한 자료 (${materials.length})` },
-                    {
-                      group: '출처 단계',
-                      options: [
-                        { value: 'tier:1', label: '1차 · 기업 발표·학회·논문' },
-                        { value: 'tier:2', label: '2차 · 전문매체' },
-                        { value: 'tier:3', label: '3차 · 일반 뉴스' },
-                      ],
-                    },
-                    { group: '매체', options: sources.map((x) => ({ value: x, label: x })) },
-                  ]}
-                />
-                <Seg
-                  value={sort}
-                  onChange={setSort}
-                  size="lg"
-                  label="정렬"
-                  options={[
-                    { value: 'importance', label: '중요도순' },
-                    { value: 'latest', label: '최신순' },
-                  ]}
-                />
-              </div>
+              <button type="submit" className="btn outline" disabled={!query.trim() || search?.loading}>
+                {search?.loading ? '찾는 중…' : '논문 · 뉴스에서 찾기'}
+              </button>
+            </form>
+            <div className="filters">
+              <PeriodSeg value={period} onChange={changePeriod} options={PERIODS} title={search ? '바꾸면 이 기간으로 다시 찾아요' : undefined} />
+              <Dropdown
+                value={source}
+                onChange={setSource}
+                label="출처"
+                size="lg"
+                className="dd-source"
+                options={[
+                  { value: 'all', label: '모든 출처' },
+                  { value: 'material', label: `직접 추가한 자료 (${materials.length})` },
+                  {
+                    group: '출처 단계',
+                    options: [
+                      { value: 'tier:1', label: '1차 · 기업 발표·학회·논문' },
+                      { value: 'tier:2', label: '2차 · 전문매체' },
+                      { value: 'tier:3', label: '3차 · 일반 뉴스' },
+                    ],
+                  },
+                  { group: '매체', options: sources.map((x) => ({ value: x, label: x })) },
+                ]}
+              />
+              <Seg
+                value={sort}
+                onChange={setSort}
+                size="lg"
+                label="정렬"
+                options={[
+                  { value: 'importance', label: '중요도순' },
+                  { value: 'latest', label: '최신순' },
+                ]}
+              />
+            </div>
+            <div className="collect-top-actions">
+              <FavMenu
+                favorites={favorites}
+                recent={recent}
+                active={search?.query}
+                onPick={runSearch}
+                onToggleFavorite={(q) => changeFavorites(favorites.includes(q) ? favorites.filter((f) => f !== q) : [...favorites, q])}
+                onRemoveRecent={(q) => saveRecent(recent.filter((r) => r !== q))}
+              />
+              {features.has('refreshButton') && (
+                <button type="button" className="btn" onClick={handleRefresh} disabled={starting || refreshRunning || keywords.length === 0}>
+                  {starting || refreshRunning ? '최신화 중…' : '지금 최신화'}
+                </button>
+              )}
+              <button type="button" className={showAdd ? 'btn primary' : 'btn'} aria-expanded={showAdd} onClick={() => setShowAdd((v) => !v)} aria-label="자료 추가">
+                + <span className="lbl-long">자료 </span>추가
+              </button>
+            </div>
+          </div>
+          <div className={`content collect-grid${features.has('collectPanel') ? '' : ' no-settings'}${showAdd ? ' has-add' : ''}`}>
+            {showAdd && <AddMaterial tag={currentTag} onAdded={handleMaterialAdded} onClose={() => setShowAdd(false)} />}
+            <section className="panel panel-flush list-panel">
               {search ? (
                 <div className="search-banner">
                   <span aria-live="polite">
@@ -1548,18 +1534,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                       </button>
                     ))}
                   </span>
-                  <button
-                    type="button"
-                    className="btn scope-folder"
-                    onClick={() => {
-                      const name = `${search.scope.query} · ${search.scope.terms[0]}${search.scope.terms.length > 1 ? ` 외 ${search.scope.terms.length - 1}` : ''}`
-                      const existing = folders.find((f) => f.name === name)
-                      setTargetFolder(existing ? existing.id : createFolder(name))
-                    }}
-                    title="「키워드 · 고른 말」 이름으로 폴더를 만들고, 「선별 추가」가 그 폴더에 담기게 해요"
-                  >
-                    + 이 범위로 폴더
-                  </button>
                 </div>
               ) : null}
               {/* 11/15 화면 틀: 건수 줄과 거르기 줄을 한 줄로 (목록 칸을 한 줄 더 넓게) */}
@@ -1817,11 +1791,11 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                               )}
                               <SelectToggle
                                 selected={selected}
-                                folders={folders}
-                                folderId={folderIdOf(a.id)}
-                                targetName={folders.find((f) => f.id === targetFolder)?.name ?? '미분류'}
+                                tags={selected ? selTagsFor(a) : []}
+                                tag={currentTag ?? tagOfArticle(a)}
                                 onToggle={() => toggleSelected(a)}
-                                onMove={(id) => putInFolder(a.id, id)}
+                                onAddTag={(t) => addTag(a, t)}
+                                onRemoveTag={(t) => removeTag(a, t)}
                               />
                             </div>
                           </td>

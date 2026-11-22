@@ -1122,13 +1122,19 @@ async function handleApiInner(req, res) {
       return send(res, 200, { selection: ip ? await getSelection(`ip:${ip}`) : null })
     }
     if (req.method === 'PUT' && req.url === '/api/selections') {
-      const { folders = [], folderOf = {}, selectedIds = [] } = await readJson(req)
+      const { folders = [], folderOf = {}, selectedIds = [], tagsOf = {} } = await readJson(req)
       const ip = clientIp(req)
       if (!ip) return send(res, 400, { error: '접속 주소를 알 수 없어요.' })
       const data = {
         folders: folders.slice(0, 50).map((f) => ({ id: String(f.id).slice(0, 40), name: String(f.name ?? '').slice(0, 40) })),
         folderOf: Object.fromEntries(Object.entries(folderOf).slice(0, 2000).map(([k, v]) => [String(k).slice(0, 200), String(v).slice(0, 40)])),
         selectedIds: selectedIds.slice(0, 2000).map((x) => String(x).slice(0, 200)),
+        // 11/22: 폴더 → 키워드 태그 (기사마다 검색어 태그 최대 5개). folders · folderOf는 예전 기록용으로만 남음 (화면은 빈 값을 보냄)
+        tagsOf: Object.fromEntries(
+          Object.entries(tagsOf && typeof tagsOf === 'object' ? tagsOf : {})
+            .slice(0, 2000)
+            .map(([k, v]) => [String(k).slice(0, 200), (Array.isArray(v) ? v : []).slice(0, 5).map((t) => String(t).slice(0, 40))]),
+        ),
       }
       await saveSelection(`ip:${ip}`, data)
       return send(res, 200, { ok: true })
