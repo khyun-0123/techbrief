@@ -8963,6 +8963,10 @@ a.dash-home-t:hover,
     overflow-y: auto;
     scrollbar-gutter: stable;
   }
+  /* 11/22: 왼쪽(맵) 칸은 스크롤 자리를 비우지 않음 — 비우면 맵 카드 오른쪽에 15px가 더 생겨 가운데 비율 손잡이가 틈 한가운데서 오른쪽으로 밀렸음 */
+  .dash-search.is-open > .ka > .split > .split-pane:first-child {
+    scrollbar-gutter: auto;
+  }
   .dash-search.is-open > .ka > .split > .split-pane > .ka-pane:has(> .km) {
     display: flex;
     flex-direction: column;
@@ -9657,10 +9661,10 @@ body:has(.dash-next .ka-next) .progress-panel {
   border-radius: var(--tb-radius-button);
   background: var(--tb-color-surface);
   box-shadow: var(--tb-shadow-card);
-  transform: translate(50%, -50%) translateX(var(--rh-dx, 0px));
+  transform: translate(50%, -50%);
 }
-.rail-handle.is-dragging {
-  border-color: var(--tb-color-line-focus);
+.rail-step + .rail-step {
+  border-top: 1px solid var(--tb-color-line-soft);
 }
 .rail-step {
   width: 24px;
@@ -9682,21 +9686,6 @@ body:has(.dash-next .ka-next) .progress-panel {
   color: var(--tb-color-line);
   cursor: default;
 }
-.rail-grip {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 36px;
-  border-block: 1px solid var(--tb-color-line-soft);
-  cursor: ew-resize;
-  touch-action: none;
-}
-.rail-grip > span {
-  width: 6px;
-  height: 16px;
-  border-inline: 2px dotted var(--tb-color-text-faint);
-}
-.rail-grip:focus-visible,
 .rail-step:focus-visible {
   outline: 2px solid var(--tb-color-line-focus);
   outline-offset: 1px;
@@ -9743,12 +9732,13 @@ body:has(.dash-next .ka-next) .progress-panel {
     margin-top: var(--tb-space-2);
     transform: none;
   }
-  .rail-grip {
-    display: none;
-  }
   .rail-step {
     width: 44px;
     height: 36px;
+  }
+  .rail-step + .rail-step {
+    border-top: 0;
+    border-left: 1px solid var(--tb-color-line-soft);
   }
   .tr-unfold {
     min-height: 44px;

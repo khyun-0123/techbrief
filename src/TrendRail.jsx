@@ -6,7 +6,6 @@
 // - 11/22 시안 2차: 「접기 «」 · 「펼쳐 보기 ›」 두 단추 → 오른쪽 가장자리 손잡이 하나(RailHandle)로 넣기 · 기본 · 넓게 세 단계.
 //   넣기 = 좁은 띠(세로 「요즘 뜨는 기술」, 누르면 기본) · 넓게 = 예전 「펼쳐 보기」 전체 표 (Dashboard.jsx drawer)
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { pageZoom } from './utils.js'
 import { fetchTechTrends, fetchTrendVerdicts } from './api.js'
 
 const TOP = 10 // 화면 틀 밖
@@ -139,67 +138,24 @@ export default function TrendRail({ active, onFirst, onPick, onVerdicts, onVerdi
   )
 }
 
-// 막대 오른쪽 가장자리 손잡이 (11/22 시안 2차): 넣기 · 기본 · 넓게 세 단계 — 세밀하게 끄는 레버가 아니라 가까운 단계로 딱 맞춤
-// - 끌기: 오른쪽으로 끌면 넓게, 왼쪽으로 끌면 좁게 (48px 넘게 끌면 한 단계, 160px 넘으면 두 단계)
-// - 끌지 않고도(WCAG 2.5.7): ‹ › 단추로 한 단계씩 · 손잡이에 초점을 두고 ← → Home End
-// - 화면 읽기 프로그램: 「요즘 뜨는 기술 보기 크기: 기본 (3단계 중 2)」
+// 막대 오른쪽 가장자리 손잡이 (11/22 시안 2차): 넣기 · 기본 · 넓게 세 단계
+// - 11/22 팀 검수: 가운데 끌기 손잡이는 끄는 동안 손잡이만 따로 움직여 어색 → 없애고 ‹ › 단추 두 개만
+// - 단추에 초점을 두고 ← → Home End 로도 바꿈
+// - 화면 읽기 프로그램: 단추 이름 「좁게 (넣기)」 · 「넓게 (넓게)」, 묶음 이름에 지금 단계
 const STEPS = ['넣기', '기본', '넓게']
 export function RailHandle({ step, onStep }) {
-  const [dx, setDx] = useState(0)
-  const drag = useRef(null)
   const go = (n) => onStep(Math.max(0, Math.min(2, n)))
-  const down = (e) => {
-    if (e.button !== 0) return
-    drag.current = { x: e.clientX, moved: false }
-    e.currentTarget.setPointerCapture(e.pointerId)
-  }
-  const move = (e) => {
-    if (!drag.current) return
-    const d = (e.clientX - drag.current.x) / pageZoom()
-    if (Math.abs(d) > 4) drag.current.moved = true
-    setDx(Math.max(-140, Math.min(200, d)))
-  }
-  const up = (e) => {
-    if (!drag.current) return
-    const d = (e.clientX - drag.current.x) / pageZoom()
-    drag.current = null
-    setDx(0)
-    const by = Math.abs(d) > 160 ? 2 : Math.abs(d) > 48 ? 1 : 0
-    if (by) go(step + Math.sign(d) * by)
-  }
   const key = (e) => {
-    const n = { ArrowRight: step + 1, ArrowUp: step + 1, ArrowLeft: step - 1, ArrowDown: step - 1, Home: 0, End: 2 }[e.key]
+    const n = { ArrowRight: step + 1, ArrowLeft: step - 1, Home: 0, End: 2 }[e.key]
     if (n === undefined) return
     e.preventDefault()
     go(n)
   }
   return (
-    <div className={`rail-handle${dx ? ' is-dragging' : ''}`} role="group" aria-label="요즘 뜨는 기술 보기 크기" style={dx ? { '--rh-dx': `${dx}px` } : undefined}>
+    <div className="rail-handle" role="group" aria-label={`요즘 뜨는 기술 보기 크기: ${STEPS[step]} (3단계 중 ${step + 1})`} onKeyDown={key}>
       <button type="button" className="rail-step" onClick={() => go(step - 1)} disabled={step <= 0} aria-label={`좁게 (${STEPS[Math.max(0, step - 1)]})`} title="좁게">
         <span aria-hidden="true">‹</span>
       </button>
-      <div
-        className="rail-grip"
-        role="slider"
-        tabIndex={0}
-        aria-label="요즘 뜨는 기술 보기 크기"
-        aria-orientation="horizontal"
-        aria-valuemin={0}
-        aria-valuemax={2}
-        aria-valuenow={step}
-        aria-valuetext={`${STEPS[step]} (3단계 중 ${step + 1})`}
-        title="끌어서 넣기 · 기본 · 넓게 (← → 키도 돼요)"
-        onPointerDown={down}
-        onPointerMove={move}
-        onPointerUp={up}
-        onPointerCancel={() => {
-          drag.current = null
-          setDx(0)
-        }}
-        onKeyDown={key}
-      >
-        <span aria-hidden="true" />
-      </div>
       <button type="button" className="rail-step" onClick={() => go(step + 1)} disabled={step >= 2} aria-label={`넓게 (${STEPS[Math.min(2, step + 1)]})`} title="넓게">
         <span aria-hidden="true">›</span>
       </button>

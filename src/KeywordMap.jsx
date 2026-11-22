@@ -194,16 +194,26 @@ function bboxOf(pos) {
   }
   return Number.isFinite(x0) ? { x0, y0, x1, y1 } : null
 }
+// 세로 늘림 (11/22 조장 「맵 칸을 위아래로 넓혔으니 위아래로 더 퍼지게」): 힘 계산 결과는 거의 둥근데 칸은 세로가 길다 →
+// 점 자리만 세로로 sy배(최대 MAX_SY) 늘려 칸 비율에 맞춘다. 글자 · 점 크기는 그대로라 위아래로만 사이가 벌어지고 새로 겹치지 않는다
+const MAX_SY = 1.6
+const kyOf = (v) => v.k * (v.sy ?? 1)
 // 전체 보기 (zoomToFit, 여백 pad). 아래 40px는 범례 · 단추 줄, 글자가 점 옆 · 아래로 나가므로 가로 100 · 세로 40 더 남김
 function fitView(pos, W, H, pad = 40, minK = 0.3) {
   const b = bboxOf(pos)
-  if (!b) return { k: 1, tx: W / 2, ty: H / 2 }
-  const top = pad
+  if (!b) return { k: 1, tx: W / 2, ty: H / 2, sy: 1 }
+  const top = pad + 32 // 왼쪽 위 「표시 설정」 상자(약 64px) 밑으로 점이 들어가지 않게 (11/23: 가지를 처음부터 펼치자 위쪽 점이 가려졌음)
   const bottom = Math.max(pad, 44)
-  const bw = b.x1 - b.x0 + 100
-  const bh = b.y1 - b.y0 + 40
-  const k = Math.max(minK, Math.min(6, Math.min((W - pad * 2) / bw, (H - top - bottom) / bh)))
-  return { k, tx: W / 2 - ((b.x0 + b.x1) / 2) * k, ty: top + (H - top - bottom) / 2 - ((b.y0 + b.y1) / 2 + 10) * k }
+  const aw = W - pad * 2
+  const ah = H - top - bottom
+  const gw = b.x1 - b.x0
+  const gh = Math.max(1, b.y1 - b.y0)
+  // 가로에 맞춘 배율로 그렸을 때 세로가 남으면, 남는 만큼 늘림
+  const sy = Math.max(1, Math.min(MAX_SY, ((ah - 40) * (gw + 100)) / (aw * gh)))
+  const bw = gw + 100
+  const bh = gh * sy + 40
+  const k = Math.max(minK, Math.min(6, Math.min(aw / bw, ah / bh)))
+  return { k, sy, tx: W / 2 - ((b.x0 + b.x1) / 2) * k, ty: top + ah / 2 - ((b.y0 + b.y1) / 2) * k * sy - 10 * k }
 }
 // 화면 이동 제한 (가이드 clampView): 화면 가운데가 그래프 가장자리 20% 안쪽을 벗어나지 않게
 function clampView(v, pos, W, H) {
@@ -212,10 +222,10 @@ function clampView(v, pos, W, H) {
   const ix = (b.x1 - b.x0) * 0.2
   const iy = (b.y1 - b.y0) * 0.2
   const cx = (W / 2 - v.tx) / v.k
-  const cy = (H / 2 - v.ty) / v.k
+  const cy = (H / 2 - v.ty) / kyOf(v)
   const x = Math.max(b.x0 + ix, Math.min(b.x1 - ix, cx))
   const y = Math.max(b.y0 + iy, Math.min(b.y1 - iy, cy))
-  return x === cx && y === cy ? v : { k: v.k, tx: W / 2 - x * v.k, ty: H / 2 - y * v.k }
+  return x === cx && y === cy ? v : { ...v, tx: W / 2 - x * v.k, ty: H / 2 - y * kyOf(v) }
 }
 
 const radius = (score, max) => 3 + 9 * Math.sqrt(score / max)
@@ -236,7 +246,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
   const max = Math.max(1, ...l1.map((n) => n.score), ...l2.map((n) => n.score))
   const S = (w) => {
     const p = pos.get(w)
-    return p ? { x: p.x * view.k + view.tx, y: p.y * view.k + view.ty } : null
+    return p ? { x: p.x * view.k + view.tx, y: p.y * kyOf(view) + view.ty } : null
   }
   const drag = useRef(null)
   const local = (e) => {
@@ -263,7 +273,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
     if (!d.moved && Math.hypot(dx, dy) < 4) return
     if (!d.moved && d.word) onHover(null)
     d.moved = true
-    if (d.word) onDragNode(d.word, (at.x - view.tx) / view.k, (at.y - view.ty) / view.k)
+    if (d.word) onDragNode(d.word, (at.x - view.tx) / view.k, (at.y - view.ty) / kyOf(view))
     else setView(clampView({ ...d.view0, tx: d.view0.tx + dx, ty: d.view0.ty + dy }, pos, W, H))
   }
   const onUp = (e, word) => {
@@ -547,7 +557,7 @@ function countOverlaps(final, view, graph, hidden, keyword, isOn) {
     const p = final.get(it.word)
     if (!p) continue
     const x = p.x * view.k + view.tx
-    const y = p.y * view.k + view.ty
+    const y = p.y * kyOf(view) + view.ty
     const on = it.word !== keyword && isOn(it.word)
     const w = textW(`${on ? '✓ ' : ''}${short(it.word, it.max ?? 18)}`, it.fs) + (on ? 14 : 4) // 고른 말은 알약 폭
     boxes.push({ x0: x - w / 2, x1: x + w / 2, y0: y + it.r + 2, y1: y + it.r + (on ? 9 : 4) + it.fs, dot: { x0: x - it.r, x1: x + it.r, y0: y - it.r, y1: y + it.r } })
@@ -640,7 +650,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
   const [totalN, setTotalN] = useState(phone ? 18 : 40)
   const [minCo, setMinCo] = useState(MIN_CO_DEFAULT)
   const [panelOpen, setPanelOpen] = useState(false) // 가이드: 처음엔 접힘
-  const [openSet, setOpenSet] = useState({}) // 손으로 펼치거나 접은 가지 { 말: true | false }. 없으면 위 3개만 펼침
+  const [openSet, setOpenSet] = useState({}) // 손으로 펼치거나 접은 가지 { 말: true | false }. 없으면 칸 높이에 따라 위 0~4개 펼침 (autoN)
   const [hover, setHover] = useState(null)
   const [saveMsg, setSaveMsg] = useState('')
   const [crowdOff, setCrowdOff] = useState(false) // 안내를 닫았으면 이 맵에서는 다시 안 띄움
@@ -661,7 +671,11 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
   const graph = useMemo(() => pickGraph(nodes, branches, edges, branchN, totalN, minCo, extraAll ? extraAll.split('\u0001') : []), [nodes, branches, edges, branchN, totalN, minCo, extraAll])
   // 펼침: 처음엔 모두 접힘 — 「+n」으로 펼침 (11/16 검수: 「맵에 글이 너무 많다」 → 처음엔 검색어 + 1단계 말만 글자, 24개 → 8개 안팎.
   // 예전: 1단계 위 3개를 처음부터 펼침)
-  const isOpen = useCallback((w) => openSet[w] ?? false, [openSet])
+  // 11/23 조장 (가)안: 맵 칸이 세로로 넉넉하면 1단계 위 몇 개 가지는 처음부터 펼침 — 칸 높이 440px 이상 2개 · 560px 이상 3개 · 720px 이상 4개,
+  // 휴대폰 · 낮은 칸은 예전처럼 모두 접힘(11/16 「글이 너무 많다」). 손으로 펼치거나 접은 가지는 그 값이 우선
+  const autoN = phone ? 0 : H >= 720 ? 4 : H >= 560 ? 3 : H >= 440 ? 2 : 0
+  const autoOpen = useMemo(() => new Set(graph.l1.filter((n) => graph.l2.some((c) => c.parent === n.word)).slice(0, autoN).map((n) => n.word)), [graph, autoN])
+  const isOpen = useCallback((w) => openSet[w] ?? autoOpen.has(w), [openSet, autoOpen])
   const hidden = useMemo(() => new Set([...graph.l1, ...graph.l2.filter((n) => n.lv === 2)].filter((n) => !isOpen(n.word)).map((n) => n.word)), [graph, isOpen])
   const minK = phone ? 0.75 : 0.3 // 휴대폰은 0.75배 아래로 줄이지 않음 — 다 안 들어오면 끌어서 봄
   // 힘 계산: 말 · 접힘이 바뀌면 새로. 끝 자리를 미리 계산해 화면을 맞춰 두고, 점들은 가운데서 퍼지며 그 자리로 감
@@ -744,7 +758,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
     const step = (t) => {
       const u = Math.min(1, (t - t0) / 400)
       const e = 1 - (1 - u) ** 3
-      setView({ k: from.k + (to.k - from.k) * e, tx: from.tx + (to.tx - from.tx) * e, ty: from.ty + (to.ty - from.ty) * e })
+      setView({ k: from.k + (to.k - from.k) * e, tx: from.tx + (to.tx - from.tx) * e, ty: from.ty + (to.ty - from.ty) * e, sy: (from.sy ?? 1) + ((to.sy ?? 1) - (from.sy ?? 1)) * e })
       if (u < 1) anim.current = requestAnimationFrame(step)
     }
     anim.current = requestAnimationFrame(step)
@@ -762,7 +776,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
       const my = (e.clientY - r.top) / z
       setView((v) => {
         const k = Math.max(0.3, Math.min(6, v.k * Math.exp(-e.deltaY * 0.0015)))
-        return clampView({ k, tx: mx - ((mx - v.tx) * k) / v.k, ty: my - ((my - v.ty) * k) / v.k }, posRef.current, W, H)
+        return clampView({ ...v, k, tx: mx - ((mx - v.tx) * k) / v.k, ty: my - ((my - v.ty) * k) / v.k }, posRef.current, W, H)
       })
     }
     el.addEventListener('wheel', onWheel, { passive: false })
@@ -778,7 +792,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
       const v = viewRef.current
       const out = [...posRef.current.values()].some((p) => {
         const x = p.x * v.k + v.tx
-        const y = p.y * v.k + v.ty
+        const y = p.y * kyOf(v) + v.ty
         return x < 24 || x > W - 24 || y < 64 || y > H - 48
       })
       if (out) fit()
