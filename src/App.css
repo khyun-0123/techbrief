@@ -3370,35 +3370,6 @@ a.brand:focus-visible {
   font-size: var(--fs-sm);
 }
 
-/* 칩 줄: 왼쪽 이름(무엇을 하는지 작은 글씨) + 오른쪽 칩. 줄바꿈해도 칩끼리 왼쪽이 맞게 */
-.dash-chips {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 12px;
-  align-items: start;
-  padding-top: 12px;
-  border-top: 1px solid var(--tb-color-bg-strong);
-}
-
-.dash-chips-label {
-  display: grid;
-  gap: 2px;
-  padding-top: 5px;
-  font-size: var(--fs-sm);
-  font-weight: 600;
-}
-
-.dash-chips-label small {
-  color: var(--tb-color-text-sub);
-  font-weight: 400;
-}
-
-.dash-chips-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .chip.dash-chip {
   padding: 0 12px;
   cursor: pointer;
@@ -3414,10 +3385,6 @@ a.brand:focus-visible {
 }
 
 @media (max-width: 640px) {
-  .dash-chips {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
 
   .dash-search .search-form {
     flex-wrap: wrap;
@@ -3850,26 +3817,6 @@ a.brand:focus-visible {
 .summary-source-abstract {
   color: var(--tb-color-text);
   font-weight: 600;
-}
-
-/* 대시보드 자료 검색의 칩 줄은 접어 둔다 (11/07 조장) */
-.dash-more summary {
-  width: fit-content;
-  color: var(--tb-color-text-sub);
-  font-size: var(--fs-sm);
-  cursor: pointer;
-}
-
-.dash-more summary:hover {
-  color: var(--tb-color-text);
-}
-
-.dash-more-count {
-  color: var(--tb-color-text-faint);
-}
-
-.dash-more[open] summary {
-  margin-bottom: 4px;
 }
 
 /* ── 선별 폴더 (27 문서 2장) ── */
@@ -5549,18 +5496,10 @@ a.brand:focus-visible {
 .dash-search {
   scroll-margin-top: 72px;
 }
-.dash-search-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
 /* 분석이 펼쳐지면 검색창 아래로 결과가 이어진다 (같은 카드) */
 .ka {
   display: grid;
   gap: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--tb-color-line-soft);
 }
 .ka-head {
   display: flex;
@@ -5698,9 +5637,6 @@ a.brand:focus-visible {
 .ka-help p {
   margin: 6px 0 0;
 }
-.dash-chips-label small {
-  font-size: var(--fs-xs);
-}
 .ka-legend {
   display: inline-flex;
   align-items: center;
@@ -5725,77 +5661,11 @@ a.brand:focus-visible {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px 16px;
 }
-
-/* 대시보드 검색 전 「바로 볼 수 있는 분석」 (11/10): 미리 분석된 키워드 + 단계, 한 줄로 작게 */
-.dash-ready {
-  position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-}
-/* 11/15: 칩 폭을 재는 보이지 않는 줄 (Dashboard.jsx가 2줄에 몇 개 들어가는지 계산) */
-.dash-ready-measure {
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: flex;
-  gap: 8px;
-  width: 0; /* 폭 0 + 넘침 숨김: 안의 칩은 제 폭대로 재지만 페이지를 옆으로 넓히지 않게 */
-  height: 0;
-  overflow: hidden;
-  visibility: hidden;
-  pointer-events: none;
-}
-.dash-ready-measure > * {
-  flex: none;
-}
-.dash-ready-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.dash-ready-item {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 12px;
-  border: 1px solid var(--tb-color-line);
-  border-radius: var(--tb-radius-full);
-  background: var(--tb-color-surface);
-  color: var(--tb-color-text);
-  font: inherit;
-  font-size: var(--fs-sm);
-  cursor: pointer;
-}
-.dash-ready-item:hover,
-.dash-ready-item:focus-visible {
-  border-color: var(--tb-color-text);
-}
-.dash-ready-stage {
-  color: var(--tb-color-text-sub);
-  white-space: nowrap;
-}
 /* 휴대폰: 6줄(309px)로 쌓이던 칩을 한 줄로, 옆으로 밀어 봄 */
 @media (max-width: 640px) {
-  .dash-ready-list {
-    flex: 1 1 100%;
-    flex-wrap: nowrap;
-    min-width: 0;
-    width: 100%;
-    overflow-x: auto;
-    scrollbar-width: none;
-    padding-bottom: 2px;
-  }
-  .dash-ready-list > * {
-    flex: none;
-  }
   /* 칸 폭이 칩 줄 길이에 끌려 넓어지지 않게 (검색 카드는 grid, 기본 칸 폭이 내용 폭) */
   .dash-search {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .dash-ready {
-    min-width: 0;
   }
 }
 /* 키워드 분석 오른쪽: 시계열 칸을 조금 넓게, 한눈에 · 사실 칸 */
@@ -5852,120 +5722,6 @@ a.brand:focus-visible {
   }
 }
 
-/* 검색 전 「분석하면 이렇게 보여요」 (11/10): 실제 예시 하나로 4칸 축소판, 한 줄 (좁으면 2×2) */
-.kp {
-  display: grid;
-  gap: 8px;
-  width: 100%;
-  padding: 12px 14px;
-  border: 1px solid var(--tb-color-line-soft);
-  border-radius: var(--tb-radius-input, 8px);
-  background: var(--tb-color-bg);
-  color: var(--tb-color-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.kp:hover,
-.kp:focus-visible {
-  border-color: var(--tb-color-text-sub);
-}
-.kp-title {
-  font-size: var(--fs-sm);
-  color: var(--tb-color-text-sub);
-}
-.kp-title b {
-  color: var(--tb-color-text);
-}
-.kp-open {
-  margin-left: 6px;
-  color: var(--tb-color-text);
-  font-weight: 600;
-}
-.kp-steps {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-@media (max-width: 900px) {
-  .kp-steps {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-.kp-step {
-  display: grid;
-  align-content: start;
-  gap: 4px;
-  min-width: 0;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: var(--tb-color-surface);
-}
-.kp-label {
-  font-size: var(--fs-sm);
-  font-weight: 600;
-}
-.kp-text {
-  overflow: hidden;
-  color: var(--tb-color-text-sub);
-  font-size: var(--fs-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.kp-ai {
-  white-space: normal;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  color: var(--tb-color-text);
-}
-.kp-badge {
-  justify-self: start;
-  font-size: var(--fs-sm);
-}
-.kp-map,
-.kp-line {
-  width: 100%;
-  height: 88px; /* 11/17 (39 문서 C11): 도식을 크게 (예전 120×36) */
-}
-.kp-map text {
-  fill: var(--tb-color-text-sub);
-  font-size: 11px;
-}
-.kp-map text.center-label {
-  fill: var(--tb-color-text);
-  font-size: 12px;
-  font-weight: 700;
-}
-.kp-line .area {
-  fill: var(--tb-color-bg-strong);
-  stroke: none;
-}
-.kp-line circle {
-  fill: var(--tb-color-text);
-}
-.kp-map line {
-  stroke: var(--tb-color-line);
-}
-.kp-map circle {
-  fill: var(--tb-color-bg-strong);
-  stroke: var(--tb-color-text-sub);
-}
-.kp-map circle.firm {
-  fill: var(--tb-color-surface);
-  stroke-dasharray: 2 2;
-}
-.kp-map circle.center {
-  fill: var(--tb-color-text);
-  stroke: none;
-}
-.kp-line path {
-  fill: none;
-  stroke: var(--tb-color-text);
-  stroke-width: 2;
-  stroke-linejoin: round;
-}
-
 /* 범위 고르기 (11/10, KeywordAnalysis.jsx): 일반 노드 · 고른 노드 · 좁게/넓게 · 고른 범위 칩 */
 .ka-node.ka-company rect {
   fill: var(--tb-color-surface);
@@ -6019,22 +5775,6 @@ a.brand:focus-visible {
   background: var(--tb-color-surface);
   color: var(--tb-color-text);
   font-weight: 600;
-}
-.ka-picked {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-.ka-picked-label {
-  color: var(--tb-color-text-sub);
-  font-size: var(--fs-sm);
-}
-.ka-picked .chip {
-  padding: 0 10px;
-  font: inherit;
-  font-size: var(--fs-sm);
-  cursor: pointer;
 }
 /* 자료 현황 범위 칩 (11/10) */
 .scope-bar {
@@ -6226,15 +5966,8 @@ a.brand:focus-visible {
 .tr-wait li {
   padding: 8px 0;
 }
-.dash-ready-item.is-wait {
-  height: 34px;
-  border-color: transparent;
-  background: var(--tb-color-bg-strong);
-  animation: pulse 1.6s ease-in-out infinite;
-}
 @media (prefers-reduced-motion: reduce) {
-  .km-wait-dot,
-  .dash-ready-item.is-wait {
+  .km-wait-dot {
     animation: none;
   }
 }
@@ -9513,6 +9246,287 @@ a.dash-home-t:hover,
 /* 11/21 팀 회의: 대시보드는 화면 제목 · 설명을 숨김 → 남은 도구(수집 수 · 자료 현황으로)는 예전처럼 오른쪽 */
 .page-header.is-bare {
   justify-content: flex-end;
+}
+
+/* ══ 11/22 팀 회의: 위 한 줄(제목 · 마지막 수집 · 이동 단추)을 없애고 그 자리에 검색창 ══
+   대시보드 · 자료 현황은 검색창이 맨 위 한 줄, 왼쪽 막대는 그 줄과 위가 맞는다. 내 보고서 · 선별·요약은 제목 줄 없이 바로 카드 */
+
+/* 대시보드: 검색창 + 내 검색어 칩 한 줄 (칩은 들어가는 만큼, Dashboard.jsx가 잼) */
+.dash-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tb-space-2) var(--tb-space-4);
+}
+.dash-searchbar {
+  flex: 1 1 360px;
+  max-width: 640px;
+}
+.dash-searchbar input {
+  flex: 1;
+  min-width: 0;
+}
+.dash-mine {
+  position: relative;
+  display: flex;
+  flex: 1 1 280px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+.dash-mine.is-all {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+.dash-mine-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  gap: 6px;
+  visibility: hidden;
+  pointer-events: none;
+}
+.dash-mine-measure > * {
+  flex: none;
+}
+.dash-mine-label {
+  flex: none;
+  margin-right: 4px;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.dash-mine > .chip {
+  flex: none;
+}
+.dash-mine-more {
+  flex: none;
+  white-space: nowrap;
+}
+.chip.dash-chip.on {
+  border-color: var(--tb-color-text);
+  font-weight: 700;
+}
+/* 첫 화면 분석이 요즘 뜨는 기술 1위를 저절로 고른 것일 때 「다른 키워드로 검색해 보세요」 */
+.ka-auto-hint {
+  margin-left: var(--tb-space-3);
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-sm);
+}
+/* 요즘 뜨는 기술: 지금 분석 중인 줄 */
+.tr-list li.is-on {
+  background: var(--tb-color-bg-strong);
+}
+.tr-list li.is-on .tr-name {
+  font-weight: 800;
+}
+
+/* 기술 시계열 그래프 세 칸은 늘 한 줄 (11/22: 두 칸 + 아래 한 칸이면 배치가 어색) — QHD · FHD · 노트북 · 화면 절반까지.
+   칸이 좁아지면 제목과 값을 위아래로 */
+.ka-sparks {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--tb-space-3);
+}
+@container (max-width: 460px) {
+  .ka-sparks {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--tb-space-2);
+  }
+}
+.ka-sparks .trend-spark figcaption {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+.ka-sparks .trend-spark-title {
+  overflow: hidden;
+  max-width: 100%;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ka-sparks .trend-source {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* 막대그래프 (Spark bars): 해마다 막대, 마지막 · 마우스 올린 해만 진하게. 막대 사이 2px, 위 모서리 둥글게 */
+.trend-bars {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 64px;
+  border-bottom: 1px solid var(--tb-color-line);
+  cursor: default;
+}
+.trend-bar {
+  display: flex;
+  flex: 1 1 0;
+  align-items: flex-end;
+  min-width: 0;
+}
+.trend-bar > span {
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  background: color-mix(in srgb, var(--tb-color-text) 28%, transparent);
+  transition: background-color 0.12s;
+}
+.trend-bar.is-on > span {
+  background: var(--tb-color-text);
+}
+.trend-bars-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: reduce) {
+  .trend-bar > span {
+    transition: none;
+  }
+}
+
+/* 자료 현황 (11/22): 검색 줄이 맨 위. 넓은 화면은 왼쪽 검색어 막대가 검색 줄과 위가 맞고,
+   1399 이하(검색어 막대가 가로 한 줄로 올라감)는 검색 줄 → 검색어 줄 → 목록 */
+.collect-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tb-space-2) var(--tb-space-3);
+  min-width: 0;
+}
+.collect-top .search-form {
+  flex: 1 1 360px;
+  max-width: 720px;
+}
+.collect-top .search-form input {
+  flex: 1;
+  min-width: 0;
+}
+.collect-top-actions {
+  display: flex;
+  gap: var(--tb-space-2);
+  margin-left: auto;
+}
+.collect-page .content.collect-grid {
+  margin-top: 0;
+  grid-template-areas:
+    'rail top top'
+    'rail list settings';
+  grid-template-rows: auto 1fr;
+}
+.collect-page .content.collect-grid.has-add {
+  grid-template-areas:
+    'rail top top'
+    'rail add add'
+    'rail list settings';
+  grid-template-rows: auto auto 1fr;
+}
+.collect-page .content.collect-grid.no-settings {
+  grid-template-areas:
+    'rail top'
+    'rail list';
+}
+.collect-page .content.collect-grid.no-settings.has-add {
+  grid-template-areas:
+    'rail top'
+    'rail add'
+    'rail list';
+}
+.collect-grid > .collect-top {
+  grid-area: top;
+}
+.collect-grid > .add-material {
+  grid-area: add;
+  margin: 0; /* 간격은 칸 사이 간격(--tb-card-gap)으로 */
+}
+.collect-grid > .fav-rail {
+  grid-area: rail;
+}
+.collect-grid > .list-panel {
+  grid-area: list;
+}
+.collect-grid > .settings {
+  grid-area: settings;
+}
+@media (max-width: 1399px) {
+  .collect-page .content.collect-grid {
+    grid-template-areas:
+      'top top'
+      'rail rail'
+      'list settings';
+    grid-template-rows: auto auto 1fr;
+  }
+  .collect-page .content.collect-grid.has-add {
+    grid-template-areas:
+      'top top'
+      'add add'
+      'rail rail'
+      'list settings';
+    grid-template-rows: auto auto auto 1fr;
+  }
+  .collect-page .content.collect-grid.no-settings {
+    grid-template-areas:
+      'top'
+      'rail'
+      'list';
+  }
+  .collect-page .content.collect-grid.no-settings.has-add {
+    grid-template-areas:
+      'top'
+      'add'
+      'rail'
+      'list';
+  }
+}
+/* 화면 틀(폭 901 이상 · 높이 600 이상): 목록 줄만 남은 높이를 채운다 */
+@media (min-width: 901px) and (min-height: 600px) {
+  .collect-page > .content.collect-grid {
+    margin-top: 0;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .collect-page > .content.collect-grid.has-add {
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  .collect-grid > .add-material {
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+}
+@media (min-width: 901px) and (max-width: 1399px) and (min-height: 600px) {
+  .collect-page > .content.collect-grid {
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  .collect-page > .content.collect-grid.has-add {
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+  }
+}
+
+/* 선별·요약 (11/22): 제목 줄 없이 바로 카드. 「+ 자료 올리기」는 「선별 자료」 제목 옆, 정렬은 오른쪽 끝 */
+.select-list-head .btn-compact {
+  height: 32px;
+  padding: 0 12px;
+  font-size: var(--fs-sm);
+}
+.select-list-head h2 + .btn-compact {
+  margin-right: auto;
+}
+.select-page > .add-material {
+  margin: 0;
+}
+.select-page > .add-material + *,
+.select-page > .select-pane-switch + * {
+  margin-top: var(--tb-card-gap);
+}
+.select-page > .select-pane-switch {
+  align-self: flex-start;
 }
 
 /* 대표 특허 3건 (11/22, KeywordAnalysis.jsx): 누르면 초록 */

@@ -1,13 +1,14 @@
 // 대시보드 (11/07 팀 회의, 11/10 다시 배치): 첫 화면
-// - 처음: 「키워드 분석」 검색창 + 바로 아래 「요즘 뜨는 기술」(참고해서 고르도록). 분석 칸은 비어 있어 작다
-// - 찾거나 기술을 누르면: 같은 패널 안에서 분석이 펼쳐진다 (연관 키워드 맵 + 기술 시계열, KeywordAnalysis.jsx). 검색창과 분석을 한 카드로 묶어 겹치지 않게
-//   「자료 찾기 →」(기간과 함께)를 눌러야 자료 현황에서 뉴스 · 논문을 찾는다. 「닫기」로 처음 모양으로
-// - 검색어 칩은 두 묶음 (11/16 조장): 「자동 수집 키워드」(공용, 예전 추천 검색어를 합침) · 「즐겨찾기 · 최근 검색어」(내 것, IP별).
-//   어느 칩이든 누르면 그 말로 분석한다 (예전: 자동 수집 키워드는 자료 현황으로 넘어갔음 — 대시보드는 분석하는 곳. 모은 기사는 「자료 찾기 →」)
+// - 11/22 팀 회의: 위 한 줄(마지막 수집 · 「자료 현황으로 →」)을 없애고 그 자리에 검색창. 「바로 볼 수 있는 분석」 · 「분석하면 이렇게 보여요」 예시는 뺌
+//   (거기 든 말은 요즘 뜨는 기술 · 관리자가 등록한 키워드라 왼쪽 막대 · 팀 합의로 이미 보임)
+// - 첫 화면은 늘 분석이 펼쳐진 모양: 요즘 뜨는 기술 1위를 저절로 골라 분석한다 (옆에 「다른 키워드로 검색해 보세요」 회색 안내).
+//   저절로 고른 말은 최근 검색어 · 보고서 주제 키워드(LAST_ANALYZED_KEY)에 남기지 않는다 — 사람이 고른 말만
+//   요즘 뜨는 기술을 못 받으면 예전 첫 화면(최근 중요 자료 · 최근 내 보고서, DashHome.jsx)
+// - 검색창 옆 칩은 내 검색어(★ 즐겨찾기 · 최근 검색어, IP별)만. 한 줄에 들어가는 만큼, 남으면 「+n개 더」.
+//   자동 수집 키워드 칩은 뺌 (관리자가 등록한 키워드는 팀 합의라 모두 앎, 11/22)
 // - 예전 「추적 중인 키워드 추이」는 11/10 조장 결정으로 뺐다 (KeywordTrends.jsx는 그래프 부품 Spark만 씀)
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { fetchReadyTimelines } from './api.js'
-import KeywordAnalysis, { AnalysisPreview } from './KeywordAnalysis.jsx'
+import KeywordAnalysis from './KeywordAnalysis.jsx'
 import DashHome from './DashHome.jsx'
 import { consumeOpenRequest, useOpenRequest, useStoryJobs } from './storyJobs.js'
 import TechTrends from './TechTrends.jsx'
@@ -18,32 +19,17 @@ import { LAST_ANALYZED_KEY } from './utils.js'
 // 칩에 보이는 이름 (11/14 D6): 저장된 검색어가 「ai 안경」 · 「tandem oled」처럼 소문자라 표 · 카드의 「AI 안경」과 달라 보였음
 // → 4글자 이하 영문 낱말(AI · OLED · LED · TFT · QD)만 대문자로. 누르면 원래 말 그대로 분석한다
 const showTerm = (q) => String(q).replace(/\b[a-z]{2,4}\b/g, (w) => w.toUpperCase())
-// 「바로 볼 수 있는 분석」 처음에 보이는 수 (11/14 D5: 8개 고정) → 11/15: 2줄에 들어가는 만큼, 남으면 마지막 자리에 「+n개 더」
-// (FHD에서 8개가 7 + 1로 끊기고, QHD는 12개가 다 들어가는데 4개를 숨겼음). 휴대폰은 한 줄로 두고 옆으로 밀어 봄
-const READY_SHOWN = 8 // 아직 못 쟀을 때
-const READY_LINES = 1 // 11/17 조장: 한 줄만 (넘치면 「+n개 더」)
+const MINE_MAX = 12 // 내 검색어 칩 최대 (즐겨찾기 + 최근)
 
-// 칩 폭을 차례로 줄에 담아 lines줄 안에 몇 개 들어가는지 (다 못 담으면 「+n개 더」 자리를 남김)
-function fitInLines(widths, moreW, avail, gap, lines) {
-  const linesOf = (ws) => {
-    let n = 1
-    let x = 0
-    for (const w of ws) {
-      if (x === 0) x = w
-      else if (x + gap + w <= avail) x += gap + w
-      else {
-        n += 1
-        x = w
-      }
-    }
-    return n
-  }
-  if (linesOf(widths) <= lines) return widths.length
-  for (let k = widths.length - 1; k > 0; k -= 1) if (linesOf([...widths.slice(0, k), moreW]) <= lines) return k
-  return 1
+// 칩 폭을 차례로 한 줄에 담아 몇 개 들어가는지 (다 못 담으면 「+n개 더」 자리를 남김)
+function fitInLine(widths, moreW, avail, gap) {
+  const total = (ws) => ws.reduce((a, w) => a + w, 0) + gap * Math.max(0, ws.length - 1)
+  if (total(widths) <= avail) return widths.length
+  for (let k = widths.length - 1; k > 0; k -= 1) if (total([...widths.slice(0, k), moreW]) <= avail) return k
+  return 0
 }
 
-function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, onGoReports, stats, keywords, favorites, recent, onSearch, onScopeSearch, onAutoReport, onGoCollect, onRemember }) {
+function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, onGoReports, favorites, recent, onSearch, onScopeSearch, onAutoReport, onGoCollect, onRemember }) {
   // 보고서의 「분석 열기 ↗」 링크(/?analyze=키워드, 11/17)로 들어오면 그 키워드 분석을 바로 연다
   const [linked] = useState(() => {
     try {
@@ -53,21 +39,24 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     }
   })
   const [text, setText] = useState(linked ?? '')
-  const [focus, setFocus] = useState(linked) // 분석 중인 말 (없으면 검색창 + 미리 분석된 키워드 + 요즘 뜨는 기술)
+  const [focus, setFocus] = useState(linked) // 분석 중인 말
+  const [auto, setAuto] = useState(false) // 지금 분석이 요즘 뜨는 기술 1위를 저절로 고른 것인지 (11/22)
+  const [firstTrend, setFirstTrend] = useState(null) // 요즘 뜨는 기술 1위 (TrendRail이 받으면 알려 줌)
+  const [trendFailed, setTrendFailed] = useState(false)
   useEffect(() => {
     if (linked) window.history.replaceState(null, '', window.location.pathname) // 새로고침해도 다시 열리지 않게 주소에서 뺀다
   }, [linked])
-  const [ready, setReady] = useState([]) // 미리 분석해 둔 말 (11/10): 검색 전에도 분석이 어떤 모양인지 보이게
-  const [readyLoading, setReadyLoading] = useState(true) // 11/17: 받는 동안 칩 자리를 그려 둔다
-  const [allReady, setAllReady] = useState(false)
-  // 「분석하면 이렇게 보여요 · 예시」 (11/15 조장): 펼친 채로 아래 「최근 중요 기사」가 4건 이상 보이면 펼침, 그보다 적으면 접음.
-  // 창 크기를 바꾸면 다시 정하고, 사람이 직접 펴거나 접으면 그때부터는 손대지 않는다. 화면 틀 밖(휴대폰)은 11/14 결정대로 펼침
-  const [exampleOpen, setExampleOpen] = useState(true)
-  const exampleRef = useRef(null)
-  const readyBoxRef = useRef(null)
-  const readyMeasureRef = useRef(null)
-  const [readyFit, setReadyFit] = useState(READY_SHOWN)
-  const exampleManual = useRef(false)
+  // 첫 화면: 사람이 고른 말이 없으면 요즘 뜨는 기술 1위로 (11/22). TrendRail이 받은 뒤 한 번 부른다 — 그 사이 사람이 찾았으면 그대로
+  const focusRef = useRef(focus)
+  focusRef.current = focus
+  const onFirstTrend = (name) => {
+    if (!name) return setTrendFailed(true)
+    setFirstTrend(name)
+    if (!focusRef.current) {
+      setFocus(name)
+      setAuto(true)
+    }
+  }
   // 요즘 뜨는 기술 (11/14 조장): 왼쪽 작은 막대 + 「펼쳐 보기」로 왼쪽에서 나오는 판, 자사 위협 · 기회 설명 창
   const [drawer, setDrawer] = useState(false)
   const [drawerClosing, setDrawerClosing] = useState(false) // 11/17: 닫을 때도 미끄러져 들어가게 (끝나면 drawer를 끔)
@@ -92,51 +81,16 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     return () => window.removeEventListener('keydown', esc)
   }, [drawer, verdictView, closeDrawer])
   const openVerdict = (term, info) => setVerdictView({ term, info })
-  // 대시보드 탭을 한 번 더 누르거나 로고를 누르면 첫 화면으로 (11/15): 분석 · 펼친 목록 · 판정 창을 닫는다
+  // 대시보드 탭을 한 번 더 누르거나 로고를 누르면 첫 화면으로 (11/15): 요즘 뜨는 기술 1위 분석 · 펼친 목록 · 판정 창을 닫는다
   const firstReset = useRef(resetKey)
   useEffect(() => {
     if (resetKey === firstReset.current) return
-    setFocus(null)
+    setFocus(firstTrend)
+    setAuto(Boolean(firstTrend))
     setText('')
     setDrawer(false)
     setVerdictView(null)
-  }, [resetKey])
-  // 「바로 볼 수 있는 분석」 칩: 보이지 않는 측정 줄에서 칩 폭을 재서 2줄에 담는다 (창 폭이 바뀌면 다시)
-  useLayoutEffect(() => {
-    if (focus) return undefined
-    const box = readyBoxRef.current
-    const meas = readyMeasureRef.current
-    if (!box || !meas) return undefined
-    const decide = () => {
-      const list = box.querySelector('.dash-ready-list')
-      if (list && getComputedStyle(list).flexWrap === 'nowrap') return setReadyFit(ready.length) // 휴대폰: 한 줄 옆으로 밀기
-      const [label, ...rest] = [...meas.children]
-      const more = rest.pop()
-      const widths = rest.map((e) => e.offsetWidth)
-      const avail = box.clientWidth
-      const gap = 8
-      const total = widths.reduce((a, w) => a + w, 0) + gap * Math.max(0, widths.length - 1)
-      // 다 들어가면 제목 옆 한 줄, 아니면 제목 아래 전체 폭으로 2줄
-      if (label.offsetWidth + 12 + total <= avail) return setReadyFit(widths.length)
-      setReadyFit(fitInLines(widths, more.offsetWidth, avail, gap, READY_LINES))
-    }
-    decide()
-    const ro = new ResizeObserver(decide)
-    ro.observe(box)
-    return () => ro.disconnect()
-  }, [focus, ready])
-  // 11/17 조장 (39 문서 C11): 「분석하면 이렇게 보여요」 도식을 늘 펼쳐 크게 — 아래 최근 중요 자료 · 내 보고서는 한 줄짜리로 줄였다.
-  // 예전(11/15): 아래 목록이 4건보다 적게 보이면 예시를 자동으로 접었음
-  useEffect(() => {
-    let alive = true
-    fetchReadyTimelines()
-      .then((d) => alive && setReady(d.items ?? []))
-      .catch(() => {})
-      .finally(() => alive && setReadyLoading(false))
-    return () => {
-      alive = false
-    }
-  }, [])
+  }, [resetKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const panelRef = useRef(null)
   // 진행 창 「분석 보기」(11/11): 다른 화면에서 눌러도 대시보드로 와서 그 말을 연다
   const openRequest = useOpenRequest()
@@ -144,7 +98,7 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     const r = openRequest && consumeOpenRequest()
     if (r) analyze(r.query)
   }, [openRequest]) // eslint-disable-line react-hooks/exhaustive-deps
-  // 흐름 정리가 끝났는데 아직 안 본 말 · 정리 중인 말: 칩에 표시
+  // 흐름 정리가 끝났는데 아직 안 본 말: 칩에 표시
   const storyJobs = useStoryJobs()
   const unseen = new Set(storyJobs.filter((j) => j.unseen).map((j) => j.query))
   const mark = (q) =>
@@ -154,9 +108,10 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
       </span>
     ) : null
 
-  // 분석할 말을 바꾸고 그 자리로 (찾은 말은 최근 검색어에 남긴다)
+  // 분석할 말을 바꾸고 그 자리로 (사람이 고른 말은 최근 검색어에 남긴다)
   function analyze(q) {
     setFocus(q)
+    setAuto(false)
     setText(q)
     // 11/12: 마지막으로 분석한 키워드 — 보고서를 만들 때 그 분석 묶음이 자동으로 근거에 들어간다 (ReportComposer, server/keywordBundle.js)
     try {
@@ -165,174 +120,111 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
       // 저장소를 못 쓰면 보고서에서 주제 키워드를 직접 고른다
     }
     onRemember?.(q)
-    requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
   }
-  function close() {
-    setFocus(null)
-    setText('')
-  }
-  // 내 검색어: ★ 즐겨찾기 먼저, 그 뒤 최근 검색어 (자동 수집 키워드 · 즐겨찾기와 겹치는 말은 한 번만)
-  const recentOnly = recent.filter((q) => !favorites.includes(q) && !keywords.includes(q)).slice(0, 8)
-  const mine = [...favorites.map((q) => ({ q, star: true })), ...recentOnly.map((q) => ({ q, star: false }))]
-  const chipCount = keywords.length + mine.length
+  // 내 검색어: ★ 즐겨찾기 먼저, 그 뒤 최근 검색어 (겹치는 말은 한 번만)
+  const mine = [...favorites.map((q) => ({ q, star: true })), ...recent.filter((q) => !favorites.includes(q)).map((q) => ({ q, star: false }))].slice(0, MINE_MAX)
+  // 한 줄에 들어가는 만큼만 (11/15 「바로 볼 수 있는 분석」과 같은 방식): 보이지 않는 측정 줄에서 칩 폭을 재고, 창 폭이 바뀌면 다시
+  const chipsRef = useRef(null)
+  const measureRef = useRef(null)
+  const [fit, setFit] = useState(MINE_MAX)
+  const [allChips, setAllChips] = useState(false)
+  const mineKey = mine.map((m) => m.q).join('|')
+  useLayoutEffect(() => {
+    const box = chipsRef.current
+    const meas = measureRef.current
+    if (!box || !meas) return undefined
+    const decide = () => {
+      const [label, ...rest] = [...meas.children]
+      const more = rest.pop()
+      const gap = 6
+      setFit(fitInLine(rest.map((e) => e.offsetWidth), more.offsetWidth, box.clientWidth - label.offsetWidth - 10, gap))
+    }
+    decide()
+    const ro = new ResizeObserver(decide)
+    ro.observe(box)
+    return () => ro.disconnect()
+  }, [mineKey])
 
   function submit(e) {
     e.preventDefault()
     const q = text.trim()
     if (q) analyze(q)
   }
+  const chip = ({ q, star }) => (
+    <>
+      {star && <span aria-label="즐겨찾기">★ </span>}
+      {showTerm(q)}
+      {mark(q)}
+    </>
+  )
+  const home = !focus && trendFailed // 요즘 뜨는 기술을 못 받았을 때만 예전 첫 화면
 
   return (
-    <main className={focus ? 'page page-wide dash-page' : 'page page-wide dash-page is-home'}>
-      <header className="page-header with-actions is-bare">
-        {/* 11/21 팀 회의: 화면의 제목 · 설명 문구 없앰 (화면 읽기 프로그램용 제목만 숨겨 둠) */}
-        <h1 className="sr-only">대시보드</h1>
-        <div className="header-actions">
-          <span className="header-count">{stats.collectedLabel}</span>
-          {/* 11/17 (39 문서 C6): 분석 중에는 숨김 — 같은 곳으로 가는 진한 단추(「자료 고르기 →」)가 분석 칸에 있어 둘이 됐음 */}
-          {!focus && (
-            <button type="button" className="btn primary" onClick={onGoCollect}>
-              자료 현황으로 →
-            </button>
-          )}
-        </div>
-      </header>
-
+    <main className={home ? 'page page-wide dash-page is-home' : 'page page-wide dash-page'}>
+      {/* 11/21 팀 회의: 화면의 제목 · 설명 문구 없앰 (화면 읽기 프로그램용 제목만 숨겨 둠) */}
+      <h1 className="sr-only">대시보드</h1>
       <div className="dash-layout">
-        <TrendRail onPick={analyze} onOpen={() => setDrawer(true)} onVerdicts={setVerdictData} onVerdict={openVerdict} />
-      <div className="dash-main">
-      <section ref={panelRef} className={focus ? 'panel dash-search is-open' : 'panel dash-search'} aria-labelledby="dash-search-title">
-        <div className="dash-search-head">
-          <h2 id="dash-search-title" className="sr-only">
-            키워드 분석
-          </h2>
-          {focus && (
-            <button type="button" className="btn" onClick={close}>
-              닫기
-            </button>
-          )}
-        </div>
-        <form className="search-form" onSubmit={submit}>
-          <input
-            type="search"
-            placeholder="찾을 키워드·제목 (예: 마이크로LED, 투명 OLED)"
-            aria-label="분석할 키워드"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
-          <button type="submit" className="btn primary" disabled={!text.trim() || text.trim() === focus}>
-            분석
-          </button>
-        </form>
-        {!focus && (
-          <>
-            {/* 11/14 D5: 눈 갈 곳은 「바로 볼 수 있는 분석」 칩 줄 하나. 분석 예시(11/10)는 아래 접힌 줄로 (자동 수집 키워드 목록과 같은 모양) */}
-            {readyLoading && ready.length === 0 && (
-              <div className="dash-ready" aria-label="바로 볼 수 있는 분석을 불러오는 중">
-                <span className="dash-chips-label">바로 볼 수 있는 분석</span>
-                <div className="dash-ready-list" aria-hidden="true">
-                  {[96, 120, 140, 104, 88].map((w, i) => (
-                    <span key={i} className="dash-ready-item is-wait" style={{ width: w }} />
-                  ))}
-                </div>
-              </div>
-            )}
-            {ready.length > 0 && (
-              <div ref={readyBoxRef} className="dash-ready" aria-label="미리 분석된 키워드">
-                <span className="dash-chips-label">바로 볼 수 있는 분석</span>
+        <TrendRail
+          active={focus}
+          onFirst={onFirstTrend}
+          onPick={analyze}
+          onOpen={() => setDrawer(true)}
+          onVerdicts={setVerdictData}
+          onVerdict={openVerdict}
+        />
+        <div className="dash-main">
+          {/* 11/22 팀 회의: 위 한 줄(마지막 수집 · 「자료 현황으로 →」) 자리에 검색창 + 내 검색어 한 줄 */}
+          <div className="dash-top">
+            <form className="search-form dash-searchbar" onSubmit={submit} role="search" aria-label="키워드 분석">
+              <input
+                type="search"
+                placeholder={auto ? '다른 키워드로 검색해 보세요' : '찾을 키워드 (예: 마이크로LED, 투명 OLED)'}
+                aria-label="분석할 키워드"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+              />
+              <button type="submit" className="btn primary" disabled={!text.trim() || text.trim() === focus}>
+                분석
+              </button>
+            </form>
+            {mine.length > 0 && (
+              <div ref={chipsRef} className={allChips ? 'dash-mine is-all' : 'dash-mine'}>
                 {/* 측정용 (보이지 않음): 칩마다 폭을 재서 몇 개 보일지 정한다 */}
-                <div ref={readyMeasureRef} className="dash-ready-measure" aria-hidden="true">
-                  <span className="dash-chips-label">바로 볼 수 있는 분석</span>
-                  {ready.map((r) => (
-                    <span key={r.query} className="dash-ready-item">
-                      <b>{showTerm(r.query)}</b>
-                      {r.stage && <span className="dash-ready-stage">{r.stage}</span>}
-                      {mark(r.query)}
+                <div ref={measureRef} className="dash-mine-measure" aria-hidden="true">
+                  <span className="dash-mine-label">내 검색어</span>
+                  {mine.map((m) => (
+                    <span key={m.q} className="chip dash-chip">
+                      {chip(m)}
                     </span>
                   ))}
-                  <span className="btn-text dash-ready-more">+{ready.length}개 더</span>
+                  <span className="btn-text dash-mine-more">+{mine.length}개 더</span>
                 </div>
-                <div className="dash-ready-list">
-                  {(allReady ? ready : ready.slice(0, readyFit)).map((r) => (
-                    <button key={r.query} type="button" className="dash-ready-item" onClick={() => analyze(r.query)} title={`${r.from.join(' · ')}${r.growth ? ` · 논문 ${r.growth}배` : ''}${r.story ? ' · AI 정리 있음' : ''}`}>
-                      <b>{showTerm(r.query)}</b>
-                      {r.stage && <span className="dash-ready-stage">{r.stage}</span>}
-                      {mark(r.query)}
-                    </button>
-                  ))}
-                  {ready.length > readyFit && (
-                    <button type="button" className="btn-text dash-ready-more" aria-expanded={allReady} onClick={() => setAllReady((v) => !v)}>
-                      {allReady ? '접기' : `+${ready.length - readyFit}개 더`}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-            {/* 11/14 조장: 예시는 처음부터 펼쳐 둠. 11/15 조장: 아래 「최근 중요 기사」가 4건보다 적게 보이면 접는다 (위 exampleOpen) */}
-            <details
-              ref={exampleRef}
-              className="dash-more"
-              open={exampleOpen}
-              onToggle={(e) => {
-                if (e.currentTarget.open === exampleOpen) return
-                exampleManual.current = true
-                setExampleOpen(e.currentTarget.open)
-              }}
-            >
-              <summary>분석하면 이렇게 보여요 · 예시</summary>
-              {/* 예시: AI 정리까지 있는 미리 분석 중 흐름이 잘 보이는 것(「연구 지속」이 아닌 단계)을 먼저 */}
-              <AnalysisPreview example={(ready.find((r) => r.story && r.stage && r.stage !== '연구 지속') ?? ready.find((r) => r.story))?.query ?? null} onOpen={analyze} />
-            </details>
-          </>
-        )}
-
-        {chipCount > 0 && (
-          <details className="dash-more">
-            <summary>
-              자동 수집 키워드 · 즐겨찾기 · 최근 검색어 <span className="dash-more-count">{chipCount}개</span>
-              {[...keywords, ...mine.map((m) => m.q)].some((k) => unseen.has(k)) && mark([...unseen][0])}
-            </summary>
-            {keywords.length > 0 && (
-              <div className="dash-chips">
-                <span className="dash-chips-label">
-                  자동 수집 키워드
-                  <small>모두에게 보이는 추천</small>
+                <span className="dash-mine-label" title="★ 즐겨찾기 · 최근 검색어 (나만 보여요)">
+                  내 검색어
                 </span>
-                <div className="dash-chips-list">
-                  {keywords.map((k) => (
-                    <button key={k} type="button" className="chip dash-chip" onClick={() => analyze(k)} title={`「${k}」 분석 (자동으로 모으는 키워드)`}>
-                      {showTerm(k)}
-                      {mark(k)}
-                    </button>
-                  ))}
-                </div>
+                {(allChips ? mine : mine.slice(0, fit)).map((m) => (
+                  <button key={m.q} type="button" className={m.q === focus ? 'chip dash-chip on' : 'chip dash-chip'} onClick={() => analyze(m.q)} title={`「${m.q}」 분석${m.star ? ' (즐겨찾기)' : ' (최근 검색어)'}`}>
+                    {chip(m)}
+                  </button>
+                ))}
+                {mine.length > fit && (
+                  <button type="button" className="btn-text dash-mine-more" aria-expanded={allChips} onClick={() => setAllChips((v) => !v)}>
+                    {allChips ? '접기' : `+${mine.length - fit}개 더`}
+                  </button>
+                )}
               </div>
             )}
-            {mine.length > 0 && (
-              <div className="dash-chips">
-                <span className="dash-chips-label">
-                  즐겨찾기 · 최근 검색어
-                  <small>나만 보여요</small>
-                </span>
-                <div className="dash-chips-list">
-                  {mine.map(({ q, star }) => (
-                    <button key={q} type="button" className="chip dash-chip" onClick={() => analyze(q)} title={`「${q}」 분석${star ? ' (즐겨찾기)' : ''}`}>
-                      {star && <span aria-label="즐겨찾기">★ </span>}
-                      {showTerm(q)}
-                      {mark(q)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </details>
-        )}
-        {/* key: 키워드가 바뀌면 새로 그린다 (고른 범위 · 받은 값 초기화) */}
-        {focus && <KeywordAnalysis key={focus} keyword={focus} onSearch={onSearch} onScopeSearch={onScopeSearch} onAutoReport={onAutoReport} />}
-      </section>
-      {/* 첫 화면(분석 전)에만: 최근 중요 기사 · 최근 내 보고서 (11/15 시안 A) */}
-      {!focus && <DashHome issues={homeIssues} reports={reports} onOpenReport={onOpenReport} onGoReports={onGoReports} onGoCollect={onGoCollect} />}
-      </div>
+          </div>
+          {focus && (
+            <section ref={panelRef} className="panel dash-search is-open" aria-label={`「${focus}」 키워드 분석`}>
+              {/* key: 키워드가 바뀌면 새로 그린다 (고른 범위 · 받은 값 초기화) */}
+              <KeywordAnalysis key={focus} keyword={focus} autoNote={auto ? '요즘 뜨는 기술 1위라 먼저 보여 드려요 · 다른 키워드로 검색해 보세요' : null} onSearch={onSearch} onScopeSearch={onScopeSearch} onAutoReport={onAutoReport} />
+            </section>
+          )}
+          {/* 요즘 뜨는 기술을 못 받았을 때만: 최근 중요 자료 · 최근 내 보고서 (11/15 시안 A) */}
+          {home && <DashHome issues={homeIssues} reports={reports} onOpenReport={onOpenReport} onGoReports={onGoReports} onGoCollect={onGoCollect} />}
+        </div>
       </div>
 
       {/* 「세부 기술 × 경쟁사 특허」는 대시보드에서 뺌 (11/14 조장: 계속 볼 자료가 아님) — 보고서 분석 자료 · 위협 · 기회 설명 창에서 씀 */}

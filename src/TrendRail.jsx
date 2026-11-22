@@ -2,6 +2,7 @@
 // - 이번 주 종합 상위: 순위 · 이름(누르면 분석) · 단계 · 자사 위협/기회 표시(누르면 설명 창)
 //   11/15: 10개 고정 → 화면 틀 안에서는 막대 높이에 다 들어가는 만큼(5~20개, QHD는 아래가 500px 비고 노트북은 잘렸음).
 //   20개를 다 그려 두고 잘리는 줄부터 감춘다. 화면 틀 밖(휴대폰)은 10개
+// - 11/22: 받으면 1위를 대시보드에 알린다(onFirst) — 첫 화면은 1위를 저절로 분석. 지금 분석 중인 기술(active)은 줄을 칠해 둔다
 // - 「펼쳐 보기」를 누르면 왼쪽에서 판이 나오듯 지금의 「요즘 뜨는 기술」 전체 화면이 펼쳐진다 (Dashboard.jsx)
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { fetchTechTrends, fetchTrendVerdicts } from './api.js'
@@ -10,7 +11,7 @@ const TOP = 10 // 화면 틀 밖
 const MAX = 20 // 자사 위협 · 기회 판정도 20개까지 받음
 const MIN = 5
 
-export default function TrendRail({ onPick, onOpen, onVerdicts, onVerdict }) {
+export default function TrendRail({ active, onFirst, onPick, onOpen, onVerdicts, onVerdict }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [verdicts, setVerdicts] = useState({})
@@ -20,6 +21,7 @@ export default function TrendRail({ onPick, onOpen, onVerdicts, onVerdict }) {
       .then((d) => {
         if (!on) return
         setData(d)
+        onFirst?.(d.composite?.[0]?.name ?? null)
         const names = (d.composite ?? []).slice(0, 20).map((r) => r.name)
         if (names.length)
           fetchTrendVerdicts(names)
@@ -30,7 +32,11 @@ export default function TrendRail({ onPick, onOpen, onVerdicts, onVerdict }) {
             })
             .catch(() => {})
       })
-      .catch((err) => on && setError(err.message))
+      .catch((err) => {
+        if (!on) return
+        setError(err.message)
+        onFirst?.(null)
+      })
     return () => {
       on = false
     }
@@ -92,7 +98,12 @@ export default function TrendRail({ onPick, onOpen, onVerdicts, onVerdict }) {
         {list.map((r, i) => {
           const v = verdicts[r.name]
           return (
-            <li key={r.key ?? r.name} className={framed && i >= fit ? 'is-clipped' : undefined} aria-hidden={framed && i >= fit ? true : undefined}>
+            <li
+              key={r.key ?? r.name}
+              className={[framed && i >= fit ? 'is-clipped' : '', r.name === active ? 'is-on' : ''].filter(Boolean).join(' ') || undefined}
+              aria-current={r.name === active ? 'true' : undefined}
+              aria-hidden={framed && i >= fit ? true : undefined}
+            >
               <span className={i < 3 ? 'tr-rank top' : 'tr-rank'}>{i + 1}</span>
               <span className="tr-body">
                 <button type="button" className="tr-name" onClick={() => onPick(r.name)} title={`「${r.name}」 분석 · 종합 ${r.score}점 · ${r.grade}`}>

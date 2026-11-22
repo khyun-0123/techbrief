@@ -1385,7 +1385,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           tagsFor={tagsFor}
           onDelete={handleDeleteReport}
           canDelete={canDeleteReport}
-          onGoDraft={() => setScreen('select')}
           onUpdated={handleReportUpdated}
           selectedIds={selectedIds}
           onCleanup={handleCleanup}
@@ -1424,51 +1423,39 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         />
       ) : (
         <main className="page page-wide collect-page">
-          <header className="page-header with-actions">
-            <div>
-              <h1>자료 현황</h1>
-              {/* 11/17 (39 문서 C6): 대시보드 분석에서 범위를 골라 왔으면 지금 단계를 보여 준다. 다음 단계는 「선별·요약으로 →」 */}
-              {search?.scope ? (
-                <p>{`「${search.scope.query}」${search.scope.terms?.length ? ` + ${search.scope.terms.length}개` : ''} 범위의 자료예요 · 「선별 추가」로 담기`}</p>
-              ) : (
-                <p>
-                  {isSample
-                    ? '키워드로 자료를 모아 보여 줘요. 아직 수집 전이라 샘플 자료를 보여 줘요.'
-                    : '전문매체 · 기업 발표 · 학회 · 논문 · 뉴스에서 모은 자료예요. 같은 소식은 하나로 묶었어요.'}
-                </p>
-              )}
-            </div>
-            <div className="header-actions">
-              <span className="header-count">
-                {refreshRunning ? '최신화 중…' : collectedAt ? `마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 수집 전'}
-                {' · '}선별 <strong>{selectedIds.length}건</strong>
-              </span>
-              {features.has('refreshButton') && (
-                <button type="button" className="btn" onClick={handleRefresh} disabled={starting || refreshRunning || keywords.length === 0}>
-                  {starting || refreshRunning ? '최신화 중…' : '지금 최신화'}
-                </button>
-              )}
-              <button type="button" className={showAdd ? 'btn primary' : 'btn'} aria-expanded={showAdd} onClick={() => setShowAdd((v) => !v)}>
-                + 자료 추가
-              </button>
-              <button
-                type="button"
-                className="btn primary"
-                onClick={() => setScreen('select')}
-                disabled={selectedIds.length === 0}
-                title={selectedIds.length === 0 ? '목록에서 「선별 추가」를 눌러 자료를 고르세요' : undefined}
-              >
-                선별·요약으로 →
-              </button>
-            </div>
-          </header>
+          {/* 11/22 팀 회의: 위 한 줄(제목 · 설명 · 마지막 수집 · 「선별·요약으로 →」)을 없애고 그 자리에 검색 줄 (대시보드와 같은 자리) */}
+          <h1 className="sr-only">자료 현황</h1>
           {refreshError && <p className="ai-error" role="alert">{refreshError}</p>}
-          {showAdd && <AddMaterial folders={folders} defaultFolder={targetFolder} onAdded={handleMaterialAdded} onClose={() => setShowAdd(false)} />}
-
           {/* 오늘 수집 숫자 · 키워드 추이는 대시보드로 옮김 (11/07 팀 회의) */}
-          <div className={features.has('collectPanel') ? 'content with-favs' : 'content with-favs no-settings'}>
+          <div className={`content with-favs collect-grid${features.has('collectPanel') ? '' : ' no-settings'}${showAdd ? ' has-add' : ''}`}>
+            {/* 검색 줄: 찾기 칸 + 「논문 · 뉴스에서 찾기」, 오른쪽 끝에 「+ 자료 추가」 (예전 위 한 줄에 있던 단추) */}
+            <div className="collect-top">
+              <form className="search-form" onSubmit={handleSearch} role="search">
+                <input
+                  type="search"
+                  placeholder="자료 찾기 (제목·키워드)"
+                  aria-label="자료 찾기"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+                <button type="submit" className="btn outline" disabled={!query.trim() || search?.loading}>
+                  {search?.loading ? '찾는 중…' : '논문 · 뉴스에서 찾기'}
+                </button>
+              </form>
+              <div className="collect-top-actions">
+                {features.has('refreshButton') && (
+                  <button type="button" className="btn" onClick={handleRefresh} disabled={starting || refreshRunning || keywords.length === 0}>
+                    {starting || refreshRunning ? '최신화 중…' : '지금 최신화'}
+                  </button>
+                )}
+                <button type="button" className={showAdd ? 'btn primary' : 'btn'} aria-expanded={showAdd} onClick={() => setShowAdd((v) => !v)}>
+                  + 자료 추가
+                </button>
+              </div>
+            </div>
+            {showAdd && <AddMaterial folders={folders} defaultFolder={targetFolder} onAdded={handleMaterialAdded} onClose={() => setShowAdd(false)} />}
+            {/* 11/22: 자동 수집 키워드는 뺌 — 즐겨찾기 · 최근 검색어만 */}
             <FavoritesRail
-              keywords={keywords}
               favorites={favorites}
               recent={recent}
               active={search?.query}
@@ -1487,18 +1474,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 onCreate={(name) => setTargetFolder(createFolder(name))}
               />
               <div className="filters">
-                <form className="search-form" onSubmit={handleSearch}>
-                  <input
-                    type="search"
-                    placeholder="자료 찾기 (제목·키워드)"
-                    aria-label="자료 찾기"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                  />
-                  <button type="submit" className="btn outline" disabled={!query.trim() || search?.loading}>
-                    {search?.loading ? '찾는 중…' : '논문 · 뉴스에서 찾기'}
-                  </button>
-                </form>
                 <PeriodSeg value={period} onChange={changePeriod} options={PERIODS} title={search ? '바꾸면 이 기간으로 다시 찾아요' : undefined} />
                 <Dropdown
                   value={source}

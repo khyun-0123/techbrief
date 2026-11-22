@@ -144,28 +144,19 @@ function SelectSummary({
 
   return (
     <main className="page page-wide select-page">
-      <header className="page-header with-actions">
-        <div>
-          <h1>선별·요약</h1>
-          {/* 11/17 (39 문서 C6): 마지막 단계 */}
-          <p>자료를 눌러 요약을 보고, 넣을 자료를 체크하세요.</p>
-        </div>
-        <div className="header-actions">
-          {candidates.length > 0 && (
-            <div className="segmented select-pane-switch" role="group" aria-label="보는 칸">
-              <button type="button" aria-pressed={pane === 'list'} onClick={() => setPane('list')}>
-                선별 자료 <span className="select-pane-n">{candidates.length}</span>
-              </button>
-              <button type="button" aria-pressed={pane === 'report'} onClick={() => setPane('report')}>
-                보고서 <span className="select-pane-n">{reportArticles.length}</span>
-              </button>
-            </div>
-          )}
-          <button type="button" className={showAdd ? 'btn primary' : 'btn'} aria-expanded={showAdd} onClick={() => setShowAdd((v) => !v)}>
-            + 자료 올리기
+      {/* 11/22 팀 회의: 제목 · 설명 줄을 없앰. 「+ 자료 올리기」는 「선별 자료」 제목 옆으로 */}
+      <h1 className="sr-only">선별·요약</h1>
+      {/* 폭 901~1100(FHD 절반 등)에서만 보이는 칸 고르기 (두 칸이 좁아 하나씩) */}
+      {candidates.length > 0 && (
+        <div className="segmented select-pane-switch" role="group" aria-label="보는 칸">
+          <button type="button" aria-pressed={pane === 'list'} onClick={() => setPane('list')}>
+            선별 자료 <span className="select-pane-n">{candidates.length}</span>
+          </button>
+          <button type="button" aria-pressed={pane === 'report'} onClick={() => setPane('report')}>
+            보고서 <span className="select-pane-n">{reportArticles.length}</span>
           </button>
         </div>
-      </header>
+      )}
 
       {showAdd && <AddMaterial folders={folders} defaultFolder={folder ?? INBOX} selectByDefault onAdded={onMaterialAdded} onClose={() => setShowAdd(false)} />}
 
@@ -201,6 +192,9 @@ function SelectSummary({
           <section className="panel panel-flush select-list" aria-label="선별 자료">
             <div className="select-list-head">
               <h2>선별 자료</h2>
+              <button type="button" className={showAdd ? 'btn primary btn-compact' : 'btn btn-compact'} aria-expanded={showAdd} onClick={() => setShowAdd((v) => !v)}>
+                + 자료 올리기
+              </button>
               <Seg
                 value={sort}
                 onChange={setSort}

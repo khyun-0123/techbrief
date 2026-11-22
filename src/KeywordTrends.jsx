@@ -23,7 +23,9 @@ export const axisFloor = (unit) => (unit === '%' ? 50 : ['편', '건', '회'].in
 
 // monthly: false(일별) · true(월별) · 'year'(해마다, 기술 시계열 11/10). 기술 시계열(TechTimeline.jsx)도 같이 쓴다
 // band: [{ t, lo, hi }] 예상 범위(회색 띠), marks: [{ t, hi }] 「예상 밖 급증」 점 (레드) — 기술 시계열 네이버 관심도의 TimesFM (11/16)
-export function Spark({ title, unit, series, note, source, asOf, monthly = false, band = null, marks = null, markLabel = '예상 밖 급증' }) {
+// bars (11/22 팀 회의 「막대가 더 잘 보인다」): 해마다 값(기술 시계열 논문 · 기업 저자 · 특허)은 막대로. 마지막(또는 마우스를 올린) 해만 진하게,
+// 아래에 처음 · 마지막 해. 예상 범위 띠 · 급증 점은 꺾은선에서만 쓴다
+export function Spark({ title, unit, series, note, source, asOf, monthly = false, band = null, marks = null, markLabel = '예상 밖 급증', bars = false }) {
   const [hover, setHover] = useState(null)
   const floor = axisFloor(unit)
   const dataMax = series?.length ? Math.max(...series.map((p) => p.v)) : 0
@@ -74,7 +76,26 @@ export function Spark({ title, unit, series, note, source, asOf, monthly = false
           {shown?.band ? `${shown.mark ? `${markLabel} · ` : ''}예상 범위 ${fmtNum(shown.band.loV)}~${fmtNum(shown.band.hiV)}` : '회색 띠 위로 마우스를 올리면 예상 범위'}
         </span>
       )}
-      {pts.length > 1 ? (
+      {pts.length > 1 && bars ? (
+        <div className="trend-plot">
+          <div
+            className="trend-bars"
+            role="img"
+            aria-label={`${title}: ${fmtDay(pts[0].t, monthly)}부터 ${fmtDay(last.t, monthly)}까지, 최근 ${fmtNum(last.v)}${unit}, 최대 ${fmtNum(Math.max(...pts.map((p) => p.v)))}${unit}`}
+            onMouseLeave={() => setHover(null)}
+          >
+            {pts.map((p) => (
+              <span key={p.t} className={p === shown ? 'trend-bar is-on' : 'trend-bar'} onMouseEnter={() => setHover(p)} title={`${fmtDay(p.t, monthly)} ${fmtNum(p.v)}${unit}`}>
+                <span style={{ height: `${Math.max(p.v > 0 ? 3 : 0, ((H - PAD.b - p.y) / (H - PAD.t - PAD.b)) * 100)}%` }} />
+              </span>
+            ))}
+          </div>
+          <span className="trend-bars-axis" aria-hidden="true">
+            <span>{monthly === 'year' ? pts[0].t.slice(0, 4) : fmtDay(pts[0].t, monthly)}</span>
+            <span>{monthly === 'year' ? last.t.slice(0, 4) : fmtDay(last.t, monthly)}</span>
+          </span>
+        </div>
+      ) : pts.length > 1 ? (
         <div className="trend-plot">
         <svg
           viewBox={`0 0 ${W} ${H}`}
