@@ -15,9 +15,7 @@ const CLIENT_KEY = 'techbrief.clientId' // usage.js와 같음
 const KEYS = {
   'techbrief-selected': '선별한 자료',
   'techbrief-included': '보고서에 넣으려고 체크한 자료',
-  'techbrief-folders': '폴더',
-  'techbrief-folder-of': '자료별 폴더',
-  'techbrief-target-folder': '담을 폴더',
+  'techbrief-tags-of': '자료별 키워드 태그', // 11/22: 폴더 → 키워드 태그
   'techbrief-extra-articles': '찾기로 담은 자료',
   'techbrief-recent-searches': '최근 검색어',
   'techbrief-report-input': '보고서 제목 · 방향 · 조사 수준',
@@ -82,13 +80,10 @@ function DataMove({ favorites = [], recent = [], onClose }) {
       if (theirs === null || theirs === undefined) continue
       if (mode === 'replace' || mine === null) {
         next[key] = theirs
-      } else if (key === 'techbrief-folders') {
-        const ids = new Set(arr(mine).map((f) => f.id))
-        next[key] = [...arr(mine), ...arr(theirs).filter((f) => !ids.has(f.id))]
       } else if (key === 'techbrief-extra-articles') {
         const ids = new Set(arr(mine).map((a) => a.id))
         next[key] = [...arr(mine), ...arr(theirs).filter((a) => !ids.has(a.id))]
-      } else if (key === 'techbrief-folder-of' || key === 'techbrief-report-input') {
+      } else if (key === 'techbrief-tags-of' || key === 'techbrief-report-input') {
         next[key] = { ...obj(theirs), ...obj(mine) }
       } else if (Array.isArray(mine)) {
         next[key] = [...new Set([...mine, ...arr(theirs)])]
@@ -140,7 +135,7 @@ function DataMove({ favorites = [], recent = [], onClose }) {
         {file && (
           <div className="data-move-preview">
             <p>
-              <strong>{file.name}</strong> · {new Date(file.data.exportedAt).toLocaleString('ko-KR')} 내보냄 · 선별 {count('techbrief-selected')}건 · 폴더 {count('techbrief-folders')}개 · 보고서 체크 {count('techbrief-included')}건
+              <strong>{file.name}</strong> · {new Date(file.data.exportedAt).toLocaleString('ko-KR')} 내보냄 · 선별 {count('techbrief-selected')}건 · 보고서 체크 {count('techbrief-included')}건
             </p>
             <div className="composer-tabs" role="radiogroup" aria-label="불러오는 방법">
               <button type="button" role="radio" aria-checked={mode === 'merge'} className={mode === 'merge' ? 'active' : ''} onClick={() => setMode('merge')}>

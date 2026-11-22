@@ -23,8 +23,8 @@ function readBase64(file) {
   })
 }
 
-// folders: 담을 폴더 목록 (없으면 폴더 고르기 숨김) · defaultFolder · selectByDefault: 추가하면서 선별에도 담을지 기본값
-function AddMaterial({ folders, defaultFolder, selectByDefault = false, onAdded, onClose }) {
+// tag: 선별에 담을 때 붙는 키워드 태그(보고 있던 검색어 · 선별 칩, 없으면 「직접 추가」) · selectByDefault: 추가하면서 선별에도 담을지 기본값
+function AddMaterial({ tag = null, selectByDefault = false, onAdded, onClose }) {
   const [kind, setKind] = useState('link')
   const [url, setUrl] = useState('')
   const [doi, setDoi] = useState('')
@@ -35,7 +35,6 @@ function AddMaterial({ folders, defaultFolder, selectByDefault = false, onAdded,
   const [tier, setTier] = useState('')
   const [confirming, setConfirming] = useState(false) // 11/17: 추가 전 한 번 확인
   const [select, setSelect] = useState(selectByDefault)
-  const [folderId, setFolderId] = useState(defaultFolder)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState('')
@@ -60,7 +59,7 @@ function AddMaterial({ folders, defaultFolder, selectByDefault = false, onAdded,
       if (kind === 'text') input.text = text
       if (kind === 'file') Object.assign(input, { fileName: file.name, fileBase64: await readBase64(file) })
       const material = await addMaterialApi(input, clientId())
-      onAdded(material, { select, folderId })
+      onAdded(material, { select, tag })
       setDone(`「${material.title}」을(를) 추가했어요${select ? ' · 선별에도 담았어요' : ''}.`)
       setUrl('')
       setDoi('')
@@ -160,7 +159,7 @@ function AddMaterial({ folders, defaultFolder, selectByDefault = false, onAdded,
               <input type="checkbox" checked={select} onChange={(e) => setSelect(e.target.checked)} />
               선별에도 담기
             </label>
-            {folders && select && <Dropdown value={folderId} onChange={setFolderId} size="lg" label="담을 폴더" options={folders.map((f) => ({ value: f.id, label: f.name }))} />}
+            {select && <span className="hint">태그 「{tag ?? '직접 추가'}」</span>}
           </div>
           {/* 11/17 조장: 「추가」를 누르면 한 번 확인 (공용 자료 현황에 남고 AI 요약 · 보고서에 쓰임) */}
           {confirming ? (

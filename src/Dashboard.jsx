@@ -13,7 +13,7 @@
 //   고른 범위 바로 옆에서 누르고, 스크롤해도 늘 보인다. 왼쪽 「요즘 뜨는 기술」 막대는 접을 수 있다(이 브라우저에 기억) — 맵이 넓어짐
 // - 예전 「추적 중인 키워드 추이」는 11/10 조장 결정으로 뺐다 (KeywordTrends.jsx는 그래프 부품 Spark만 씀)
 import { useCallback, useEffect, useRef, useState } from 'react'
-import Dropdown from './Dropdown.jsx'
+import FavMenu from './FavMenu.jsx'
 import KeywordAnalysis from './KeywordAnalysis.jsx'
 import DashHome from './DashHome.jsx'
 import { consumeOpenRequest, useOpenRequest, useStoryJobs } from './storyJobs.js'
@@ -22,13 +22,9 @@ import TrendRail, { RailHandle } from './TrendRail.jsx'
 import VerdictModal from './VerdictModal.jsx'
 import { LAST_ANALYZED_KEY } from './utils.js'
 
-// 칩에 보이는 이름 (11/14 D6): 저장된 검색어가 「ai 안경」 · 「tandem oled」처럼 소문자라 표 · 카드의 「AI 안경」과 달라 보였음
-// → 4글자 이하 영문 낱말(AI · OLED · LED · TFT · QD)만 대문자로. 누르면 원래 말 그대로 분석한다
-const showTerm = (q) => String(q).replace(/\b[a-z]{2,4}\b/g, (w) => w.toUpperCase())
-const MINE_MAX = 12 // 내 검색어 칩 최대 (즐겨찾기 + 최근)
 
 
-function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, onGoReports, favorites, recent, onSearch, onScopeSearch, onAutoReport, onGoCollect, onRemember }) {
+function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, onGoReports, favorites, recent, onToggleFavorite, onRemoveRecent, onSearch, onScopeSearch, onAutoReport, onGoCollect, onRemember }) {
   // 보고서의 「분석 열기 ↗」 링크(/?analyze=키워드, 11/17)로 들어오면 그 키워드 분석을 바로 연다
   const [linked] = useState(() => {
     try {
@@ -139,8 +135,6 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     onRemember?.(q)
     requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
   }
-  // 내 검색어: ★ 즐겨찾기 먼저, 그 뒤 최근 검색어 (겹치는 말은 한 번만)
-  const mine = [...favorites.map((q) => ({ q, star: true })), ...recent.filter((q) => !favorites.includes(q)).map((q) => ({ q, star: false }))].slice(0, MINE_MAX)
 
   function submit(e) {
     e.preventDefault()
@@ -170,19 +164,8 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
             분석
           </button>
         </form>
-        {mine.length > 0 && (
-          <Dropdown
-            className="dash-mine-pick"
-            value=""
-            placeholder={`최근·즐겨찾기 ${mine.length}${mine.some((m) => unseen.has(m.q)) ? ' · 새 정리' : ''}`}
-            title="★ 즐겨찾기 · 최근 검색어 (나만 보여요) — 고르면 그 말로 분석"
-            onChange={(q) => analyze(q)}
-            options={[
-              ...(mine.some((m) => m.star) ? [{ group: '★ 즐겨찾기', options: mine.filter((m) => m.star).map((m) => ({ value: m.q, label: showTerm(m.q), hint: unseen.has(m.q) ? 'AI 흐름 정리 끝' : undefined })) }] : []),
-              ...(mine.some((m) => !m.star) ? [{ group: '최근 검색어', options: mine.filter((m) => !m.star).map((m) => ({ value: m.q, label: showTerm(m.q), hint: unseen.has(m.q) ? 'AI 흐름 정리 끝' : undefined })) }] : []),
-            ]}
-          />
-        )}
+        {/* 최근·즐겨찾기 (11/22 검수): 자료 현황과 같은 부품 · 같은 자리 (FavMenu.jsx) — ☆ · × 관리도 여기서 */}
+        <FavMenu className="dash-mine-pick" favorites={favorites} recent={recent} active={focus} done={unseen} onPick={analyze} onToggleFavorite={onToggleFavorite} onRemoveRecent={onRemoveRecent} />
       </div>
       <div className={`dash-layout is-rail-${railStep}`}>
         <div className="dash-rail">

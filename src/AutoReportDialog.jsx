@@ -128,7 +128,7 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
               {run.failed ? ` · 요약 실패 ${run.failed}건은 빼고 만들어요` : ''}
             </p>
             <progress max={run.total + 1} value={run.done + (step === 'sending' ? 1 : 0)} />
-            <p className="hint">이 창을 닫아도 계속돼요. 고른 자료는 선별 폴더 「{run.folderName}」에 담았어요.</p>
+            <p className="hint">이 창을 닫아도 계속돼요. 고른 자료는 선별에 「{run.tag}」 태그로 담았어요.</p>
           </div>
         )}
 

@@ -3,7 +3,7 @@
 //       다른 탭에 가도 오른쪽 아래 진행 창에서 진행 상황을 보고, 요약 안 된 기사를 써야 하면 거기서 묻는다
 // 미리보기: 체크한 자료 요약이 섹션별로 어떻게 들어가는지 (재료 미리보기). 만든 보고서는 보고서함에서 본다
 // 기간: 예전에는 「오늘 · 이번 주 · 이번 달」을 골랐지만 보고서 머리글에만 붙는 글자였다 → 기사 날짜로 자동 (11/8)
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createReportJob } from './api.js'
 import { articleKey } from './reportStore.js'
 import { byRank } from './autoPick.js'
@@ -117,7 +117,7 @@ const autoTitleOf = (topic) => {
   return `${topic ? `${topic} ` : '테크 '}동향 브리핑 · ${d.getMonth() + 1}/${d.getDate()}`
 }
 
-function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderSummary, reportJobs = [], onJobAdded, onOpenReport }) {
+function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderSummary, tagTopic = null, reportJobs = [], onJobAdded, onOpenReport }) {
   const [saved0] = useState(() => load(DRAFT_INPUT_KEY, {}))
   // 제목 (11/14): 비워 두면 「주제 키워드 동향 브리핑 · 월/일」 — 예전 기본값 「테크 동향 브리핑」 하나로 17건 중 11건이 같은 제목이었음
   const [title, setTitle] = useState(saved0.title && saved0.title !== GENERIC_TITLE ? saved0.title : '')
@@ -131,6 +131,10 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
     const fresh = a?.query && Date.now() - (a.at ?? 0) < 7 * 86_400_000 ? a.query : null
     return lastScope?.query ?? fresh
   })
+  // 11/22: 선별·요약에서 키워드 태그를 고르면 그 말이 주제 키워드 (검색한 키워드에 맞춰 보고서가 나오게)
+  useEffect(() => {
+    if (tagTopic) setTopic(tagTopic) // eslint-disable-line react-hooks/set-state-in-effect
+  }, [tagTopic])
   const autoTitle = autoTitleOf(topic)
   const [level, setLevel] = useState(saved0.level ?? 'owned')
   const [summarizeNew, setSummarizeNew] = useState(saved0.summarizeNew === true) // 「보유 자료까지」에서만 고름. 「추가 자료 조사까지」는 늘 요약 (11/20)
