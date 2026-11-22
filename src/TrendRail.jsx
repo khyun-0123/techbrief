@@ -11,7 +11,6 @@ import { fetchTechTrends, fetchTrendVerdicts } from './api.js'
 
 const TOP = 10 // 화면 틀 밖
 const MAX = 20 // 자사 위협 · 기회 판정도 20개까지 받음
-const MIN = 5
 
 export default function TrendRail({ active, onFirst, onPick, onVerdicts, onVerdict, collapsed = false, onToggle }) {
   const [data, setData] = useState(null)
@@ -46,8 +45,10 @@ export default function TrendRail({ active, onFirst, onPick, onVerdicts, onVerdi
   }, [])
   const listRef = useRef(null)
   const [framed, setFramed] = useState(false)
-  const [fit, setFit] = useState(MAX)
   const [gap, setGap] = useState(0)
+  // 촘촘 모드 (11/22): 두 줄(이름 / 단계)로 다 안 들어가면 한 줄(이름 · 위협 표시)로 — 20개를 숨기지 않고 다 보이게. 단계는 이름에 마우스를 올리면
+  const [dense, setDense] = useState(false)
+  const twoLine = useRef(0) // 두 줄일 때 줄 하나 높이 (한 줄에서 다시 두 줄로 돌아갈 수 있는지 셈)
   const all = (data?.composite ?? []).slice(0, MAX)
   // 11/18 조장: 조금이라도 잘리는 줄은 빼고, 남는 아래 여백은 줄 사이에 고르게 나눈다 (하단을 비워 두지 않게)
   // 예전엔 처음 그린 높이로만 셌다 → 위협 · 기회 표시가 붙거나 글꼴이 늦게 들어와 줄이 높아지면 마지막 줄이 잘렸음.
@@ -56,19 +57,20 @@ export default function TrendRail({ active, onFirst, onPick, onVerdicts, onVerdi
     const ol = listRef.current
     if (!ol) return undefined
     const decide = () => {
-      const clip = getComputedStyle(ol).overflowY === 'hidden' // 화면 틀(App.css)에서만 막대 높이에 맞춤
+      const clip = getComputedStyle(ol).overflowY !== 'visible' // 화면 틀(App.css)에서만 막대 높이에 맞춤
       setFramed(clip)
       if (!clip) return setGap(0)
+      // 11/22 검수 「세로 크기에 맞춰 다 보여 줘」: 줄을 감추지 않는다. 다 들어가면 남는 높이를 줄 사이에 나누고, 모자라면 막대 안에서 스크롤
       const room = ol.clientHeight
       let used = 0
-      let n = 0
-      for (const li of ol.children) {
-        if (used + li.offsetHeight > room) break
-        used += li.offsetHeight
-        n += 1
-      }
-      setFit(Math.max(MIN, n))
-      setGap(n > 1 ? Math.min(14, Math.max(0, (room - used) / n)) : 0)
+      for (const li of ol.children) used += li.offsetHeight
+      const n = ol.children.length
+      if (!n) return setGap(0)
+      if (!ol.classList.contains('is-dense')) {
+        twoLine.current = used / n
+        if (used > room) return setDense(true)
+      } else if (twoLine.current && twoLine.current * n <= room) return setDense(false)
+      setGap(n > 1 && used < room ? Math.min(12, (room - used) / n) : 0)
     }
     decide()
     const ro = new ResizeObserver(decide)
@@ -104,26 +106,26 @@ export default function TrendRail({ active, onFirst, onPick, onVerdicts, onVerdi
         </ol>
       )}
       {data && !list.length && <p className="tr-empty">아직 찾은 기술이 없어요</p>}
-      <ol ref={listRef} className="tr-list" style={framed ? { '--tr-gap': `${gap}px` } : undefined}>
+      <ol ref={listRef} className={dense ? 'tr-list is-dense' : 'tr-list'} style={framed ? { '--tr-gap': `${gap}px` } : undefined}>
         {list.map((r, i) => {
           const v = verdicts[r.name]
           return (
             <li
               key={r.key ?? r.name}
-              className={[framed && i >= fit ? 'is-clipped' : '', r.name === active ? 'is-on' : ''].filter(Boolean).join(' ') || undefined}
+              className={r.name === active ? 'is-on' : undefined}
               aria-current={r.name === active ? 'true' : undefined}
-              aria-hidden={framed && i >= fit ? true : undefined}
             >
               <span className={i < 3 ? 'tr-rank top' : 'tr-rank'}>{i + 1}</span>
               <span className="tr-body">
-                <button type="button" className="tr-name" onClick={() => onPick(r.name)} title={`「${r.name}」 분석 · 종합 ${r.score}점 · ${r.grade}`}>
+                <button type="button" className="tr-name" onClick={() => onPick(r.name)} title={`「${r.name}」 분석 · ${r.stage || r.grade} · 종합 ${r.score}점`}>
                   {r.name}
                 </button>
                 <span className="tr-meta">
-                  {r.stage || r.grade}
+                  <span className="tr-stage">{r.stage || r.grade}</span>
                   {v?.verdict && (
                     <button type="button" className={`tr-verdict tr-${v.verdict === '위협' ? 'threat' : 'chance'}`} onClick={() => onVerdict(r.name, v)} title="왜 위협 · 기회인지 보기">
-                      자사 {v.verdict}
+                      <span className="tr-own">자사 </span>
+                      {v.verdict}
                     </button>
                   )}
                 </span>

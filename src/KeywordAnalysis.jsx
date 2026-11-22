@@ -367,19 +367,12 @@ function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, on
   )
   return (
     <div className="ka" aria-label={`「${keyword}」 분석`}>
-      <div className="ka-head">
-        {/* 11/21 팀 회의: 진행 단계 막대(키워드 → 범위 → 자료 → 보고서)를 없앰. 고른 범위만 한 줄로 */}
-        <p className="ka-for">
-          <b>「{keyword}」</b>
-          {picked.length ? ` + ${picked.length}개` : ''}
-          {/* 11/22: 첫 화면에서 요즘 뜨는 기술 1위를 저절로 고른 경우 */}
-          {autoNote && <span className="ka-auto-hint">{autoNote}</span>}
-        </p>
-        {/* 11/22: 「자료 선별하기 · 보고서까지 자동 진행」은 아래 고정 바로 (고른 범위 바로 옆에서 누르게). 키보드는 여기서 건너뛸 수 있다 */}
-        <a className="skip-next" href="#ka-next">
-          다음 단계(자료 선별)로 건너뛰기
-        </a>
-      </div>
+      {/* 11/22 시안 2차 검토: 위 「「키워드」 + n개」 줄은 아래 범위 바와 겹쳐 뺌. 1위를 저절로 고른 안내는 검색칸 회색 안내 + 화면 읽기용으로만 */}
+      {autoNote && <p className="sr-only">{autoNote}</p>}
+      {/* 「자료 선별하기 · 보고서까지 자동 진행」은 아래 고정 바 — 키보드는 여기서 건너뛸 수 있다 */}
+      <a className="skip-next" href="#ka-next">
+        다음 단계(자료 선별)로 건너뛰기
+      </a>
 
       {/* 11/14 조장: 맵 | 기술 시계열 비율을 끌어서 조절, 좁아지면 접힘 · × 로 닫기 · 탭 누르면 반반 (SplitPanes.jsx) */}
       <SplitPanes
