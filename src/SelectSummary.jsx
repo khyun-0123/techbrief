@@ -8,7 +8,8 @@ import SummaryItems from './SummaryItems.jsx'
 import { formatPublished } from './utils.js'
 import AddMaterial from './AddMaterial.jsx'
 import ReportComposer from './ReportComposer.jsx'
-import Dropdown, { Seg } from './Dropdown.jsx'
+import { Seg } from './Dropdown.jsx'
+import TitleBand from './TitleBand.jsx'
 
 const IMPORTANCE_LABEL = { high: '중요', normal: '' }
 const JOB_LABEL = { queued: '요약 대기', running: '요약 중', error: '요약 오류' }
@@ -146,8 +147,26 @@ function SelectSummary({
 
   return (
     <main className="page page-wide select-page">
-      {/* 11/22 팀 회의: 제목 · 설명 줄을 없앰. 「+ 자료 올리기」는 「선별 자료」 제목 옆으로 */}
-      <h1 className="sr-only">선별·요약</h1>
+      {/* 위 제목 띠 (11/22 조장 A안, TitleBand.jsx): 왼쪽 = 고른 키워드 태그(없으면 선별 자료 전체), 오른쪽 = 자료 올리기 · 정렬 */}
+      <TitleBand
+        over="선별·요약"
+        title={folder ? `「${folder}」` : '선별 자료'}
+        meta={`${sorted.length}건 · 요약 ${summarizedCount}${checkedHere ? ` · 보고서 체크 ${checkedHere}` : ''}`}
+      >
+        <button type="button" className={showAdd ? 'btn primary' : 'btn'} aria-expanded={showAdd} onClick={() => setShowAdd((v) => !v)}>
+          + 자료 올리기
+        </button>
+        <Seg
+          value={sort}
+          onChange={setSort}
+          label="정렬"
+          size="lg"
+          options={[
+            { value: 'importance', label: '중요도순' },
+            { value: 'latest', label: '최신순' },
+          ]}
+        />
+      </TitleBand>
       {/* 폭 901~1100(FHD 절반 등)에서만 보이는 칸 고르기 (두 칸이 좁아 하나씩) */}
       {candidates.length > 0 && (
         <div className="segmented select-pane-switch" role="group" aria-label="보는 칸">
@@ -192,22 +211,7 @@ function SelectSummary({
       ) : (
         <div className={`select-report show-${pane}`}>
           <section className="panel panel-flush select-list" aria-label="선별 자료">
-            <div className="select-list-head">
-              <h2>선별 자료</h2>
-              <button type="button" className={showAdd ? 'btn primary btn-compact' : 'btn btn-compact'} aria-expanded={showAdd} onClick={() => setShowAdd((v) => !v)}>
-                + 자료 올리기
-              </button>
-              <Seg
-                value={sort}
-                onChange={setSort}
-                label="정렬"
-                size="md"
-                options={[
-                  { value: 'importance', label: '중요도순' },
-                  { value: 'latest', label: '최신순' },
-                ]}
-              />
-            </div>
+            <h2 className="sr-only">선별 자료 목록</h2>
             {/* 키워드 태그 칩 (11/22: 폴더 대신 — 선별할 때 찾던 검색어로 자동). 고르면 그 키워드만 보이고, 보고서 주제 키워드도 그 말로 */}
             <div className="tag-bar" role="group" aria-label="키워드로 거르기">
               <button type="button" className={folder === null ? 'tag-pick on' : 'tag-pick'} aria-pressed={folder === null} onClick={() => setFolder(null)}>

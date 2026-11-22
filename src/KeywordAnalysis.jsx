@@ -174,7 +174,7 @@ function Spoken({ text, delay = 900 }) {
   )
 }
 
-function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, onAutoReport, nextSlot = null }) {
+function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, onAutoReport, nextSlot = null, onStage }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [related, setRelated] = useState(null)
@@ -266,6 +266,7 @@ function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, on
       .then((d) => {
         if (!alive) return
         setData(d)
+        onStage?.(d?.stage?.stage ?? null) // 11/22 A안: 대시보드 제목 띠에 단계
         // 숫자를 받은 뒤 묶음 (서버가 /api/timeline 때 이미 만들기 시작함)
         fetchBundle(keyword)
           .then((b) => alive && setBundle(b))

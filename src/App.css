@@ -10154,3 +10154,190 @@ body:has(.dash-next .ka-next) .progress-panel {
   color: var(--tb-color-text-faint);
   font-size: var(--fs-xs);
 }
+
+/* ══ 화면 위 제목 띠 (11/22 조장 A안, TitleBand.jsx) — 대시보드 · 자료 현황 · 선별·요약 · 내 보고서 공통 ══
+   메뉴 막대 아래 화면 폭 전체의 각진 흰 띠. 왼쪽 = 지금 보고 있는 것(작은 윗줄 + 큰 제목 + 표시), 오른쪽 = 그 화면의 도구
+   검색칸은 돋보기 · 입력 · 칸 안 오른쪽 끝 「최근·즐겨찾기」, 바깥에 검정 실행 단추(늘 켜 둠 — 비었으면 칸으로 초점) */
+.title-band {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tb-space-3) var(--tb-space-6, 24px);
+  padding: var(--tb-space-3) var(--tb-space-5) var(--tb-space-3) var(--tb-space-6, 24px);
+  border-bottom: 1px solid var(--tb-color-line-card);
+  background: var(--tb-color-surface);
+}
+.tb-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.tb-over {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.tb-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.tb-line h1 {
+  max-width: 28ch;
+  margin: 0;
+  overflow: hidden;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tb-meta {
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+}
+.tb-stage {
+  padding: 2px 12px;
+  border: 1.5px solid var(--tb-color-text);
+  border-radius: var(--tb-radius-full);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.tb-verdict {
+  padding: 2px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--tb-radius-full);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.tb-threat {
+  background: var(--tb-color-accent-soft);
+  color: var(--tb-color-accent);
+}
+.tb-chance {
+  border-color: var(--tb-color-text);
+}
+.tb-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tb-space-2);
+  margin-left: auto;
+}
+.tb-tools .btn {
+  height: 44px;
+  margin-right: 0;
+}
+.tb-tools .search-form {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--tb-space-2);
+  max-width: none;
+  margin: 0;
+}
+.tb-search {
+  display: flex;
+  flex: 0 1 420px;
+  align-items: center;
+  gap: 8px;
+  width: 420px;
+  min-width: 240px;
+  height: 44px;
+  padding: 0 5px 0 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-button);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text-sub);
+}
+.tb-search:focus-within {
+  outline: 2px solid var(--tb-color-line-focus);
+  outline-offset: 1px;
+}
+.tb-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-md);
+}
+.tb-search .fm-btn {
+  min-height: 32px;
+  height: 32px;
+  border: 0;
+  background: var(--tb-color-bg);
+}
+/* 자료 현황: 거르기(기간 · 출처 · 정렬)와 단추가 같은 도구 줄에 */
+.collect-top.title-band .filters {
+  flex-basis: auto;
+}
+.collect-top.title-band .tb-search {
+  width: 360px;
+}
+/* 선별·요약 · 내 보고서도 띠가 화면 폭 전체 — 아래 내용은 양옆 여백 */
+.page.page-wide.select-page,
+.page.page-wide.mr-page {
+  max-width: none;
+  padding: 0 0 var(--tb-space-5);
+}
+.select-page > :not(.title-band),
+.mr-page > :not(.title-band) {
+  margin-inline: var(--tb-space-5);
+}
+.select-page > .title-band + *,
+.mr-page > .title-band + * {
+  margin-top: var(--tb-space-5);
+}
+@media (max-width: 1279px) {
+  .collect-top.title-band .tb-tools {
+    margin-left: 0;
+    width: 100%;
+  }
+  .collect-top.title-band .search-form {
+    flex: 1 1 360px;
+  }
+  .collect-top.title-band .tb-search {
+    flex: 1;
+    width: auto;
+  }
+}
+@media (max-width: 900px) {
+  .title-band {
+    padding: var(--tb-space-3) var(--tb-space-4);
+  }
+  .tb-tools {
+    width: 100%;
+    margin-left: 0;
+  }
+  .tb-tools .search-form {
+    flex: 1 1 100%;
+  }
+  .tb-search {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+  .tb-line h1 {
+    font-size: 22px;
+  }
+  .select-page > :not(.title-band),
+  .mr-page > :not(.title-band) {
+    margin-inline: var(--tb-space-4);
+  }
+}
+@media (max-width: 600px) {
+  .tb-search .fm-label {
+    display: none; /* 휴대폰: 검색칸 안에서는 「10 ▾」만 (단추 이름은 「최근·즐겨찾기 10개」로 읽힘) */
+  }
+}

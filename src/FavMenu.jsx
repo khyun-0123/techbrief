@@ -73,6 +73,7 @@ export default function FavMenu({ favorites = [], recent = [], active = null, do
         className={open ? 'fm-btn is-open' : 'fm-btn'}
         aria-expanded={open}
         aria-haspopup="true"
+        aria-label={`${label} ${n}개`}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown' && !open) {
@@ -83,7 +84,7 @@ export default function FavMenu({ favorites = [], recent = [], active = null, do
         disabled={n === 0}
         title={n ? '★ 즐겨찾기 · 최근 검색어 (나만 보여요)' : '아직 찾은 말이 없어요'}
       >
-        {label} <span className="fm-n">{n}</span>
+        <span className="fm-label">{label}</span> <span className="fm-n">{n}</span>
         {anyDone && <span className="fm-dot" aria-label="AI 흐름 정리가 끝난 말이 있어요" />}
         <span aria-hidden="true" className="fm-caret">
           ▾

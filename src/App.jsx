@@ -46,6 +46,7 @@ import SettingsMenu from './SettingsMenu.jsx'
 import { buildBundleHtml } from './exportBundle.js'
 import SelectToggle from './SelectToggle.jsx'
 import FavMenu from './FavMenu.jsx'
+import TitleBand, { SearchBox } from './TitleBand.jsx'
 import Highlight from './Highlight.jsx'
 import { highlightPattern } from './highlightTerms.js'
 import Pager from './Pager.jsx'
@@ -843,6 +844,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   // 「뉴스·논문에서 찾기」: 등록 키워드와 상관없이 네이버 뉴스 + 논문(OpenAlex 등)에서 바로 찾는다 (11/08)
   async function handleSearch(e) {
     e.preventDefault()
+    if (!query.trim()) return document.getElementById('collect-q')?.focus() // 11/22 A안: 단추는 늘 켜 두고, 비었으면 찾기칸으로
     await runSearch(query.trim())
   }
 
@@ -1419,22 +1421,37 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       ) : (
         <main className="page page-wide collect-page">
           {/* 11/22 팀 회의: 위 한 줄(제목 · 설명 · 마지막 수집 · 「선별·요약으로 →」)을 없애고 그 자리에 검색 줄 (대시보드와 같은 자리) */}
-          <h1 className="sr-only">자료 현황</h1>
           {refreshError && <p className="ai-error" role="alert">{refreshError}</p>}
           {/* 오늘 수집 숫자 · 키워드 추이는 대시보드로 옮김 (11/07 팀 회의) */}
           {/* 위 검색 띠 (11/22 조장 검수): 화면 폭 전체 각진 띠 — 찾기 칸 · 「논문 · 뉴스에서 찾기」 바로 옆에 기간 · 출처 · 정렬,
               오른쪽 끝에 「최근·즐겨찾기」(대시보드와 같은 부품) · 「+ 자료 추가」. 절반 화면은 두 줄(찾기 · 단추 / 거르기) */}
-          <div className="collect-top">
-            <form className="search-form" onSubmit={handleSearch} role="search">
-              <input
-                type="search"
-                placeholder="자료 찾기 (제목·키워드)"
-                aria-label="자료 찾기"
+          <TitleBand
+            className="collect-top"
+            over={search ? (search.scope ? '자료 현황 · 범위 찾기' : '자료 현황 · 찾은 결과') : '자료 현황'}
+            title={search ? `「${search.scope?.query ?? search.query}」` : '모은 자료'}
+            meta={search ? (search.loading ? '찾는 중…' : `${search.articles?.length ?? 0}건`) : `자료 ${visibleArticleCount}건`}
+          >
+            <form className="search-form collect-search" onSubmit={handleSearch} role="search" aria-label="논문 · 뉴스에서 찾기">
+              <SearchBox
+                id="collect-q"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={setQuery}
+                label="자료 찾기"
+                placeholder="논문 · 뉴스에서 찾기"
+                suffix={
+                  <FavMenu
+                    className="tb-fav"
+                    favorites={favorites}
+                    recent={recent}
+                    active={search?.query}
+                    onPick={runSearch}
+                    onToggleFavorite={(q) => changeFavorites(favorites.includes(q) ? favorites.filter((f) => f !== q) : [...favorites, q])}
+                    onRemoveRecent={(q) => saveRecent(recent.filter((r) => r !== q))}
+                  />
+                }
               />
-              <button type="submit" className="btn outline" disabled={!query.trim() || search?.loading}>
-                {search?.loading ? '찾는 중…' : '논문 · 뉴스에서 찾기'}
+              <button type="submit" className="btn primary" disabled={search?.loading} title="논문 · 뉴스에서 찾기">
+                {search?.loading ? '찾는 중…' : '찾기'}
               </button>
             </form>
             <div className="filters">
@@ -1471,14 +1488,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               />
             </div>
             <div className="collect-top-actions">
-              <FavMenu
-                favorites={favorites}
-                recent={recent}
-                active={search?.query}
-                onPick={runSearch}
-                onToggleFavorite={(q) => changeFavorites(favorites.includes(q) ? favorites.filter((f) => f !== q) : [...favorites, q])}
-                onRemoveRecent={(q) => saveRecent(recent.filter((r) => r !== q))}
-              />
               {features.has('refreshButton') && (
                 <button type="button" className="btn" onClick={handleRefresh} disabled={starting || refreshRunning || keywords.length === 0}>
                   {starting || refreshRunning ? '최신화 중…' : '지금 최신화'}
@@ -1488,7 +1497,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 + <span className="lbl-long">자료 </span>추가
               </button>
             </div>
-          </div>
+          </TitleBand>
           <div className={`content collect-grid${features.has('collectPanel') ? '' : ' no-settings'}${showAdd ? ' has-add' : ''}`}>
             {showAdd && <AddMaterial tag={currentTag} onAdded={handleMaterialAdded} onClose={() => setShowAdd(false)} />}
             <section className="panel panel-flush list-panel">
