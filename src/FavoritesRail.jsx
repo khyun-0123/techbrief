@@ -1,5 +1,5 @@
 // 왼쪽 검색어 목록 (13 문서 F3, 11/09 조장 결정으로 셋으로 나눔)
-// - 자동 수집 키워드: 관리자가 정한 공용 목록 (11/16 조장: 예전 「추천 검색어」를 합침 — 추천은 자동 수집되는 말만). ☆를 누르면 내 즐겨찾기에도 담김
+// - 자동 수집 키워드 묶음은 11/22 팀 회의로 뺌 (관리자가 등록한 키워드는 팀 합의라 모두 앎) — 즐겨찾기 · 최근 검색어만
 // - 즐겨찾기 ☆: 나(IP)만 보이는 검색어 (서버). 자동 수집 키워드와 별개
 // - 최근 검색어: 「뉴스·논문에서 찾기」를 하면 자동으로 쌓임 (IP별, 최신 10개). ☆를 누르면 즐겨찾기로
 import { useState } from 'react'
@@ -39,8 +39,8 @@ function QueryItem({ q, active, starred, onSearch, onStar, onRemove, removeLabel
   )
 }
 
-function FavoritesRail({ keywords = [], favorites, recent, active, onSearch, onToggleFavorite, onRemoveRecent }) {
-  const recentOnly = recent.filter((q) => !favorites.includes(q) && !keywords.includes(q))
+function FavoritesRail({ favorites, recent, active, onSearch, onToggleFavorite, onRemoveRecent }) {
+  const recentOnly = recent.filter((q) => !favorites.includes(q))
   const [recentOpen, setRecentOpen] = useState(readOpen)
   function toggleRecent() {
     const next = !recentOpen
@@ -53,16 +53,6 @@ function FavoritesRail({ keywords = [], favorites, recent, active, onSearch, onT
   }
   return (
     <nav className="panel fav-rail" aria-label="검색어">
-      {keywords.length > 0 && (
-        <div className="fav-section">
-          <h2 className="fav-title" title="관리자가 정한 팀 공용 키워드 (자동으로 모아요)">자동 수집 키워드</h2>
-          <ul className="fav-list">
-            {keywords.map((q) => (
-              <QueryItem key={q} q={q} active={active} starred={favorites.includes(q)} onSearch={onSearch} onStar={onToggleFavorite} />
-            ))}
-          </ul>
-        </div>
-      )}
       <div className="fav-section">
         <h2 className="fav-title" title="나만 보이는 검색어">즐겨찾기</h2>
         {favorites.length === 0 ? (

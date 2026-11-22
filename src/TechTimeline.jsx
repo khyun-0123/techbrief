@@ -130,11 +130,12 @@ function TechTimeline({ query, onClose, initialData = null, job: givenJob = null
             )}
 
             <div className="tl-charts">
-              <Spark title="논문 수" unit="편" monthly="year" series={yearly(full(data.long))} source="OpenAlex · 해마다" note={data.longError ?? '논문이 없어요.'} />
+              <Spark title="논문 수" unit="편" monthly="year" bars series={yearly(full(data.long))} source="OpenAlex · 해마다" note={data.longError ?? '논문이 없어요.'} />
               <Spark
                 title="기업 저자 논문 비율"
                 unit="%"
                 monthly="year"
+                bars
                 series={(full(c?.years) ?? []).map((x) => ({ t: `${x.y}-01-01`, v: Math.round(x.companyShare * 100) }))}
                 source="우리 논문 DB · 2018년~"
                 note="2018년 이후 논문 DB에 맞는 논문이 없어요."
@@ -143,6 +144,7 @@ function TechTimeline({ query, onClose, initialData = null, job: givenJob = null
                 title={['family', 'family-all'].includes(data.patents.basis) ? '특허 (같은 발명 한 번)' : '특허 공개 수'}
                 unit="건"
                 monthly="year"
+                bars
                 series={data.patents.status === 'ok' ? yearly(full(data.patents.years)) : []}
                 source={
                   data.patents.basis === 'family'

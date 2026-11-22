@@ -125,7 +125,7 @@ function SlidePreview({ saved }) {
 }
 
 // newIds: 확인 안 한 내 보고서 (목록에 NEW). listNav: 메뉴 「내 보고서」를 누를 때마다 바뀜 → 열린 보고서를 닫고 목록으로 (11/18 조장)
-function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, initialId, selectedIds = [], onCleanup, onOpened, onRestore, onPurge, onStar, tagsFor, trashDays, newIds = [], listNav = 0 }) {
+function ReportArchive({ reports, onDelete, canDelete, onUpdated, initialId, selectedIds = [], onCleanup, onOpened, onRestore, onPurge, onStar, tagsFor, trashDays, newIds = [], listNav = 0 }) {
   const [openId, setOpenId] = useState(initialId ?? null)
   useEffect(() => {
     if (openId) onOpened?.(openId) // NEW 지우기
@@ -333,15 +333,8 @@ function ReportArchive({ reports, onDelete, canDelete, onGoDraft, onUpdated, ini
   const topKw = [...kwCount].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([key]) => kwShown.get(key))
   return (
     <main className="page page-wide mr-page">
-      <header className="page-header with-actions">
-        <div>
-          <h1>내 보고서</h1>
-          <p>만든 보고서를 확인하고 내려받아요. 지운 보고서는 휴지통에서 되살릴 수 있어요.</p>
-        </div>
-        <button type="button" className="btn primary" onClick={onGoDraft}>
-          ＋ 새 보고서 만들기
-        </button>
-      </header>
+      {/* 11/22 팀 회의: 제목 · 설명 줄과 「＋ 새 보고서 만들기」를 없앰 (보고서는 선별·요약 · 대시보드 자동 보고서에서 만든다) */}
+      <h1 className="sr-only">내 보고서</h1>
 
       <div className="mr-layout">
         <aside className="panel mr-side" aria-label="보고서 거르기">

@@ -7,7 +7,7 @@
 import KeywordMap from './KeywordMap.jsx'
 import SplitPanes from './SplitPanes.jsx'
 import { useEffect, useState } from 'react'
-import { fetchBundle, fetchRelated, fetchTimeline, fetchTimelineStory, fetchWordArticles } from './api.js'
+import { fetchBundle, fetchRelated, fetchTimeline, fetchWordArticles } from './api.js'
 import { retryStory, useStory } from './storyJobs.js'
 import { Spark } from './KeywordTrends.jsx'
 import TechTimeline from './TechTimeline.jsx'
@@ -81,7 +81,7 @@ function MapWait({ startedAt }) {
           ['next', '볼 범위 추천 개수 고르기'],
         ]}
       />
-      <EtaBar startedAt={startedAt} expect={5} label="처음 보는 말은" slowNote="평소보다 오래 걸려요. 네이버 응답을 기다리는 중일 수 있어요. 미리 분석된 말(아래 「바로 볼 수 있는 분석」)은 바로 떠요." />
+      <EtaBar startedAt={startedAt} expect={5} label="처음 보는 말은" slowNote="평소보다 오래 걸려요. 네이버 응답을 기다리는 중일 수 있어요. 요즘 뜨는 기술 · 자동 수집 키워드처럼 미리 분석된 말은 바로 떠요." />
       <div className="km-wait-art" aria-hidden="true">
         <span className="km-wait-dot is-center" />
         {[0, 1, 2, 3, 4, 5].map((i) => (
@@ -159,7 +159,7 @@ function Glance({ job, stage, keyword }) {
 // 대시보드 「키워드 분석」 패널 안(검색창 아래)에 펼쳐진다. 기간은 「자료 찾기 →」로 자료 현황에서 찾을 때만 쓴다
 const MAX_SCOPE_TERMS = 30 // server/scopeSearch.js MAX_TERMS와 같게 (거르기용, 네이버는 앞 6개만 따로 부름)
 
-function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
+function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, onAutoReport }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [related, setRelated] = useState(null)
@@ -303,6 +303,8 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
         <p className="ka-for">
           <b>「{keyword}」</b>
           {picked.length ? ` + ${picked.length}개` : ''}
+          {/* 11/22: 첫 화면에서 요즘 뜨는 기술 1위를 저절로 고른 경우 */}
+          {autoNote && <span className="ka-auto-hint">{autoNote}</span>}
         </p>
         <div className="ka-actions">
           <span className="ka-flash" aria-live="polite" key={flash?.at}>
@@ -408,32 +410,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
                         점이 클수록 「{keyword}」와 함께 나온 이슈가 많음 · 재료: 뉴스 · 모은 기사(전체 기간) · AI 요약 문장 {related.issues}개 이슈{related.words === 'kiwi' ? ' (형태소 분석으로 명사만)' : ''} · 특허 출원인 · 논문 핵심어 (점에 마우스를 올리면 수)
                       </p>
                     </details>
-                    <div className="ka-picked" aria-live="polite">
-                      {picked.length ? (
-                        <>
-                          <span className="ka-picked-label">고른 범위</span>
-                          {picked.map((w) => (
-                            <button key={w} type="button" className="chip" onClick={() => toggle(w)} aria-label={`${w} 빼기`}>
-                              {w} ×
-                            </button>
-                          ))}
-                          {(picks || Object.keys(skip).length > 0) && (
-                            <button
-                              type="button"
-                              className="link-btn ka-reset"
-                              onClick={() => {
-                                setPicks(null)
-                                setSkip({})
-                              }}
-                            >
-                              처음 상태로
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <span className="hint">고른 말이 없어요. 「{keyword}」만으로 찾아요.</span>
-                      )}
-                    </div>
+                    {/* 11/22 팀 회의: 맵 아래 「고른 범위」 칩 줄은 뺌 — 맵의 ✓ 표시로 확인한다 */}
                   </>
                 ) : (
                   <p className="hint">함께 나온 말이 충분하지 않아요 (이슈 {related.issues}개). 「{keyword}」만으로 찾아요.</p>
@@ -498,11 +475,12 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
                     </p>
                   )}
                   <div className="ka-sparks">
-                    <Spark title="논문 수" unit="편" monthly="year" series={full(data.long).map((x) => ({ t: `${x.y}-01-01`, v: x.n }))} source="OpenAlex" note={data.longError ?? '논문이 없어요.'} />
+                    <Spark title="논문 수" unit="편" monthly="year" bars series={full(data.long).map((x) => ({ t: `${x.y}-01-01`, v: x.n }))} source="OpenAlex" note={data.longError ?? '논문이 없어요.'} />
                     <Spark
                       title="기업 저자 비율"
                       unit="%"
                       monthly="year"
+                      bars
                       series={full(data.corpus?.years).map((x) => ({ t: `${x.y}-01-01`, v: Math.round(x.companyShare * 100) }))}
                       source="논문 DB · 2018년~"
                       note="맞는 논문이 없어요."
@@ -511,6 +489,7 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
                       title="특허 공개 수"
                       unit="건"
                       monthly="year"
+                      bars
                       series={data.patents.status === 'ok' ? full(data.patents.years).map((x) => ({ t: `${x.y}-01-01`, v: x.n })) : []}
                       source="Google Patents · 제목"
                       note="특허가 없거나 받지 못했어요."
@@ -623,107 +602,3 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
 }
 
 export default KeywordAnalysis
-
-// ── 검색 전 「분석하면 이렇게 보여요」 (11/10 조장: 검색 전엔 무슨 분석을 해 주는지 와닿지 않음, 자리는 적게) ──
-// 미리 분석된 실제 키워드 하나로 4칸 축소판: 연관 키워드 → 기술 단계 → 논문 · 특허 흐름 → AI 전망. 누르면 그 예시가 열린다
-function MiniLine({ series }) {
-  const pts = series.filter((p) => p.v != null)
-  if (pts.length < 2) return null
-  const max = Math.max(...pts.map((p) => p.v), 10) // 11/15: 최소 축 10 (적은 수가 급등처럼 안 보이게)
-  const xy = pts.map((p, i) => [(i / (pts.length - 1)) * 232 + 4, 76 - (p.v / max) * 68])
-  const d = xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join('')
-  const [lx, ly] = xy[xy.length - 1]
-  return (
-    <svg className="kp-line" viewBox="0 0 240 80" aria-hidden="true">
-      <path d={`${d}L${lx.toFixed(1)},78L4,78Z`} className="area" />
-      <path d={d} />
-      <circle cx={lx} cy={ly} r={3.5} />
-    </svg>
-  )
-}
-
-// 11/17 조장 (39 문서 C11): 도식을 크게 — 점 옆에 실제 말을 적는다 (예전: 120×36 점만)
-function MiniMap({ names, center }) {
-  // 점 위(위쪽 두 점) · 아래(아래쪽 두 점) 가운데에 말을 적어 양옆이 잘리지 않게
-  const spots = [
-    [56, 26, -9],
-    [184, 26, -9],
-    [56, 74, 17],
-    [184, 74, 17],
-  ]
-  const short = (t) => (t.length > 8 ? `${t.slice(0, 7)}…` : t)
-  return (
-    <svg className="kp-map" viewBox="0 0 240 100" aria-hidden="true">
-      {spots.slice(0, Math.max(3, Math.min(4, names.length))).map(([x, y, dy], i) => (
-        <g key={i}>
-          <line x1={120} y1={50} x2={x} y2={y} />
-          <circle cx={x} cy={y} r={5} className={i % 3 === 2 ? 'firm' : ''} />
-          {names[i] && (
-            <text x={x} y={y + dy} textAnchor="middle">
-              {short(names[i])}
-            </text>
-          )}
-        </g>
-      ))}
-      <circle cx={120} cy={50} r={9} className="center" />
-      {center && (
-        <text x={120} y={74} textAnchor="middle" className="center-label">
-          {short(center)}
-        </text>
-      )}
-    </svg>
-  )
-}
-
-export function AnalysisPreview({ example, onOpen }) {
-  const [data, setData] = useState(null)
-  const [story, setStory] = useState(null)
-  useEffect(() => {
-    if (!example) return undefined
-    let alive = true
-    // 미리 분석된 말이라 둘 다 기억해 둔 값이 바로 온다
-    fetchTimeline(example)
-      .then((d) => alive && setData(d))
-      .catch(() => {})
-    fetchTimelineStory(example)
-      .then((st) => alive && setStory(st))
-      .catch(() => {})
-    return () => {
-      alive = false
-    }
-  }, [example])
-  if (!example || !data) return null
-  const p = data.corpus?.periods ?? []
-  const names = [...(data.corpus?.rising ?? []).map((r) => r.name), ...(p[2]?.keywords ?? []).map((k) => k.name)].slice(0, 3)
-  const firms = (p[2]?.companies ?? []).slice(0, 2).map((c) => c.name)
-  const ai = [...(story?.story?.research ?? []), ...(story?.story?.outlook ?? [])].find((b) => !b.text.includes(data.stage.stage))
-  const series = (data.long ?? []).filter((x) => x.y < THIS_YEAR).slice(-12).map((x) => ({ v: x.n }))
-  return (
-    <button type="button" className="kp" onClick={() => onOpen(example)} aria-label={`분석 예시 「${example}」 열기`}>
-      <span className="kp-title">
-        분석하면 이렇게 보여요 · 예: <b>{example}</b> <span className="kp-open">열어 보기 →</span>
-      </span>
-      <span className="kp-steps">
-        <span className="kp-step">
-          <span className="kp-label">① 연관 키워드</span>
-          <MiniMap names={[...names, ...firms]} center={example} />
-          <span className="kp-text">{[...names.slice(0, 2), ...firms.slice(0, 1)].join(' · ') || '기술 · 회사'}</span>
-        </span>
-        <span className="kp-step">
-          <span className="kp-label">② 기술 단계</span>
-          <span className="tl-stage-badge kp-badge">{data.stage.stage}</span>
-          <span className="kp-text">{data.stage.growth ? `논문 앞 3년의 ${data.stage.growth}배` : ''}{data.stage.companyShareNow != null ? ` · 기업 저자 ${Math.round(data.stage.companyShareNow * 100)}%` : ''}</span>
-        </span>
-        <span className="kp-step">
-          <span className="kp-label">③ 논문 · 특허 흐름</span>
-          <MiniLine series={series} />
-          <span className="kp-text">해마다 논문 · 특허 수, 낸 회사</span>
-        </span>
-        <span className="kp-step">
-          <span className="kp-label">④ AI 전망 · 연구 제안</span>
-          <span className="kp-text kp-ai">{ai ? (ai.text.length > 70 ? `${ai.text.slice(0, 69)}…` : ai.text) : '근거 논문으로 배경 · 성장 · 적용 · 전망 정리'}</span>
-        </span>
-      </span>
-    </button>
-  )
-}
