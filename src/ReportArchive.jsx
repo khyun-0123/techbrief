@@ -19,6 +19,7 @@ import { copyText, toPlainText } from './reportStore.js'
 import { clientId, secondsSince, track } from './usage.js'
 import ReportView from './ReportView.jsx'
 import { load } from './utils.js'
+import TitleBand, { SearchBox } from './TitleBand.jsx'
 
 const ASKED_KEY = 'techbrief-cleanup-asked' // 선별 정리를 이미 물어본 보고서 id
 
@@ -333,8 +334,11 @@ function ReportArchive({ reports, onDelete, canDelete, onUpdated, initialId, sel
   const topKw = [...kwCount].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([key]) => kwShown.get(key))
   return (
     <main className="page page-wide mr-page">
-      {/* 11/22 팀 회의: 제목 · 설명 줄과 「＋ 새 보고서 만들기」를 없앰 (보고서는 선별·요약 · 대시보드 자동 보고서에서 만든다) */}
-      <h1 className="sr-only">내 보고서</h1>
+      {/* 위 제목 띠 (11/22 조장 A안, TitleBand.jsx): 왼쪽 = 보는 묶음 · 건수, 오른쪽 = 보고서 찾기 · 정렬 (예전 목록 카드 머리에 있던 것) */}
+      <TitleBand over="내 보고서" title={((l) => (l.endsWith('보고서') || l === '휴지통' ? l : `${l} 보고서`))(VIEWS.find(([id]) => id === view)?.[1] ?? '보고서')} meta={`${results.length}건`}>
+        <SearchBox id="mr-q" value={q} onChange={setQ} label="보고서 찾기" placeholder="제목 · 본문 · 근거 자료에서 찾기" />
+        <Seg value={sort} onChange={setSort} label="정렬" size="lg" options={SORTS.map(([value, label]) => ({ value, label }))} />
+      </TitleBand>
 
       <div className="mr-layout">
         <aside className="panel mr-side" aria-label="보고서 거르기">
@@ -400,15 +404,9 @@ function ReportArchive({ reports, onDelete, canDelete, onUpdated, initialId, sel
         </aside>
 
         <section className="panel panel-flush mr-main" aria-labelledby="mr-list-title">
-          <div className="mr-toolbar">
-            <h2 id="mr-list-title">
-              {VIEWS.find(([id]) => id === view)?.[1]} <span className="mr-total">{results.length}건</span>
-            </h2>
-            <div className="field-clear mr-search">
-              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목 · 본문 · 근거 자료에서 찾기" aria-label="보고서 찾기" />
-            </div>
-            <Seg value={sort} onChange={setSort} label="정렬" size="lg" options={SORTS.map(([value, label]) => ({ value, label }))} />
-          </div>
+          <h2 id="mr-list-title" className="sr-only">
+            {VIEWS.find(([id]) => id === view)?.[1]} 목록
+          </h2>
           {(checkedRows.length > 0 || notice) && (
             <div className="mr-bulk" role="status">
               {checkedRows.length > 0 && <span>{checkedRows.length}개 고름</span>}

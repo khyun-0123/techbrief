@@ -14,6 +14,7 @@
 // - 예전 「추적 중인 키워드 추이」는 11/10 조장 결정으로 뺐다 (KeywordTrends.jsx는 그래프 부품 Spark만 씀)
 import { useCallback, useEffect, useRef, useState } from 'react'
 import FavMenu from './FavMenu.jsx'
+import TitleBand, { SearchBox } from './TitleBand.jsx'
 import KeywordAnalysis from './KeywordAnalysis.jsx'
 import DashHome from './DashHome.jsx'
 import { consumeOpenRequest, useOpenRequest, useStoryJobs } from './storyJobs.js'
@@ -49,6 +50,7 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     setFirstTrend(name)
     if (!focusRef.current) {
       setFocus(name)
+      setStage(null)
       setAuto(true)
     }
   }
@@ -66,6 +68,7 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     }, 240)
   }, [drawerClosing])
   const [verdictData, setVerdictData] = useState(null)
+  const [stage, setStage] = useState(null) // 분석 중인 키워드의 기술 단계 (KeywordAnalysis가 받으면 알려 줌 — 제목 띠에)
   const [verdictView, setVerdictView] = useState(null) // { term, info }
   const drawerClose = useRef(null)
   useEffect(() => {
@@ -81,6 +84,7 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
   useEffect(() => {
     if (resetKey === firstReset.current) return
     setFocus(firstTrend)
+    setStage(null)
     setAuto(Boolean(firstTrend))
     setText('')
     setDrawer(false)
@@ -125,7 +129,8 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
   function analyze(q) {
     setFocus(q)
     setAuto(false)
-    setText(q)
+    setStage(null)
+    setText('') // 11/22 A안: 분석 중인 말은 제목에 — 검색칸은 다른 키워드용으로 비움
     // 11/12: 마지막으로 분석한 키워드 — 보고서를 만들 때 그 분석 묶음이 자동으로 근거에 들어간다 (ReportComposer, server/keywordBundle.js)
     try {
       localStorage.setItem(LAST_ANALYZED_KEY, JSON.stringify({ query: q, at: Date.now() }))
@@ -140,33 +145,40 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     e.preventDefault()
     const q = text.trim()
     if (q) analyze(q)
+    else document.getElementById('dash-q')?.focus()
   }
   const home = !focus && trendFailed // 요즘 뜨는 기술을 못 받았을 때만 예전 첫 화면
 
   return (
     <main className={home ? 'page page-wide dash-page is-home' : 'page page-wide dash-page'}>
       {/* 11/21 팀 회의: 화면의 제목 · 설명 문구 없앰 (화면 읽기 프로그램용 제목만 숨겨 둠) */}
-      <h1 className="sr-only">대시보드</h1>
-      {/* 위 검색 띠 (11/22 시안 2차): 화면 폭 전체, 각진 띠 — 키워드 · 분석 · 최근·즐겨찾기 */}
-      <div className="dash-top">
+      {/* 위 제목 띠 (11/22 조장 A안, TitleBand.jsx): 왼쪽 = 지금 분석 중인 키워드 · 단계 · 자사 위협/기회, 오른쪽 = 다른 키워드 검색칸(최근·즐겨찾기는 칸 안) · 분석 */}
+      <TitleBand
+        over={focus ? (auto ? '키워드 분석 · 요즘 뜨는 기술 1위' : '키워드 분석') : '대시보드'}
+        title={focus ?? '키워드를 골라 주세요'}
+        badges={
+          focus && (
+            <>
+              {stage && <span className="tb-stage">{stage}</span>}
+              {verdictData?.verdicts?.[focus]?.verdict && <span className={`tb-verdict tb-${verdictData.verdicts[focus].verdict === '위협' ? 'threat' : 'chance'}`}>자사 {verdictData.verdicts[focus].verdict}</span>}
+            </>
+          )
+        }
+      >
         <form className="search-form dash-searchbar" onSubmit={submit} role="search" aria-label="키워드 분석">
-          <label className="dash-top-label" htmlFor="dash-q">
-            키워드
-          </label>
-          <input
+          <SearchBox
             id="dash-q"
-            type="search"
-            placeholder={auto ? '다른 키워드로 검색해 보세요' : '찾을 키워드 (예: 마이크로LED, 투명 OLED)'}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={setText}
+            label="분석할 키워드"
+            placeholder={focus ? '다른 키워드 분석 (예: 마이크로LED)' : '분석할 키워드 (예: 마이크로LED, 투명 OLED)'}
+            suffix={<FavMenu className="tb-fav" favorites={favorites} recent={recent} active={focus} done={unseen} onPick={analyze} onToggleFavorite={onToggleFavorite} onRemoveRecent={onRemoveRecent} />}
           />
-          <button type="submit" className="btn primary" disabled={!text.trim() || text.trim() === focus}>
+          <button type="submit" className="btn primary">
             분석
           </button>
         </form>
-        {/* 최근·즐겨찾기 (11/22 검수): 자료 현황과 같은 부품 · 같은 자리 (FavMenu.jsx) — ☆ · × 관리도 여기서 */}
-        <FavMenu className="dash-mine-pick" favorites={favorites} recent={recent} active={focus} done={unseen} onPick={analyze} onToggleFavorite={onToggleFavorite} onRemoveRecent={onRemoveRecent} />
-      </div>
+      </TitleBand>
       <div className={`dash-layout is-rail-${railStep}`}>
         <div className="dash-rail">
           <TrendRail collapsed={railStep === 0} onToggle={() => setRailStep(1)} active={focus} onFirst={onFirstTrend} onPick={analyze} onVerdicts={setVerdictData} onVerdict={openVerdict} />
@@ -176,7 +188,7 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
           {focus && (
             <section ref={panelRef} className="panel dash-search is-open" aria-label={`「${focus}」 키워드 분석`}>
               {/* key: 키워드가 바뀌면 새로 그린다 (고른 범위 · 받은 값 초기화) */}
-              <KeywordAnalysis key={focus} keyword={focus} nextSlot={nextSlot} autoNote={auto ? '요즘 뜨는 기술 1위라 먼저 보여 드려요 · 다른 키워드로 검색해 보세요' : null} onSearch={onSearch} onScopeSearch={onScopeSearch} onAutoReport={onAutoReport} />
+              <KeywordAnalysis key={focus} keyword={focus} nextSlot={nextSlot} onStage={setStage} autoNote={auto ? '요즘 뜨는 기술 1위라 먼저 보여 드려요 · 다른 키워드로 검색해 보세요' : null} onSearch={onSearch} onScopeSearch={onScopeSearch} onAutoReport={onAutoReport} />
             </section>
           )}
           {/* 요즘 뜨는 기술을 못 받았을 때만: 최근 중요 자료 · 최근 내 보고서 (11/15 시안 A) */}
