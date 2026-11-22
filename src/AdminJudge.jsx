@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { checkOwner, fetchJudge, saveJudge, saveOwnerApi } from './api.js'
 import AdminTechCpc from './AdminTechCpc.jsx'
+import AdminAbstractCompare from './AdminAbstractCompare.jsx'
 
 const fmtAt = (iso) => new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 const GROUPS = [
@@ -192,6 +193,7 @@ export default function AdminJudge({ onToast }) {
       </section>
 
       <AdminTechCpc onToast={onToast} />
+      <AdminAbstractCompare />
 
       <section className="adm-card">
         <h2>회사 특허 이름</h2>

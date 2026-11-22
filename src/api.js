@@ -612,6 +612,8 @@ export const saveOwnerApi = (name, like) => adminCall('/api/admin/judge/owner', 
 export const fetchTechCpc = () => adminCall('/api/admin/tech-cpc')
 export const saveTechCpcApi = (body) => adminCall('/api/admin/tech-cpc', 'PUT', body)
 export const previewTechCpc = (tech) => adminCall('/api/admin/tech-cpc/preview', 'POST', tech)
+export const fetchAbstractCompare = () => adminCall('/api/admin/abstract-compare')
+export const runAbstractCompare = (body) => adminCall('/api/admin/abstract-compare', 'POST', body)
 export const fetchSecurity = () => adminCall('/api/admin/security')
 export const saveAccessCode = (code, current) => adminCall('/api/admin/security/access-code', 'PUT', { code, current })
 export const resetAccessCode = (current) => adminCall('/api/admin/security/access-code/reset', 'POST', { current })
