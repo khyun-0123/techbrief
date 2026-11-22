@@ -25,7 +25,7 @@ const reduceMotion = () => typeof window !== 'undefined' && window.matchMedia?.(
 // 색은 토큰에서 읽어 SVG 속성으로 넣는다 — PNG로 저장할 때도 같은 색이 나오게
 const TOKEN = {
   accent: ['--tb-color-accent', '#ea1917'],
-  d1: ['--tb-color-surface-inverse', '#262626'],
+  d1: ['--tb-color-map-node', '#262626'], // 11/22 다크: 어두운 바탕에서도 보이는 점 색 (tokens.css)
   d2: ['--tb-color-text-faint', '#878580'],
   d3: ['--tb-color-line', '#cbc8c2'],
   text: ['--tb-color-text', '#111111'],
@@ -279,7 +279,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
     const p = S(a)
     const q = S(b)
     if (!p || !q) return null
-    return <line key={key} x1={p.x} y1={p.y} x2={q.x} y2={q.y} stroke="rgba(17,17,17,.2)" strokeWidth={Math.min(6, 0.6 + c / 8)} />
+    return <line key={key} x1={p.x} y1={p.y} x2={q.x} y2={q.y} stroke={colors.text} strokeOpacity={0.2} strokeWidth={Math.min(6, 0.6 + c / 8)} />
   }
   const node = (n, lv) => {
     const p = S(n.word)
@@ -323,7 +323,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
         {/* 고른 말 (11/14): 점 둘레 테두리는 1단계 점과 헷갈려서, 글자를 알약으로. 글자는 알약 가운데(central, 11/15 실측 2.3px 위로 떠 있었음)
             11/16 검수: 검정 알약 6개가 검색어보다 먼저 눈에 들어와 → 흰 바탕 + 진한 테두리 (✓ 표시는 그대로) */}
         {on && <rect x={p.x - (textW(label, fs) + 14) / 2} y={p.y + r + 2} width={textW(label, fs) + 14} height={fs + 7} rx={(fs + 7) / 2} fill={colors.surface} stroke={colors.text} strokeWidth="1.5" />}
-        <text x={p.x} y={on ? p.y + r + 2 + (fs + 7) / 2 : p.y + r + 2 + fs * 0.85} dominantBaseline={on ? 'central' : undefined} textAnchor="middle" fontSize={fs} fontWeight={lv === 0 || on ? 700 : lv >= 2 ? 400 : 600} fill={lv >= 2 && !on ? colors.sub : colors.text} stroke={on ? 'none' : '#fff'} strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
+        <text x={p.x} y={on ? p.y + r + 2 + (fs + 7) / 2 : p.y + r + 2 + fs * 0.85} dominantBaseline={on ? 'central' : undefined} textAnchor="middle" fontSize={fs} fontWeight={lv === 0 || on ? 700 : lv >= 2 ? 400 : 600} fill={lv >= 2 && !on ? colors.sub : colors.text} stroke={on ? 'none' : colors.surface} strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
           {label}
         </text>
       </g>
@@ -383,7 +383,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
         {cross.map((e) => {
           const p = S(e.a)
           const q = S(e.b)
-          return p && q && <line key={`x-${e.a}-${e.b}`} x1={p.x} y1={p.y} x2={q.x} y2={q.y} stroke="rgba(17,17,17,.07)" strokeWidth="0.6" strokeDasharray="3 3" />
+          return p && q && <line key={`x-${e.a}-${e.b}`} x1={p.x} y1={p.y} x2={q.x} y2={q.y} stroke={colors.text} strokeOpacity={0.07} strokeWidth="0.6" strokeDasharray="3 3" />
         })}
         {l1.map((n) => edge(keyword, n.word, n.score, `e-${n.word}`))}
         {shown2.map((n) => edge(n.parent, n.word, n.score, `e2-${n.word}`))}

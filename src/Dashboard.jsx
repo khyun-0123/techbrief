@@ -6,6 +6,8 @@
 //   요즘 뜨는 기술을 못 받으면 예전 첫 화면(최근 중요 자료 · 최근 내 보고서, DashHome.jsx)
 // - 검색창 옆 칩은 내 검색어(★ 즐겨찾기 · 최근 검색어, IP별)만. 한 줄에 들어가는 만큼, 남으면 「+n개 더」.
 //   자동 수집 키워드 칩은 뺌 (관리자가 등록한 키워드는 팀 합의라 모두 앎, 11/22)
+// - 11/22 조장 시안: 「자료 선별하기 →」 · 「보고서까지 자동 진행」은 세 칸 아래 고정 바(dash-next, KeywordAnalysis가 그림).
+//   고른 범위 바로 옆에서 누르고, 스크롤해도 늘 보인다. 왼쪽 「요즘 뜨는 기술」 막대는 접을 수 있다(이 브라우저에 기억) — 맵이 넓어짐
 // - 예전 「추적 중인 키워드 추이」는 11/10 조장 결정으로 뺐다 (KeywordTrends.jsx는 그래프 부품 Spark만 씀)
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import KeywordAnalysis from './KeywordAnalysis.jsx'
@@ -92,6 +94,24 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     setVerdictView(null)
   }, [resetKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const panelRef = useRef(null)
+  const [nextSlot, setNextSlot] = useState(null) // 하단 고정 바 자리 (KeywordAnalysis가 createPortal로 채움)
+  // 왼쪽 막대 접기 (11/22): 맵 · 시계열 칸을 넓게. 이 브라우저에 기억
+  const [railOff, setRailOff] = useState(() => {
+    try {
+      return localStorage.getItem('techbrief.railOff') === '1'
+    } catch {
+      return false
+    }
+  })
+  const toggleRail = () =>
+    setRailOff((v) => {
+      try {
+        localStorage.setItem('techbrief.railOff', v ? '0' : '1')
+      } catch {
+        // 저장 공간을 못 쓰면 이번 화면에서만
+      }
+      return !v
+    })
   // 진행 창 「분석 보기」(11/11): 다른 화면에서 눌러도 대시보드로 와서 그 말을 연다
   const openRequest = useOpenRequest()
   useEffect(() => {
@@ -164,8 +184,10 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     <main className={home ? 'page page-wide dash-page is-home' : 'page page-wide dash-page'}>
       {/* 11/21 팀 회의: 화면의 제목 · 설명 문구 없앰 (화면 읽기 프로그램용 제목만 숨겨 둠) */}
       <h1 className="sr-only">대시보드</h1>
-      <div className="dash-layout">
+      <div className={railOff ? 'dash-layout is-rail-off' : 'dash-layout'}>
         <TrendRail
+          collapsed={railOff}
+          onToggle={toggleRail}
           active={focus}
           onFirst={onFirstTrend}
           onPick={analyze}
@@ -219,7 +241,7 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
           {focus && (
             <section ref={panelRef} className="panel dash-search is-open" aria-label={`「${focus}」 키워드 분석`}>
               {/* key: 키워드가 바뀌면 새로 그린다 (고른 범위 · 받은 값 초기화) */}
-              <KeywordAnalysis key={focus} keyword={focus} autoNote={auto ? '요즘 뜨는 기술 1위라 먼저 보여 드려요 · 다른 키워드로 검색해 보세요' : null} onSearch={onSearch} onScopeSearch={onScopeSearch} onAutoReport={onAutoReport} />
+              <KeywordAnalysis key={focus} keyword={focus} nextSlot={nextSlot} autoNote={auto ? '요즘 뜨는 기술 1위라 먼저 보여 드려요 · 다른 키워드로 검색해 보세요' : null} onSearch={onSearch} onScopeSearch={onScopeSearch} onAutoReport={onAutoReport} />
             </section>
           )}
           {/* 요즘 뜨는 기술을 못 받았을 때만: 최근 중요 자료 · 최근 내 보고서 (11/15 시안 A) */}
@@ -227,6 +249,8 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
         </div>
       </div>
 
+      {/* 하단 고정 바 자리: 세 칸 뒤라 키보드 · 화면 읽기 순서도 「검토 → 다음 단계」 */}
+      {focus && <div ref={setNextSlot} className="dash-next" />}
       {/* 「세부 기술 × 경쟁사 특허」는 대시보드에서 뺌 (11/14 조장: 계속 볼 자료가 아님) — 보고서 분석 자료 · 위협 · 기회 설명 창에서 씀 */}
       {drawer && (
         <div className={drawerClosing ? 'trend-drawer-backdrop is-closing' : 'trend-drawer-backdrop'} role="presentation" onClick={(e) => e.target === e.currentTarget && closeDrawer()}>

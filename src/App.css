@@ -9546,3 +9546,189 @@ a.dash-home-t:hover,
   font-size: 0.92em;
   line-height: 1.55;
 }
+
+/* ══ 대시보드 하단 고정 바 (11/22 조장 시안, KeywordAnalysis.jsx nextBar · Dashboard.jsx dash-next) ══
+   - 고른 범위 한 줄 + 「보고서까지 자동 진행」(보조) · 「자료 선별하기 →」(주요, 오른쪽 끝)
+   - 화면 틀(넓고 높은 화면)에서는 세 칸 아래 자리를 차지해 내용을 가리지 않는다. 휴대폰처럼 스크롤하는 화면에서는 아래에 붙어 늘 보인다
+   - 높이가 낮은 화면(확대 200% 등, 560px 미만)에서는 붙이지 않는다 — 고정 바가 화면을 다 차지하지 않게 (WCAG 1.4.10)
+   - 오른쪽 아래 AI 대기열 · 진행 창은 바 위로 올린다 */
+.dash-next {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  margin-top: var(--tb-card-gap);
+}
+.dash-next:empty {
+  display: none;
+}
+.ka-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tb-space-2) var(--tb-space-4);
+  padding: var(--tb-space-3) var(--tb-space-4);
+  border: 1px solid var(--tb-color-line-card);
+  border-radius: var(--tb-radius-card, 12px);
+  background: var(--tb-color-surface);
+  box-shadow: var(--tb-shadow-card);
+}
+.ka-next:focus {
+  outline: none;
+}
+.ka-next:focus-visible {
+  outline: 2px solid var(--tb-color-line-focus);
+  outline-offset: 2px;
+}
+.ka-next-scope {
+  flex: 1 1 280px;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--tb-color-text);
+  font-size: var(--fs-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ka-next-label {
+  margin-right: var(--tb-space-2);
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+}
+.ka-next .ka-flash {
+  flex: none;
+}
+.ka-next-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: var(--tb-space-2);
+  margin-left: auto;
+}
+.ka-next-actions .btn {
+  min-height: 44px; /* 누르는 곳 44px (WCAG 2.5.8 권장 이상) */
+  margin-right: 0;
+}
+.ka-next-go {
+  padding-inline: 22px;
+}
+@media (max-width: 600px) {
+  .ka-next {
+    padding: var(--tb-space-2) var(--tb-space-3);
+  }
+  .ka-next-scope {
+    flex-basis: 100%;
+  }
+  .ka-next-actions {
+    width: 100%;
+  }
+  .ka-next-actions .btn {
+    flex: 1;
+    padding-inline: 10px;
+    white-space: nowrap;
+  }
+}
+@media (max-height: 559px) {
+  .dash-next {
+    position: static;
+  }
+}
+/* 스크롤하는 화면: 키보드로 옮겨 간 곳이 바 뒤에 숨지 않게 (WCAG 2.4.11) */
+html:has(.dash-next .ka-next) {
+  scroll-padding-bottom: 140px;
+}
+body:has(.dash-next .ka-next) .queue-fab,
+body:has(.dash-next .ka-next) .progress-panel {
+  bottom: 110px;
+}
+@media (max-width: 600px) {
+  body:has(.dash-next .ka-next) .queue-fab,
+  body:has(.dash-next .ka-next) .progress-panel {
+    bottom: 150px;
+  }
+}
+
+/* 키보드 건너뛰기: 평소에는 안 보이고, 키보드로 오면 보인다 */
+.skip-next {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.skip-next:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  clip: auto;
+  padding: 4px 10px;
+  border-radius: var(--tb-radius-button);
+  background: var(--tb-color-surface-inverse);
+  color: var(--tb-color-text-inverse);
+  font-size: var(--fs-sm);
+}
+
+/* 요즘 뜨는 기술 막대 접기 (11/22): 접으면 좁은 띠 — 맵 · 시계열 칸이 넓어짐 */
+.dash-layout.is-rail-off {
+  grid-template-columns: 44px minmax(0, 1fr);
+}
+.tr-head {
+  position: relative;
+}
+.tr-fold {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-button);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text-sub);
+  font: inherit;
+  cursor: pointer;
+}
+.tr-fold:hover,
+.tr-unfold:hover {
+  background: var(--tb-color-surface-hover);
+  color: var(--tb-color-text);
+}
+.trend-rail.is-collapsed.panel {
+  padding: var(--tb-space-1);
+}
+.tr-unfold {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--tb-space-2);
+  width: 100%;
+  height: 100%;
+  min-height: 160px;
+  padding: var(--tb-space-2) 0;
+  border: 0;
+  border-radius: var(--tb-radius-button);
+  background: transparent;
+  color: var(--tb-color-text-sub);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.tr-unfold-text {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.1em;
+}
+@media (max-width: 900px) {
+  .dash-layout.is-rail-off {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tr-unfold {
+    flex-direction: row;
+    min-height: 44px;
+    height: auto;
+    justify-content: center;
+  }
+  .tr-unfold-text {
+    writing-mode: horizontal-tb;
+  }
+}
