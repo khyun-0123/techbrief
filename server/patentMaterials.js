@@ -13,7 +13,7 @@ import { patentDbReady, toPg } from './patentDb.js'
 import { patternFromTerms } from './patents.js'
 import { NON_DISPLAY_TITLE, techCpcVersion, techRuleFor, techWhere } from './techCpc.js'
 import { compareCompanies } from './keywordBundle.js'
-import { SEARCH_DOC, abstractsStatus } from './patentAbstracts.js'
+import { SEARCH_DOC, abstractsStatus, ensureTable } from './patentAbstracts.js'
 import { createHash } from 'node:crypto'
 
 const LIMIT = 8 // 목록에 넣는 특허 수 (논문 · 기사와 섞여 너무 많지 않게)
@@ -38,7 +38,9 @@ const ownerLabel = (o) =>
 export async function patentsReady() {
   if (!dbEnabled()) return false
   const st = await abstractsStatus().catch(() => null)
-  return Boolean(st?.ready && (await patentDbReady().catch(() => null)))
+  if (!st?.ready || !(await patentDbReady().catch(() => null))) return false
+  await ensureTable()
+  return true
 }
 
 // query: 사람이 넣은 말(한글일 수 있음) · terms: 영문 검색어 (englishTerms 결과)
