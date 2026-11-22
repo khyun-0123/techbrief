@@ -3,6 +3,7 @@
 //   11/15: 10개 고정 → 화면 틀 안에서는 막대 높이에 다 들어가는 만큼(5~20개, QHD는 아래가 500px 비고 노트북은 잘렸음).
 //   20개를 다 그려 두고 잘리는 줄부터 감춘다. 화면 틀 밖(휴대폰)은 10개
 // - 11/22: 받으면 1위를 대시보드에 알린다(onFirst) — 첫 화면은 1위를 저절로 분석. 지금 분석 중인 기술(active)은 줄을 칠해 둔다
+// - 11/22: 접기(«) — 접으면 좁은 띠(세로 「요즘 뜨는 기술」)만 남고 맵 · 시계열이 넓어진다. 상태는 Dashboard.jsx가 기억
 // - 「펼쳐 보기」를 누르면 왼쪽에서 판이 나오듯 지금의 「요즘 뜨는 기술」 전체 화면이 펼쳐진다 (Dashboard.jsx)
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { fetchTechTrends, fetchTrendVerdicts } from './api.js'
@@ -11,7 +12,7 @@ const TOP = 10 // 화면 틀 밖
 const MAX = 20 // 자사 위협 · 기회 판정도 20개까지 받음
 const MIN = 5
 
-export default function TrendRail({ active, onFirst, onPick, onOpen, onVerdicts, onVerdict }) {
+export default function TrendRail({ active, onFirst, onPick, onOpen, onVerdicts, onVerdict, collapsed = false, onToggle }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [verdicts, setVerdicts] = useState({})
@@ -75,9 +76,23 @@ export default function TrendRail({ active, onFirst, onPick, onOpen, onVerdicts,
     return () => ro.disconnect()
   }, [all.length, verdicts])
   const list = framed ? all : all.slice(0, TOP)
+  if (collapsed)
+    return (
+      <aside className="panel trend-rail is-collapsed" aria-label="요즘 뜨는 기술 (접힘)">
+        <button type="button" className="tr-unfold" onClick={onToggle} aria-expanded="false" title="요즘 뜨는 기술 펼치기">
+          <span aria-hidden="true">»</span>
+          <span className="tr-unfold-text">요즘 뜨는 기술</span>
+        </button>
+      </aside>
+    )
   return (
     <aside className="panel trend-rail" aria-labelledby="tr-title">
       <div className="tr-head">
+        {onToggle && (
+          <button type="button" className="tr-fold" onClick={onToggle} aria-expanded="true" aria-label="요즘 뜨는 기술 접기" title="접기 — 맵을 넓게">
+            <span aria-hidden="true">«</span>
+          </button>
+        )}
         <h2 id="tr-title">요즘 뜨는 기술</h2>
         <span className="tr-sub">{(data?.window?.label ?? '이번 주').replace(/\s*\(.*\)$/, '')} · 종합 점수</span>
       </div>

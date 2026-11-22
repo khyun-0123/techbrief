@@ -16,6 +16,7 @@
   --tb-color-surface: var(--semantic-color-surface-main); /* 카드 #fff */
   --tb-color-surface-hover: var(--semantic-color-surface-main-hover);
   --tb-color-surface-inverse: var(--primitive-color-warm-gray-10); /* 어두운 면: 관리 메뉴, 저장 막대 #262626 */
+  --tb-color-map-node: var(--tb-color-surface-inverse); /* 마인드맵 점 (다크는 밝게, 11/22) */
 
   /* ── 색: 글자 ── */
   --tb-color-text: var(--semantic-color-on-surface-main); /* #000 */
@@ -99,6 +100,7 @@
   --tb-color-surface: var(--primitive-color-warm-gray-10); /* 카드 #262626 */
   --tb-color-surface-hover: var(--primitive-color-warm-gray-15); /* #333 */
   --tb-color-surface-inverse: var(--primitive-color-black); /* 메뉴 막대 · 저장 막대는 그대로 어둡게 */
+  --tb-color-map-node: var(--primitive-color-warm-gray-70); /* 11/22 마인드맵 점 — 검은 점이 어두운 바탕에 묻혔음 */
 
   --tb-color-text: var(--primitive-color-warm-gray-95); /* #faf9f5 */
   --tb-color-text-sub: var(--primitive-color-warm-gray-65); /* #bdbab5 — 카드 위 대비 약 8.9:1 */

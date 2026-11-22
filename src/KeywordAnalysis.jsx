@@ -7,6 +7,7 @@
 import KeywordMap from './KeywordMap.jsx'
 import SplitPanes from './SplitPanes.jsx'
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { fetchBundle, fetchRelated, fetchTimeline, fetchTopPatents, fetchWordArticles } from './api.js'
 import { retryStory, useStory } from './storyJobs.js'
 import { Spark } from './KeywordTrends.jsx'
@@ -159,7 +160,21 @@ function Glance({ job, stage, keyword }) {
 // 대시보드 「키워드 분석」 패널 안(검색창 아래)에 펼쳐진다. 기간은 「자료 찾기 →」로 자료 현황에서 찾을 때만 쓴다
 const MAX_SCOPE_TERMS = 30 // server/scopeSearch.js MAX_TERMS와 같게 (거르기용, 네이버는 앞 6개만 따로 부름)
 
-function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, onAutoReport }) {
+// 바뀐 문장을 잠시 뒤 한 번만 화면 읽기 프로그램에 (계속 바뀌면 마지막 것만)
+function Spoken({ text, delay = 900 }) {
+  const [said, setSaid] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setSaid(text), delay)
+    return () => clearTimeout(t)
+  }, [text, delay])
+  return (
+    <span className="sr-only" aria-live="polite">
+      {said}
+    </span>
+  )
+}
+
+function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, onAutoReport, nextSlot = null }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [related, setRelated] = useState(null)
@@ -309,6 +324,47 @@ function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, on
     else onSearch(keyword)
   }
 
+  // 고른 범위가 주제어 이슈를 얼마나 덮는지: 추천 순서(서버 autoPick.steps)대로 고른 경우에만 정확한 값이 있다
+  const coverage = (() => {
+    const steps = related?.autoPick?.steps ?? []
+    if (!picked.length || picked.length > steps.length || !picked.every((w, i) => steps[i]?.word === w)) return null
+    return steps[picked.length - 1].coverage
+  })()
+  const shown = picked.slice(0, 4)
+  const scopeLine = `「${keyword}」${picked.length ? ` + ${shown.join(', ')}${picked.length > shown.length ? ` 외 ${picked.length - shown.length}개` : ''}` : '만'}${coverage != null ? ` · 이슈 ${Math.round(coverage * 100)}% 포함` : ''}`
+  const nextBar = (
+    <div id="ka-next" className="ka-next" role="region" aria-label="선택한 범위와 다음 단계" tabIndex={-1}>
+      <p className="ka-next-scope" title={picked.length ? `「${keyword}」 + ${picked.join(', ')}` : undefined}>
+        <span className="ka-next-label">선택한 범위</span>
+        <b>「{keyword}」</b>
+        {picked.length ? (
+          <>
+            {' '}
+            + {shown.join(', ')}
+            {picked.length > shown.length && <span className="muted"> 외 {picked.length - shown.length}개</span>}
+          </>
+        ) : (
+          '만'
+        )}
+        {coverage != null && <span className="muted"> · 이슈 {Math.round(coverage * 100)}% 포함</span>}
+      </p>
+      {/* 화면 읽기 프로그램: 범위가 바뀌면 잠시 뒤 한 번만 읽는다 (맵 · 레버를 여러 번 바꾸면 마지막 것만) */}
+      <Spoken text={`선택한 범위 ${scopeLine}`} />
+      <span className="ka-flash" aria-hidden="true" key={flash?.at}>
+        {flash?.text}
+      </span>
+      <div className="ka-next-actions">
+        {onAutoReport && (
+          <button type="button" className="btn ka-next-auto" onClick={() => onAutoReport({ query: keyword, terms: picked })} title="고른 범위의 자료를 중요도로 자동으로 골라 보고서까지 — 만들기 전에 확인 창이 떠요">
+            보고서까지 자동 진행
+          </button>
+        )}
+        <button type="button" className="btn primary ka-next-go" onClick={findScope} title={picked.length ? `「${keyword}」 자료 중 ${picked.join(' · ')}이(가) 든 것만` : `「${keyword}」 자료 전부`}>
+          자료 선별하기 <span aria-hidden="true">→</span>
+        </button>
+      </div>
+    </div>
+  )
   return (
     <div className="ka" aria-label={`「${keyword}」 분석`}>
       <div className="ka-head">
@@ -319,19 +375,10 @@ function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, on
           {/* 11/22: 첫 화면에서 요즘 뜨는 기술 1위를 저절로 고른 경우 */}
           {autoNote && <span className="ka-auto-hint">{autoNote}</span>}
         </p>
-        <div className="ka-actions">
-          <span className="ka-flash" aria-live="polite" key={flash?.at}>
-            {flash?.text}
-          </span>
-          {onAutoReport && related && (
-            <button type="button" className="btn-text ka-auto" onClick={() => onAutoReport({ query: keyword, terms: picked })} title="고른 범위의 자료를 중요도로 자동으로 골라 보고서까지 — 만들기 전에 확인 창이 떠요">
-              바로 보고서까지 (자동)
-            </button>
-          )}
-          <button type="button" className="btn primary" onClick={findScope} title={picked.length ? `「${keyword}」 자료 중 ${picked.join(' · ')}이(가) 든 것만` : `「${keyword}」 자료 전부`}>
-            자료 고르기 →
-          </button>
-        </div>
+        {/* 11/22: 「자료 선별하기 · 보고서까지 자동 진행」은 아래 고정 바로 (고른 범위 바로 옆에서 누르게). 키보드는 여기서 건너뛸 수 있다 */}
+        <a className="skip-next" href="#ka-next">
+          다음 단계(자료 선별)로 건너뛰기
+        </a>
       </div>
 
       {/* 11/14 조장: 맵 | 기술 시계열 비율을 끌어서 조절, 좁아지면 접힘 · × 로 닫기 · 탭 누르면 반반 (SplitPanes.jsx) */}
@@ -415,7 +462,7 @@ function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, on
                     {/* 11/16 검수: 「글이 너무 많다」 → 레버 · 맵 설명 세 문단을 접어 둠 (aria-describedby는 접혀도 읽힘) */}
                     <details className="ka-help">
                       <summary>레버 · 맵 읽는 법</summary>
-                      <p className="hint">「자료 찾기」는 「{keyword}」 자료 중 고른 말이 하나 이상 든 것만 보여 줘요. 더 넓게 보려면 맵에서 말을 더 고르세요.</p>
+                      <p className="hint">「자료 선별하기」는 「{keyword}」 자료 중 고른 말이 하나 이상 든 것만 보여 줘요. 더 넓게 보려면 맵에서 말을 더 고르세요.</p>
                       <p id="ka-auto-help" className="hint">
                         레버 왼쪽 끝은 주제어만, 오른쪽 끝은 맵의 말 전부예요. 처음엔 추천 개수만큼 골라 둬요 — 연관도(함께 나온 이슈 수) 순 기술 · 회사 말을 하나씩 더하다가, 「{keyword}」 이슈를 새로 5% 이상 덮지 못하면 멈춘 개수예요. 레버를 올리면 다음 말을 하나씩 더하고(기술 · 회사 말 먼저), 내리면 마지막에 더한 말부터 빼요. 맵의 점이나 글자를 눌러 넣고 빼면 개수도 같이 바뀌어요 (직접 뺀 말은 오른쪽 끝이 아니면 다시 안 들어가요). 점 옆 「+n」은 그 가지를 펼쳐요.
                       </p>
@@ -611,6 +658,8 @@ function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, on
           ),
         }}
       />
+      {/* 하단 고정 바 (11/22 조장 시안): 대시보드가 준 자리(nextSlot, 세 칸 아래 전체 폭)에. 자리가 없으면 분석 칸 맨 아래 */}
+      {nextSlot ? createPortal(nextBar, nextSlot) : nextBar}
       {open && <TechTimeline query={keyword} initialData={data} job={job} onClose={() => setOpen(false)} />}
       {/* 맵 크게 보기 (11/14 조장): 워드클라우드팀 맵 v2처럼 한 화면 크게 — 마인드맵 · 워드클라우드, 고른 범위는 대시보드와 같음 */}
       {bigMap && related && (
