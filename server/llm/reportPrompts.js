@@ -131,8 +131,8 @@ function describeArticles(articles, itemKeys = Object.keys(ITEM_LABELS)) {
       // 유료 논문 (11/14, 보고서팀 작업 이식): 제목 · 저자 · 출처 · 초록까지만 넣고 표시한다. 6항목 요약은 초록 밖 추측이 섞일 수 있어 넣지 않음
       const paid = a.paper && !a.body && a.access === 'paid'
       if (a.paper) {
-        lines[0] += paid ? ' [유료 논문 — 초록까지만 공개]' : ' [논문]'
-        if (a.authors?.length) lines.push(`  - 저자: ${a.authors.slice(0, 6).join(', ')}`)
+        lines[0] += a.patent ? ` [특허${a.patentNo ? ` ${a.patentNo}` : ''}]` : paid ? ' [유료 논문 — 초록까지만 공개]' : ' [논문]'
+        if (a.authors?.length) lines.push(`  - ${a.patent ? '출원인' : '저자'}: ${a.authors.slice(0, 6).join(', ')}`)
       }
       if (paid) {
         if (a.abstract || a.description) lines.push(`  - 초록: ${String(a.abstract || a.description).replace(/\n+/g, ' ').slice(0, 1200)}`)

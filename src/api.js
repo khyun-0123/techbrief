@@ -141,6 +141,7 @@ function reportArticle(article, aiSummary) {
     summary: aiSummary?.summary,
     // 논문: 유료 여부 · 저자 · 초록 (11/14, 보고서팀 작업 이식 — 유료면 초록까지만 쓴다)
     ...(article.paper ? { paper: true, access: article.access, authors: article.authors, abstract: article.abstract, oaUrl: article.oaUrl, doi: article.doi } : {}),
+    ...(article.patent ? { patent: true, patentNo: article.patentNo } : {}),
   }
 }
 
@@ -551,6 +552,14 @@ export async function fetchCategoryCompetitors() {
 }
 
 // 키워드 분석 묶음 (11/12): 상용화 시점 문장 · 경쟁사 특허 등 (보고서에 자동으로 들어가는 것과 같음)
+// 대표 특허 3건 (11/22): 키워드 분석 「대표 특허」
+export async function fetchTopPatents(q) {
+  const res = await fetch(`/api/patents?q=${encodeURIComponent(q)}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  return data.patents ?? []
+}
+
 export async function fetchBundle(q) {
   const res = await fetch(`/api/bundle?q=${encodeURIComponent(q)}`)
   const data = await res.json().catch(() => ({}))

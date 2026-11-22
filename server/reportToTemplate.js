@@ -226,7 +226,7 @@ export function reportToTemplate(entry, { trends = null, trendItems = null, topi
   // 수집 기간 = 기사 날짜만, 논문은 연도 범위를 따로 (11/17, 40 문서 R8 — 예전 보고서도 자료에서 다시 셈)
   const newsT = arts.filter((a) => !a.paper && !isAnalysis(a)).map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite)
   const papY = arts.filter((a) => a.paper).map((a) => new Date(a.publishedAt).getFullYear()).filter(Number.isFinite)
-  const papPart = papY.length ? `논문 ${Math.min(...papY)}${Math.max(...papY) !== Math.min(...papY) ? `~${Math.max(...papY)}` : ''}년` : ''
+  const papPart = papY.length ? `${arts.some((a) => a.patent) ? (arts.some((a) => a.paper && !a.patent) ? '논문 · 특허' : '특허') : '논문'} ${Math.min(...papY)}${Math.max(...papY) !== Math.min(...papY) ? `~${Math.max(...papY)}` : ''}년` : ''
   const newsPart = newsT.length ? `${ymd(Math.min(...newsT))}~${ymd(Math.max(...newsT))}` : ''
   const period = [newsPart, papPart].filter(Boolean).join(' · ') || (r.sources?.period ? r.sources.period.replace(/-/g, '.').replace(/\s*~\s*/, '~') : '')
   const keywords = r.sources?.topics ?? []
@@ -289,9 +289,10 @@ export function reportToTemplate(entry, { trends = null, trendItems = null, topi
     // article_count = 기사만 (11/17: 논문 10편을 「기사 10건」으로 적었음). counts = 「기사 a · 논문 b · 우리 분석 c」 (양식 출처 줄에 그대로)
     source: (() => {
       const nA = arts.filter((a) => isAnalysis(a)).length
-      const nP = arts.filter((a) => a.paper && !isAnalysis(a)).length
-      const nN = arts.length - nA - nP
-      return { period, article_count: nN, media_count: media.size, keywords, counts: [`기사 ${nN}건`, nP && `논문 ${nP}편`, nA && `우리 분석 ${nA}`].filter(Boolean).join(' · ') }
+      const nT = arts.filter((a) => a.patent && !isAnalysis(a)).length // 11/22 특허 자료
+      const nP = arts.filter((a) => a.paper && !a.patent && !isAnalysis(a)).length
+      const nN = arts.length - nA - nP - nT
+      return { period, article_count: nN, media_count: media.size, keywords, counts: [`기사 ${nN}건`, nP && `논문 ${nP}편`, nT && `특허 ${nT}건`, nA && `우리 분석 ${nA}`].filter(Boolean).join(' · ') }
     })(),
     one_line_summary: cutWords(r.oneLine ?? '', 50),
     appendix: {

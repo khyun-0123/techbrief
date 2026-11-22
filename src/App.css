@@ -9528,3 +9528,21 @@ a.dash-home-t:hover,
 .select-page > .select-pane-switch {
   align-self: flex-start;
 }
+
+/* 대표 특허 3건 (11/22, KeywordAnalysis.jsx): 누르면 초록 */
+.ka-patents {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--tb-space-2, 8px);
+}
+.ka-patents summary {
+  cursor: pointer;
+}
+.ka-patents details p {
+  margin: var(--tb-space-1, 4px) 0;
+  color: var(--tb-color-text-sub);
+  font-size: 0.92em;
+  line-height: 1.55;
+}

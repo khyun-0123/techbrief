@@ -55,7 +55,7 @@ export async function summarizeArticle(article, related = [], { refresh = false,
   // 논문 (11/10): DOI 페이지는 대개 유료벽이라 열린 원문(오픈 액세스 · arXiv · Semantic Scholar PDF)에서 서론 · 결론 · 그림 설명까지
   //   못 받으면 초록 전체로 요약하고 「초록 기준」으로 표시 (papers/fulltext.js)
   const paper = article.paper || /doi\.org\//.test(url ?? '')
-  const paperText = paper && !stored ? await paperFullText({ doi: article.doi ?? url?.match(/doi\.org\/(.+)$/)?.[1], oaUrl: article.oaUrl, url }) : null
+  const paperText = paper && !article.patent && !stored ? await paperFullText({ doi: article.doi ?? url?.match(/doi\.org\/(.+)$/)?.[1], oaUrl: article.oaUrl, url }) : null
   const body = stored ?? (paper ? paperText?.body ?? null : await fetchBody(url))
   if (select && body && !stored) await saveArticleText(id, url, body)
   // 선별했지만 원문을 못 가져왔고 예전 요약이 있으면 그대로 쓴다 (다시 해도 같은 발췌문 요약)
