@@ -194,16 +194,26 @@ function bboxOf(pos) {
   }
   return Number.isFinite(x0) ? { x0, y0, x1, y1 } : null
 }
+// 세로 늘림 (11/22 조장 「맵 칸을 위아래로 넓혔으니 위아래로 더 퍼지게」): 힘 계산 결과는 거의 둥근데 칸은 세로가 길다 →
+// 점 자리만 세로로 sy배(최대 MAX_SY) 늘려 칸 비율에 맞춘다. 글자 · 점 크기는 그대로라 위아래로만 사이가 벌어지고 새로 겹치지 않는다
+const MAX_SY = 1.6
+const kyOf = (v) => v.k * (v.sy ?? 1)
 // 전체 보기 (zoomToFit, 여백 pad). 아래 40px는 범례 · 단추 줄, 글자가 점 옆 · 아래로 나가므로 가로 100 · 세로 40 더 남김
 function fitView(pos, W, H, pad = 40, minK = 0.3) {
   const b = bboxOf(pos)
-  if (!b) return { k: 1, tx: W / 2, ty: H / 2 }
+  if (!b) return { k: 1, tx: W / 2, ty: H / 2, sy: 1 }
   const top = pad
   const bottom = Math.max(pad, 44)
-  const bw = b.x1 - b.x0 + 100
-  const bh = b.y1 - b.y0 + 40
-  const k = Math.max(minK, Math.min(6, Math.min((W - pad * 2) / bw, (H - top - bottom) / bh)))
-  return { k, tx: W / 2 - ((b.x0 + b.x1) / 2) * k, ty: top + (H - top - bottom) / 2 - ((b.y0 + b.y1) / 2 + 10) * k }
+  const aw = W - pad * 2
+  const ah = H - top - bottom
+  const gw = b.x1 - b.x0
+  const gh = Math.max(1, b.y1 - b.y0)
+  // 가로에 맞춘 배율로 그렸을 때 세로가 남으면, 남는 만큼 늘림
+  const sy = Math.max(1, Math.min(MAX_SY, ((ah - 40) * (gw + 100)) / (aw * gh)))
+  const bw = gw + 100
+  const bh = gh * sy + 40
+  const k = Math.max(minK, Math.min(6, Math.min(aw / bw, ah / bh)))
+  return { k, sy, tx: W / 2 - ((b.x0 + b.x1) / 2) * k, ty: top + ah / 2 - ((b.y0 + b.y1) / 2) * k * sy - 10 * k }
 }
 // 화면 이동 제한 (가이드 clampView): 화면 가운데가 그래프 가장자리 20% 안쪽을 벗어나지 않게
 function clampView(v, pos, W, H) {
@@ -212,10 +222,10 @@ function clampView(v, pos, W, H) {
   const ix = (b.x1 - b.x0) * 0.2
   const iy = (b.y1 - b.y0) * 0.2
   const cx = (W / 2 - v.tx) / v.k
-  const cy = (H / 2 - v.ty) / v.k
+  const cy = (H / 2 - v.ty) / kyOf(v)
   const x = Math.max(b.x0 + ix, Math.min(b.x1 - ix, cx))
   const y = Math.max(b.y0 + iy, Math.min(b.y1 - iy, cy))
-  return x === cx && y === cy ? v : { k: v.k, tx: W / 2 - x * v.k, ty: H / 2 - y * v.k }
+  return x === cx && y === cy ? v : { ...v, tx: W / 2 - x * v.k, ty: H / 2 - y * kyOf(v) }
 }
 
 const radius = (score, max) => 3 + 9 * Math.sqrt(score / max)
@@ -236,7 +246,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
   const max = Math.max(1, ...l1.map((n) => n.score), ...l2.map((n) => n.score))
   const S = (w) => {
     const p = pos.get(w)
-    return p ? { x: p.x * view.k + view.tx, y: p.y * view.k + view.ty } : null
+    return p ? { x: p.x * view.k + view.tx, y: p.y * kyOf(view) + view.ty } : null
   }
   const drag = useRef(null)
   const local = (e) => {
@@ -263,7 +273,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
     if (!d.moved && Math.hypot(dx, dy) < 4) return
     if (!d.moved && d.word) onHover(null)
     d.moved = true
-    if (d.word) onDragNode(d.word, (at.x - view.tx) / view.k, (at.y - view.ty) / view.k)
+    if (d.word) onDragNode(d.word, (at.x - view.tx) / view.k, (at.y - view.ty) / kyOf(view))
     else setView(clampView({ ...d.view0, tx: d.view0.tx + dx, ty: d.view0.ty + dy }, pos, W, H))
   }
   const onUp = (e, word) => {
@@ -547,7 +557,7 @@ function countOverlaps(final, view, graph, hidden, keyword, isOn) {
     const p = final.get(it.word)
     if (!p) continue
     const x = p.x * view.k + view.tx
-    const y = p.y * view.k + view.ty
+    const y = p.y * kyOf(view) + view.ty
     const on = it.word !== keyword && isOn(it.word)
     const w = textW(`${on ? '✓ ' : ''}${short(it.word, it.max ?? 18)}`, it.fs) + (on ? 14 : 4) // 고른 말은 알약 폭
     boxes.push({ x0: x - w / 2, x1: x + w / 2, y0: y + it.r + 2, y1: y + it.r + (on ? 9 : 4) + it.fs, dot: { x0: x - it.r, x1: x + it.r, y0: y - it.r, y1: y + it.r } })
@@ -744,7 +754,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
     const step = (t) => {
       const u = Math.min(1, (t - t0) / 400)
       const e = 1 - (1 - u) ** 3
-      setView({ k: from.k + (to.k - from.k) * e, tx: from.tx + (to.tx - from.tx) * e, ty: from.ty + (to.ty - from.ty) * e })
+      setView({ k: from.k + (to.k - from.k) * e, tx: from.tx + (to.tx - from.tx) * e, ty: from.ty + (to.ty - from.ty) * e, sy: (from.sy ?? 1) + ((to.sy ?? 1) - (from.sy ?? 1)) * e })
       if (u < 1) anim.current = requestAnimationFrame(step)
     }
     anim.current = requestAnimationFrame(step)
@@ -762,7 +772,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
       const my = (e.clientY - r.top) / z
       setView((v) => {
         const k = Math.max(0.3, Math.min(6, v.k * Math.exp(-e.deltaY * 0.0015)))
-        return clampView({ k, tx: mx - ((mx - v.tx) * k) / v.k, ty: my - ((my - v.ty) * k) / v.k }, posRef.current, W, H)
+        return clampView({ ...v, k, tx: mx - ((mx - v.tx) * k) / v.k, ty: my - ((my - v.ty) * k) / v.k }, posRef.current, W, H)
       })
     }
     el.addEventListener('wheel', onWheel, { passive: false })
@@ -778,7 +788,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
       const v = viewRef.current
       const out = [...posRef.current.values()].some((p) => {
         const x = p.x * v.k + v.tx
-        const y = p.y * v.k + v.ty
+        const y = p.y * kyOf(v) + v.ty
         return x < 24 || x > W - 24 || y < 64 || y > H - 48
       })
       if (out) fit()
