@@ -138,7 +138,7 @@ export async function techCompetitors(rule, terms = []) {
 }
 
 // where(at): 비교할 특허를 고르는 SQL 조건 · 자리표시자는 at번부터
-async function competitorsWhere({ id, name, cacheId, where, tech = false }) {
+export async function competitorsWhere({ id, name, cacheId, where, tech = false }) {
   // 특허 DB를 다시 받으면(분기 · 11/13 CPC 전체 코드) 다시 센다
   const meta = await patentDbReady().catch(() => null)
   if (!meta) return null

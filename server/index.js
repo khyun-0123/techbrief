@@ -966,6 +966,18 @@ async function handleApiInner(req, res) {
       const { previewTech } = await import('./techCpc.js')
       return send(res, 200, await previewTech(await readJson(req)))
     }
+    // 특허 「제목만 / 제목 + 초록」 비교 (11/22, abstractCompare.js): 읽기만, 판정은 안 바꿈
+    if (req.method === 'GET' && req.url === '/api/admin/abstract-compare') {
+      requireAdmin(req)
+      const { COMPARE_SET } = await import('./abstractCompare.js')
+      const { abstractsStatus } = await import('./patentAbstracts.js')
+      return send(res, 200, { set: COMPARE_SET, abstracts: await abstractsStatus() })
+    }
+    if (req.method === 'POST' && req.url === '/api/admin/abstract-compare') {
+      requireAdmin(req)
+      const { compareAbstracts } = await import('./abstractCompare.js')
+      return send(res, 200, await compareAbstracts(await readJson(req)))
+    }
     if (req.method === 'GET' && req.url === '/api/admin/judge') {
       requireAdmin(req)
       await loadJudgeSettings({ fresh: true })
