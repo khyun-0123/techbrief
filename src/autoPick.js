@@ -19,7 +19,7 @@ export function reasonOf(a) {
     .sort((x, y) => y.v / y.max - x.v / x.max)
     .slice(0, 2)
     .map((p) => `${p.label} ${p.v}/${p.max}`)
-  return [`${a.importance ?? 0}점`, ...(a.paper ? ['논문'] : a.collected ? ['1·2차 출처'] : []), ...parts].join(' · ')
+  return [`${a.importance ?? 0}점`, ...(a.patent ? ['특허'] : a.paper ? ['논문'] : a.collected ? ['1·2차 출처'] : []), ...parts].join(' · ')
 }
 
 // 섞인 목록 줄 세우기 (11/17, 37 문서 P7 · 36 문서 1장 「섞인 목록」): 기사(45점 기준)와 논문(60점 기준) 점수를 한 숫자로 비교하지 않는다

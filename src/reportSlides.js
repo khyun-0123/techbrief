@@ -346,7 +346,7 @@ export function reportPages(saved, extra = {}) {
   // 수집 기간은 기사 날짜로만, 논문은 연도 범위를 따로 (11/17, 40 문서 R8: 논문이 섞이면 「2024-06-01 ~ 2026-06-01」처럼 보였음)
   const nt = base.filter((a) => !a.paper).map((a) => Date.parse(a.publishedAt)).filter(Number.isFinite)
   const py = base.filter((a) => a.paper).map((a) => new Date(a.publishedAt).getFullYear()).filter(Number.isFinite)
-  const paperPart = py.length ? `논문 ${Math.min(...py)}${Math.max(...py) !== Math.min(...py) ? `~${Math.max(...py)}` : ''}` : ''
+  const paperPart = py.length ? `${base.some((a) => a.patent) ? (base.some((a) => a.paper && !a.patent) ? '논문 · 특허' : '특허') : '논문'} ${Math.min(...py)}${Math.max(...py) !== Math.min(...py) ? `~${Math.max(...py)}` : ''}` : ''
   const withPapers = (t) => [t, paperPart].filter(Boolean).join(' · ')
   const period = nt.length ? withPapers(`${md(Math.min(...nt))} ~ ${md(Math.max(...nt))}`) : paperPart || String(saved.periodLabel ?? '').replace(/\s*기사$/, '') || '-'
   const periodFull = nt.length ? withPapers(`${ymd(Math.min(...nt))} ~ ${ymd(Math.max(...nt))}`) : period

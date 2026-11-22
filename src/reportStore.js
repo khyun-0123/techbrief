@@ -107,13 +107,14 @@ export function evidenceCounts(saved) {
   const list = saved?.articles ?? []
   const analysis = list.filter((a) => a.analysis).length
   const supplement = list.filter((a) => a.supplement).length
-  const paper = list.filter((a) => a.paper && !a.supplement).length
-  const news = list.length - analysis - supplement - paper
-  return { news, paper, analysis, supplement, total: list.length }
+  const patent = list.filter((a) => a.patent && !a.supplement).length // 11/22 특허 자료
+  const paper = list.filter((a) => a.paper && !a.patent && !a.supplement).length
+  const news = list.length - analysis - supplement - paper - patent
+  return { news, paper, patent, analysis, supplement, total: list.length }
 }
 export function evidenceLabel(saved) {
   const c = evidenceCounts(saved)
-  return [c.news && `기사 ${c.news}`, c.paper && `논문 ${c.paper}`, c.analysis && `우리 분석 ${c.analysis}`, c.supplement && `보충 ${c.supplement}`].filter(Boolean).join(' · ')
+  return [c.news && `기사 ${c.news}`, c.paper && `논문 ${c.paper}`, c.patent && `특허 ${c.patent}`, c.analysis && `우리 분석 ${c.analysis}`, c.supplement && `보충 ${c.supplement}`].filter(Boolean).join(' · ')
 }
 // [분석] 줄 → 앱의 키워드 분석을 새 창으로 (/?analyze=키워드). 키워드를 남기지 않은 예전 보고서는 보고서 분석 묶음 · 주제어로
 export function analysisUrl(saved, a) {

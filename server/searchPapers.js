@@ -101,6 +101,13 @@ export async function searchPaperArticles(query, period = 'all', terms = null) {
   }
   // 국내 논문 (11/17 KCI · 39 문서 D1, 11/18 ScienceON): 키가 있으면 한글 검색어로 각 20편까지 더한다 (DOI · 제목이 같으면 한 번)
   // ScienceON은 이용 조건상 사람이 「찾기」를 누를 때만 부르고 저장하지 않는다 (papers/scienceon.js, 23 문서)
+  // 특허 (11/22, patentMaterials.js): 디스플레이 특허 초록에서 같은 영문 검색어로 — 논문과 같은 길(초록 기준 요약 · 보고서 근거)
+  const patentsP = import('./patentMaterials.js')
+    .then((m) => m.searchPatentArticles(query, period, t.terms))
+    .catch((err) => {
+      console.warn(`[patents] 특허 자료 찾기 실패: ${err.message}`)
+      return { articles: [], note: null }
+    })
   const [kci, sci] = await Promise.all([
     kciReady()
       ? searchKci(query, { from, to, limit: 20 }).catch((err) => {
@@ -153,6 +160,8 @@ export async function searchPaperArticles(query, period = 'all', terms = null) {
       sameIssue: 0,
     }
   })
+  const patents = await patentsP
+  articles.push(...patents.articles)
   const noAbstract = articles.filter((a) => !a.abstract).length
   const notes = []
   const how = { llm: ' (AI 번역)', google: ' (Google 번역)', admin: '', alias: '' }
@@ -163,5 +172,6 @@ export async function searchPaperArticles(query, period = 'all', terms = null) {
   if (sciCount) notes.push(`국내 논문(ScienceON · 출처 KISTI) ${sciCount}편 더함`)
   if (storedOnly) notes.push(`논문 검색(OpenAlex)이 잠시 안 돼 예전에 받아 둔 ${storedAdded}편만 보여요`)
   else if (storedAdded) notes.push(`예전에 이 말로 받아 둔 논문 ${storedAdded}편 더함`)
+  if (patents.note) notes.push(patents.note)
   return { articles, provider, note: notes.join(' · ') || null, terms: t.terms }
 }

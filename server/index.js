@@ -340,7 +340,7 @@ async function buildReportEntry(body) {
     ...(long ? { chunks: Math.ceil(articles.length / REPORT_CHUNK) } : {}),
     // fulltext: 원문 본문을 반영했는지 (화면 근거 기사 목록에 표시). 본문 자체는 저장하지 않는다
     articles: articles.map((a) => {
-      const { title: t, source, url, publishedAt, body: b, analysis, description, paper, authors } = a
+      const { title: t, source, url, publishedAt, body: b, analysis, description, paper, patent, authors } = a
       return {
         title: t,
         source,
@@ -349,6 +349,7 @@ async function buildReportEntry(body) {
         // [분석] 줄은 우리 규칙 계산이라 원문 · 발췌문 표시가 없다 (11/17: 「발췌문으로 작성」으로 보였음). 어느 키워드 분석인지 남겨 앱 분석으로 잇는다
         ...(analysis ? { analysis: true, description, ...(a.keyword ? { keyword: a.keyword } : {}) } : { fulltext: Boolean(b) }),
         ...(paper ? { paper: true, access: paperAccessOf(a), ...(authors?.length ? { authors: authors.slice(0, 6) } : {}) } : {}),
+        ...(patent ? { patent: true, ...(a.patentNo ? { patentNo: a.patentNo } : {}) } : {}),
       }
     }),
     inputs: picked.map(({ n: _n, body: _b, ...rest }) => rest),
@@ -400,7 +401,8 @@ export function startScheduler() {
   startPrecompute({ allowed: backgroundAllowed }) // 기술 시계열 미리 분석: 켜진 뒤 10분, 그 뒤 6시간마다 (TIMELINE_PRECOMPUTE=off면 안 함, timelineJobs.js)
   // 11/21 Railway: 특허 제목 파일이 없고 PATENT_TITLES_URL이 있으면 켜진 뒤 30초에 한 번 받아 온다 (patentDb.js)
   // 11/21: PATENT_ABSTRACTS=fetch 이고 아직 안 받았으면 켜진 뒤 2분에 디스플레이 특허 초록을 한 번 받는다 (patentAbstracts.js, BigQuery 약 260GB — 하루 할당량을 그날만 올려야 함)
-  if (process.env.PATENT_ABSTRACTS) setTimeout(() => fetchAbstractsIfWanted().catch((err) => console.warn(`[abstracts] ${err.message}`)), 120_000)
+  // 11/22: PATENT_PUBS=fetch 면 원문 링크용 공보 번호도(약 37GB, 하루 한도 안). 초록이 있으면 전문 검색 색인도 없을 때 한 번 만든다
+  if (dbEnabled()) setTimeout(() => fetchAbstractsIfWanted().catch((err) => console.warn(`[abstracts] ${err.message}`)), 120_000)
   if (process.env.PATENT_TITLES_URL) setTimeout(() => fetchTitlesIfMissing().catch((err) => console.warn(`[patent-db] ${err.message}`)), 30_000)
   // 사용 현황 원본은 90일만 둔다: 켜질 때 한 번, 그 뒤 하루 한 번
   const prune = () => {
@@ -744,6 +746,15 @@ async function handleApiInner(req, res) {
     if (req.method === 'POST' && req.url === '/api/timeline/story') {
       const { query, refresh = false } = await readJson(req)
       return send(res, 200, await timelineStory(query, { refresh: Boolean(refresh) }))
+    }
+    // 대표 특허 (11/22, patentMaterials.js): 키워드 분석 「대표 특허」 3건 — 찾기 목록의 특허와 같은 순서(최근 · 여러 나라 · 비교 회사)
+    if (req.method === 'GET' && req.url.startsWith('/api/patents?')) {
+      const q = String(new URL(req.url, 'http://x').searchParams.get('q') ?? '').trim().slice(0, 60)
+      if (!q) return send(res, 400, { error: '키워드가 없어요.' })
+      const t = await englishTerms(q, { waitMs: 8_000 }).catch(() => ({ terms: [] }))
+      const { searchPatentArticles } = await import('./patentMaterials.js')
+      const { articles } = await searchPatentArticles(q, 'all', t.terms ?? [])
+      return send(res, 200, { keyword: q, patents: articles.slice(0, 3).map(({ title, url, publishedAt, source, abstract, countries, patentNo, patentCompany }) => ({ title, url, year: publishedAt.slice(0, 4), owner: source.replace(/^특허 · /, ''), abstract, countries: countries.length, patentNo, company: patentCompany })) })
     }
     // 키워드 분석 묶음 (11/12, keywordBundle.js): 대시보드 키워드 분석 · 보고서가 같은 것을 본다. 화면용이라 네이버 문장도 aiOk: false로 함께
     if (req.method === 'GET' && req.url.startsWith('/api/bundle?')) {
