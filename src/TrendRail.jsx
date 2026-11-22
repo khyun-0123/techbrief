@@ -3,16 +3,17 @@
 //   11/15: 10개 고정 → 화면 틀 안에서는 막대 높이에 다 들어가는 만큼(5~20개, QHD는 아래가 500px 비고 노트북은 잘렸음).
 //   20개를 다 그려 두고 잘리는 줄부터 감춘다. 화면 틀 밖(휴대폰)은 10개
 // - 11/22: 받으면 1위를 대시보드에 알린다(onFirst) — 첫 화면은 1위를 저절로 분석. 지금 분석 중인 기술(active)은 줄을 칠해 둔다
-// - 11/22: 접기(«) — 접으면 좁은 띠(세로 「요즘 뜨는 기술」)만 남고 맵 · 시계열이 넓어진다. 상태는 Dashboard.jsx가 기억
-// - 「펼쳐 보기」를 누르면 왼쪽에서 판이 나오듯 지금의 「요즘 뜨는 기술」 전체 화면이 펼쳐진다 (Dashboard.jsx)
+// - 11/22 시안 2차: 「접기 «」 · 「펼쳐 보기 ›」 두 단추 → 오른쪽 가장자리 손잡이 하나(RailHandle)로 넣기 · 기본 · 넓게 세 단계.
+//   넣기 = 좁은 띠(세로 「요즘 뜨는 기술」, 누르면 기본) · 넓게 = 예전 「펼쳐 보기」 전체 표 (Dashboard.jsx drawer)
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { pageZoom } from './utils.js'
 import { fetchTechTrends, fetchTrendVerdicts } from './api.js'
 
 const TOP = 10 // 화면 틀 밖
 const MAX = 20 // 자사 위협 · 기회 판정도 20개까지 받음
 const MIN = 5
 
-export default function TrendRail({ active, onFirst, onPick, onOpen, onVerdicts, onVerdict, collapsed = false, onToggle }) {
+export default function TrendRail({ active, onFirst, onPick, onVerdicts, onVerdict, collapsed = false, onToggle }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [verdicts, setVerdicts] = useState({})
@@ -79,8 +80,7 @@ export default function TrendRail({ active, onFirst, onPick, onOpen, onVerdicts,
   if (collapsed)
     return (
       <aside className="panel trend-rail is-collapsed" aria-label="요즘 뜨는 기술 (접힘)">
-        <button type="button" className="tr-unfold" onClick={onToggle} aria-expanded="false" title="요즘 뜨는 기술 펼치기">
-          <span aria-hidden="true">»</span>
+        <button type="button" className="tr-unfold" onClick={onToggle} aria-expanded="false" title="요즘 뜨는 기술 보이기">
           <span className="tr-unfold-text">요즘 뜨는 기술</span>
         </button>
       </aside>
@@ -88,11 +88,6 @@ export default function TrendRail({ active, onFirst, onPick, onOpen, onVerdicts,
   return (
     <aside className="panel trend-rail" aria-labelledby="tr-title">
       <div className="tr-head">
-        {onToggle && (
-          <button type="button" className="tr-fold" onClick={onToggle} aria-expanded="true" aria-label="요즘 뜨는 기술 접기" title="접기 — 맵을 넓게">
-            <span aria-hidden="true">«</span>
-          </button>
-        )}
         <h2 id="tr-title">요즘 뜨는 기술</h2>
         <span className="tr-sub">{(data?.window?.label ?? '이번 주').replace(/\s*\(.*\)$/, '')} · 종합 점수</span>
       </div>
@@ -138,9 +133,74 @@ export default function TrendRail({ active, onFirst, onPick, onOpen, onVerdicts,
           )
         })}
       </ol>
-      <button type="button" className="tr-open" onClick={onOpen} aria-haspopup="dialog">
-        펼쳐 보기 <span aria-hidden="true">›</span>
-      </button>
     </aside>
+  )
+}
+
+// 막대 오른쪽 가장자리 손잡이 (11/22 시안 2차): 넣기 · 기본 · 넓게 세 단계 — 세밀하게 끄는 레버가 아니라 가까운 단계로 딱 맞춤
+// - 끌기: 오른쪽으로 끌면 넓게, 왼쪽으로 끌면 좁게 (48px 넘게 끌면 한 단계, 160px 넘으면 두 단계)
+// - 끌지 않고도(WCAG 2.5.7): ‹ › 단추로 한 단계씩 · 손잡이에 초점을 두고 ← → Home End
+// - 화면 읽기 프로그램: 「요즘 뜨는 기술 보기 크기: 기본 (3단계 중 2)」
+const STEPS = ['넣기', '기본', '넓게']
+export function RailHandle({ step, onStep }) {
+  const [dx, setDx] = useState(0)
+  const drag = useRef(null)
+  const go = (n) => onStep(Math.max(0, Math.min(2, n)))
+  const down = (e) => {
+    if (e.button !== 0) return
+    drag.current = { x: e.clientX, moved: false }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const move = (e) => {
+    if (!drag.current) return
+    const d = (e.clientX - drag.current.x) / pageZoom()
+    if (Math.abs(d) > 4) drag.current.moved = true
+    setDx(Math.max(-140, Math.min(200, d)))
+  }
+  const up = (e) => {
+    if (!drag.current) return
+    const d = (e.clientX - drag.current.x) / pageZoom()
+    drag.current = null
+    setDx(0)
+    const by = Math.abs(d) > 160 ? 2 : Math.abs(d) > 48 ? 1 : 0
+    if (by) go(step + Math.sign(d) * by)
+  }
+  const key = (e) => {
+    const n = { ArrowRight: step + 1, ArrowUp: step + 1, ArrowLeft: step - 1, ArrowDown: step - 1, Home: 0, End: 2 }[e.key]
+    if (n === undefined) return
+    e.preventDefault()
+    go(n)
+  }
+  return (
+    <div className={`rail-handle${dx ? ' is-dragging' : ''}`} role="group" aria-label="요즘 뜨는 기술 보기 크기" style={dx ? { '--rh-dx': `${dx}px` } : undefined}>
+      <button type="button" className="rail-step" onClick={() => go(step - 1)} disabled={step <= 0} aria-label={`좁게 (${STEPS[Math.max(0, step - 1)]})`} title="좁게">
+        <span aria-hidden="true">‹</span>
+      </button>
+      <div
+        className="rail-grip"
+        role="slider"
+        tabIndex={0}
+        aria-label="요즘 뜨는 기술 보기 크기"
+        aria-orientation="horizontal"
+        aria-valuemin={0}
+        aria-valuemax={2}
+        aria-valuenow={step}
+        aria-valuetext={`${STEPS[step]} (3단계 중 ${step + 1})`}
+        title="끌어서 넣기 · 기본 · 넓게 (← → 키도 돼요)"
+        onPointerDown={down}
+        onPointerMove={move}
+        onPointerUp={up}
+        onPointerCancel={() => {
+          drag.current = null
+          setDx(0)
+        }}
+        onKeyDown={key}
+      >
+        <span aria-hidden="true" />
+      </div>
+      <button type="button" className="rail-step" onClick={() => go(step + 1)} disabled={step >= 2} aria-label={`넓게 (${STEPS[Math.min(2, step + 1)]})`} title="넓게">
+        <span aria-hidden="true">›</span>
+      </button>
+    </div>
   )
 }
