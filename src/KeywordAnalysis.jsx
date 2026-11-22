@@ -13,7 +13,6 @@ import { Spark } from './KeywordTrends.jsx'
 import TechTimeline from './TechTimeline.jsx'
 import TimelineExtras from './TimelineExtras.jsx'
 import { Seg } from './Dropdown.jsx'
-import FlowSteps from './FlowSteps.jsx'
 
 const THIS_YEAR = new Date().getFullYear() // 올해는 안 끝나 줄어 보이므로 그래프에서 뺀다
 // 11/14 통합: 임시 맵(ScopeMap)을 워드클라우드팀 맵 v2 이식본(KeywordMap.jsx)으로 바꿈 — 분할 칸 왼쪽에 들어감
@@ -300,8 +299,11 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
   return (
     <div className="ka" aria-label={`「${keyword}」 분석`}>
       <div className="ka-head">
-        {/* 11/17 조장 (39 문서 C6): 지금 단계 + 다음으로 가는 진한 단추 하나. 기간(오늘 · 최근 7일 · 전체)은 맵과 상관없어 자료 현황 단계로 옮김 (C5) */}
-        <FlowSteps current={1} note={picked.length ? `「${keyword}」 + ${picked.length}개` : `「${keyword}」`} />
+        {/* 11/21 팀 회의: 진행 단계 막대(키워드 → 범위 → 자료 → 보고서)를 없앰. 고른 범위만 한 줄로 */}
+        <p className="ka-for">
+          <b>「{keyword}」</b>
+          {picked.length ? ` + ${picked.length}개` : ''}
+        </p>
         <div className="ka-actions">
           <span className="ka-flash" aria-live="polite" key={flash?.at}>
             {flash?.text}

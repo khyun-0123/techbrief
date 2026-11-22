@@ -2,13 +2,16 @@
 // - 내 보고서 · 선별 정리본 받기 (.html, 인쇄하면 PDF)
 // - 새 자리로 옮기기 (선별 · 폴더 · 즐겨찾기를 파일로 내보내고 불러오기 → DataMove)
 // - 관리자 페이지
+// - 화면 라이트 · 다크 (11/21 팀 회의, theme.js — 이 브라우저에 기억)
 import { useEffect, useRef, useState } from 'react'
 import { pageZoom } from './utils.js'
+import { setTheme, useTheme } from './theme.js'
 
 function SettingsMenu({ admin, reportCount, selectedCount, onBundle, onMove }) {
   const [open, setOpen] = useState(null) // { top, right } — 메뉴 막대(가로 스크롤)에 잘리지 않게 화면 기준으로 띄움
   const btnRef = useRef(null)
   const menuRef = useRef(null)
+  const theme = useTheme()
 
   useEffect(() => {
     if (!open) return undefined
@@ -66,6 +69,10 @@ function SettingsMenu({ admin, reportCount, selectedCount, onBundle, onMove }) {
           <button type="button" role="menuitem" onClick={pick(onMove)}>
             <b>새 자리로 옮기기</b>
             <small>선별 · 폴더 · 즐겨찾기를 파일로 내보내고, 새 PC에서 불러와요</small>
+          </button>
+          <button type="button" role="menuitemcheckbox" aria-checked={theme === 'dark'} onClick={pick(() => setTheme(theme === 'dark' ? 'light' : 'dark'))}>
+            <b>{theme === 'dark' ? '라이트 모드로 바꾸기' : '다크 모드로 바꾸기'}</b>
+            <small>지금 {theme === 'dark' ? '다크' : '라이트'} · 이 브라우저에 기억해요</small>
           </button>
           <hr />
           <a role="menuitem" href="/admin">

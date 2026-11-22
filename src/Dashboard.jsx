@@ -184,11 +184,9 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
 
   return (
     <main className={focus ? 'page page-wide dash-page' : 'page page-wide dash-page is-home'}>
-      <header className="page-header with-actions">
-        <div>
-          <h1>대시보드</h1>
-          <p>기술 키워드를 분석하고, 볼 범위를 정한 뒤 자료 현황에서 선별하세요.</p>
-        </div>
+      <header className="page-header with-actions is-bare">
+        {/* 11/21 팀 회의: 화면의 제목 · 설명 문구 없앰 (화면 읽기 프로그램용 제목만 숨겨 둠) */}
+        <h1 className="sr-only">대시보드</h1>
         <div className="header-actions">
           <span className="header-count">{stats.collectedLabel}</span>
           {/* 11/17 (39 문서 C6): 분석 중에는 숨김 — 같은 곳으로 가는 진한 단추(「자료 고르기 →」)가 분석 칸에 있어 둘이 됐음 */}
@@ -205,7 +203,7 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
       <div className="dash-main">
       <section ref={panelRef} className={focus ? 'panel dash-search is-open' : 'panel dash-search'} aria-labelledby="dash-search-title">
         <div className="dash-search-head">
-          <h2 id="dash-search-title" className="dash-title">
+          <h2 id="dash-search-title" className="sr-only">
             키워드 분석
           </h2>
           {focus && (
@@ -228,7 +226,6 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
         </form>
         {!focus && (
           <>
-            <p className="dash-note">무엇을 찾을지 모르겠으면 아래 「요즘 뜨는 기술」이나 바로 볼 수 있는 분석에서 골라 보세요.</p>
             {/* 11/14 D5: 눈 갈 곳은 「바로 볼 수 있는 분석」 칩 줄 하나. 분석 예시(11/10)는 아래 접힌 줄로 (자동 수집 키워드 목록과 같은 모양) */}
             {readyLoading && ready.length === 0 && (
               <div className="dash-ready" aria-label="바로 볼 수 있는 분석을 불러오는 중">

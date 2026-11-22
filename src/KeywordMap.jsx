@@ -14,6 +14,7 @@
 // - 고르는 기준 (11/17, 37 문서 Q1): 함께 나온 순(처음 값) | 중요도순 = 그 말이 든 이슈 중요도의 **평균**(이슈 3개 이상, server/related.js impOf).
 //   중요도순은 말의 순서만 바꾸고 점 · 글자 크기는 그대로 함께 나온 수 (맵팀 제안 「합」과 다름, 32 문서 근거)
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTheme } from './theme.js'
 import Dropdown, { Seg } from './Dropdown.jsx'
 import { pageZoom } from './utils.js'
 
@@ -593,7 +594,8 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
     }
   }, [])
   const { W, H } = size
-  const colors = useMemo(() => readColors(), [])
+  const theme = useTheme() // 11/21 다크모드: 테마가 바뀌면 토큰 색을 다시 읽음
+  const colors = useMemo(() => readColors(), [theme]) // eslint-disable-line react-hooks/exhaustive-deps
   // 기술 분류 (11/15): 서버가 붙인 사업 6분류(subcats)로 1 · 2 · 3단계를 모두 거름. 분류별 수 = 1~3단계의 서로 다른 말 수
   const catCounts = useMemo(() => {
     const seen = new Map()

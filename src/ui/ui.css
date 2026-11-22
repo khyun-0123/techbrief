@@ -279,7 +279,7 @@
 .tb-pills button[aria-checked='true'] {
   border-color: var(--tb-color-text);
   background: var(--tb-color-text);
-  color: var(--tb-color-text-inverse);
+  color: var(--tb-color-surface);
   font-weight: 600;
 }
 
