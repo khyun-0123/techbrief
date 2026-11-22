@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS display_abstracts (
 )`
 
 let tableReady = null
-async function ensureTable() {
+// pubnum 칸(11/22)은 공보 번호를 받기 전에도 있어야 찾기(patentMaterials.js)가 읽는다
+export async function ensureTable() {
   tableReady ??= query(TABLE + ';\nALTER TABLE display_abstracts ADD COLUMN IF NOT EXISTS pubnum text').catch((err) => {
     tableReady = null
     throw err
@@ -239,6 +240,7 @@ export async function ensureSearchIndex() {
   G.indexing = true
   G.indexError = null
   try {
+    await ensureTable()
     const t0 = Date.now()
     await query(`CREATE INDEX IF NOT EXISTS display_abstracts_fts ON display_abstracts USING gin (${SEARCH_DOC})`)
     G.indexed = true
