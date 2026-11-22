@@ -7,7 +7,7 @@
 import KeywordMap from './KeywordMap.jsx'
 import SplitPanes from './SplitPanes.jsx'
 import { useEffect, useState } from 'react'
-import { fetchBundle, fetchRelated, fetchTimeline, fetchTimelineStory, fetchWordArticles } from './api.js'
+import { fetchBundle, fetchRelated, fetchTimeline, fetchTimelineStory, fetchTopPatents, fetchWordArticles } from './api.js'
 import { retryStory, useStory } from './storyJobs.js'
 import { Spark } from './KeywordTrends.jsx'
 import TechTimeline from './TechTimeline.jsx'
@@ -218,6 +218,19 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
   // 11/18 조장: 검색하는 순간 AI 대기열에 넣는다 (예전엔 시계열 숫자를 받은 뒤 시작 → 3~4초 안에 닫으면 아예 안 걸렸음).
   // 서버(timelineStory)가 시계열을 스스로 만든 뒤 쓰므로 화면이 숫자를 기다릴 필요가 없다. 닫아도 끝까지 하고 진행 창에 「정리 끝」
   const job = useStory(keyword, true)
+
+  // 대표 특허 3건 (11/22): 특허 내용을 자료로 — 누르면 초록, 제목은 Google Patents 원문
+  const [topPatents, setTopPatents] = useState([])
+  useEffect(() => {
+    if (!keyword) return undefined
+    let alive = true
+    fetchTopPatents(keyword)
+      .then((p) => alive && setTopPatents(p))
+      .catch(() => alive && setTopPatents([]))
+    return () => {
+      alive = false
+    }
+  }, [keyword])
 
   useEffect(() => {
     if (!keyword) return undefined
@@ -552,6 +565,28 @@ function KeywordAnalysis({ keyword, onSearch, onScopeSearch, onAutoReport }) {
                             <div>
                               <dt>특허 많은 출원인</dt>
                               <dd>{owners.join(', ')}</dd>
+                            </div>
+                          )}
+                          {topPatents.length > 0 && (
+                            <div>
+                              <dt>대표 특허</dt>
+                              <dd>
+                                <ul className="ka-patents">
+                                  {topPatents.map((p) => (
+                                    <li key={p.url}>
+                                      <details>
+                                        <summary title="누르면 초록">
+                                          {p.title} <span className="muted">· {p.owner} · {p.year}{p.countries >= 2 ? ` · ${p.countries}개국` : ''}</span>
+                                        </summary>
+                                        <p>{p.abstract}</p>
+                                        <a href={p.url} target="_blank" rel="noreferrer">
+                                          원문 (Google Patents{p.patentNo ? ` ${p.patentNo}` : ''})
+                                        </a>
+                                      </details>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </dd>
                             </div>
                           )}
                           {/* 세부 기술 분류 (11/17 R11, keywordBundle.js categoryMix): 이 말 특허가 걸친 분류 · 분류 전체 특허 추이 */}

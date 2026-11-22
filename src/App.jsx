@@ -735,6 +735,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     : null
   // 강조할 검색어: 네이버 찾기 결과면 찾은 말, 모은 기사에서 거르는 중이면 입력한 말 (Highlight.jsx)
   const hlTerms = search?.query ? [search.query, ...(search.scope?.terms ?? [])] : q ? [q] : []
+  const patentCount = (search?.articles ?? []).filter((a) => a.patent).length // 11/22 특허 자료 (논문 묶음에 함께 옴)
   const hasSummary = (a) => Boolean(liteOf(a))
   // 찾기 결과는 여기서, 모은 자료는 공용 함수(src/articleFilter.js — 서버의 한 쪽씩 보기와 같은 규칙)
   const view = listed
@@ -1534,7 +1535,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 <div className="search-banner">
                   <span aria-live="polite">
                     <strong>‘{search.query}’</strong> 찾기 결과 · 뉴스 {searchScope(search.period)}
-                    {search.articles && ` · 뉴스 ${search.newsCount ?? 0}건${search.collectedCount ? ` · 모아 둔 1·2차 출처 ${search.collectedCount}건` : ''} · 논문 ${search.paperCount ?? 0}건`}
+                    {search.articles && ` · 뉴스 ${search.newsCount ?? 0}건${search.collectedCount ? ` · 모아 둔 1·2차 출처 ${search.collectedCount}건` : ''} · 논문 ${(search.paperCount ?? 0) - patentCount}건${patentCount ? ` · 특허 ${patentCount}건` : ''}`}
                     {search.paperNote && <span className="search-note"> · {search.paperNote}</span>}
                     {search.newsNote && <span className="search-note" role="status"> · {search.newsNote}</span>}
                     {search.articles && ` · 이슈 ${visibleCount}개 · 자료 ${visibleArticleCount}건`}
@@ -1676,7 +1677,13 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                                   {a.topicTag} 기사 속 기술 정보
                                 </span>
                               )}
-                              {a.paper && <span className="badge-material" title={`논문 · 인용 ${a.cited ?? 0}회`}>논문</span>}
+                              {a.patent ? (
+                                <span className="badge-material" title={`특허${a.patentNo ? ` ${a.patentNo}` : ''} · ${a.countries?.length ?? 1}개 나라 출원${a.patentCompany ? ` · ${a.patentCompany}` : ''} · 출처 Google Patents`}>
+                                  특허{a.countries?.length >= 2 ? ` · ${a.countries.length}개국` : ''}
+                                </span>
+                              ) : (
+                                a.paper && <span className="badge-material" title={`논문 · 인용 ${a.cited ?? 0}회`}>논문</span>
+                              )}
                               {/* 유료 논문 (11/14): 보고서에 초록까지만 들어감을 미리 알림. 모르면 표시 안 함 */}
                               {paperAccess(a) === 'paid' && (
                                 <span className="badge-material badge-paid" title={ACCESS_TITLE.paid}>
@@ -1707,7 +1714,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                             )}
                             {(() => {
                               const abs = paperAbstract(a)
-                              if (!abs) return a.paper ? <p className="row-sub muted">초록 없음 · 출판사가 공개하지 않았어요. 원문 링크에서 확인해 주세요</p> : null
+                              if (!abs) return a.paper && !a.patent ? <p className="row-sub muted">초록 없음 · 출판사가 공개하지 않았어요. 원문 링크에서 확인해 주세요</p> : null
                               const absOpen = abstractOpen.has(a.id)
                               return (
                                 <div className={`row-abstract${absOpen ? ' open' : ''}`}>

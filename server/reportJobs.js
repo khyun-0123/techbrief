@@ -221,7 +221,7 @@ function gapsOf(entry) {
   return out.slice(0, MAX_GAPS)
 }
 
-// 바깥에서 새로 찾기: 네이버 뉴스(정확도순 몇 건) · 논문(디스플레이 주제 최근 2년)
+// 바깥에서 새로 찾기: 네이버 뉴스(정확도순 몇 건) · 논문(디스플레이 주제 최근 2년) · 특허(11/22, 디스플레이 특허 초록 2건)
 async function externalCandidates(terms) {
   const q = terms.slice(0, 3).join(' ')
   const out = []
@@ -242,6 +242,13 @@ async function externalCandidates(terms) {
     }
   } catch (err) {
     console.warn(`[report-job] 논문 찾기 실패: ${err.message}`)
+  }
+  try {
+    const { searchPatentArticles } = await import('./patentMaterials.js')
+    const { articles } = await searchPatentArticles(q, 'all', terms.filter((t) => /[A-Za-z]/.test(t)))
+    for (const a of articles.slice(0, 2)) out.push({ ...a, kind: 'data', text: `${a.title}. ${a.abstract}`, summarized: true, external: 'patent' })
+  } catch (err) {
+    console.warn(`[report-job] 특허 찾기 실패: ${err.message}`)
   }
   return out
 }
@@ -392,7 +399,7 @@ async function supplement(job, entry, gaps, research) {
       const p = bestPassage(c.text, g.terms)
       if (!p) continue
       passages.push({
-        label: c.kind === 'input' ? `이 보고서 근거 [${c.n}]` : c.external === 'paper' ? '논문' : c.external === 'news' ? '새로 찾은 기사' : c.material ? '직접 추가한 자료' : '모은 기사',
+        label: c.kind === 'input' ? `이 보고서 근거 [${c.n}]` : c.external === 'paper' ? '논문' : c.external === 'patent' ? '특허' : c.external === 'news' ? '새로 찾은 기사' : c.material ? '직접 추가한 자료' : '모은 기사',
         title: c.title,
         text: p.text.slice(0, PASSAGE_MAX),
         ref: { id: c.id, n: c.n, title: c.title, source: c.source ?? '', url: c.url ?? '', publishedAt: c.published_at ? new Date(c.published_at).toISOString() : c.publishedAt },
