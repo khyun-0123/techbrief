@@ -377,6 +377,10 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     fetchTechTrends()
       .then((d) => setTechTerms(techTermNames(d)))
       .catch(() => {})
+    // 자료 현황 첫 화면 (11/23 조장): 대시보드와 같은 요즘 뜨는 기술 1위 (이번 주 종합)
+    fetchTechTrends({ period: 'week' })
+      .then((d) => setTrendTop(d.composite?.[0]?.name ?? ''))
+      .catch(() => setTrendTop(''))
     fetchMaterials(clientId())
       .then(setMaterials)
       .catch(() => {})
@@ -857,19 +861,20 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   // 찾는 중에 기간을 바꾸면 새 요청을 보내고, 늦게 온 이전 응답은 버린다
   const searchSeq = useRef(0)
   const [timelineQuery, setTimelineQuery] = useState(null) // 기술 시계열 창 (11/10)
-  async function runSearch(q, p = period) {
+  // auto: 사람이 찾지 않고 저절로 연 찾기(요즘 뜨는 기술 1위) — 최근 검색어에 안 남김 (대시보드와 같게)
+  async function runSearch(q, p = period, { auto = false } = {}) {
     if (!q) return
     const seq = ++searchSeq.current
     track('search', q)
     setQuery(q)
     setScopeTerm(null)
     // 찾은 말은 최근 검색어 맨 위로 (같은 말은 하나만)
-    saveRecent([q, ...recent.filter((r) => r !== q)].slice(0, RECENT_MAX))
-    setSearch({ query: q, period: p, loading: true })
+    if (!auto) saveRecent([q, ...recent.filter((r) => r !== q)].slice(0, RECENT_MAX))
+    setSearch({ query: q, period: p, loading: true, auto })
     try {
       const result = await searchNewsApi(q, p)
       if (seq !== searchSeq.current) return
-      setSearch({ query: result.query, period: result.period, articles: result.articles, truncated: result.truncated, oldestAt: result.oldestAt, newsCount: result.newsCount, collectedCount: result.collectedCount, paperCount: result.paperCount, paperNote: result.paperNote, newsNote: result.newsNote })
+      setSearch({ auto, query: result.query, period: result.period, articles: result.articles, truncated: result.truncated, oldestAt: result.oldestAt, newsCount: result.newsCount, collectedCount: result.collectedCount, paperCount: result.paperCount, paperNote: result.paperNote, newsNote: result.newsNote })
       // 영문 검색어를 아직 만드는 중이면 (새 한글 키워드, 11/10) 뒤에서 논문 · 1·2차 출처만 다시 받아 채운다
       if (result.paperPending) {
         searchPapersApi(q, p)
@@ -886,9 +891,30 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       }
     } catch (err) {
       if (seq !== searchSeq.current) return
-      setSearch({ query: q, period: p, error: err.message })
+      setSearch({ query: q, period: p, auto, error: err.message })
     }
   }
+
+  // 자료 현황은 늘 「찾기」로 본다 (11/23 조장: 모은 자료만으로는 진행하지 않음, 「모은 자료로 돌아가기」 없앰)
+  // - 대시보드에서 사람이 분석한 키워드가 새로 있으면 그 키워드를 이어서 찾는다 (자료 선별하기 단추로 왔으면 범위 찾기가 이미 열려 그대로)
+  // - 찾은 것이 없으면 요즘 뜨는 기술 1위 (대시보드 첫 화면과 같은 말). 1위를 못 받으면 예전처럼 모은 자료
+  const [trendTop, setTrendTop] = useState(null) // null = 받는 중, '' = 못 받음
+  const [dashFocus, setDashFocus] = useState(null) // { word, auto } 대시보드에서 분석 중인 말
+  const followed = useRef(null)
+  useEffect(() => {
+    if (screen !== 'collect') return
+    const now = (search?.scope?.query ?? search?.query ?? '').trim()
+    const want = dashFocus?.word
+    if (want && !dashFocus.auto && want !== followed.current) {
+      followed.current = want
+      if (now !== want) runSearch(want)
+      return
+    }
+    if (search) return
+    const first = (dashFocus?.auto && dashFocus.word) || trendTop
+    if (first) runSearch(first, period, { auto: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, dashFocus, trendTop])
 
   // 범위 찾기 (11/10, 대시보드 키워드 분석): 중심 키워드 + 고른 말. 결과 글마다 scopeHits(든 말) → 자료 현황 범위 칩
   // 고른 범위는 브라우저에 남겨 보고서 「보고서 방향」 채우기에 쓴다 (ReportComposer)
@@ -1135,6 +1161,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
 
   // 선별에서 빠진 기사는 보고서 포함 목록에서도 뺀다
   const candidates = pool.filter((a) => selectedIds.includes(a.id))
+  const pickedHere = currentTag ? candidates.filter((a) => selTagsFor(a).includes(currentTag)) : [] // 자료 현황 아래 바: 지금 키워드로 선별한 자료
   const included = includedIds.filter((id) => selectedIds.includes(id))
 
   function handleExclude(id) {
@@ -1299,6 +1326,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             title="화면 둘러보기 — 처음 쓰는 방법을 차례로 보여 줘요"
             aria-label="사용 안내"
           >
+            {/* 11/23 조장: 왼쪽에 동그란 i 아이콘 (설정의 톱니와 같은 크기 · 줄) */}
+            <svg className="topbar-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="11" x2="12" y2="17" strokeLinecap="round" />
+              <circle cx="12" cy="7.5" r="0.6" fill="currentColor" />
+            </svg>
             <span className="guide-btn-text">사용 안내</span>
           </button>
           <SettingsMenu admin={admin} reportCount={liveReports.filter((r) => r.mine).length} selectedCount={selectedIds.length} onBundle={downloadBundle} onMove={() => setShowMove(true)} />
@@ -1374,6 +1407,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             window.scrollTo({ top: 0 })
           }}
           onGoCollect={() => setScreen('collect')}
+          onFocus={setDashFocus}
         />
       ) : screen === 'archive' ? (
         <ReportArchive
@@ -1396,6 +1430,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         />
       ) : screen === 'select' ? (
         <SelectSummary
+          focusTag={currentTag}
           candidates={candidates}
           includedIds={included}
           setIncludedIds={setIncludedIds}
@@ -1427,9 +1462,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               오른쪽 끝에 「최근·즐겨찾기」(대시보드와 같은 부품) · 「+ 자료 추가」. 절반 화면은 두 줄(찾기 · 단추 / 거르기) */}
           <TitleBand
             className="collect-top"
-            over={search ? (search.scope ? '자료 현황 · 범위 찾기' : '자료 현황 · 찾은 결과') : '자료 현황'}
-            title={search ? `「${search.scope?.query ?? search.query}」` : '모은 자료'}
-            meta={search ? (search.loading ? '찾는 중…' : `${search.articles?.length ?? 0}건`) : `자료 ${visibleArticleCount}건`}
+            over={search ? (search.scope ? '자료 현황 · 범위 찾기' : search.auto ? '자료 현황 · 요즘 뜨는 기술 1위' : '자료 현황 · 찾은 결과') : '자료 현황'}
+            title={search ? `「${search.scope?.query ?? search.query}」` : trendTop === null ? '불러오는 중…' : '모은 자료'}
+            meta={search ? (search.loading ? '찾는 중…' : `${search.articles?.length ?? 0}건`) : trendTop === null ? '' : `자료 ${visibleArticleCount}건`}
           >
             <form className="search-form collect-search" onSubmit={handleSearch} role="search" aria-label="논문 · 뉴스에서 찾기">
               <SearchBox
@@ -1519,9 +1554,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   </span>
                   <button type="button" className="btn" onClick={() => setTimelineQuery(search.query)} title="이 기술의 배경 · 성장 · 적용 · 전망을 논문 · 특허 · 검색 관심도로 봐요">
                     기술 시계열
-                  </button>
-                  <button type="button" className="btn" onClick={closeSearch}>
-                    모은 자료로 돌아가기
                   </button>
                 </div>
               ) : null}
@@ -1776,16 +1808,17 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                           </td>
                           <td className="actions">
                             {/* 작업 (11/09 조장: 같은 모양 버튼 두 개): 요약 · 선별 버튼을 같은 폭 · 같은 높이로.
-                                내용을 여는 버튼(요약 보기)은 옅은 테두리, 하는 버튼(요약하기 · + 선별)은 진한 테두리 · 굵게, 선별됨은 옅은 바탕.
-                                폴더 옮기기 · 빼기는 「✓ 선별됨 ▾」 메뉴 안 (SelectToggle) */}
+                                내용을 여는 버튼(보기)은 옅은 테두리, 하는 버튼(요약 · 선별)은 진한 테두리 · 굵게, 선별됨은 옅은 바탕.
+                                태그 빼기 · 선별 빼기는 「선별됨」 메뉴 안 (SelectToggle). 11/23: 글자 짧게, 화면 읽기에는 원래 이름 */}
                             <div className="row-actions">
                               {ai ? (
-                                <button type="button" className={open ? 'act-btn view open' : 'act-btn view'} aria-expanded={Boolean(open)} onClick={() => setOpenSummaryId(open ? null : a.id)}>
-                                  {open ? '요약 접기' : '요약 보기'}
+                                <button type="button" className={open ? 'act-btn view open' : 'act-btn view'} aria-label={open ? '요약 접기' : '요약 보기'} aria-expanded={Boolean(open)} onClick={() => setOpenSummaryId(open ? null : a.id)}>
+                                  {/* 11/23 조장: 작업 글자 짧게 — 요약 / 보기 · 선별 / 선별됨 */}
+                                  {open ? '접기' : '보기'}
                                 </button>
                               ) : job?.status === 'queued' || job?.status === 'running' ? (
                                 <button type="button" className="act-btn wait" disabled>
-                                  {job.status === 'running' ? '요약 중…' : '요약 대기'}
+                                  {job.status === 'running' ? '요약 중' : '대기'}
                                 </button>
                               ) : (
                                 <button
@@ -1794,8 +1827,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                                   title={a.aiAllowed === false ? 'AI 요약을 허용하지 않은 자료예요' : opsValue.aiBlocked ? AI_BLOCKED_TITLE : job?.status === 'error' ? `요약 오류: ${job.error}` : 'AI로 6항목 요약 (선별하지 않아도 됨)'}
                                   disabled={opsValue.aiBlocked || a.aiAllowed === false}
                                   onClick={() => queue.enqueue(a)}
+                                  aria-label={job?.status === 'error' ? '다시 요약' : '요약하기'}
                                 >
-                                  {job?.status === 'error' ? '다시 요약' : '요약하기'}
+                                  {job?.status === 'error' ? '다시' : '요약'}
                                 </button>
                               )}
                               <SelectToggle
@@ -1872,6 +1906,39 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               </aside>
             )}
           </div>
+          {/* 아래 고정 바 (11/23 조장: 대시보드와 같은 모양): 이 키워드로 선별한 자료를 보고 선별·요약으로 넘어감 */}
+          {currentTag && (
+            <div className="ka-next collect-next" role="region" aria-label="선별한 자료와 다음 단계">
+              <p className="ka-next-scope" title={pickedHere.map((a) => a.title).join('\n') || undefined}>
+                <span className="ka-next-label">선별한 자료</span>
+                <b>「{currentTag}」</b> {pickedHere.length}건
+                {pickedHere.length > 0 ? (
+                  <span className="muted">
+                    {' '}
+                    · {pickedHere
+                      .slice(0, 2)
+                      .map((a) => (a.title.length > 24 ? `${a.title.slice(0, 23)}…` : a.title))
+                      .join(', ')}
+                    {pickedHere.length > 2 && ` 외 ${pickedHere.length - 2}건`}
+                  </span>
+                ) : (
+                  <span className="muted"> · 목록에서 「선별」을 눌러 담아요</span>
+                )}
+              </p>
+              <div className="ka-next-actions">
+                <button
+                  type="button"
+                  className="btn primary ka-next-go"
+                  onClick={() => {
+                    setScreen('select')
+                    window.scrollTo({ top: 0 })
+                  }}
+                >
+                  선별·요약으로 <span aria-hidden="true">→</span>
+                </button>
+              </div>
+            </div>
+          )}
         </main>
       )}
       {showMove && <DataMove favorites={favorites} recent={recent} onClose={() => setShowMove(false)} />}

@@ -31,7 +31,8 @@ function SelectSummary({
   tagList,
   onRemoveTag,
   onMaterialAdded,
-  reportArticles,
+  reportArticles: allReportArticles,
+  focusTag = null,
   reports,
   folderSummary,
   reportJobs,
@@ -41,11 +42,16 @@ function SelectSummary({
   const { aiBlocked } = useOps()
   const [sort, setSort] = useState('importance')
   const [openId, setOpenId] = useState(null)
-  const [folder, setFolder] = useState(null) // 보는 키워드 태그 (null = 전체)
+  // 보는 키워드 태그 (11/23 조장: 선별·요약은 늘 키워드 하나 중심 — 「전체」 없앰).
+  // 처음 값 = 자료 현황에서 찾던 말(focusTag), 그 태그가 없으면 첫 태그
+  const [folderPick, setFolder] = useState(focusTag)
+  const folder = tagList.includes(folderPick) ? folderPick : tagList.includes(focusTag) ? focusTag : (tagList[0] ?? null)
   const [showAdd, setShowAdd] = useState(false)
   // 폭 901~1100(FHD 절반 등)에서는 두 칸을 나란히 두기 좁아 하나씩 본다 (11/15 화면 틀). 그 밖의 폭에서는 CSS가 단추를 숨기고 둘 다 보인다
   const [pane, setPane] = useState('list')
   const inFolder = (a) => folder === null || tagsFor(a).includes(folder)
+  // 보고서에는 지금 키워드 태그의 체크한 자료만 (다른 키워드에서 체크한 것은 그 키워드를 고르면 다시 보임)
+  const reportArticles = allReportArticles.filter(inFolder)
   const checkedByTag = {}
   for (const a of candidates) if (includedIds.includes(a.id)) for (const t of tagsFor(a)) checkedByTag[t] = (checkedByTag[t] ?? 0) + 1
 
@@ -188,7 +194,7 @@ function SelectSummary({
           <ol className="select-steps">
             <li>
               <b>자료 현황에서 기사 고르기</b>
-              <span>기사 줄의 「+ 선별」을 누르면 여기로 모여요. 찾던 검색어로 저절로 묶여요.</span>
+              <span>기사 줄의 「선별」을 누르면 여기로 모여요. 찾던 검색어로 저절로 묶여요.</span>
             </li>
             <li>
               <b>요약 확인하기</b>
@@ -214,11 +220,8 @@ function SelectSummary({
             <h2 className="sr-only">선별 자료 목록</h2>
             {/* 키워드 태그 칩 (11/22: 폴더 대신 — 선별할 때 찾던 검색어로 자동). 고르면 그 키워드만 보이고, 보고서 주제 키워드도 그 말로 */}
             <div className="tag-bar" role="group" aria-label="키워드로 거르기">
-              <button type="button" className={folder === null ? 'tag-pick on' : 'tag-pick'} aria-pressed={folder === null} onClick={() => setFolder(null)}>
-                전체 <span className="tag-n">{candidates.length}</span>
-              </button>
               {tagList.map((t) => (
-                <button key={t} type="button" className={folder === t ? 'tag-pick on' : 'tag-pick'} aria-pressed={folder === t} onClick={() => setFolder(folder === t ? null : t)} title={`「${t}」로 선별한 자료${checkedByTag[t] ? ` · 보고서 체크 ${checkedByTag[t]}건` : ''} — 고르면 보고서 주제 키워드도 「${t}」`}>
+                <button key={t} type="button" className={folder === t ? 'tag-pick on' : 'tag-pick'} aria-pressed={folder === t} onClick={() => setFolder(t)} title={`「${t}」로 선별한 자료${checkedByTag[t] ? ` · 보고서 체크 ${checkedByTag[t]}건` : ''} — 고르면 보고서 주제 키워드도 「${t}」`}>
                   #{t} <span className="tag-n">{tagCounts[t]}</span>
                 </button>
               ))}
