@@ -25,6 +25,20 @@ function subscribe(l) {
 const getSnapshot = () => snapshot
 const getOpenRequest = () => openRequest
 
+// 오래 기다리다 끊기면 다시 묻기 (11/25 팀 검수 「300초 넘으면 서버 오류」): AI 대기열이 길면 흐름 정리 요청이 응답을 오래 붙잡고,
+// 앞단(Railway 등) 시간 제한에 끊긴다. 서버는 같은 말의 정리를 한 번만 만들고(timeline.js storyRuns) 끝나면 기억해 두므로,
+// 1분 넘게 기다리다 실패했으면 다시 물어 진행 중인 정리에 합류하거나 기억된 결과를 받는다 (최대 3번)
+async function storyWithRetry(query) {
+  for (let i = 0; ; i++) {
+    const t0 = Date.now()
+    try {
+      return await fetchTimelineStory(query)
+    } catch (err) {
+      if (i >= 3 || Date.now() - t0 < 60_000) throw err
+    }
+  }
+}
+
 // 정리를 시작한다 (이미 했거나 하는 중이면 그대로). 미리 분석된 말은 서버가 기억해 둔 값이 바로 온다
 export function startStory(query) {
   const have = jobs.get(query)
@@ -32,7 +46,7 @@ export function startStory(query) {
   const job = { query, status: 'running', startedAt: Date.now(), endedAt: null, story: null, error: '', watchers: have?.watchers ?? 0, listed: have?.listed ?? false, unseen: false }
   jobs.set(query, job)
   emit()
-  fetchTimelineStory(query)
+  storyWithRetry(query)
     .then((story) => {
       Object.assign(job, { status: 'done', story, endedAt: Date.now(), unseen: job.listed && job.watchers === 0 })
     })

@@ -652,6 +652,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
   const [totalN, setTotalN] = useState(phone ? 18 : 40)
   const [minCo, setMinCo] = useState(MIN_CO_DEFAULT)
   const [panelOpen, setPanelOpen] = useState(false) // 가이드: 처음엔 접힘
+  const [depthPick, setDepthPick] = useState('auto') // 보이는 단계 (11/25 팀 검수 「가지 수는 노드 깊이」 의견): auto · 1 · 2 · 3
   const [openSet, setOpenSet] = useState({}) // 손으로 펼치거나 접은 가지 { 말: true | false }. 없으면 칸 높이에 따라 위 0~4개 펼침 (autoN)
   const [hover, setHover] = useState(null)
   const [saveMsg, setSaveMsg] = useState('')
@@ -878,6 +879,31 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
                   <input type="range" min={kwMin} max={kwMax} value={kwN} disabled={kwMax <= kwMin} onChange={(e) => setTotalN(Number(e.target.value))} aria-valuetext={`${kwN}개 (${kwMin}~${kwMax})`} />
                 </label>
               </div>
+              {mode === 'map' && (
+                <div className="km-ctl" title="몇 단계까지 펼쳐 보일지 — 점마다 「+n」 · 「−」로 따로 펼치고 접을 수도 있어요">
+                  <span className="km-lbl">보이는 단계</span>
+                  <Seg
+                    value={depthPick}
+                    label="보이는 단계"
+                    size="md"
+                    onChange={(d) => {
+                      setDepthPick(d)
+                      // 1단계만 = 모두 접기 · 2단계 = 1단계 가지를 모두 펼침 · 3단계 = 2단계 가지까지 · 자동 = 칸 높이에 맞춰 위 몇 개만
+                      if (d === 'auto') return setOpenSet({})
+                      const next = {}
+                      for (const n of graph.l1) next[n.word] = Number(d) >= 2
+                      for (const n of graph.l2.filter((x) => x.lv === 2)) next[n.word] = Number(d) >= 3
+                      setOpenSet(next)
+                    }}
+                    options={[
+                      { value: 'auto', label: '자동' },
+                      { value: '1', label: '1단계' },
+                      { value: '2', label: '2단계' },
+                      { value: '3', label: '3단계' },
+                    ]}
+                  />
+                </div>
+              )}
               {mode === 'map' && (
                 <label className="km-ctl">
                   <span className="km-lbl">

@@ -351,22 +351,26 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
             {picked.length === 0 ? (
               <p className="hint">선별 목록에서 보고서에 넣을 자료를 체크하세요. 여러 폴더의 자료를 함께 넣을 수 있어요.</p>
             ) : (
-              <ol>
-                {articles.map((a, i) => {
+              // 11/25 팀 검수: 체크한 자료를 모두 보여 줌 — 들어가는 자료(번호) 다음에 빠지는 자료(「빠짐」). 칸 높이는 화면에 맞추고 칸 안에서 스크롤
+              <ol className="composer-list" tabIndex={0} aria-label={`담길 자료 ${articles.length}건${leftOut.length ? ` · 빠지는 자료 ${leftOut.length}건` : ''}`}>
+                {[...articles, ...leftOut].map((a, i) => {
+                  const out = i >= articles.length
                   const job = jobOf(a.id)
                   const done = Boolean(aiSummaries[a.id])
                   const state = done ? '요약 완료' : job?.status === 'running' ? `요약 중 ${queue.progressOf(job)}%` : job?.status === 'queued' ? '요약 대기' : '요약 없음'
                   return (
-                    <li key={a.id}>
-                      <span className="report-ref-num">{i + 1}</span>
-                      <span className="composer-article-title">{a.title}</span>
-                      <span className={done ? 'summary-dot done' : 'summary-dot none'}>{state}</span>
+                    <li key={a.id} className={out ? 'is-out' : undefined}>
+                      {out && i === articles.length && <span className="composer-out-head">빠지는 자료 {leftOut.length}건 (중요도 낮은 순) — 넣으려면 「{picked.length}건 모두」</span>}
+                      <span className="report-ref-num">{out ? '–' : i + 1}</span>
+                      <span className="composer-article-title" title={a.title}>
+                        {a.title}
+                      </span>
+                      <span className={out ? 'summary-dot none' : done ? 'summary-dot done' : 'summary-dot none'}>{out ? '빠짐' : state}</span>
                     </li>
                   )
                 })}
               </ol>
             )}
-            {leftOut.length > 0 && <p className="hint">이번 초안에서 빠지는 자료 {leftOut.length}건 (중요도 낮은 순)</p>}
           </div>
 
           <div className="composer-foot">
