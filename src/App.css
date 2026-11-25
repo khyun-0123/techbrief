@@ -10521,3 +10521,34 @@ body:has(.collect-next) .progress-panel {
   font-size: 13px;
   color: var(--tb-color-text-sub);
 }
+
+/* 기술 시계열 세부 근거 접기 (11/25 팀 검수) */
+.ka-facts-wrap > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tb-color-text-sub);
+  cursor: pointer;
+  list-style: none;
+}
+.ka-facts-wrap > summary::-webkit-details-marker {
+  display: none;
+}
+.ka-facts-wrap > summary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+.ka-facts-wrap[open] > summary::before {
+  transform: rotate(45deg);
+}
+.ka-facts-wrap > summary:hover {
+  color: var(--tb-color-text);
+}

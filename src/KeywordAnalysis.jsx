@@ -550,6 +550,9 @@ function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, on
                     />
                   </div>
                   <Glance job={job} stage={data.stage.stage} keyword={keyword} />
+                  {/* 11/25 팀 검수: 논문 낸 회사 · 특허 · 상용화 언급 · 대표 특허 · 세부 분류는 길어서 접었다 펼침 (처음엔 접힘) */}
+                  <details className="ka-facts-wrap">
+                    <summary>세부 근거 — 논문 낸 회사 · 특허 · 상용화 언급 · 대표 특허 · 세부 분류</summary>
                   <dl className="ka-facts">
                     {(() => {
                       const last = data.corpus?.periods?.[2]
@@ -644,6 +647,7 @@ function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, on
                       )
                     })()}
                   </dl>
+                  </details>
                   {/* 화면이 넓으면 「크게 보기」 내용을 더 (11/18 조장, TimelineExtras.jsx) */}
                   <TimelineExtras keyword={keyword} data={data} job={job} />
                 </>

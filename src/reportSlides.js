@@ -405,127 +405,197 @@ export function reportPages(saved, extra = {}) {
   const factN = Object.values(sec).reduce((n, s) => n + s.facts.length, 0)
   const aiN = Object.values(sec).reduce((n, s) => n + s.ai.length, 0)
 
-  // ════ 1쪽 핵심 요약 ════
+  // ════ 1쪽 핵심 요약 (11/25 팀 검수 8번 시안 · 추천안) ════
+  // 위: 헤드라인(검정) · 한 줄 요약 / 왼쪽: 특허 증가 그래프(이전 기간 = 100) · 기술 단계 · 핵심 사실 근거(담당자 필수 칸) / 오른쪽: 시사점 및 제언
+  // 레드는 자사 · 지금 단계 같은 강조에만 (5번: 헤드라인이 위협인데 「기회」와 같은 레드였음). 분석 숫자가 없으면 그 자리에 핵심 사실을 더
   {
     const els = []
-    chrome(els, meta, null)
-    els.push(text(PAGE.w - M - 3, 0.5, 3, LH(SIZE.note), SIZE.note, `보고일 ${meta.date}${meta.dept ? ` · ${meta.dept}` : ''}`, { align: 'right', color: COLOR.sub }))
-    els.push(text(M, 0.72, 5.2, LH(SIZE.title), SIZE.title, meta.title, { bold: true }))
-    els.push(text(PAGE.w - M - 3.8, 0.72 + LH(SIZE.title) - LH(SIZE.note), 3.8, LH(SIZE.note), SIZE.note, `수집 기간 ${meta.period}  |  ${evidenceLabel(saved)}`, { align: 'right', color: COLOR.sub }))
-    els.push({ t: 'line', x: M, y: 0.72 + LH(SIZE.title) + 0.08, w: CW, color: COLOR.line })
-    let y = 0.72 + LH(SIZE.title) + 0.18
-    if (meta.direction) {
-      const n = linesOf(`방향: ${meta.direction}`, SIZE.body, CW - 0.2)
-      els.push(rect(M, y, 0.05, n * LH(SIZE.body), { fill: COLOR.ink }))
-      els.push(text(M + 0.15, y, CW - 0.15, n * LH(SIZE.body), SIZE.body, [{ text: '방향: ', bold: true }, { text: meta.direction }]))
-      y += n * LH(SIZE.body) + 0.12
+    // 머리 줄: 왼쪽 「테크브리프 · 제목」, 오른쪽 보고일 · 수집 기간, 아래 레드 줄
+    els.push(text(M, 0.28, 6, LH(SIZE.body), SIZE.body, [{ text: '테크브리프  ', bold: true }, { text: meta.title, color: COLOR.sub }]))
+    els.push(text(PAGE.w - M - 3.6, 0.28, 3.6, LH(SIZE.note), SIZE.note, `보고일 ${meta.date}${meta.dept ? ` · ${meta.dept}` : ''} · 수집 ${meta.period}`, { align: 'right', color: COLOR.sub }))
+    els.push(rect(M, 0.28 + LH(SIZE.body) + 0.06, CW, 0.03, { fill: COLOR.accent }))
+    let y = 0.28 + LH(SIZE.body) + 0.2
+    // 헤드라인 (18pt · 검정 · 2줄까지, 넘치면 3줄까지 칸을 늘리고 표시)
+    const hlLines = Math.min(3, linesOf(headline, SIZE.title, CW))
+    els.push(text(M, y, CW, hlLines * LH(SIZE.title), SIZE.title, headline, { bold: true }))
+    const hlOver = linesOf(headline, SIZE.title, CW) > 2
+    y += hlLines * LH(SIZE.title) + 0.06
+    const oneLine = report.oneLine ? cutWords(report.oneLine, 80) : ''
+    if (oneLine) {
+      const n = Math.min(2, linesOf(oneLine, SIZE.body, CW))
+      els.push(text(M, y, CW, n * LH(SIZE.body), SIZE.body, oneLine, { color: COLOR.sub }))
+      y += n * LH(SIZE.body) + 0.04
     }
-    // 11/20: 3줄까지는 칸을 늘려 글이 칸 밖으로 나가지 않게 (관리 페이지에서 제목 글자를 키우면 2줄을 넘기 쉬움). 2줄 넘음 표시(hlOver)는 그대로
-    const hlLines = Math.min(3, linesOf(headline, SIZE.title, CW - 0.4))
-    const hlH = hlLines * LH(SIZE.title) + 0.22
-    els.push(rect(M, y, CW, hlH, { fill: COLOR.pink, radius: 0.1 }))
-    els.push(rect(M + 0.15, y + 0.13, 0.07, hlH - 0.26, { fill: COLOR.accent }))
-    els.push(text(M + 0.32, y + 0.11, CW - 0.45, hlLines * LH(SIZE.title), SIZE.title, headline, { bold: true, color: COLOR.accent }))
-    const hlOver = linesOf(headline, SIZE.title, CW - 0.4) > 2
-    y += hlH + 0.14
+    if (meta.direction) {
+      els.push(text(M, y, CW, LH(SIZE.note), SIZE.note, [{ text: '방향  ', bold: true }, { text: cutWords(meta.direction, 70) }], { color: COLOR.sub }))
+      y += LH(SIZE.note) + 0.04
+    }
+    y += 0.16
 
-    const srcY = FOOT_Y - 0.5
-    // 한 줄 요약 (11/17, 보고서팀 양식 본문 맨 아래 칸): 있으면 출처 줄 위에 한 줄. 양식처럼 50자(낱말 단위)로 줄임
-    const oneLine = report.oneLine ? cutWords(report.oneLine, 50) : ''
-    const oneY = srcY - 0.46
+    const footY = FOOT_Y - 0.1
+    const LW = 5.75 // 왼쪽 칸 폭
+    const RX = M + LW + 0.35
+    const RW = CW - LW - 0.35
     const colTop = y
-    const colH = (oneLine ? oneY : srcY) - 0.1 - colTop
-    const colW = (CW - 0.2) / 2
-    const innerW = colW - 0.3
+    const bottom = footY - 0.12
 
-    // 왼쪽: 핵심 사실 및 근거 (근거 2건 이상 먼저) + AI 해설
-    // 핵심 요약 사실을 근거 많은 순으로. 2줄이 안 되면 업계 동향 · 기술 개요 사실로 채움 (그 쪽에도 그대로 남음)
-    const byRefs = (a, b) => Math.min(b.refs.length, 2) - Math.min(a.refs.length, 2)
-    // 헤드라인과 같은 문장은 1쪽 목록에서 빼고 (기술 개요 등 다른 쪽에는 그대로)
+    // [분석] 근거 번호: 특허 비교 · 기술 단계 줄 (없으면 번호 없이)
+    const refOf = (re) => {
+      const i = saved.articles.findIndex((x) => x.analysis && re.test(x.title ?? ''))
+      return i >= 0 ? [i + 1] : []
+    }
+    const an0 = (() => {
+      const x = (report.analysis ?? [])[0]
+      return x && !x.papers && extra.analysis?.[x.keyword] ? { ...extra.analysis[x.keyword], ...x } : x
+    })()
+    const comp = an0?.competitors
+    const own = comp?.companies?.find((c) => c.own && c.ratio != null)
+    const rivals = (comp?.companies ?? []).filter((c) => !c.own && c.ratio != null && !c.unsure).sort((p, q) => q.ratio - p.ratio).slice(0, 2)
+    let ly = colTop
+    if (own) {
+      // ── 특허 증가 그래프: 이전 기간 = 100, 자사(레드) · 경쟁사 · 분야 전체(회색) ──
+      const rows = [
+        { name: `${(own.name ?? '자사').replace(/\s*\(자사\)/, '')} (자사)`, r: own.ratio, me: true },
+        ...rivals.map((c) => ({ name: c.name, r: c.ratio })),
+        ...(comp.field?.ratio != null ? [{ name: '분야 전체 특허', r: comp.field.ratio }] : []),
+      ]
+      const top = Math.max(...rows.map((x) => x.r)) >= Math.max(...rivals.map((c) => c.ratio), 0) && rows[0].r === Math.max(...rows.map((x) => x.r))
+      const title = own.ratio >= 2 ? `자사 특허는 이전 기간의 두 배를 넘었다` : top ? '자사 특허가 경쟁사 가운데 가장 빠르게 늘었다' : `${rivals[0]?.name ?? '경쟁사'} 특허가 자사보다 빠르게 늘었다`
+      els.push(text(M, ly, LW, LH(SIZE.body), SIZE.body, [{ text: title, bold: true }, { text: refLabel(refOf(/특허|경쟁/)), color: COLOR.sub }]))
+      ly += LH(SIZE.body)
+      els.push(text(M, ly, LW, LH(SIZE.note), SIZE.note, `${comp.name ?? an0.keyword} 특허 · 이전 기간을 100으로 놓은 지수 (${comp.years ?? ''})`, { color: COLOR.sub }))
+      ly += LH(SIZE.note) + 0.12
+      const lab = 1.75
+      const px0 = M + lab + 0.1
+      const pw = LW - lab - 0.75
+      const vmin = Math.min(100, ...rows.map((x) => x.r * 100)) - 10
+      const vmax = Math.max(200, ...rows.map((x) => x.r * 100)) + 5
+      const X = (v) => px0 + ((v - vmin) / (vmax - vmin)) * pw
+      const rowH = 0.32
+      const plotTop = ly
+      // 이전 기간(100) 세로선 · 눈금
+      els.push(rect(X(100) - 0.005, plotTop - 0.04, 0.012, rows.length * rowH + 0.04, { fill: COLOR.sub }))
+      for (const tick of [100, 150, 200].filter((t) => t >= vmin && t <= vmax)) {
+        if (tick !== 100) els.push(rect(X(tick) - 0.003, plotTop, 0.006, rows.length * rowH, { fill: COLOR.line }))
+        els.push(text(X(tick) - 0.3, plotTop + rows.length * rowH + 0.02, 0.6, LH(SIZE.note), SIZE.note, String(tick), { align: 'center', color: COLOR.sub }))
+      }
+      for (const [i, r] of rows.entries()) {
+        const cy = plotTop + i * rowH + rowH / 2
+        const col = r.me ? COLOR.accent : COLOR.grayInk
+        els.push(text(M, cy - LH(SIZE.body) / 2, lab, LH(SIZE.body), SIZE.body, cutWords(r.name, 16), { bold: r.me, color: r.me ? COLOR.ink : COLOR.sub }))
+        const x1 = X(100)
+        const x2 = X(r.r * 100)
+        els.push(rect(Math.min(x1, x2), cy - 0.025, Math.abs(x2 - x1), 0.05, { fill: col }))
+        els.push(rect(x1 - 0.06, cy - 0.06, 0.12, 0.12, { fill: 'FFFFFF', line: col, radius: 0.06 }))
+        els.push(rect(x2 - 0.07, cy - 0.07, 0.14, 0.14, { fill: col, radius: 0.07 }))
+        els.push(text(Math.max(x1, x2) + 0.1, cy - LH(SIZE.body) / 2, 0.75, LH(SIZE.body), SIZE.body, `${r.r}배`, { bold: true, color: col }))
+      }
+      ly = plotTop + rows.length * rowH + LH(SIZE.note) + 0.06
+      const rival = rivals[0]
+      const sentence = rival ? `자사 특허 증가 폭(${own.ratio}배)이 ${rival.name}(${rival.ratio}배)${own.ratio >= rival.ratio ? '보다 크다' : '보다 작다'}${comp.field?.ratio != null ? ` · 분야 전체 ${comp.field.ratio}배` : ''}${comp.verdict ? ` → 규칙 판정: 자사에 ${comp.verdict}` : ''}` : `자사 특허가 이전 기간의 ${own.ratio}배`
+      const sn = linesOf(sentence, SIZE.body, LW)
+      els.push(text(M, ly, LW, sn * LH(SIZE.body), SIZE.body, sentence))
+      ly += sn * LH(SIZE.body) + 0.02
+      els.push(text(M, ly, LW, LH(SIZE.note), SIZE.note, '출처: 디스플레이 특허 DB (같은 발명 한 번 · 규칙 계산)', { color: COLOR.sub }))
+      ly += LH(SIZE.note) + 0.14
+    }
+    // ── 기술 단계 막대: 태동 · 성장 · 상용화 진입 · 성숙 (지금 단계 = 레드, 함께 걸친 단계 = 옅은 레드) ──
+    const stageText = an0?.stage?.stage ?? ''
+    if (stageText) {
+      const STEPS = ['태동', '성장', '상용화 진입', '성숙']
+      const hits = STEPS.filter((x) => stageText.includes(x))
+      const lab = 1.2
+      els.push(text(M, ly + 0.07, lab, LH(SIZE.body), SIZE.body, [{ text: '기술 단계', bold: true }, { text: refLabel(refOf(/기술 단계/)), color: COLOR.sub }]))
+      const sw = (LW - lab - 0.1 - 0.06 * 3) / 4
+      for (const [i, st] of STEPS.entries()) {
+        const x = M + lab + 0.1 + i * (sw + 0.06)
+        const k = hits.indexOf(st)
+        const fill = k === 0 ? COLOR.accent : k > 0 ? COLOR.pink : COLOR.gray
+        els.push(rect(x, ly, sw, 0.36, { fill }))
+        els.push(text(x, ly + 0.18 - LH(SIZE.body) / 2, sw, LH(SIZE.body), SIZE.body, st, { align: 'center', bold: k >= 0, color: k === 0 ? 'FFFFFF' : k > 0 ? COLOR.accent : COLOR.sub }))
+      }
+      ly += 0.42
+      if (an0.stage.why) {
+        const why = cutWords(an0.stage.why, 90)
+        const wn = Math.min(2, linesOf(why, SIZE.note, LW - lab - 0.1))
+        els.push(text(M + lab + 0.1, ly, LW - lab - 0.1, wn * LH(SIZE.note), SIZE.note, why, { color: COLOR.sub }))
+        ly += wn * LH(SIZE.note)
+      }
+      ly += 0.14
+    }
+
+    // ── 핵심 사실 근거 (담당자 회신 11/10 1쪽 필수 칸): 근거 많은 순, 남는 자리만큼 ──
+    const byRefs = (p, q) => Math.min(q.refs.length, 2) - Math.min(p.refs.length, 2)
     const sameAsHead = (f) => norm(f.text) === norm(headline) || norm(headline).includes(norm(f.text)) || norm(f.text).includes(norm(headline))
     const ranked = sec.summary.facts.filter((f) => !sameAsHead(f)).sort(byRefs)
     if (ranked.length < 2) ranked.push(...[...sec.industry.facts, ...sec.tech.facts].filter((f) => !sameAsHead(f)).sort(byRefs).slice(0, 2 - ranked.length))
-    const leftAi = sec.summary.ai.slice(0, 2)
-    const aiH = aiBoxHeight(innerW, leftAi)
-    const room = colH - 0.6 - (aiH ? aiH + 0.1 : 0)
+    els.push({ t: 'line', x: M, y: ly, w: LW, color: COLOR.line })
+    ly += 0.08
+    els.push(text(M, ly, LW, LH(SIZE.sub), SIZE.sub, '핵심 사실 근거', { bold: true }))
+    ly += LH(SIZE.sub) + 0.06
+    const leftAi = own ? [] : sec.summary.ai.slice(0, 2) // 그래프가 없을 때만 AI 해설 상자 (자리)
+    const aiH = aiBoxHeight(LW, leftAi)
     const leftFacts = []
-    let used = 0
     for (const f of ranked) {
-      const h = factHeight(innerW, f) + 0.07
-      if (leftFacts.length >= 4 || used + h > room) break
+      const h = factHeight(LW, f) + 0.06
+      if (leftFacts.length >= (own ? 3 : 5) || ly + h > bottom - (aiH ? aiH + 0.08 : 0)) break
       leftFacts.push(f)
-      used += h
+      ly += factLine(els, M, ly, LW, f) + 0.06
     }
-    const movedFacts = sec.summary.facts.filter((f) => !leftFacts.includes(f) && !sameAsHead(f))
-    els.push(rect(M, colTop, colW, colH, { line: COLOR.pinkLine, radius: 0.12 }))
-    els.push(text(M + 0.15, colTop + 0.12, innerW, LH(SIZE.sub), SIZE.sub, '핵심 사실 및 근거', { bold: true }))
-    els.push({ t: 'line', x: M + 0.15, y: colTop + 0.18 + LH(SIZE.sub), w: innerW, color: COLOR.line })
-    let ly = colTop + 0.3 + LH(SIZE.sub)
     if (!leftFacts.length) {
-      els.push(text(M + 0.15, ly, innerW, LH(SIZE.body), SIZE.body, '기사로 확인된 사실 없음', { color: COLOR.sub }))
+      els.push(text(M, ly, LW, LH(SIZE.body), SIZE.body, '기사로 확인된 사실 없음', { color: COLOR.sub }))
+      ly += LH(SIZE.body)
     }
-    for (const f of leftFacts) ly += factLine(els, M + 0.15, ly, innerW, f) + 0.07
-    if (leftAi.length) aiBox(els, M + 0.15, colTop + colH - 0.12 - aiH, innerW, leftAi)
+    if (leftAi.length) aiBox(els, M, bottom - aiH, LW, leftAi)
+    const movedFacts = sec.summary.facts.filter((f) => !leftFacts.includes(f) && !sameAsHead(f))
 
-    // 오른쪽: 시사점 및 제언 — 기회 / 위협 + AI 해설
-    const rx = M + colW + 0.2
-    els.push(rect(rx, colTop, colW, colH, { line: COLOR.pinkLine, radius: 0.12 }))
-    els.push(text(rx + 0.15, colTop + 0.12, innerW, LH(SIZE.sub), SIZE.sub, '시사점 및 제언', { bold: true }))
-    els.push({ t: 'line', x: rx + 0.15, y: colTop + 0.18 + LH(SIZE.sub), w: innerW, color: COLOR.line })
-    let ry = colTop + 0.3 + LH(SIZE.sub)
-    const labelW = 1.05
-    const rows = brief
+    // ── 오른쪽: 시사점 및 제언 (제목 + 굵은 검정 줄, 기회 · 위협 · 할 일 — 색 없이 제목만, AI 해설은 작은 표시) ──
+    let ry = colTop
+    els.push(text(RX, ry, RW, LH(SIZE.sub), SIZE.sub, '시사점 및 제언', { bold: true }))
+    ry += LH(SIZE.sub) + 0.05
+    els.push(rect(RX, ry, RW, 0.04, { fill: COLOR.ink }))
+    ry += 0.14
+    const aiRuns = (t) => {
+      const m = String(t).match(/^(.*?)\s*\((AI 해설[^)]*)\)\s*$/)
+      return m ? [{ text: m[1] }, { text: ' [AI 해설]', color: COLOR.sub, size: SIZE.note }] : [{ text: t }]
+    }
+    const groups = brief
       ? [
-          ['↑ 기회', '(Opportunities)', opps, COLOR.pink, COLOR.accent],
-          ['↓ 위협', '(Threats)', threats, COLOR.gray, COLOR.grayInk],
-          // 담당자 양식: 1페이지에 할 일까지 (11/14 통합)
-          ...(brief.fromMain ? [['→ 할 일', '(Actions)', actions.map((a) => (a.when ? `${a.what} — ${a.when}` : a.what)), COLOR.gray, COLOR.ink]] : []),
+          ['기회', opps],
+          ['위협', threats],
+          ...(brief.fromMain ? [['할 일', actions.map((a) => (a.when ? `${a.what} — ${a.when}` : a.what))]] : []),
         ]
-      : []
-    const rightAi = sec.implications.ai.slice(0, 2)
-    const raiH = aiBoxHeight(innerW, rightAi)
-    for (const [lab, en, list, bg, fg] of rows) {
+      : [['기사 확인 사실', sec.implications.facts.slice(0, 3).map((f) => `${f.text}${refLabel(f.refs)}`)]]
+    for (const [gi, [head, list]] of groups.entries()) {
+      if (ry + LH(SIZE.body) > bottom) break
+      els.push(text(RX, ry, RW, LH(SIZE.body), SIZE.body, head, { bold: true }))
+      ry += LH(SIZE.body) + 0.03
       const items = list.length ? list : ['기사에 근거 없음 — 검토 필요']
-      const h = Math.max(0.62, items.reduce((s, t) => s + bulletHeight(innerW - labelW - 0.1, t) + 0.03, 0) + 0.12)
-      if (ry + h > colTop + colH - 0.12 - (raiH ? raiH + 0.08 : 0)) break
-      els.push(rect(rx + 0.15, ry, labelW, h, { fill: bg, radius: 0.08 }))
-      els.push(text(rx + 0.15, ry + h / 2 - LH(SIZE.body) + 0.02, labelW, LH(SIZE.body), SIZE.body, lab, { bold: true, color: fg, align: 'center' }))
-      els.push(text(rx + 0.15, ry + h / 2 + 0.02, labelW, LH(SIZE.note), SIZE.note, en, { color: fg, align: 'center' }))
-      let iy = ry + 0.06
-      for (const t of items) iy += bulletLine(els, rx + 0.25 + labelW, iy, innerW - labelW - 0.1, [{ text: t, color: list.length ? undefined : COLOR.sub }]) + 0.03
-      ry += h + 0.1
+      for (const t of items) {
+        const runs = list.length ? aiRuns(t) : [{ text: t, color: COLOR.sub }]
+        const h = bulletHeight(RW, runsText(runs))
+        if (ry + h > bottom) break
+        ry += (head === '할 일' ? bulletLine(els, RX, ry, RW, runs, SIZE.body, '▪') : (els.push(text(RX, ry, RW, h, SIZE.body, runs)), h)) + 0.04
+      }
+      ry += 0.06
+      if (gi < groups.length - 1) {
+        els.push({ t: 'line', x: RX, y: ry, w: RW, color: COLOR.line })
+        ry += 0.1
+      }
     }
-    if (!brief) {
-      const fallback = [...sec.implications.facts].slice(0, 3)
-      for (const f of fallback) ry += factLine(els, rx + 0.15, ry, innerW, f) + 0.07
-      if (judgment === null) els.push(text(rx + 0.15, ry, innerW, LH(SIZE.note), SIZE.note, '기회/위협 판단: 이 보고서 형식에는 없음 — 다시 만들면 들어감', { color: COLOR.sub }))
-    }
-    if (rightAi.length) aiBox(els, rx + 0.15, colTop + colH - 0.12 - raiH, innerW, rightAi)
+    if (!brief && judgment === null) els.push(text(RX, Math.min(ry, bottom - LH(SIZE.note)), RW, LH(SIZE.note), SIZE.note, '기회/위협 판단: 예전 형식 — 다시 만들면 들어감', { color: COLOR.sub }))
 
-    if (oneLine) {
-      els.push(rect(M, oneY, CW, 0.38, { line: COLOR.accent, radius: 0.08 }))
-      els.push(text(M + 0.15, oneY + 0.09, CW - 0.3, LH(SIZE.body), SIZE.body, [{ text: '한 줄 요약   ', bold: true, color: COLOR.accent }, { text: oneLine, bold: true }]))
-    }
-    // 출처 정보 줄
-    els.push(rect(M, srcY, CW, 0.38, { fill: COLOR.gray, radius: 0.08 }))
-    const srcRuns = [
-      { text: '출처 정보   ', bold: true, color: COLOR.accent },
-      { text: '수집 기간 ', bold: true },
-      { text: `${meta.period}   ` },
-      { text: '근거 자료 ', bold: true },
-      { text: `${evidenceLabel(saved)}   ` },
-      { text: '주요 출처 ', bold: true },
-      { text: '' },
-    ]
-    // 한 줄에 들어가게 (11/17: 학술지 이름이 길어 두 줄로 넘침 · 11/25: 글자 수만 세서 여전히 띠 밖으로 넘침)
-    // → 실제 폭을 재서 출처 수(3 → 1) · 곳마다 글자 수(20 → 10)를 줄인다
-    const srcW = CW - 0.3
-    const head = srcRuns.map((r) => r.text).join('')
+    // 아래 줄: 근거 자료 · 주요 출처 | 표시 설명 · 쪽 번호
+    els.push({ t: 'line', x: M, y: footY, w: CW, color: COLOR.line })
+    const legend = '[ ] 근거 번호 · [AI 해설] 기사로 확인되지 않은 해석'
+    const legW = 3.4
+    const head = `근거 자료: ${evidenceLabel(saved)} · 주요 출처: `
     const srcList = (k, n) => `${sources.slice(0, k).map((x) => (x.length > n ? `${x.slice(0, n - 1)}…` : x)).join(', ')}${sources.length > k ? ` 외 ${sources.length - k}곳` : ''}`
     let srcText = srcList(1, 10)
-    outer: for (const k of [3, 2, 1]) for (const n of [20, 14, 10]) if (fitsLine(head + srcList(k, n), SIZE.note, srcW)) { srcText = srcList(k, n); break outer }
-    srcRuns[srcRuns.length - 1].text = srcText
-    els.push(text(M + 0.15, srcY + 0.19 - LH(SIZE.note) / 2, CW - 0.3, LH(SIZE.note), SIZE.note, srcRuns, { color: COLOR.sub }))
+    outer: for (const k of [3, 2, 1]) for (const n of [20, 14, 10]) if (fitsLine(head + srcList(k, n), SIZE.note, CW - legW - 0.9)) { srcText = srcList(k, n); break outer }
+    els.push(text(M, footY + 0.08, CW - legW - 0.9, LH(SIZE.note), SIZE.note, head + srcText, { color: COLOR.sub }))
+    els.push(text(PAGE.w - M - 0.6 - legW, footY + 0.08, legW, LH(SIZE.note), SIZE.note, legend, { align: 'right', color: COLOR.sub }))
+    els.push({ t: 'pageno' })
     pages.push({ kind: 'cover', label: '1페이지 · 핵심 요약', els, fit: { hlOver, moved: movedFacts.length } })
     if (movedFacts.length) notes.push(`1쪽 분량으로 핵심 요약 사실 ${movedFacts.length}줄을 2쪽(기술 개요) 앞에 옮김`)
 
