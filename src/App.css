@@ -7591,6 +7591,59 @@ a.brand:focus-visible {
   margin: 0;
   accent-color: var(--tb-color-primary);
 }
+/* 맵 표시 설정 레버 (11/26 조장 「레버가 양 끝까지 안 간다」): 공통 input 여백 10·12px · 테두리를 받아 손잡이가 끝보다 안쪽에서 멈췄음.
+   아래 「자동으로 고를 범위」 레버(.ka-lever)와 같게 직접 그림 — 손잡이 18px, 채움 = 손잡이 가운데까지 */
+.km-ctl input.km-lever {
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.km-ctl input.km-lever:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.km-lever::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: var(--tb-radius-full);
+  background: linear-gradient(to right, var(--tb-color-text) 0 calc(9px + (100% - 18px) * var(--f, 0)), var(--tb-color-line-soft) 0);
+}
+.km-lever::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border: 2px solid var(--tb-color-text);
+  border-radius: 50%;
+  background: var(--tb-color-surface);
+  box-shadow: 0 1px 3px rgb(17 17 17 / 20%);
+  -webkit-appearance: none;
+}
+.km-lever::-moz-range-track {
+  height: 6px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-line-soft);
+}
+.km-lever::-moz-range-progress {
+  height: 6px;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-text);
+}
+.km-lever::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--tb-color-text);
+  border-radius: 50%;
+  background: var(--tb-color-surface);
+}
+.km-lever:focus-visible {
+  outline: 2px solid var(--tb-color-line-focus);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
 .km-seg {
   display: flex;
   gap: 6px;
