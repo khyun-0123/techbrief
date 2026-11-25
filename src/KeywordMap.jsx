@@ -44,6 +44,7 @@ function readColors() {
 // 2단계 = 가지마다 돌아가며 하나씩(키워드 수까지), 한 가지에 가지 수까지. 같은 말은 한 번만
 // 11/25 팀 검수: 가지 수는 원안(맵팀 11/14)대로 「점마다 뻗는 가지 수」 — 검색어에서 k개, 1단계 말마다 다시 k개까지.
 // 예전엔 1단계 개수만 정해 2단계가 레버와 상관없이 붙어 「깊이 설정이 안 먹는다」로 보였음
+// 11/25 조장 (레버 두 개): 가지 수 = 폭(점마다 뻗는 수), 보이는 단계 = 깊이. 전체 개수는 레버 없이 자동 상한(MAP_CAP)
 // extra: 고른 말인데 위 기준에 안 들어 맵에 없던 1단계 말 — 늘 그린다 (11/14: 레버가 고른 8위 이하 말이 칩에만 있고 맵에 안 보였음)
 function pickGraph(nodes, branches, edges, branchN, totalN, minCo, extra = []) {
   const base = nodes.filter((n) => n.score >= minCo).slice(0, branchN)
@@ -64,9 +65,9 @@ function pickGraph(nodes, branches, edges, branchN, totalN, minCo, extra = []) {
     }
     if (!any) break
   }
-  // 3단계 (11/15): 2단계 말마다 함께 나온 말 4개까지 (함께 나온 이슈 2개 이상). 키워드 수와 따로 — 「+n」을 눌러 펼칠 때만 보임
+  // 3단계 (11/15): 2단계 말마다 함께 나온 말 4개까지(가지 수가 더 작으면 그만큼, 11/25) (함께 나온 이슈 2개 이상). 상한과 따로 — 3단계를 펼칠 때만 보임
   for (const n of l2.filter((x) => x.lv === 2)) {
-    for (const c of (branches?.[n.word] ?? []).filter((x) => x.score >= 2).slice(0, 4)) {
+    for (const c of (branches?.[n.word] ?? []).filter((x) => x.score >= 2).slice(0, Math.min(4, branchN))) {
       const key = c.word.toLowerCase()
       if (seen.has(key)) continue
       seen.add(key)
@@ -75,7 +76,7 @@ function pickGraph(nodes, branches, edges, branchN, totalN, minCo, extra = []) {
   }
   const on = new Set(l1.map((n) => n.word))
   const cross = (edges ?? []).filter((e) => on.has(e.a) && on.has(e.b) && (e.n ?? 3) >= 3).sort((a, b) => b.npmi - a.npmi).slice(0, 16)
-  return { l1, l2, cross }
+  return { l1, l2, cross, baseN: base.length }
 }
 
 // 힘 계산 (d3-force 식: manyBody · link(차수로 나눔) · center, 속도 감쇠 .4, alpha 감쇠 .0228)
@@ -645,15 +646,17 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
   const filterName = cat !== 'all' ? `「${cat}」` : kind !== 'all' ? `「${KIND_LABEL[kind]}」` : null
   const filterReset = cat !== 'all' ? '기술 분류' : '종류'
   const cloudEmpty = nodes.length === 0 && !Object.values(branches ?? {}).some((l) => l.length)
-  // 처음 값 (가이드): 가지 7 · 키워드 40 · 함께 나온 이슈 6개 이상. 휴대폰(720px 미만)은 가지 6 · 키워드 18 (390px에서 글자가 겹쳤음, 11/14 실측)
+  // 처음 값 (11/25 조장 (가)안): 가지 수 4 · 2단계 → 4 + 16 = 20개 안팎(11/16 「글이 너무 많다」 수준). 휴대폰(720px 미만)은 가지 4 · 1단계.
+  // 맵 전체 개수는 레버 없이 상한만: 넓은 화면 40 · 휴대폰 18 (390px에서 글자가 겹쳤음, 11/14 실측). 워드클라우드만 「키워드 수」 레버를 둔다
+  // 예전: 가지 7(휴대폰 6) · 전체 키워드 수 40(18) 레버 · 처음엔 칸 높이에 따라 위 0~4개 가지만 펼침(11/16 · 11/23)
   const phone = typeof window !== 'undefined' && window.innerWidth < 720
-  const maxBranch = Math.max(3, Math.min(15, nodes.length))
-  const [branchN, setBranchN] = useState(Math.min(phone ? 6 : 7, maxBranch))
-  const [totalN, setTotalN] = useState(phone ? 18 : 40)
+  const MAP_CAP = phone ? 18 : 40
+  const [branchN, setBranchN] = useState(4)
+  const [totalN, setTotalN] = useState(MAP_CAP) // 워드클라우드 말 수
   const [minCo, setMinCo] = useState(MIN_CO_DEFAULT)
   const [panelOpen, setPanelOpen] = useState(false) // 가이드: 처음엔 접힘
-  const [depthPick, setDepthPick] = useState('auto') // 보이는 단계 (11/25 팀 검수 「가지 수는 노드 깊이」 의견): auto · 1 · 2 · 3
-  const [openSet, setOpenSet] = useState({}) // 손으로 펼치거나 접은 가지 { 말: true | false }. 없으면 칸 높이에 따라 위 0~4개 펼침 (autoN)
+  const [depth, setDepth] = useState(phone ? 1 : 2) // 보이는 단계 1 · 2 · 3 (11/25 팀 검수 「가지 수는 노드 깊이」 의견)
+  const [openSet, setOpenSet] = useState({}) // 손으로 펼치거나 접은 가지 { 말: true | false }. 없으면 보이는 단계를 따름
   const [hover, setHover] = useState(null)
   const [saveMsg, setSaveMsg] = useState('')
   const [crowdOff, setCrowdOff] = useState(false) // 안내를 닫았으면 이 맵에서는 다시 안 띄움
@@ -673,26 +676,28 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
   const extraAll = [...keptList, ...newExtra].join('\u0001')
   // 레버 양 끝 = 지금 고를 수 있는 최소 · 최대 (11/23 조장: 끝까지 밀었는데 맵이 그대로거나, 끝이 아닌데 더 안 움직이는 일이 없게)
   // - 함께 나온 이슈: 1개 ~ 1단계 말이 3개(적으면 그 수) 남는 가장 큰 값
-  // - 가지 수: 3(적으면 그 수) ~ 그 기준을 넘는 1단계 말 수(15까지)
-  // - 키워드 수: 가지 수 ~ 그 가지들로 그릴 수 있는 1 · 2단계 말 전부
+  // - 가지 수: 3(적으면 그 수) ~ 그 기준을 넘는 1단계 말 수(10까지, 11/25)
+  // - 워드클라우드 키워드 수: 10(적으면 그 수) ~ 그릴 수 있는 말 전부(80까지)
   const coMax = Math.max(1, Math.min(20, [...nodes].sort((a, b) => b.score - a.score)[Math.min(3, nodes.length) - 1]?.score ?? 1))
   const coN = Math.min(Math.max(minCo, 1), coMax)
-  const brAvail = Math.min(15, nodes.filter((n) => n.score >= coN).length)
+  const brAvail = Math.min(10, nodes.filter((n) => n.score >= coN).length)
   const brMin = Math.min(3, brAvail)
   const brN = Math.max(brMin, Math.min(branchN, brAvail))
   const extraList = useMemo(() => (extraAll ? extraAll.split('\u0001') : []), [extraAll])
-  const full = useMemo(() => pickGraph(nodes, branches, edges, brN, Infinity, coN, extraList), [nodes, branches, edges, brN, coN, extraList])
-  const kwMax = full.l1.length + full.l2.filter((n) => n.lv === 2).length
-  const kwMin = Math.min(kwMax, full.l1.length)
+  const cloudAll = useMemo(() => new Set([...nodes, ...Object.values(branches ?? {}).flat()].map((n) => n.word)).size, [nodes, branches])
+  const kwMax = Math.min(80, cloudAll)
+  const kwMin = Math.min(10, kwMax)
   const kwN = Math.max(kwMin, Math.min(totalN, kwMax))
-  const graph = useMemo(() => pickGraph(nodes, branches, edges, brN, kwN, coN, extraList), [nodes, branches, edges, brN, kwN, coN, extraList])
+  const graph = useMemo(() => pickGraph(nodes, branches, edges, brN, MAP_CAP, coN, extraList), [nodes, branches, edges, brN, MAP_CAP, coN, extraList])
   // 펼침: 처음엔 모두 접힘 — 「+n」으로 펼침 (11/16 검수: 「맵에 글이 너무 많다」 → 처음엔 검색어 + 1단계 말만 글자, 24개 → 8개 안팎.
   // 예전: 1단계 위 3개를 처음부터 펼침)
   // 11/23 조장 (가)안: 맵 칸이 세로로 넉넉하면 1단계 위 몇 개 가지는 처음부터 펼침 — 칸 높이 440px 이상 2개 · 560px 이상 3개 · 720px 이상 4개,
   // 휴대폰 · 낮은 칸은 예전처럼 모두 접힘(11/16 「글이 너무 많다」). 손으로 펼치거나 접은 가지는 그 값이 우선
-  const autoN = phone ? 0 : H >= 720 ? 4 : H >= 560 ? 3 : H >= 440 ? 2 : 0
-  const autoOpen = useMemo(() => new Set(graph.l1.filter((n) => graph.l2.some((c) => c.parent === n.word)).slice(0, autoN).map((n) => n.word)), [graph, autoN])
-  const isOpen = useCallback((w) => openSet[w] ?? autoOpen.has(w), [openSet, autoOpen])
+  // 11/25 조장 (가)안: 처음 펼침은 「보이는 단계」를 따름 — 1단계 = 모두 접힘 · 2단계 = 1단계 가지 모두 펼침 · 3단계 = 2단계 가지까지
+  // 레버 밖에서 덧붙은 1단계 말(고른 말 · extra)은 처음엔 접어 둔다 — 같이 펼치면 4 + 16개를 넘어 글자가 겹쳤음 (11/25 OLED 실측)
+  const l1Words = useMemo(() => new Set(graph.l1.map((n) => n.word)), [graph])
+  const l1Base = useMemo(() => new Set(graph.l1.slice(0, graph.baseN).map((n) => n.word)), [graph])
+  const isOpen = useCallback((w) => openSet[w] ?? (l1Words.has(w) ? depth >= 2 && l1Base.has(w) : depth >= 3), [openSet, l1Words, l1Base, depth])
   const hidden = useMemo(() => new Set([...graph.l1, ...graph.l2.filter((n) => n.lv === 2)].filter((n) => !isOpen(n.word)).map((n) => n.word)), [graph, isOpen])
   const minK = phone ? 0.75 : 0.3 // 휴대폰은 0.75배 아래로 줄이지 않음 — 다 안 들어오면 끌어서 봄
   // 힘 계산: 말 · 접힘이 바뀌면 새로. 끝 자리를 미리 계산해 화면을 맞춰 두고, 점들은 가운데서 퍼지며 그 자리로 감
@@ -866,37 +871,34 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
             <div className="km-pbody">
               {/* 11/17 조장: 「보기(마인드맵 · 워드클라우드)」는 칸 머리 단추와 같아 뺐다 (맵팀 가이드와 다름, 38 문서) */}
               <div className="km-prow">
-                <label className="km-ctl" title="점마다 뻗는 가지 수 — 검색어에서 이만큼, 1단계 말마다 다시 이만큼까지 (전체 키워드 수 안에서)">
-                  <span className="km-lbl">
-                    가지 수 <output>{brN}</output>
-                  </span>
-                  <input type="range" min={brMin} max={brAvail} value={brN} disabled={brAvail <= brMin} onChange={(e) => setBranchN(Number(e.target.value))} aria-valuetext={`${brN}개 (${brMin}~${brAvail})`} />
-                </label>
-                <label className="km-ctl" title="맵에 그릴 말 전체 개수 — 2단계 말은 가지마다 고르게 나눠 붙임">
-                  <span className="km-lbl">
-                    전체 키워드 수 <output>{kwN}</output>
-                  </span>
-                  <input type="range" min={kwMin} max={kwMax} value={kwN} disabled={kwMax <= kwMin} onChange={(e) => setTotalN(Number(e.target.value))} aria-valuetext={`${kwN}개 (${kwMin}~${kwMax})`} />
-                </label>
+                {mode === 'map' ? (
+                  <label className="km-ctl" title={`점마다 뻗는 가지 수(폭) — 검색어에서 이만큼, 1단계 말마다 다시 이만큼까지. 맵 전체는 ${MAP_CAP}개까지`}>
+                    <span className="km-lbl">
+                      가지 수 <output>{brN}</output>
+                    </span>
+                    <input type="range" min={brMin} max={brAvail} value={brN} disabled={brAvail <= brMin} onChange={(e) => setBranchN(Number(e.target.value))} aria-valuetext={`${brN}개 (${brMin}~${brAvail})`} />
+                  </label>
+                ) : (
+                  <label className="km-ctl" title="워드클라우드에 그릴 말 개수">
+                    <span className="km-lbl">
+                      키워드 수 <output>{kwN}</output>
+                    </span>
+                    <input type="range" min={kwMin} max={kwMax} value={kwN} disabled={kwMax <= kwMin} onChange={(e) => setTotalN(Number(e.target.value))} aria-valuetext={`${kwN}개 (${kwMin}~${kwMax})`} />
+                  </label>
+                )}
               </div>
               {mode === 'map' && (
-                <div className="km-ctl" title="몇 단계까지 펼쳐 보일지 — 점마다 「+n」 · 「−」로 따로 펼치고 접을 수도 있어요">
+                <div className="km-ctl" title="몇 단계까지 펼쳐 보일지(깊이) — 점마다 「+n」 · 「−」로 따로 펼치고 접을 수도 있어요">
                   <span className="km-lbl">보이는 단계</span>
                   <Seg
-                    value={depthPick}
+                    value={String(depth)}
                     label="보이는 단계"
                     size="md"
                     onChange={(d) => {
-                      setDepthPick(d)
-                      // 1단계만 = 모두 접기 · 2단계 = 1단계 가지를 모두 펼침 · 3단계 = 2단계 가지까지 · 자동 = 칸 높이에 맞춰 위 몇 개만
-                      if (d === 'auto') return setOpenSet({})
-                      const next = {}
-                      for (const n of graph.l1) next[n.word] = Number(d) >= 2
-                      for (const n of graph.l2.filter((x) => x.lv === 2)) next[n.word] = Number(d) >= 3
-                      setOpenSet(next)
+                      setDepth(Number(d))
+                      setOpenSet({}) // 손으로 펼치고 접은 것은 비우고 고른 단계대로
                     }}
                     options={[
-                      { value: 'auto', label: '자동' },
                       { value: '1', label: '1단계' },
                       { value: '2', label: '2단계' },
                       { value: '3', label: '3단계' },
@@ -954,7 +956,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
         {/* 11/17: 표시 설정 창을 펼쳤을 때는 안 띄운다 (둘이 겹쳤음, 창에서 가지 수를 줄이면 바로 줄어듦) */}
         {mode === 'map' && !crowdOff && !panelOpen && overlaps >= CROWDED && (
           <div className="km-crowd" role="status">
-            <span>점이 많아 글자가 겹쳐요{large ? ` · ${phone ? '두 손가락으로 벌려 확대' : '휠로 확대'}하거나 표시 설정에서 1단계 가지 수를 줄여 보세요` : ''}</span>
+            <span>점이 많아 글자가 겹쳐요{large ? ` · ${phone ? '두 손가락으로 벌려 확대' : '휠로 확대'}하거나 표시 설정에서 가지 수나 보이는 단계를 줄여 보세요` : ''}</span>
             {!large && onEnlarge && (
               <button type="button" className="km-crowd-go" onClick={onEnlarge}>
                 ⤢ 크게 보기
