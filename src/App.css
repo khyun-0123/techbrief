@@ -7963,13 +7963,32 @@ a.brand:focus-visible {
 button.ka-auto-note {
   color: var(--tb-color-text);
 }
-/* 자동 보고서 확인 창 (11/15, AutoReportDialog.jsx) */
+/* 자동 보고서 확인 창 (11/15, AutoReportDialog.jsx)
+   11/26 조장: 창 전체가 스크롤되고 너무 크게 떠 부담스러웠음 → 창은 화면에 맞춘 크기로, 기사 목록만 안에서 스크롤.
+   폭 640px(작은 화면은 양옆 16px 남김) · 높이 최대 720px(낮은 화면은 위아래 32px 남김). 목록이 120px까지 줄어도 모자라는 아주 낮은 화면만 창 전체가 스크롤 */
 .auto-report {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--tb-card-head-gap);
-  width: min(760px, calc(100vw - 32px));
-  max-height: calc(100vh - 48px);
-  overflow: auto;
+  width: min(640px, calc(100vw - 32px));
+  max-height: min(720px, calc(100dvh - 64px));
+  overflow-y: auto;
+}
+.auto-report > * {
+  flex: none;
+}
+.auto-report > .ar-list {
+  flex: 0 1 auto;
+  min-height: 120px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (max-width: 600px) {
+  .auto-report {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 32px);
+    padding: 16px;
+  }
 }
 .ar-scope {
   display: flex;
@@ -8017,6 +8036,7 @@ button.ka-auto-note {
   min-width: 0;
 }
 .ar-title {
+  font-size: var(--fs-md); /* 11/26: 창을 줄이며 기사 제목도 본문 크기로 (예전 16px 굵게라 무거웠음) */
   font-weight: 600;
   overflow-wrap: anywhere;
 }
