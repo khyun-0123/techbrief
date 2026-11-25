@@ -302,7 +302,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
     const label = `${on ? '✓ ' : ''}${short(n.word, lv === 0 ? 18 : lv === 1 ? 14 : 11)}`
     const sub = lv === 1 ? (n.subcats ?? [])[0] : null
     const role = lv === 0 ? undefined : 'checkbox'
-    const info = lv === 0 ? { word: n.word, tag: '검색어', rows: [['함께 나온 이슈', `${issues ?? '-'}개`]] } : { word: n.word, tag: `${lv}단계`, rows: [[lv >= 2 ? `「${n.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${n.score}개`], ...(impOn && n.imp != null ? [['평균 중요도', `${n.imp}점 · 이슈 ${n.impN}개`]] : []), ...((n.subcats ?? []).length ? [['분류', n.subcats.join(' · ')]] : []), ['볼 범위', on ? '넣음' : '안 넣음']] }
+    const info = lv === 0 ? { word: n.word, tag: '검색어', rows: [['함께 나온 이슈', `${issues ?? '-'}개`]] } : { word: n.word, tag: `${lv}단계`, rows: [[lv >= 2 ? `「${n.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${n.score}개`], ...(impOn && n.imp != null ? [['평균 중요도', `${n.imp}점 · 이슈 ${n.impN}개`]] : []), ...((n.subcats ?? []).length ? [['분류', n.subcats.join(' · ')]] : [])] }
     return (
       <g
         key={`n-${n.word}`}
@@ -486,7 +486,7 @@ function CloudView({ W, H, keyword, nodes, branches, isOn, onPick, total, avoid,
               tabIndex={0}
               onMouseDown={(e) => e.preventDefault()} // 11/15: 마우스로 누를 때는 초점이 안 가게 (네모 테두리가 생기던 문제). 키보드 Tab · Enter는 그대로
               onClick={() => onPick(w.word)}
-              onPointerEnter={() => onHover({ word: w.word, tag: w.parent ? '2단계' : '1단계', rows: [[w.parent ? `「${w.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${w.score}개`], ...(by === 'imp' && w.imp != null ? [['평균 중요도', `${w.imp}점 · 이슈 ${w.impN}개`]] : []), ['볼 범위', on ? '넣음' : '안 넣음']], x: w.x, y: w.y + 4 })}
+              onPointerEnter={() => onHover({ word: w.word, tag: w.parent ? '2단계' : '1단계', rows: [[w.parent ? `「${w.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${w.score}개`], ...(by === 'imp' && w.imp != null ? [['평균 중요도', `${w.imp}점 · 이슈 ${w.impN}개`]] : [])], x: w.x, y: w.y + 4 })}
               onPointerLeave={() => onHover(null)}
               onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onPick(w.word))}
             >
@@ -845,15 +845,15 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
             <div className="km-pbody">
               {/* 11/17 조장: 「보기(마인드맵 · 워드클라우드)」는 칸 머리 단추와 같아 뺐다 (맵팀 가이드와 다름, 38 문서) */}
               <div className="km-prow">
-                <label className="km-ctl">
+                <label className="km-ctl" title="검색어에서 바로 뻗는 가지(1단계 말)의 개수">
                   <span className="km-lbl">
-                    가지 수 <output>{branchN}</output>
+                    1단계 가지 수 <output>{branchN}</output>
                   </span>
                   <input type="range" min="3" max={maxBranch} value={branchN} onChange={(e) => setBranchN(Number(e.target.value))} />
                 </label>
-                <label className="km-ctl">
+                <label className="km-ctl" title="맵에 그릴 말 전체 개수 — 2단계 말은 가지마다 고르게 나눠 붙임">
                   <span className="km-lbl">
-                    키워드 수 <output>{totalN}</output>
+                    전체 키워드 수 <output>{totalN}</output>
                   </span>
                   <input type="range" min="10" max="80" step="5" value={totalN} onChange={(e) => setTotalN(Number(e.target.value))} />
                 </label>
@@ -908,7 +908,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
         {/* 11/17: 표시 설정 창을 펼쳤을 때는 안 띄운다 (둘이 겹쳤음, 창에서 가지 수를 줄이면 바로 줄어듦) */}
         {mode === 'map' && !crowdOff && !panelOpen && overlaps >= CROWDED && (
           <div className="km-crowd" role="status">
-            <span>점이 많아 글자가 겹쳐요{large ? ` · ${phone ? '두 손가락으로 벌려 확대' : '휠로 확대'}하거나 표시 설정에서 가지 수를 줄여 보세요` : ''}</span>
+            <span>점이 많아 글자가 겹쳐요{large ? ` · ${phone ? '두 손가락으로 벌려 확대' : '휠로 확대'}하거나 표시 설정에서 1단계 가지 수를 줄여 보세요` : ''}</span>
             {!large && onEnlarge && (
               <button type="button" className="km-crowd-go" onClick={onEnlarge}>
                 ⤢ 크게 보기

@@ -24,6 +24,17 @@ const cutWords = (t, n) => {
   return `${(at > n * 0.6 ? head.slice(0, at) : head).replace(/[,\s·]+$/, '')}…`
 }
 const cut = (t, n) => (String(t ?? '').length > n ? `${String(t).slice(0, n - 1)}…` : String(t ?? ''))
+// 칸 폭으로 맞추기 (11/25 팀 검수: 헤드라인을 60자에서 잘라 두 줄 칸인데도 「…」가 붙었음)
+// 글자 폭은 src/reportSlides.js units와 같은 어림 — 한글 1em, 영문 · 숫자 0.55em(글꼴이 없는 PC 기준), 굵은 글씨라 폭의 95%만 씀
+const unitsOf = (text) => [...String(text)].reduce((u, ch) => u + (/[ㄱ-힝一-鿿]/.test(ch) ? 1 : ch === ' ' ? 0.3 : /[A-Za-z0-9]/.test(ch) ? 0.55 : 0.45), 0)
+const fitBox = (t, pt, widthIn, lines) => {
+  const s = String(t ?? '').replace(/[.。]$/, '')
+  const cap = ((widthIn * 0.95) / (pt / 72)) * lines
+  if (unitsOf(s) <= cap) return s
+  let n = [...s].length
+  while (n > 10 && unitsOf(cutWords(s, n)) > cap) n--
+  return cutWords(s, n)
+}
 // 업계 동향 쪽 낱말 (회사 · 제품 · 투자 · 공급 · 양산 · 특허 · 시장)
 const INDUSTRY = /삼성|LG|BOE|CSOT|애플|Apple|구글|메타|투자|공급|양산|수주|계약|출시|점유율|시장|매출|특허|라인|증설|협력|인수|가격|원가/
 
@@ -245,14 +256,19 @@ export function reportToTemplate(entry, { trends = null, trendItems = null, topi
     const facts1 = list.filter((b) => b.kind === 'fact')
     const ai = list.filter((b) => b.kind !== 'fact')
     if (!list.length) return null
-    // 같은 줄을 두 칸에 쓰지 않는다: 쟁점이 AI 줄을 썼으면 전망은 그다음 AI 줄
-    const point = facts1[1]?.text ?? ai[0]?.text ?? ''
-    const rest = facts1[1] ? ai : ai.slice(1)
+    // 같은 줄을 두 칸에 쓰지 않는다 (11/25 팀 검수: 사실 줄이 하나도 없으면 배경과 쟁점에 같은 AI 줄이 들어갔음)
+    const background = facts1[0]?.text ?? list[0].text
+    const used = new Set([background])
+    const pointLine = [facts1[1], ...ai].find((b) => b && !used.has(b.text))
+    const point = pointLine?.text ?? ''
+    if (point) used.add(point)
+    const rest = ai.filter((b) => !used.has(b.text))
     return {
       issue: name,
-      background: facts1[0]?.text ?? list[0].text,
+      background,
       point,
-      outlook: rest.length ? `${rest[rest.length - 1].text} (추정)` : '',
+      // 전망 재료(AI 줄)가 없으면 빈칸 대신 알린다 (원칙 2: 빠진 것을 알아챌 수 있게)
+      outlook: rest.length ? `${rest[rest.length - 1].text} (추정)` : '근거 자료에서 전망을 찾지 못함 — 확인 필요',
       refs: [...new Set(list.flatMap(refsOf))],
     }
   }
@@ -278,10 +294,10 @@ export function reportToTemplate(entry, { trends = null, trendItems = null, topi
   })
 
   return {
-    title: cut(r.title, 25),
+    title: fitBox(r.title, 18, 6.4, 1), // 양식 제목 칸: 18pt · 6.4in · 1줄 (11/25: 25자로 잘라 「· 11/…」가 됐음)
     date: ymd(entry.createdAt ?? Date.now()),
     dept,
-    headline: cut(r.headline?.text ?? '', 60),
+    headline: fitBox(r.headline?.text ?? '', 14, 8.6, 2), // 양식 헤드라인 칸: 14pt · 8.6in · 2줄
     facts,
     judgment,
     actions,
@@ -292,9 +308,9 @@ export function reportToTemplate(entry, { trends = null, trendItems = null, topi
       const nT = arts.filter((a) => a.patent && !isAnalysis(a)).length // 11/22 특허 자료
       const nP = arts.filter((a) => a.paper && !a.patent && !isAnalysis(a)).length
       const nN = arts.length - nA - nP - nT
-      return { period, article_count: nN, media_count: media.size, keywords, counts: [`기사 ${nN}건`, nP && `논문 ${nP}편`, nT && `특허 ${nT}건`, nA && `우리 분석 ${nA}`].filter(Boolean).join(' · ') }
+      return { period, article_count: nN, media_count: media.size, keywords, counts: [`기사 ${nN}건`, nP && `논문 ${nP}편`, nT && `특허 ${nT}건`, nA && `DB 분석 ${nA}`].filter(Boolean).join(' · ') }
     })(),
-    one_line_summary: cutWords(r.oneLine ?? '', 50),
+    one_line_summary: fitBox(r.oneLine ?? '', 11, 7.7, 1), // 양식 한 줄 요약 칸: 11pt · 7.7in · 1줄
     appendix: {
       analysis,
       single_facts: single,
