@@ -14,21 +14,11 @@ import { Spark } from './KeywordTrends.jsx'
 import TechTimeline from './TechTimeline.jsx'
 import TimelineExtras from './TimelineExtras.jsx'
 import { Seg } from './Dropdown.jsx'
+import EtaBar from './EtaBar.jsx'
 
 const THIS_YEAR = new Date().getFullYear() // 올해는 안 끝나 줄어 보이므로 그래프에서 뺀다
 // 11/14 통합: 임시 맵(ScopeMap)을 워드클라우드팀 맵 v2 이식본(KeywordMap.jsx)으로 바꿈 — 분할 칸 왼쪽에 들어감
 
-// 기다리는 동안 1초마다 지금 시각을 새로 받는다 (경과 초)
-function useNow(on) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!on) return undefined
-    const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(t)
-  }, [on])
-  return now
-}
-const secs = (from, now) => (from ? Math.max(0, Math.round((now - from) / 1000)) : 0)
 
 // 기다리는 칸 (11/11): 퍼센트 게이지는 쓰지 않는다 — AI 정리는 한 번 부르고 끝나 서버도 진행률을 모른다 (지어낸 숫자가 됨)
 // 대신 ① 지금 어느 단계인지 ② 몇 초째인지(보통 걸리는 시간과 함께) ③ 무엇이 나올 자리인지(회색 자리)를 보여 주고,
@@ -52,25 +42,6 @@ function WaitSteps({ steps, note }) {
   )
 }
 
-// 예상 시간 막대 (11/17 조장: 「빈 화면이면 이상하게 생각할 수 있다 — 시간 예측해서 로딩되는 걸 보여 주자」)
-// 퍼센트 숫자는 쓰지 않는다(서버도 진행률을 모름, 위 11/11 원칙). 대신 「보통 걸리는 시간」을 기준으로 막대가 차고,
-// 그 시간을 넘으면 끝을 모르는 움직이는 막대로 바꾸고 이유를 알린다. 막대 옆 글자는 실제로 지난 초와 보통 시간
-function EtaBar({ startedAt, expect, label = '보통', slowNote }) {
-  const s = secs(startedAt, useNow(true))
-  const over = s >= expect
-  const pct = Math.min(92, Math.round((s / expect) * 100))
-  return (
-    <div className={over ? 'eta is-over' : 'eta'}>
-      <span className="eta-track" aria-hidden="true">
-        <span className="eta-fill" style={over ? undefined : { width: `${pct}%` }} />
-      </span>
-      <span className="eta-text">
-        {s}초째 · {label} {expect}초 안팎
-      </span>
-      {over && slowNote && <p className="ka-wait-note">{slowNote}</p>}
-    </div>
-  )
-}
 
 // 맵을 기다리는 자리 (11/17): 글자 한 줄만 있어 빈 화면처럼 보였음 → 단계 · 예상 시간 · 맵 자리
 function MapWait({ startedAt }) {

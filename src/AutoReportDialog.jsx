@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AUTO_PICK, reasonOf } from './autoPick.js'
 import { Seg } from './Dropdown.jsx'
+import EtaBar from './EtaBar.jsx'
 
 const LEVELS = [
   ['selected', '선택한 자료만', '가장 빨라요'],
@@ -55,7 +56,13 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
           )}
         </p>
 
-        {step === 'search' && <p className="hint">고른 말이 든 자료를 찾는 중… (보통 5~10초)</p>}
+        {/* 11/26 조장: 「5~10초」 글자만 있던 자리에 맵 기다릴 때와 같은 예상 시간 막대 */}
+        {step === 'search' && (
+          <div className="ar-wait" role="status">
+            <p className="hint">고른 말이 든 자료를 찾는 중…</p>
+            <EtaBar startedAt={run.startedAt} expect={10} slowNote="평소보다 오래 걸려요. 네이버 · 논문 응답을 기다리는 중일 수 있어요." />
+          </div>
+        )}
         {step === 'error' && <p className="form-error">{run.error}</p>}
 
         {step === 'confirm' && result && (

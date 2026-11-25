@@ -10626,3 +10626,12 @@ body:has(.collect-next) .progress-panel {
   font-weight: 700;
   color: var(--tb-color-text-sub);
 }
+/* 자동 보고서 확인 창 · 자료 찾는 동안 (11/26): 안내 한 줄 + 예상 시간 막대 */
+.ar-wait {
+  display: grid;
+  gap: var(--tb-space-2);
+  margin: var(--tb-space-3) 0;
+}
+.ar-wait .hint {
+  margin: 0;
+}
