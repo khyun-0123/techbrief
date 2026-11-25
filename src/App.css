@@ -10655,3 +10655,52 @@ body:has(.collect-next) .progress-panel {
 .ar-wait .hint {
   margin: 0;
 }
+/* 자동 보고서 확인 창 · 고른 말 (11/26): 담긴 자료에 없는 말을 눌러 그 말의 자료를 더 넣기 */
+.ar-terms {
+  display: grid;
+  gap: var(--tb-space-2);
+}
+.ar-terms-head {
+  margin: 0;
+  color: var(--tb-color-text-sub);
+  font-size: var(--fs-sm);
+}
+.ar-terms .hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+}
+.ar-term-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 64px; /* 두 줄 — 더 많으면 칩 줄 안에서 스크롤 (기사 목록 자리를 지킴) */
+  overflow-y: auto;
+}
+.ar-term-chip {
+  padding: 3px 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.ar-term-chip small {
+  color: var(--tb-color-text-faint);
+}
+.ar-term-chip.is-open {
+  border-color: var(--tb-color-text);
+  background: var(--tb-color-text);
+  color: var(--tb-color-surface);
+}
+.ar-term-chip.is-open small {
+  color: inherit;
+}
+.auto-report .ar-term-list {
+  max-height: 168px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ar-term-empty {
+  padding: 10px 12px;
+}

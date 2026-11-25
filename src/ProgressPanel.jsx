@@ -92,6 +92,15 @@ const hm = (iso) => {
 const REPORT_STATUS = { queued: '대기', running: '작성 중', need_confirm: '확인 필요', done: '완성', error: '오류', cancelled: '취소됨' }
 
 function ReportJobs({ jobs, onAnswer, onCancel, onOpenReport, onHide }) {
+  // 11/26 조장 「작성 중 옆 시간이 안 흐른다」: 예전엔 시작 시각(14:05)만 → 기다리는 동안 지난 시간을 1초마다
+  const [now, setNow] = useState(() => Date.now())
+  const active = jobs.some((j) => ['queued', 'running', 'need_confirm'].includes(j.status))
+  useEffect(() => {
+    if (!active) return undefined
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [active])
+  const since = (iso) => seconds(now - (Date.parse(iso ?? '') || now))
   return (
     <ul className="progress-list report-jobs">
       {jobs.map((j) => (
@@ -104,7 +113,9 @@ function ReportJobs({ jobs, onAnswer, onCancel, onOpenReport, onHide }) {
             <span className="progress-status" title={`시작 ${hm(j.createdAt)}${j.status === 'done' ? ` · 완성 ${hm(j.updatedAt)}` : ''}`}>
               {REPORT_STATUS[j.status]}
               {j.status === 'queued' && j.queuePos > 0 && ` ${j.queuePos}번째`}
-              <small> · {hm(j.status === 'done' || j.status === 'error' ? j.updatedAt : j.createdAt)}</small>
+              {j.status === 'running' && ` ${since(j.startedAt ?? j.createdAt)}`}
+              {j.status === 'queued' && <small> · {since(j.createdAt)}째</small>}
+              {!['running', 'queued'].includes(j.status) && <small> · {hm(j.status === 'done' || j.status === 'error' ? j.updatedAt : j.createdAt)}</small>}
             </span>
             {['queued', 'running', 'need_confirm'].includes(j.status) ? (
               <button type="button" className="icon-btn" onClick={() => onCancel(j.id)} title="보고서 만들기 취소" aria-label="보고서 만들기 취소">

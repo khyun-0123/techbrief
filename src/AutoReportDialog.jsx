@@ -11,7 +11,8 @@ const LEVELS = [
   ['owned', '보유 자료까지', '근거 없는 줄을 모은 자료 · 원문으로 보충'],
   ['research', '추가 자료 조사까지', '논문 · 뉴스를 새로 찾아 보충, 가장 오래 걸림'],
 ]
-const WHY = { important: '중요', fill: '채움', term: '고른 말' }
+const WHY = { important: '중요', fill: '채움', term: '고른 말', added: '직접 추가' }
+const ONE_SHOT = 10 // 이보다 많으면 서버가 나눠 쓰고 합침 (server/index.js MAX_REPORT_ARTICLES · REPORT_CHUNK 8)
 const SUMMARY_SEC = 25 // 요약 한 건 평균 (summaryQueue.js 기본값과 같음)
 
 export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }) {
@@ -24,13 +25,26 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
   }, [onClose])
   const { step, scope, result } = run
   const [off, setOff] = useState({}) // 확인 창에서 뺀 자료 { id: true }
+  const [added, setAdded] = useState([]) // 빠진 말을 눌러 직접 더 넣은 자료 (11/26 조장)
+  const [openTerm, setOpenTerm] = useState(null)
+  const [allTerms, setAllTerms] = useState(false) // 위 고른 말 칩: 많으면 6개만 (11/26: 24개면 네 줄을 차지해 목록이 눌렸음)
   const [title, setTitle] = useState(`${scope.query} 동향 브리핑`)
   const [level, setLevel] = useState('owned')
   const [summarizeNew, setSummarizeNew] = useState(false) // 「보유 자료까지」에서만 고름. 「추가 자료 조사까지」는 늘 요약 (11/20)
   const summarizeOn = level === 'research' || summarizeNew
-  const chosen = (result?.picked ?? []).filter((c) => !off[c.article.id])
+  const rows = [...(result?.picked ?? []), ...added.map((a) => ({ article: a, why: 'added' }))]
+  const chosen = rows.filter((c) => !off[c.article.id])
+  const full = chosen.length >= AUTO_PICK.max
   const needSummary = chosen.filter((c) => !c.article.hasSummary).length
-  const estMin = Math.max(1, Math.round((needSummary * SUMMARY_SEC + 60) / 60))
+  const split = chosen.length > ONE_SHOT
+  const estMin = Math.max(1, Math.round((needSummary * SUMMARY_SEC + 60 * (split ? Math.ceil(chosen.length / 8) + 1 : 1)) / 60))
+  // 고른 말 중 담긴 자료에 없는 말 — 지금 체크 기준으로 다시 셈
+  const hitNow = new Set(chosen.flatMap((c) => c.article.scopeHits ?? []))
+  const terms = result?.termInfo ?? []
+  const missing = terms.filter((t) => (!hitNow.has(t.term) || t.term === openTerm) && t.count > 0) // 열어 둔 말은 넣은 뒤에도 남겨 둠
+  const noData = terms.filter((t) => t.count === 0)
+  const inRows = new Set(rows.map((c) => c.article.id))
+  const termList = openTerm ? (result?.poolList ?? []).filter((a) => a.scopeHits?.includes(openTerm) && !inRows.has(a.id)).slice(0, 8) : []
   return (
     <div className="modal-backdrop" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="panel modal auto-report" role="dialog" aria-modal="true" aria-labelledby="ar-title">
@@ -45,11 +59,16 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
           {scope.terms.length ? (
             <>
               {' '}
-              + {scope.terms.map((t) => (
+              + {(allTerms ? scope.terms : scope.terms.slice(0, 6)).map((t) => (
                 <span key={t} className="ar-term">
                   {t}
                 </span>
               ))}
+              {scope.terms.length > 6 && (
+                <button type="button" className="link-btn" aria-expanded={allTerms} onClick={() => setAllTerms((v) => !v)}>
+                  {allTerms ? '접기' : `외 ${scope.terms.length - 6}개`}
+                </button>
+              )}
             </>
           ) : (
             ' 만'
@@ -70,14 +89,14 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
             <p className="ar-rule">
               자료 {result.pool}건(같은 이슈는 하나로) 중 <b>「중요」({result.rule.high}점 이상) {result.important}건</b>
               {result.important > AUTO_PICK.max
-                ? ` — 많아서 점수 높은 ${AUTO_PICK.max}건만 넣어요 (보고서를 한 번에 쓰는 한도)`
+                ? ` — 많아서 점수 높은 ${AUTO_PICK.max}건만 넣어요 (보고서 한 편의 한도)`
                 : result.important < AUTO_PICK.min
-                  ? ` — 적어서 다음으로 점수 높은 자료로 ${AUTO_PICK.min}건까지 채웠어요`
+                  ? ` — 적어서 다음으로 점수 높은 자료로 ${AUTO_PICK.min}건까지 채웠어요 (자료가 너무 적으면 보고서가 얕아져요)`
                   : ' — 모두 넣었어요'}
-              . 고른 말마다 최소 1건이 들어가게 했어요. 빼고 싶은 자료는 체크를 끄세요.
+              . 빼고 싶은 자료는 체크를 끄세요.
             </p>
             <ul className="ar-list">
-              {result.picked.map((c) => {
+              {rows.map((c) => {
                 const a = c.article
                 const on = !off[a.id]
                 return (
@@ -97,6 +116,53 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
                 )
               })}
             </ul>
+            {/* 11/26 조장: 고른 말은 보장하지 않고 보여 준다 — 빠진 말을 누르면 그 말이 든 자료를 보고 더 넣는다 */}
+            {terms.length > 0 && (
+              <div className="ar-terms">
+                <p className="ar-terms-head">
+                  고른 말 {terms.length}개 중 <b>{terms.length - missing.length - noData.length}개</b>가 담긴 자료에 있어요
+                  {missing.length > 0 && ' · 빠진 말을 누르면 그 말이 든 자료를 더 넣을 수 있어요'}
+                </p>
+                {missing.length > 0 && (
+                  <div className="ar-term-chips" role="group" aria-label="담긴 자료에 없는 말">
+                    {missing.map((t) => (
+                      <button key={t.term} type="button" className={`ar-term-chip${openTerm === t.term ? ' is-open' : ''}`} aria-expanded={openTerm === t.term} onClick={() => setOpenTerm(openTerm === t.term ? null : t.term)}>
+                        {t.term} <small>{t.count}</small>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {noData.length > 0 && <p className="hint">찾은 자료에 없는 말: {noData.map((t) => t.term).join(', ')}</p>}
+                {openTerm && (
+                  <ul className="ar-list ar-term-list" aria-label={`「${openTerm}」이 든 자료`}>
+                    {termList.length === 0 && <li className="hint ar-term-empty">더 넣을 자료가 없어요 (이미 모두 담겼어요)</li>}
+                    {termList.map((a) => (
+                      <li key={a.id}>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={false}
+                            disabled={full}
+                            onChange={() => {
+                              setAdded((list) => [...list, a])
+                              setOff((m) => ({ ...m, [a.id]: false }))
+                            }}
+                          />
+                          <span className="ar-main">
+                            <span className="ar-title">{a.title}</span>
+                            <span className="ar-meta">
+                              {reasonOf(a)} · {a.source}
+                              {a.hasSummary ? ' · 요약 있음' : ''}
+                            </span>
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                    {full && <li className="hint ar-term-empty">보고서 한 편에 {AUTO_PICK.max}건까지예요. 다른 자료의 체크를 빼면 넣을 수 있어요.</li>}
+                  </ul>
+                )}
+              </div>
+            )}
             <div className="ar-form">
               <label>
                 보고서 제목
@@ -116,7 +182,7 @@ export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }
             </div>
             <div className="ar-foot">
               <span className="hint">
-                {chosen.length}건 · 요약 {needSummary}건 필요 · 약 {estMin}분 (요약 한 건 약 {SUMMARY_SEC}초 + 보고서 약 1분)
+                {chosen.length}건 · 요약 {needSummary}건 필요 · 약 {estMin}분 (요약 한 건 약 {SUMMARY_SEC}초 + 보고서 {split ? `${ONE_SHOT}건이 넘어 나눠 쓰고 합침` : '약 1분'})
               </span>
               <button type="button" className="btn" onClick={onClose}>
                 취소

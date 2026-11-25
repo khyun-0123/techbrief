@@ -1,10 +1,13 @@
 // 자료 자동 선별 (11/15 조장: 「중요도를 기준으로 — 중요한 자료가 많으면 더 많이, 적으면 그래도 최소 기준은 맞게」)
 // 규칙 (AI 안 씀, 화면에서 이유를 보여 준다):
 // 1. 같은 이슈(묶음)는 가장 점수 높은 글 하나만. AI 입력을 허용하지 않은 자료는 뺀다
-// 2. 「중요」(HIGH 45점 이상, server/collector/score.js)는 모두 넣는다 — 단 MAX건까지 (보고서를 한 번에 쓰는 한도, 서버 MAX_REPORT_ARTICLES)
-// 3. 중요 자료가 MIN건보다 적으면 다음으로 점수 높은 자료로 MIN건까지 채운다
-// 4. 고른 말마다 최소 1건: 고른 말이 든 글이 하나도 안 뽑혔으면 그 말이 든 가장 높은 글을 넣는다 (자리가 없으면 가장 낮은 「채움」 글과 바꿈)
-export const AUTO_PICK = { min: 5, max: 10 }
+// 2. 「중요」(HIGH 45점 이상, server/collector/score.js)는 모두 넣는다 — MAX건까지 (서버 MAX_REPORT_ALL, 10건이 넘으면 나눠 쓰고 합침)
+// 3. 중요 자료가 MIN건보다 적으면 다음으로 점수 높은 자료로 MIN건까지 채운다 (자료가 너무 적으면 보고서 질이 떨어짐)
+// 11/26 조장: 예전엔 MAX 10건에서 자르고(XR 글래스 「중요」 12건 중 10건) 「고른 말마다 최소 1건」(4번)은 10자리가 모두 「중요」면
+// 바꿀 자리가 없어 동작하지 않았음(고른 말 24개 중 1개만). → 상한 40 · 고른 말은 보장하지 않고 확인 창에 빠진 말을 보여 주고,
+// 사람이 그 말을 눌러 자료를 더 넣는다. 확인 창에서 「이대로 만들기」를 누르는 것이 동의라 개수를 따로 묻지 않는다.
+// 보고서를 쓰다가 근거가 더 필요하면 「보유 자료까지」 · 「추가 자료 조사까지」가 수집 자료 · 새 자료로 보충한다 (server/reportJobs.js)
+export const AUTO_PICK = { min: 5, max: 40 }
 // 서버가 기준을 안 보냈을 때만 쓰는 값 (11/17: 예전엔 opt 기본값에 high: 45가 있어 관리 페이지 기준을 바꿔도 늘 45였음, 36 문서 1장)
 const FALLBACK_HIGH = 45
 
@@ -51,21 +54,11 @@ export function pickMaterials(articles, terms = [], opt = AUTO_PICK) {
   // 2 · 3. 중요는 모두(최대 max), 모자라면 min까지 채움
   const n = Math.min(max, Math.max(min, important.length), pool.length)
   const chosen = pool.slice(0, n).map((a) => ({ article: a, why: isHigh(a) ? 'important' : 'fill' }))
-  // 4. 고른 말마다 최소 1건
-  for (const t of terms) {
-    if (chosen.some((c) => c.article.scopeHits?.includes(t))) continue
-    const cand = pool.find((a) => a.scopeHits?.includes(t) && !chosen.some((c) => c.article === a))
-    if (!cand) continue
-    if (chosen.length < max) chosen.push({ article: cand, why: 'term', term: t })
-    else {
-      // 자리가 없으면 가장 낮은 「채움」 글과 바꾼다 (그 글이 다른 고른 말의 유일한 글이면 건드리지 않음)
-      const only = (c) => (c.article.scopeHits ?? []).some((h) => terms.includes(h) && chosen.filter((x) => x.article.scopeHits?.includes(h)).length === 1)
-      const idx = chosen.map((c, i) => [c, i]).reverse().find(([c]) => c.why === 'fill' && !only(c))?.[1]
-      if (idx != null) chosen[idx] = { article: cand, why: 'term', term: t }
-    }
-  }
   chosen.sort((x, y) => Number(isHigh(y.article)) - Number(isHigh(x.article)) || rankOf(y.article) - rankOf(x.article) || time(y.article) - time(x.article))
-  return { picked: chosen, important: important.length, pool: pool.length, rule: { min, max, high } }
+  // 고른 말이 담긴 자료에 들어갔는지 (확인 창에서 빠진 말을 보여 주고 그 말의 자료를 더 고르게)
+  const inPicked = new Set(chosen.flatMap((c) => c.article.scopeHits ?? []))
+  const termInfo = terms.map((t) => ({ term: t, covered: inPicked.has(t), count: pool.filter((a) => a.scopeHits?.includes(t)).length }))
+  return { picked: chosen, important: important.length, pool: pool.length, poolList: pool, termInfo, rule: { min, max, high } }
 }
 
 // 기사 날짜로 기간 글자: 「11. 1. ~ 11. 8. 기사」 (ReportComposer와 같은 규칙)
