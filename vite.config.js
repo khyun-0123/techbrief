@@ -34,8 +34,16 @@ const allowedHosts = () => ['.ts.net', '.up.railway.app', 'healthcheck.railway.a
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   // .env.local의 값(접속 키 포함)을 서버 쪽에서만 쓰도록 process.env에 넣는다. 브라우저 코드로는 가지 않는다
+  // - 처음 켤 때 밖에서 준 값(Railway 변수 등)은 그대로 두고, .env.local에서 넣은 값만 바꾼다
+  // - .env.local을 고치면 vite가 같은 프로세스 안에서 설정을 다시 읽는다. 예전 `??=`는 이때 옛 값을 남겨 새 키가 안 먹었음 (11/25)
+  // - loadEnv는 process.env에 이미 있는 값을 파일보다 앞세우므로, 지난번 파일에서 넣은 값은 먼저 비운다
+  const fromFile = (globalThis.__techbriefEnvFromFile ??= new Set())
+  for (const key of fromFile) delete process.env[key]
   for (const [key, value] of Object.entries(loadEnv(mode, process.cwd(), ''))) {
-    process.env[key] ??= value
+    if (process.env[key] === undefined || fromFile.has(key)) {
+      process.env[key] = value
+      fromFile.add(key)
+    }
   }
   return {
     plugins: [react(), summaryApi()],
