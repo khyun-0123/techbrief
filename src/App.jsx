@@ -981,7 +981,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       setAutoRun({ step: 'error', scope, error: 'AI 요약 · 보고서가 잠시 멈춰 있어요 (관리자 운영 설정).' })
       return
     }
-    setAutoRun({ step: 'search', scope })
+    setAutoRun({ step: 'search', scope, startedAt: Date.now() })
     track('search', scope.query)
     try {
       save(LAST_SCOPE_KEY, { ...scope, at: new Date().toISOString() })
