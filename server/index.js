@@ -47,6 +47,7 @@ import {
   updateReportSection,
 } from './db/store.js'
 import { reinforceBullet } from './reinforce.js'
+import { listErrors, logError } from './errorLog.js'
 import { searchPaperArticles } from './searchPapers.js'
 import { activeJobs, addJob, answerJob, cancelJob, listJobs, resumableCount, setDraftBuilder } from './reportJobs.js'
 import { sourceStatus } from './sourceGuard.js'
@@ -564,6 +565,17 @@ async function handleApiInner(req, res) {
     }
     if (req.method === 'GET' && req.url === '/api/ops') {
       return send(res, 200, publicOps(await getOps()))
+    }
+    // 오류 기록 (11/26): 화면에서 난 오류를 모아 받음 (서버가 꺼져 있던 동안 것은 다시 연결된 뒤에) · 관리 페이지에서 보기
+    if (req.method === 'POST' && req.url === '/api/client-errors') {
+      const body = await readJson(req)
+      const items = Array.isArray(body.items) ? body.items.slice(0, 30) : []
+      for (const it of items) await logError({ side: 'client', kind: it.kind, path: it.path, status: it.status, message: it.message, clientId: body.clientId, at: it.at })
+      return send(res, 200, { ok: true, saved: items.length })
+    }
+    if (req.method === 'GET' && req.url === '/api/admin/errors') {
+      requireAdmin(req)
+      return send(res, 200, { errors: await listErrors(200) })
     }
     if (req.method === 'PUT' && req.url === '/api/admin/ops') {
       const admin = requireAdmin(req)
@@ -1432,6 +1444,7 @@ async function handleApiInner(req, res) {
   } catch (err) {
     const status = err.status ?? (err.name === 'TimeoutError' ? 504 : 502)
     console.error(`[api] ${req.method} ${req.url} → ${status}: ${err.message}`)
+    if (status >= 500) logError({ side: 'server', kind: 'api', path: `${req.method} ${String(req.url).split('?')[0]}`, status, message: err.message }).catch(() => {})
     send(res, status, { error: err.message, ...(err.locked && { locked: true }), ...(err.ops && { ops: true }), ...(err.code && /^[A-Z_]+$/.test(err.code) && { code: err.code }) })
   }
 }

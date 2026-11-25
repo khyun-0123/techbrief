@@ -71,6 +71,7 @@ import AddMaterial from './AddMaterial.jsx'
 import DataMove from './DataMove.jsx'
 import TechTimeline from './TechTimeline.jsx'
 import { ACCESS_TITLE, paperAccess } from './paperAccess.js'
+import { isTransient, waitForServer } from './errorReport.js'
 
 const KEYWORDS_KEY = 'techbrief-keywords'
 const SELECTED_KEY = 'techbrief-selected'
@@ -612,12 +613,19 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   }, [aiSummaries, selectedIds, includedIds])
 
   // 선별한 기사 중 이 브라우저에 요약이 없는 것은 DB에서 가져온다 (다른 브라우저·이전 작업에서 만든 요약)
+  // 11/26: 처음 열었을 때 DB에도 요약이 없으면 이어서 요약한다 (서버가 다시 켜지며 오류로 멈춘 요약 — 아래 resumeIds)
+  const resumeChecked = useRef(false)
+  const [resumeIds, setResumeIds] = useState([])
   useEffect(() => {
     const missing = selectedIds.filter((id) => !aiSummaries[id])
     if (missing.length === 0) return
     lookupSummaries(missing)
       .then(({ summaries }) => {
         if (Object.keys(summaries).length) setAiSummaries((prev) => ({ ...summaries, ...prev }))
+        if (!resumeChecked.current) {
+          resumeChecked.current = true
+          setResumeIds(missing.filter((id) => !summaries[id]))
+        }
       })
       .catch(() => {})
     // aiSummaries가 바뀔 때마다 다시 부르지 않도록 선별 목록이 바뀔 때만 확인한다
@@ -729,6 +737,18 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   // 검색 없이 고른 자료의 태그: 수집 키워드 → 없으면 그 자료의 첫 기술 해시태그 → 「기타」
   const tagOfArticle = (a) => keywordOfArticle(a) ?? tagsFor(a)[0] ?? '기타'
   const byId = new Map(pool.map((a) => [a.id, a]))
+  // 선별했는데 요약이 없는 자료 이어서 요약 (11/26 조장 「재접속되면 작업 대기 상태로」) — 목록에 자료가 들어오는 대로
+  useEffect(() => {
+    if (!resumeIds.length || opsValue.aiBlocked) return
+    const found = resumeIds.map((id) => byId.get(id)).filter((a) => a && a.aiAllowed !== false)
+    if (!found.length) return
+    for (const a of found) queue.enqueue(a, { select: true })
+    // 대기열에 넣은 것만 목록에서 뺀다 (자료가 아직 안 들어온 것은 다음에)
+    // oxlint-disable-next-line react/set-state-in-effect
+    setResumeIds((ids) => ids.filter((id) => !found.some((a) => a.id === id)))
+    // 자료 목록이 바뀔 때마다 다시 봄
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeIds, pool])
   // 범위 찾기 결과의 「든 말」 (모은 기사와 id가 같으면 모은 쪽 객체가 쓰이므로 찾기 결과에서 따로 꺼냄)
   const scopeHitsOf = new Map((searchArticles ?? []).map((a) => [a.id, a.scopeHits ?? []]))
   const listed = searchArticles
@@ -1042,8 +1062,9 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
         return
       }
       setAutoRun((r) => ({ ...r, step: 'sending' }))
-      try {
-        const job = await createReportJob({
+      // 11/26: 서버가 다시 켜지는 중(502)이면 돌아올 때까지 기다렸다가 한 번 더 (errorReport.js)
+      const send = () =>
+        createReportJob({
           articles: ready,
           aiSummaries,
           title,
@@ -1055,6 +1076,16 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           mode: ready.length > 10 ? 'all' : undefined,
           clientId: clientId(),
         })
+      try {
+        let job
+        try {
+          job = await send()
+        } catch (err) {
+          if (!isTransient(err)) throw err
+          setAutoRun((r) => ({ ...r, step: 'sending', waiting: true }))
+          if (!(await waitForServer())) throw err
+          job = await send()
+        }
         setReportJobs((prev) => [...prev.filter((j) => j.id !== job.id), job])
         setAutoRun((r) => ({ ...r, step: 'sent' }))
       } catch (err) {

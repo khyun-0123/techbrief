@@ -4,8 +4,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { lookupSummaries, requestSummary } from './api.js'
 import { track } from './usage.js'
 import { load } from './utils.js'
+import { isTransient, waitForServer } from './errorReport.js'
 
 const AVG_KEY = 'techbrief-summary-avg-ms'
+// 끝나지 않은 작업(대기 · 진행 · 서버 재시작으로 멈춘 오류)을 이 브라우저에 저장 — 새로 고치거나 다시 접속하면 「대기」로 되살림 (11/26)
+const PENDING_KEY = 'techbrief-summary-pending'
+const slim = (a) => ({ id: a.id, url: a.url, title: a.title, source: a.source, keyword: a.keyword, description: a.description, aiAllowed: a.aiAllowed, related: (a.related ?? []).map(({ id, url, title, source, description }) => ({ id, url, title, source, description })) })
 const DEFAULT_AVG_MS = 25_000 // 맥미니 qwen3:14b 실측 22~33초
 
 // 오래 기다리다 연결이 끊겨도 이어 받기 (11/25 팀 검수: 300초 넘게 걸리면 가끔 서버 오류)
@@ -15,8 +19,25 @@ const RECOVER_AFTER_MS = 60_000
 const RECOVER_EVERY_MS = 10_000
 const RECOVER_FOR_MS = 15 * 60_000
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
-async function summaryWithRecovery(article, opts) {
-  const t0 = Date.now()
+// 11/26 조장: 서버가 다시 켜지는 중(머지 → Railway 다시 배포, 502)이면 오류로 멈추지 않고 서버가 돌아올 때까지 기다린 뒤
+// 저장된 요약을 먼저 찾고, 없으면 다시 요청한다 (최대 3번). onWait(true/false)로 화면에 「다시 연결 기다리는 중」
+async function summaryWithRecovery(article, opts, onWait) {
+  for (let attempt = 0; ; attempt++) {
+    const t0 = Date.now()
+    try {
+      return await summaryOnce(article, opts, t0)
+    } catch (err) {
+      if (!isTransient(err) || attempt >= 3) throw err
+      onWait?.(true)
+      const back = await waitForServer()
+      onWait?.(false)
+      if (!back) throw err
+      const hit = (await lookupSummaries([article.id]).catch(() => null))?.summaries?.[article.id]
+      if (hit && (!opts.refresh || Date.parse(hit.createdAt ?? '') >= t0)) return hit
+    }
+  }
+}
+async function summaryOnce(article, opts, t0) {
   try {
     return await requestSummary(article, opts)
   } catch (err) {
@@ -25,6 +46,11 @@ async function summaryWithRecovery(article, opts) {
       await wait(RECOVER_EVERY_MS)
       const hit = (await lookupSummaries([article.id]).catch(() => null))?.summaries?.[article.id]
       if (hit && (!opts.refresh || Date.parse(hit.createdAt ?? '') >= t0)) return hit
+      // 기다리는 사이 서버가 다시 켜졌으면 그 요약은 사라졌다 — 기다리지 말고 다시 요청 (위 summaryWithRecovery)
+      const started = await fetch('/api/health', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+      if (Date.parse(started?.server?.startedAt ?? '') > t0) throw Object.assign(err, { transient: true })
     }
     throw err
   }
@@ -32,7 +58,25 @@ async function summaryWithRecovery(article, opts) {
 
 // status: 'queued' | 'running' | 'done' | 'error'
 export function useSummaryQueue({ onDone }) {
-  const [jobs, setJobs] = useState([])
+  const [jobs, setJobs] = useState(() =>
+    load(PENDING_KEY, [])
+      .filter((j) => j?.id && j.article)
+      .map((j) => ({ ...j, status: 'queued', error: '', waiting: false, transient: false })),
+  )
+  const pendingKey = jobs
+    .filter((j) => j.status === 'queued' || j.status === 'running' || (j.status === 'error' && j.transient))
+    .map((j) => j.id)
+    .join('|')
+  useEffect(() => {
+    try {
+      const keep = jobs.filter((j) => pendingKey.split('|').includes(j.id))
+      localStorage.setItem(PENDING_KEY, JSON.stringify(keep.map((j) => ({ id: j.id, title: j.title, article: slim(j.article), refresh: j.refresh, select: j.select, addedAt: j.addedAt }))))
+    } catch {
+      // 저장 공간이 막히면 이번 화면에서만
+    }
+    // 끝나지 않은 작업 목록이 바뀔 때만 저장
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingKey])
   const [avgMs, setAvgMs] = useState(() => load(AVG_KEY, DEFAULT_AVG_MS))
   const [now, setNow] = useState(() => Date.now())
   const busy = useRef(false)
@@ -61,7 +105,7 @@ export function useSummaryQueue({ onDone }) {
     setJobs((list) => list.map((j) => (j.id === next.id ? { ...j, status: 'running', startedAt } : j)))
 
     track('summary', next.article.keyword ?? '')
-    summaryWithRecovery(next.article, { refresh: next.refresh, select: next.select })
+    summaryWithRecovery(next.article, { refresh: next.refresh, select: next.select }, (waiting) => setJobs((list) => list.map((j) => (j.id === next.id ? { ...j, waiting } : j))))
       .then((result) => {
         const took = Date.now() - startedAt
         onDoneRef.current?.(next.id, result)
@@ -76,13 +120,27 @@ export function useSummaryQueue({ onDone }) {
         }
       })
       .catch((err) => {
-        setJobs((list) => list.map((j) => (j.id === next.id ? { ...j, status: 'error', error: err.message } : j)))
+        setJobs((list) => list.map((j) => (j.id === next.id ? { ...j, status: 'error', error: err.message, transient: isTransient(err), waiting: false } : j)))
       })
       .finally(() => {
         busy.current = false
         setNow(Date.now()) // 다음 작업을 시작하도록 다시 그린다
       })
   }, [jobs, now])
+
+  // 서버가 다시 켜지느라 오류로 멈춘 작업은 서버가 돌아오면 저절로 다시 대기로 (11/26 조장 「재접속되면 작업 대기 상태로」)
+  const stuck = jobs.some((j) => j.status === 'error' && j.transient)
+  useEffect(() => {
+    if (!stuck) return undefined
+    let on = true
+    waitForServer().then((back) => {
+      if (!on || !back) return
+      setJobs((list) => list.map((j) => (j.status === 'error' && j.transient ? { ...j, status: 'queued', error: '', transient: false } : j)))
+    })
+    return () => {
+      on = false
+    }
+  }, [stuck])
 
   // 같은 기사가 대기·진행 중이면 다시 넣지 않는다. 끝난 기사는 새로 넣는다
   const enqueue = useCallback((article, { refresh = false, select = false } = {}) => {
