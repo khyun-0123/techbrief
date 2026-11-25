@@ -207,6 +207,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
                     <li key={i}>
                       <span className="line-text">
                         {b.tag && <span className={`report-tag report-tag-${TAG_CLASS[b.tag] ?? 'todo'}`}>{b.tag}</span>}
+                        {b.role && <span className="report-role">{b.role}</span>}
                         {b.text}
                         {b.refs.map((n) => (
                           <a key={n} className="report-ref" href={`#ref-${saved.id}-${n}`} title={saved.articles[n - 1]?.title}>
@@ -234,6 +235,7 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
                       <li key={i}>
                         <span className="line-text">
                           {b.tag && <span className={`report-tag report-tag-${TAG_CLASS[b.tag] ?? 'todo'}`}>{b.tag}</span>}
+                        {b.role && <span className="report-role">{b.role}</span>}
                           {b.text}
                           {b.noRef && <span className="basis basis-noref">근거 못 찾음{b.noRef.tried ? ` (자료 ${b.noRef.tried}건 확인)` : ''}</span>}
                           {b.han && <span className="basis basis-ai_background">한자 확인</span>}

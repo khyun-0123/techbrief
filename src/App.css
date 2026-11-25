@@ -4702,6 +4702,13 @@ a.brand:focus-visible {
   background: var(--tb-color-bg-strong);
   color: var(--tb-color-text);
 }
+/* 유첨 글머리 칸 (11/25): 배경 · 쟁점 · 전망 — 판단 표시(기회 · 위협)와 헷갈리지 않게 색 없이 굵은 회색 글자만 */
+.report-role {
+  margin-right: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tb-color-text-sub);
+}
 .report-analysis {
   margin-top: 8px;
 }

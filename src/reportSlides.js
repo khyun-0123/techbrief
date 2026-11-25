@@ -196,8 +196,11 @@ function pageTitle(els, label, y = 0.62) {
 }
 
 // 사실 한 줄: 레드 원 ✓ + 글 (내어쓰기). 반환: 높이
+// 유첨 글머리 칸 표시 (11/25): AI가 정한 배경 · 쟁점 · 전망을 글 앞에 굵게
+const roleText = (b) => (b.role ? `${b.role}  ` : '')
+const roleRun = (b) => (b.role ? [{ text: roleText(b), bold: true }] : [])
 function factLine(els, x, y, w, f, size = SIZE.body) {
-  const runs = [{ text: f.text }, { text: refLabel(f.refs), color: COLOR.sub }]
+  const runs = [...roleRun(f), { text: f.text }, { text: refLabel(f.refs), color: COLOR.sub }]
   if (f.supplement) runs.push({ text: `  (근거 보충 · ${SUPPLEMENT_LABEL[f.supplement] ?? f.supplement})`, color: COLOR.sub, size: SIZE.note })
   const n = linesOf(runsText(runs), size, w - 0.3)
   els.push({ t: 'check', x, y: y + 0.03, d: 0.17 })
@@ -205,7 +208,7 @@ function factLine(els, x, y, w, f, size = SIZE.body) {
   return n * LH(size)
 }
 function factHeight(w, f, size = SIZE.body) {
-  return linesOf(`${f.text}${refLabel(f.refs)}${f.supplement ? '  (근거 보충 · 수집 자료 · 위키백과)' : ''}`, size, w - 0.3) * LH(size)
+  return linesOf(`${roleText(f)}${f.text}${refLabel(f.refs)}${f.supplement ? '  (근거 보충 · 수집 자료 · 위키백과)' : ''}`, size, w - 0.3) * LH(size)
 }
 function bulletLine(els, x, y, w, runs, size = SIZE.body, mark = '•') {
   const n = linesOf(runsText(runs), size, w - 0.18)
@@ -217,7 +220,7 @@ const bulletHeight = (w, t, size = SIZE.body) => linesOf(t, size, w - 0.18) * LH
 
 // AI 해설·제안 상자 (옅은 주황 바탕, 기사 밖 내용이라 따로)
 function aiBoxHeight(w, list) {
-  return list.length ? 0.14 + LH(SIZE.body) + list.reduce((h, b) => h + bulletHeight(w - 0.3, b.text, SIZE.body) + 0.03, 0) + 0.06 : 0
+  return list.length ? 0.14 + LH(SIZE.body) + list.reduce((h, b) => h + bulletHeight(w - 0.3, `${roleText(b)}${b.text}`, SIZE.body) + 0.03, 0) + 0.06 : 0
 }
 function aiBox(els, x, y, w, list) {
   if (!list.length) return 0
@@ -225,7 +228,7 @@ function aiBox(els, x, y, w, list) {
   els.push(rect(x, y, w, h, { fill: COLOR.aiBg, radius: 0.08 }))
   els.push(text(x + 0.15, y + 0.08, w - 0.3, LH(SIZE.body), SIZE.body, [{ text: 'AI 해설·제안', bold: true, color: COLOR.aiInk }, { text: '  기사 확인 사실 아님 · 검토 필요', color: COLOR.aiInk, size: SIZE.note }]))
   let yy = y + 0.1 + LH(SIZE.body) + 0.02
-  for (const b of list) yy += bulletLine(els, x + 0.15, yy, w - 0.3, [{ text: b.text }]) + 0.03
+  for (const b of list) yy += bulletLine(els, x + 0.15, yy, w - 0.3, [...roleRun(b), { text: b.text }]) + 0.03
   return h
 }
 
@@ -382,11 +385,14 @@ export function reportPages(saved, extra = {}) {
       if (!t || seen.has(t)) continue
       if (key === 'implications' && usedTagged.has(t)) continue // 1페이지 기회 · 위협 · 할 일로 이미 씀
       seen.add(t)
-      const line = { text: t, refs: b.refs ?? [], supplement: b.supplement ?? null }
+      const line = { text: t, refs: b.refs ?? [], supplement: b.supplement ?? null, ...((key === 'tech' || key === 'industry') && b.role ? { role: b.role } : {}) }
       if (kindOf(b) === 'fact') sec[key].facts.push(line)
       else sec[key].ai.push(line)
     }
   }
+  // 유첨은 배경 → 쟁점 → 전망 순으로 (칸 표시가 없는 줄은 뒤, 원래 순서 유지)
+  const ROLE_ORDER = { 배경: 0, 쟁점: 1, 전망: 2 }
+  for (const key of ['tech', 'industry']) for (const part of ['facts', 'ai']) sec[key][part].sort((a, b) => (ROLE_ORDER[a.role] ?? 3) - (ROLE_ORDER[b.role] ?? 3))
   const allFacts = Object.values(sec).flatMap((s) => s.facts)
   const headline = fixEnding(brief?.headline || sec.summary.facts[0]?.text || allFacts[0]?.text || meta.title)
   const judgment = brief?.judgment?.type ? { type: brief.judgment.type, reason: fixEnding(brief.judgment.reason || '판단 근거 검토 필요') } : null

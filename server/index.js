@@ -146,6 +146,7 @@ const SAME_BULLET = 0.3
 // - 모델이 fact라고 한 문장: 원문과 맞는 근거(겹침 0.35 이상)가 있으면 fact
 // - 모델이 ai라고 한 문장: 원문과 아주 많이 겹치면(0.6 이상) 사실로 보고 fact
 // - 그 밖은 ai (원리 설명·일반 지식·제안)
+const ROLES = ['배경', '쟁점', '전망'] // 유첨 글머리 칸 (11/25, reportPrompts SECTION_GUIDE)
 function cleanBullets(bullets, articles) {
   const kept = []
   for (let b of bullets ?? []) {
@@ -156,6 +157,12 @@ function cleanBullets(bullets, articles) {
     if (lead) {
       b = { ...b, tag: b.tag || lead[1] }
       text = text.slice(lead[0].length)
+    }
+    // 「배경: …」처럼 칸 이름을 글 앞에 쓴 경우 role로 옮긴다 (11/25 시험: 4건 중 3건이 role 칸 대신 글 앞에 씀)
+    const roleLead = text.match(/^(배경|쟁점|전망)\s*[:：·-]\s*/)
+    if (roleLead) {
+      b = { ...b, role: b.role || roleLead[1] }
+      text = text.slice(roleLead[0].length)
     }
     // 표시 낱말만 쓴 줄(「기회」 · 「위협」)은 내용이 없어 뺀다 (11/17 지시문 시험에서 실제로 나옴)
     if (/^(기회|위협|할 일|기회·위협 공존|검토 필요)[.。]?$/.test(text)) continue
@@ -174,7 +181,7 @@ function cleanBullets(bullets, articles) {
       dup.refs = [...new Set([...dup.refs, ...refs])].sort((x, y) => x - y)
       continue
     }
-    kept.push({ text, refs, kind, ...(TAGS.includes(b.tag) ? { tag: b.tag } : {}), removedRefs: claimed.filter((n) => !refs.includes(n)), han: hasHan(text) })
+    kept.push({ text, refs, kind, ...(TAGS.includes(b.tag) ? { tag: b.tag } : {}), ...(ROLES.includes(b.role) ? { role: b.role } : {}), removedRefs: claimed.filter((n) => !refs.includes(n)), han: hasHan(text) })
   }
   return kept
 }
@@ -283,7 +290,7 @@ async function requireReportOwner(req, id) {
 }
 
 // 보고서 한 건 만들기 (아직 저장 전). 대기열(reportJobs)과 예전 바로 만들기(/api/reports)가 같이 쓴다
-async function buildReportEntry(body) {
+export async function buildReportEntry(body) {
   const all = body.mode === 'all'
   const picked = readReportArticles(body, all ? MAX_REPORT_ALL : MAX_REPORT_ARTICLES)
   for (const a of picked) if (await materialBlocksAi(String(a.id ?? ''))) throw Object.assign(new Error(`AI 입력을 허용하지 않은 자료가 있어요: ${a.title}`), { status: 403 })

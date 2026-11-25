@@ -256,6 +256,23 @@ export function reportToTemplate(entry, { trends = null, trendItems = null, topi
     const facts1 = list.filter((b) => b.kind === 'fact')
     const ai = list.filter((b) => b.kind !== 'fact')
     if (!list.length) return null
+    // 11/25: AI가 칸(role)을 정해 준 보고서는 그 칸대로. 칸마다 첫 줄, 빈 칸만 아래 예전 규칙으로 채운다
+    const byRole = (role) => list.find((b) => b.role === role)
+    if (list.some((b) => b.role)) {
+      const used = new Set()
+      const take = (b) => (b && !used.has(b.text) ? (used.add(b.text), b) : null)
+      const bg = take(byRole('배경')) ?? take(facts1.find((b) => !b.role) ?? list.find((b) => !used.has(b.text)))
+      const pt = take(byRole('쟁점')) ?? take(list.find((b) => !used.has(b.text) && b.role !== '전망'))
+      const ol = take(byRole('전망')) ?? take(ai.filter((b) => !used.has(b.text)).at(-1))
+      return {
+        issue: name,
+        background: bg?.text ?? '',
+        point: pt?.text ?? '',
+        // 근거 없는 전망만 「(추정)」 — 기사 · [분석]에 있는 상용화 시점은 사실
+        outlook: ol ? `${ol.text}${ol.kind === 'fact' ? '' : ' (추정)'}` : '근거 자료에서 전망을 찾지 못함 — 확인 필요',
+        refs: [...new Set(list.flatMap(refsOf))],
+      }
+    }
     // 같은 줄을 두 칸에 쓰지 않는다 (11/25 팀 검수: 사실 줄이 하나도 없으면 배경과 쟁점에 같은 AI 줄이 들어갔음)
     const background = facts1[0]?.text ?? list[0].text
     const used = new Set([background])
