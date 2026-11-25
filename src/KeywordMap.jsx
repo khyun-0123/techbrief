@@ -586,6 +586,32 @@ function countOverlaps(final, view, graph, hidden, keyword, isOn) {
 }
 // 1단계 말의 「함께 나온 이슈」 처음 값 (맵팀 가이드 6). 맵팀이 바꾸면 여기 한 곳만 (38 문서 5장에 6 · 5 · 4일 때 차이)
 const MIN_CO_DEFAULT = 6
+
+// 「함께 나온 이슈」 레버 칸 (11/25 조장 「최소값이 레버 끝에」): 1 ~ coMax 중 맵이 실제로 바뀌는 값만 남긴다.
+// 기준은 말의 점수(함께 나온 이슈 수)를 넘을 때만 결과가 달라지므로 1과 「점수 + 1」만 해 본다. 같은 맵이 이어지면 가장 작은 값 하나만
+// 지금 펼쳐 보이는 부분만 비교한다 (접힌 가지 안에서만 달라지는 칸은 밀어도 화면이 그대로라 뺌) — open(word, l1 순번, baseN)
+// (예전: 1~20 모든 값 — OLED · 마이크로LED는 1~16이 모두 같은 맵이라 처음 값 6에서 왼쪽으로 밀어도 아무 일이 없었음)
+function coSteps(nodes, branches, edges, brN, cap, coMax, extra, open) {
+  const cand = new Set([1])
+  for (const n of [...nodes, ...Object.values(branches ?? {}).flat()]) if (n.score + 1 <= coMax) cand.add(n.score + 1)
+  const steps = []
+  let prev = null
+  for (const co of [...cand].sort((a, b) => a - b)) {
+    const g = pickGraph(nodes, branches, edges, brN, cap, co, extra)
+    const shown = new Set(g.l1.filter((n, i) => open(n.word, i, g.baseN)).map((n) => n.word))
+    for (const n of g.l2) if (n.lv === 2 && shown.has(n.parent) && open(n.word, -1, 0)) shown.add(`>${n.word}`)
+    const sig =
+      g.l1.map((n) => n.word).join('\u0001') +
+      '\u0002' +
+      g.l2
+        .filter((n) => (n.lv === 2 ? shown.has(n.parent) : shown.has(`>${n.parent}`)))
+        .map((n) => `${n.parent}>${n.word}`)
+        .join('\u0001')
+    if (sig !== prev) steps.push(co)
+    prev = sig
+  }
+  return steps
+}
 const CROWDED = 6 // 글자 · 알약 · 배지 겹침이 이만큼 이상이면 안내 (11/14 3038 실측: 1440 반 칸 ai 안경 10 · 탠덤 OLED 4 · QD-OLED 2, 크게 보기 ai 안경 4)
 
 export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, branches: rawBranches, isOn, onToggle, large = false, view: mode = 'map', onEnlarge }) {
@@ -675,15 +701,28 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
   if (newExtra.length) setKept([...keptList, ...newExtra].join('\u0001'))
   const extraAll = [...keptList, ...newExtra].join('\u0001')
   // 레버 양 끝 = 지금 고를 수 있는 최소 · 최대 (11/23 조장: 끝까지 밀었는데 맵이 그대로거나, 끝이 아닌데 더 안 움직이는 일이 없게)
-  // - 함께 나온 이슈: 1개 ~ 1단계 말이 3개(적으면 그 수) 남는 가장 큰 값
+  // - 함께 나온 이슈: 맵이 바뀌는 값만 칸으로(coSteps). 왼쪽 끝 = 가장 느슨한 기준 · 오른쪽 끝 = 1단계 말이 3개(적으면 그 수) 남는 가장 큰 값
+  //   (11/25: 20 상한 없앰 — 칸은 바뀌는 값만이라 길어지지 않음)
   // - 가지 수: 3(적으면 그 수) ~ 그 기준을 넘는 1단계 말 수(10까지, 11/25)
   // - 워드클라우드 키워드 수: 10(적으면 그 수) ~ 그릴 수 있는 말 전부(80까지)
-  const coMax = Math.max(1, Math.min(20, [...nodes].sort((a, b) => b.score - a.score)[Math.min(3, nodes.length) - 1]?.score ?? 1))
-  const coN = Math.min(Math.max(minCo, 1), coMax)
-  const brAvail = Math.min(10, nodes.filter((n) => n.score >= coN).length)
-  const brMin = Math.min(3, brAvail)
-  const brN = Math.max(brMin, Math.min(branchN, brAvail))
   const extraList = useMemo(() => (extraAll ? extraAll.split('\u0001') : []), [extraAll])
+  const coMax = Math.max(1, [...nodes].sort((a, b) => b.score - a.score)[Math.min(3, nodes.length) - 1]?.score ?? 1)
+  const coRaw = Math.min(Math.max(minCo, 1), coMax)
+  const brOf = (co) => {
+    const avail = Math.min(10, nodes.filter((n) => n.score >= co).length)
+    const min = Math.min(3, avail)
+    return { avail, min, n: Math.max(min, Math.min(branchN, avail)) }
+  }
+  // 두 레버가 서로 기대므로 두 번: 지금 기준으로 가지 수 → 그 가지 수로 칸 → 칸 값(같은 맵 중 가장 작은 값)으로 가지 수 다시
+  const br0 = brOf(coRaw).n
+  // 펼침 규칙은 아래 isOpen과 같게: 손으로 정한 값 → 아니면 1단계(레버 안 말)는 2단계 이상일 때 · 2단계 말은 3단계일 때
+  const openFor = useCallback((w, i, baseN) => openSet[w] ?? (i >= 0 ? depth >= 2 && i < baseN : depth >= 3), [openSet, depth])
+  const steps0 = useMemo(() => coSteps(nodes, branches, edges, br0, MAP_CAP, coMax, extraList, openFor), [nodes, branches, edges, br0, MAP_CAP, coMax, extraList, openFor])
+  const stepOf = (list) => list.reduce((a, v) => (v <= coRaw ? v : a), list[0] ?? 1)
+  const { avail: brAvail, min: brMin, n: brN } = brOf(stepOf(steps0))
+  const coList = useMemo(() => (brN === br0 ? steps0 : coSteps(nodes, branches, edges, brN, MAP_CAP, coMax, extraList, openFor)), [brN, br0, steps0, nodes, branches, edges, MAP_CAP, coMax, extraList, openFor])
+  const coN = stepOf(coList)
+  const coIdx = Math.max(0, coList.indexOf(coN))
   const cloudAll = useMemo(() => new Set([...nodes, ...Object.values(branches ?? {}).flat()].map((n) => n.word)).size, [nodes, branches])
   const kwMax = Math.min(80, cloudAll)
   const kwMin = Math.min(10, kwMax)
@@ -911,7 +950,15 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
                   <span className="km-lbl">
                     함께 나온 이슈 <output>{coN}</output>개 이상만
                   </span>
-                  <input type="range" min="1" max={coMax} value={coN} disabled={coMax <= 1} onChange={(e) => setMinCo(Number(e.target.value))} aria-valuetext={`${coN}개 이상 (1~${coMax})`} />
+                  <input
+                    type="range"
+                    min="0"
+                    max={Math.max(0, coList.length - 1)}
+                    value={coIdx}
+                    disabled={coList.length <= 1}
+                    onChange={(e) => setMinCo(coList[Number(e.target.value)] ?? 1)}
+                    aria-valuetext={`${coN}개 이상 (${coList[0] ?? 1}~${coList.at(-1) ?? 1}, ${coList.length}칸)`}
+                  />
                 </label>
               )}
               <div className="km-ctl">

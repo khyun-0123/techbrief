@@ -446,24 +446,14 @@ function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, on
                               추천 {autoN}개로
                             </button>
                           ))}
-                        <input type="range" min={0} max={Math.max(1, leverMax)} className="ka-lever" style={{ '--f': Math.min(picked.length, leverMax) / Math.max(1, leverMax) }} value={Math.min(picked.length, leverMax)} onChange={(e) => setCount(Number(e.target.value))} aria-describedby="ka-auto-help" aria-valuetext={picked.length ? `「${keyword}」 + ${picked.length}개 · ${picked.join(', ')}` : `「${keyword}」만`} />
+                        <input type="range" min={0} max={Math.max(1, leverMax)} className="ka-lever" style={{ '--f': Math.min(picked.length, leverMax) / Math.max(1, leverMax) }} value={Math.min(picked.length, leverMax)} onChange={(e) => setCount(Number(e.target.value))} aria-valuetext={picked.length ? `「${keyword}」 + ${picked.length}개 · ${picked.join(', ')}` : `「${keyword}」만`} />
                       </label>
                       <span className="ka-lever-ends" aria-hidden="true">
                         <span>주제어만</span>
                         <span>전체 {leverMax}개</span>
                       </span>
                     </div>
-                    {/* 11/16 검수: 「글이 너무 많다」 → 레버 · 맵 설명 세 문단을 접어 둠 (aria-describedby는 접혀도 읽힘) */}
-                    <details className="ka-help">
-                      <summary>레버 · 맵 읽는 법</summary>
-                      <p className="hint">「자료 선별하기」는 「{keyword}」 자료 중 고른 말이 하나 이상 든 것만 보여 줘요. 더 넓게 보려면 맵에서 말을 더 고르세요.</p>
-                      <p id="ka-auto-help" className="hint">
-                        레버 왼쪽 끝은 주제어만, 오른쪽 끝은 맵의 말 전부예요. 처음엔 추천 개수만큼 골라 둬요 — 연관도(함께 나온 이슈 수) 순 기술 · 회사 말을 하나씩 더하다가, 「{keyword}」 이슈를 새로 5% 이상 덮지 못하면 멈춘 개수예요. 레버를 올리면 다음 말을 하나씩 더하고(기술 · 회사 말 먼저), 내리면 마지막에 더한 말부터 빼요. 맵의 점이나 글자를 눌러 넣고 빼면 개수도 같이 바뀌어요 (직접 뺀 말은 오른쪽 끝이 아니면 다시 안 들어가요). 점 옆 「+n」은 그 가지를 펼쳐요.
-                      </p>
-                      <p className="hint">
-                        점이 클수록 「{keyword}」와 함께 나온 이슈가 많음 · 재료: 뉴스 · 모은 기사(전체 기간) · AI 요약 문장 {related.issues}개 이슈{related.words === 'kiwi' ? ' (형태소 분석으로 명사만)' : ''} · 특허 출원인 · 논문 핵심어 (점에 마우스를 올리면 수)
-                      </p>
-                    </details>
+                    {/* 11/25 조장: 「레버 · 맵 읽는 법」 설명은 뺌 (11/16엔 세 문단을 접어 뒀음) */}
                     {/* 11/22 팀 회의: 맵 아래 「고른 범위」 칩 줄은 뺌 — 맵의 ✓ 표시로 확인한다 */}
                   </>
                 ) : (
