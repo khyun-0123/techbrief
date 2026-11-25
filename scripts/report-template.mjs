@@ -101,7 +101,6 @@ function defineLayouts(pres) {
       ph('source', { x: L.source.x + 0.7, y: L.source.y, w: L.source.w - 0.7, h: L.source.h }, SIZE.note, '수집 기간 YYYY.MM.DD~YYYY.MM.DD | 기사 N건 | 매체 M곳 | 키워드: ○○'),
       ph('summary', { x: L.summary.x + 1.15, y: L.summary.y + 0.09, w: L.summary.w - 1.3, h: L.summary.h - 0.14 }, SIZE.body, '본문 전체를 한 문장으로 (헤드라인과 다른 문장, 최대 2줄)', { bold: true }),
     ],
-    slideNumber,
   })
 
   // 유첨 공통: 제목(18pt 고정 글자) + 아래 줄
@@ -110,7 +109,6 @@ function defineLayouts(pres) {
       title: name,
       background: { color: C.white },
       objects: [label(title, M, M, CW, LH(SIZE.title), SIZE.title, { bold: true }), { line: { x: M, y: M + LH(SIZE.title) + 0.06, w: CW, h: 0, line: { color: C.ink, width: 1 } } }, ...footer(), ...extra],
-      slideNumber,
     })
   const top = M + LH(SIZE.title) + 0.18
   appendix('유첨 1', '유첨 1. 상세 분석', [
@@ -214,12 +212,14 @@ export function build(data, { cover } = {}) {
   const put = (slide, name, value) => slide.addText(filled ? value : '', { placeholder: name })
   const cited = new Set((data?.facts ?? []).flatMap((f) => f.refs.map(NN)))
 
+  let coverSlide = null
   // ════ 본문 ════
   pres.addSection({ title: '본문' })
   const tr = data?.trend ?? { unit: '일', labels: [' ', '  ', '   ', '    ', '     '], values: [0, 0, 0, 0, 0] } // 빈 양식: 눈금 이름 없이 틀만
   if (cover) {
     // 11/25 PPT 하나로: 1쪽은 앱 양식 1쪽(핵심 사실 / AI 해설 구분 · 기회 / 위협 / 할 일 카드)을 그린다. 기술 언급량 추이는 유첨 2에 있음
-    cover(pres, pres.addSlide({ sectionTitle: '본문' }))
+    // 쪽 번호에 전체 쪽수가 들어가도록 그리기는 맨 끝에서 (11/26: 「1」만 나오고 전체가 없었음)
+    coverSlide = pres.addSlide({ sectionTitle: '본문' })
   } else {
     const s1 = pres.addSlide({ masterName: '본문', sectionTitle: '본문' })
     drawCard(s1, pres, COL_X[0], ROW_Y[0], CELL_W, L.rows[0], '기술 개요', '핵심 사실 근거')
@@ -368,6 +368,12 @@ export function build(data, { cover } = {}) {
     s6.addNotes('유첨 5. appendix.timeline(키워드마다: stage · why · lines[head, text] · papers · patents)을 붙여 넣는다. 숫자는 규칙 계산 그대로, 관심도 · 급증은 네이버 검색 관심도라 AI 입력에 쓰지 않는다 (23 문서).')
   }
 
+  // 쪽 번호 「n / 전체」 (11/26): 미리보기 · PDF와 같게. 예전엔 마스터 쪽 번호 칸이라 전체 쪽수가 없었음
+  const total = pres.slides.length
+  pres.slides.forEach((slide, i) => {
+    if (slide === coverSlide) return cover(pres, slide, total)
+    slide.addText(`${i + 1} / ${total}`, { ...slideNumber, margin: 0, valign: 'top', objectName: '쪽 번호' })
+  })
   return pres
 }
 

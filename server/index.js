@@ -1310,7 +1310,7 @@ async function handleApiInner(req, res) {
       let cover
       if (deck) {
         const { drawPage } = await import('../src/reportExport.js')
-        cover = (pres, slide) => drawPage(pres, deck.pages[0], { slide })
+        cover = (pres, slide, total) => drawPage(pres, deck.pages[0], { slide, total })
       }
       const buf = await renderPptx(data, { cover })
       const name = encodeURIComponent(`${(entry.report?.title ?? '보고서').replace(/[\\/:*?"<>|]/g, '_')}${teamCover ? '_보고서팀양식' : ''}.pptx`)
