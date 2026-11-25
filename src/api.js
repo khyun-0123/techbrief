@@ -239,6 +239,13 @@ export async function starReportApi(id, on) {
 }
 
 // DB에 저장된 요약 (다른 브라우저에서 만든 요약도 보이게)
+// 보고서팀 양식 데이터 (11/25): 미리보기 · PDF도 PPT와 같은 「1쪽 + 보고서팀 유첨」으로
+export async function fetchReportTemplate(id) {
+  const res = await fetch(`/api/reports/template?id=${encodeURIComponent(id)}`)
+  if (!res.ok) throw new Error('보고서 양식 데이터를 받지 못했어요')
+  return (await res.json()).data
+}
+
 export function lookupSummaries(ids) {
   return postJson('/api/summaries/lookup', { ids })
 }

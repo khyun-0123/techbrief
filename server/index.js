@@ -507,6 +507,37 @@ function crossOrigin(req) {
 const clientOf = (req) => String(readCookie(req, 'tb_client') ?? '').replace(/[^\w-]/g, '').slice(0, 64) || null
 
 // 요청 하나를 처리하는 동안 AI 호출이 누구의 요청인지 알 수 있게 맥락을 넣는다 (llm/client.js withQueueContext)
+// 보고서 → 보고서팀 양식 데이터 (PPT · 미리보기 공통, 11/25)
+// 예전 보고서(11/17 전)는 분석 묶음에 논문 추이 · 연구 폭 등이 없음 → 지금 묶음(3일 기억)으로 채우고 「분석 기준일」을 그 묶음 날짜로 (40 문서 R6)
+// withDeck: 앱 양식 1쪽을 함께 만들고, 1쪽에 못 들어가 옮긴 사실을 유첨 1 「본문에서 옮긴 사실」로
+async function templateDataFor(entry, { withDeck = true } = {}) {
+  const { reportToTemplate, topicTrendItems } = await import('./reportToTemplate.js')
+  const r0 = entry.report ?? {}
+  const kws = (r0.analysis?.length ? r0.analysis.map((a) => a.keyword) : (r0.sources?.topics ?? [])).filter(Boolean).slice(0, 2)
+  const fresh = await Promise.all(kws.map((k) => Promise.race([prepareBundle(k).catch(() => null), new Promise((ok) => setTimeout(() => ok(null), 15_000))])))
+  const analysis = kws
+    .map((k, i) => {
+      const old = r0.analysis?.find((a) => a.keyword === k)
+      const b = fresh[i]
+      if (old?.papers || !b) return old
+      return { ...(old ?? {}), keyword: k, at: b.at, stage: old?.stage ?? b.stage, patentYears: old?.patentYears?.length ? old.patentYears : b.patentYears, competitors: old?.competitors ?? b.competitors, owners: old?.owners ?? b.owners, quotes: old?.quotes ?? b.quotes, papers: b.papers, rising: b.rising, makers: b.makers, breadth: b.breadth, attention: b.attention, surges: b.surges, signal: b.signal }
+    })
+    .filter(Boolean)
+  const e = analysis.length ? { ...entry, report: { ...r0, analysis } } : entry
+  // 추이 그래프: 보고서 주제어가 든 모은 기사 수 → 없으면 맞는 수집 키워드 (11/17)
+  const [topicItems, trendItems] = await Promise.all([topicTrendItems(e, query).catch(() => []), getTrends().then((t) => t.items).catch(() => [])])
+  const data = reportToTemplate(e, { topicItems, trendItems })
+  let deck = null
+  if (withDeck) {
+    const { reportPages, applyReportStyle } = await import('../src/reportSlides.js')
+    applyReportStyle(await getReportStyle())
+    deck = reportPages(e, { topic: { items: topicItems }, trends: { items: trendItems } })
+    const moved = (deck.moved ?? []).map((f) => ({ text: f.text, refs: f.refs ?? [] }))
+    if (moved.length) data.appendix = { ...data.appendix, single_facts: [...moved, ...(data.appendix?.single_facts ?? []).filter((x) => !moved.some((m) => m.text === x.text))] }
+  }
+  return { data, deck }
+}
+
 export function handleApi(req, res) {
   return withQueueContext({ client: clientOf(req), label: null }, () => handleApiInner(req, res))
 }
@@ -1263,39 +1294,22 @@ async function handleApiInner(req, res) {
       const at = Number.isFinite(Date.parse(createdAt)) ? createdAt : new Date().toISOString()
       return send(res, 200, { items: await topicTrendItems({ createdAt: at, report: { sources: { topics } } }, query) })
     }
-    if (req.method === 'GET' && req.url.startsWith('/api/reports/pptx?')) {
-      const id = new URL(req.url, 'http://x').searchParams.get('id')
+    // 보고서팀 양식 데이터 (11/25 팀 검수: 미리보기 · PDF도 PPT와 같은 「앱 1쪽 + 보고서팀 유첨」으로 — 화면이 이 값으로 유첨 쪽을 그림)
+    if (req.method === 'GET' && (req.url.startsWith('/api/reports/pptx?') || req.url.startsWith('/api/reports/template?'))) {
+      const sp = new URL(req.url, 'http://x').searchParams
+      const id = sp.get('id')
       const list = dbEnabled() ? await listReports(1000, { ip: clientIp(req) }) : []
       const entry = list.find((e) => String(e.id) === String(id))
       if (!entry) return send(res, 404, { error: '보고서를 찾지 못했어요.' })
-      const { reportToTemplate, topicTrendItems } = await import('./reportToTemplate.js')
+      const teamCover = sp.get('form') === 'team'
+      const { data, deck } = await templateDataFor(entry, { withDeck: !teamCover })
+      if (req.url.startsWith('/api/reports/template?')) return send(res, 200, { data })
       const { renderPptx, setTemplateStyle } = await import('../scripts/report-template.mjs')
       setTemplateStyle(await getReportStyle()) // 11/20: 관리 페이지 「보고서 양식」의 글꼴 · 강조색 (칸 자리 · 글자 크기는 양식 고정)
-      // 예전 보고서(11/17 전)는 분석 묶음에 논문 추이 · 연구 폭 등이 없음 → 지금 묶음(3일 기억)으로 채우고 「분석 기준일」을 그 묶음 날짜로 (40 문서 R6)
-      const r0 = entry.report ?? {}
-      const kws = (r0.analysis?.length ? r0.analysis.map((a) => a.keyword) : (r0.sources?.topics ?? [])).filter(Boolean).slice(0, 2)
-      const fresh = await Promise.all(kws.map((k) => Promise.race([prepareBundle(k).catch(() => null), new Promise((ok) => setTimeout(() => ok(null), 15_000))])))
-      const analysis = kws.map((k, i) => {
-        const old = r0.analysis?.find((a) => a.keyword === k)
-        const b = fresh[i]
-        if (old?.papers || !b) return old
-        return { ...(old ?? {}), keyword: k, at: b.at, stage: old?.stage ?? b.stage, patentYears: old?.patentYears?.length ? old.patentYears : b.patentYears, competitors: old?.competitors ?? b.competitors, owners: old?.owners ?? b.owners, quotes: old?.quotes ?? b.quotes, papers: b.papers, rising: b.rising, makers: b.makers, breadth: b.breadth, attention: b.attention, surges: b.surges, signal: b.signal }
-      }).filter(Boolean)
-      if (analysis.length) entry.report = { ...r0, analysis }
-      // 추이 그래프: 보고서 주제어가 든 모은 기사 수 → 없으면 맞는 수집 키워드 (11/17)
-      const [topicItems, trendItems] = await Promise.all([topicTrendItems(entry, query).catch(() => []), getTrends().then((t) => t.items).catch(() => [])])
-      const data = reportToTemplate(entry, { topicItems, trendItems })
-      // 11/25 PPT 하나로 (45 문서 7장): 1쪽 = 앱 양식 1쪽(화면 미리보기와 같은 핵심 요약), 유첨 = 보고서팀 양식.
-      // 앱 1쪽에 못 들어가 2쪽으로 옮기던 사실은 유첨 1 「본문에서 옮긴 사실」로. ?form=team 이면 예전 보고서팀 양식 1쪽 그대로
-      const teamCover = new URL(req.url, 'http://x').searchParams.get('form') === 'team'
+      // 11/25 PPT 하나로 (45 문서 7장): 1쪽 = 앱 양식 1쪽(화면 미리보기와 같은 핵심 요약), 유첨 = 보고서팀 양식. ?form=team 이면 예전 보고서팀 양식 1쪽 그대로
       let cover
-      if (!teamCover) {
-        const { reportPages, applyReportStyle } = await import('../src/reportSlides.js')
+      if (deck) {
         const { drawPage } = await import('../src/reportExport.js')
-        applyReportStyle(await getReportStyle())
-        const deck = reportPages(entry, { topic: { items: topicItems }, trends: { items: trendItems } })
-        const moved = (deck.moved ?? []).map((f) => ({ text: f.text, refs: f.refs ?? [] }))
-        if (moved.length) data.appendix = { ...data.appendix, single_facts: [...moved, ...(data.appendix?.single_facts ?? []).filter((x) => !moved.some((m) => m.text === x.text))] }
         cover = (pres, slide) => drawPage(pres, deck.pages[0], { slide })
       }
       const buf = await renderPptx(data, { cover })

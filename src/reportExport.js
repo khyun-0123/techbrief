@@ -68,7 +68,7 @@ export function drawPage(pptx, page, { slide = pptx.addSlide(), total } = {}) {
     } else if (el.t === 'table') {
       const cell = (text, opts = {}) => ({ text, options: { fontFace: FONT.latin, fontSize: el.size, color: COLOR.ink, valign: 'middle', ...opts } })
       slide.addTable(
-        el.rows.map((r) => r.cells.map((c, i) => (i === 0 && el.headCol ? cell(c, { bold: true, fill: { color: COLOR.gray } }) : cell(c)))),
+        el.rows.map((r, ri) => r.cells.map((c, i) => ((i === 0 && el.headCol) || (ri === 0 && el.headRow) ? cell(c, { bold: true, fill: { color: COLOR.gray } }) : cell(c)))),
         { x: el.x, y: el.y, w: el.w, colW: el.cols, rowH: el.rows.map((r) => r.h), border: { type: 'solid', pt: 0.75, color: COLOR.line }, margin: 0.05, fontFace: FONT.latin, fontSize: el.size, autoPage: false },
       )
     } else if (el.t === 'chart') {
@@ -176,13 +176,15 @@ export async function buildPptx(saved, { PptxGenJS, JSZip, extra } = {}) {
 
 // 어디서 내려받든(보고서 화면 · 편집 탭) 미리보기와 같은 그래프가 되게, 추가 데이터를 안 받았으면 여기서 불러온다
 export async function loadReportExtra(saved) {
-  const { fetchReportAnalysis, fetchTopicTrend, fetchTrends } = await import('./api.js')
-  const [trends, topic, fresh] = await Promise.all([
+  const { fetchReportAnalysis, fetchReportTemplate, fetchTopicTrend, fetchTrends } = await import('./api.js')
+  const [trends, topic, fresh, template] = await Promise.all([
     fetchTrends().catch(() => null),
     saved ? fetchTopicTrend(saved).catch(() => null) : null,
     saved ? fetchReportAnalysis(saved).catch(() => null) : null,
+    // 11/25: 저장된 보고서면 보고서팀 양식 데이터도 받아 미리보기 · PDF를 PPT와 같게 (못 받으면 예전처럼 앱 양식 전체)
+    saved?.id ? fetchReportTemplate(saved.id).catch(() => null) : null,
   ])
-  return { trends, topic, analysis: fresh?.bundles ?? null }
+  return { trends, topic, analysis: fresh?.bundles ?? null, template }
 }
 
 // PPT로 저장 (11/25 하나로 — 45 문서 7장): 서버가 만든 「1쪽 핵심 요약(이 앱 쪽 엔진) + 보고서팀 유첨 1~5」를 받는다.

@@ -120,7 +120,7 @@ const autoTitleOf = (topic) => {
   return `${topic ? `${topic} ` : '테크 '}동향 브리핑 · ${d.getMonth() + 1}/${d.getDate()}`
 }
 
-function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderSummary, tagTopic = null, reportJobs = [], onJobAdded, onOpenReport }) {
+function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderSummary, tagTopic = null, reportJobs = [], onJobAdded, onOpenReport, onLeftOut }) {
   const [saved0] = useState(() => load(DRAFT_INPUT_KEY, {}))
   // 제목 (11/14): 비워 두면 「주제 키워드 동향 브리핑 · 월/일」 — 예전 기본값 「테크 동향 브리핑」 하나로 17건 중 11건이 같은 제목이었음
   const [title, setTitle] = useState(saved0.title && saved0.title !== GENERIC_TITLE ? saved0.title : '')
@@ -160,6 +160,11 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
   const useAll = tooMany && mode === 'all' && !overMax
   const articles = tooMany && !useAll ? topByImportance(picked, REPORT_LIMIT) : picked
   const leftOut = tooMany && !useAll ? picked.filter((a) => !articles.includes(a)) : []
+  // 빠지는 자료를 왼쪽 목록에도 표시 (11/25 팀 검수: 10건이 넘으면 어떤 자료가 빠지는지 안 보였음)
+  const leftOutKey = leftOut.map((a) => a.id).join('|')
+  useEffect(() => {
+    onLeftOut?.(leftOutKey ? leftOutKey.split('|') : [])
+  }, [leftOutKey, onLeftOut])
 
   const key = articleKey(picked.map((a) => a.id))
   // 미리보기 = 재료 미리보기만 (11/08 조장). 지금 체크한 기사로 만든 보고서가 있으면 제목 옆에 알리고 보고서함에서 연다
@@ -317,11 +322,17 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
               )}
             </fieldset>
 
+            {tooMany && mode === 'top' && leftOut.length > 0 && (
+              <p className="report-leftout" title={leftOut.map((a) => a.title).join('\n')}>
+                <b>빠지는 {leftOut.length}건</b> (중요도 낮은 순서): {leftOut.slice(0, 3).map((a) => (a.title.length > 22 ? `${a.title.slice(0, 21)}…` : a.title)).join(', ')}
+                {leftOut.length > 3 && ` 외 ${leftOut.length - 3}건`}
+              </p>
+            )}
             {tooMany && (
               <div className="report-mode-choices" role="radiogroup" aria-label="자료가 많을 때">
                 <button type="button" role="radio" aria-checked={mode === 'top'} className="report-mode-choice" onClick={() => setMode('top')}>
                   <strong>중요도 높은 {REPORT_LIMIT}건으로</strong>
-                  <span>빠름. 나머지 {picked.length - REPORT_LIMIT}건은 빠져요.</span>
+                  <span>빠름. 나머지 {picked.length - REPORT_LIMIT}건은 빠져요 (왼쪽 목록에 「빠짐」 표시).</span>
                 </button>
                 <button type="button" role="radio" aria-checked={mode === 'all'} className="report-mode-choice" onClick={() => setMode('all')} disabled={overMax}>
                   <strong>{picked.length}건 모두</strong>

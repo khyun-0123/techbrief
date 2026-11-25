@@ -346,7 +346,7 @@ export function build(data, { cover } = {}) {
         lines.push([{ text: l.head, options: { bold: true } }])
         lines.push(Object.assign([{ text: l.text }], { sub: true }))
       }
-      lines.push([{ text: t.note ?? '규칙으로 센 숫자 (AI가 만든 숫자 아님)', options: { color: C.sub } }])
+      if (t.note) lines.push([{ text: t.note, options: { color: C.sub } }]) // 11/25 팀 검수: 「숫자는 규칙으로 센 값」 줄은 기본으로 뺌
     }
     put(s6, 'timeline_text', lines.length ? bullets(lines, SIZE.note) : '')
     const rx = M + T5.textW + 0.25

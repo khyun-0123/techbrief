@@ -937,5 +937,113 @@ export function reportPages(saved, extra = {}) {
     { label: '텍스트 박스 밖으로 넘친 글자 없음', ok: !cover.fit.hlOver, note: cover.fit.hlOver ? '헤드라인이 2줄을 넘음' : '' },
   ]
   // moved: 1쪽에 못 들어가 2쪽(기술 개요)으로 옮긴 핵심 사실 — 서버 「PPT로 저장」은 1쪽만 쓰므로 유첨 1로 받는다 (11/25)
-  return { meta, pages, checks, notes, trendChart, moved: sec.tech.facts.filter((f) => f.from === 'summary') }
+  const moved = sec.tech.facts.filter((f) => f.from === 'summary')
+  // 11/25 팀 검수 「미리보기 · PDF는 옛날 양식」: 서버 보고서팀 양식 데이터(extra.template)가 있으면 PPT와 같게 1쪽 + 보고서팀 유첨 1~5
+  if (extra.template) {
+    const all = [pages[0], ...teamPages(extra.template, meta)]
+    all.forEach((p, i) => p.els.forEach((e) => e.t === 'pageno' && Object.assign(e, { no: i + 1 })))
+    return { meta, pages: all, checks, notes, trendChart, moved, hybrid: true }
+  }
+  return { meta, pages, checks, notes, trendChart, moved }
+}
+
+// ── 보고서팀 유첨 1~5 (11/25, scripts/report-template.mjs와 같은 내용 · 순서) ──
+// tpl: 서버 reportToTemplate 결과 (/api/reports/template). 미리보기 · PDF · 브라우저 PPT가 서버 PPT와 같은 구성이 되게
+const ROWS_SRC = 22
+const ROWS_SUM = 11
+const refsText = (refs) => (refs?.length ? ` ${refs.map((r) => `[${String(r).replace(/^#/, '')}]`).join('')}` : '')
+const cutTo = (t, n) => {
+  const x = String(t ?? '')
+  return x.length > n ? `${x.slice(0, n - 1)}…` : x
+}
+export function teamPages(tpl, meta) {
+  const pages = []
+  const TOP = 0.62
+  const open = (label, kind) => {
+    const els = []
+    chrome(els, meta, `${meta.title}  |  ${label.replace(/ \(계속\)$/, '')}`)
+    els.push(text(M, TOP, CW, LH(SIZE.title), SIZE.title, label, { bold: true }))
+    els.push({ t: 'line', x: M, y: TOP + LH(SIZE.title) + 0.06, w: CW, color: COLOR.ink })
+    pages.push({ kind, label, els })
+    return { els, y: TOP + LH(SIZE.title) + 0.22 }
+  }
+  const ap = tpl.appendix ?? {}
+
+  // 유첨 1. 상세 분석: 이슈마다 배경 · 쟁점 · 전망 + 근거 1건뿐인 사실 · 본문에서 옮긴 사실
+  const lines = []
+  for (const a of ap.analysis ?? []) {
+    lines.push({ runs: [{ text: a.issue, bold: true }, { text: refsText(a.refs), color: COLOR.sub }] })
+    for (const [head, body] of [
+      ['배경', a.background],
+      ['쟁점', a.point],
+      ['전망', a.outlook],
+    ])
+      if (body) lines.push({ runs: [{ text: `${head}  `, bold: true }, { text: body }], indent: true })
+  }
+  if (ap.single_facts?.length) {
+    lines.push({ runs: [{ text: '근거 기사 1건뿐인 사실 · 본문에서 옮긴 사실', bold: true, color: COLOR.accent }] })
+    for (const f of ap.single_facts) lines.push({ runs: [{ text: f.text }, { text: refsText(f.refs), color: COLOR.sub }] })
+  }
+  let cur = open('유첨 1. 상세 분석', 'team-analysis')
+  if (!lines.length) cur.els.push(text(M, cur.y, CW, LH(SIZE.body), SIZE.body, '상세 분석 없음', { color: COLOR.sub }))
+  for (const l of lines) {
+    const w = CW - (l.indent ? 0.3 : 0)
+    const h = bulletHeight(w, runsText(l.runs), SIZE.body) + 0.06
+    if (cur.y + h > BOTTOM) cur = open('유첨 1. 상세 분석 (계속)', 'team-analysis')
+    cur.y += bulletLine(cur.els, M + (l.indent ? 0.3 : 0), cur.y, w, l.runs, SIZE.body, l.indent ? '·' : '•') + 0.06
+  }
+
+  // 유첨 2. 트렌드 그래프: 기간별 기사량 · 키워드 빈도
+  cur = open('유첨 2. 트렌드 그래프', 'team-charts')
+  const tr = tpl.trend ?? { labels: [], values: [] }
+  const kw = (ap.charts ?? []).find((c) => c.type === '가로막대') ?? { labels: [], values: [] }
+  const cw2 = (CW - 0.25) / 2
+  const ch2 = BOTTOM - cur.y
+  chartBox(cur.els, M, cur.y, cw2, ch2, { kind: tr.labels?.length > 12 ? 'line' : 'vbar', title: '기간별 기사량', labels: tr.labels ?? [], values: tr.values ?? [], xTitle: tr.unit === '주' ? '주 (시작일 M/D)' : '날짜 (M/D)', yTitle: tr.unit === '주' ? '주간 기사 수 (건)' : '기사 수 (건)', unit: '건', source: tr.source ?? '-', asOf: tr.period ?? '-', empty: '기사량 자료 없음' })
+  chartBox(cur.els, M + cw2 + 0.25, cur.y, cw2, ch2, { kind: 'hbar', title: '키워드 빈도', labels: kw.labels ?? [], values: kw.values ?? [], xTitle: '키워드', yTitle: '언급 기사 수 (건)', unit: '건', source: kw.source ?? '-', asOf: kw.period ?? '-', empty: '키워드 자료 없음' })
+
+  // 유첨 3. 출처 목록 · 유첨 4. 기사 원문 요약 (표, 한 장 — 넘치면 「외 N건」)
+  const table = (label, kind, head, cols, rows, rowH, cap) => {
+    const c = open(label, kind)
+    const shown = rows.slice(0, cap)
+    c.els.push({ t: 'table', x: M, y: c.y, w: CW, cols, rows: [{ cells: head, h: 0.27 }, ...shown.map((cells) => ({ cells, h: rowH }))], size: SIZE.note, headRow: true })
+    if (rows.length > cap) c.els.push(text(M, FOOT_Y - 0.34, CW, LH(SIZE.note), SIZE.note, `외 ${rows.length - cap}건 (한 장을 넘어 생략)`, { color: COLOR.sub }))
+  }
+  table('유첨 3. 출처 목록', 'team-sources', ['번호', '날짜', '매체', '제목', 'URL'], [0.5, 0.9, 1.35, 3.65, 2.6], (ap.sources ?? []).map((r) => [String(r.no ?? ''), r.date ?? '', cutTo(r.media, 14), cutTo(r.title, 34), r.url ? cutTo(r.url.replace(/^https?:\/\//, ''), 30) : '링크 없음']), 0.25, ROWS_SRC)
+  table(
+    '유첨 4. 기사 원문 요약',
+    'team-summaries',
+    ['번호', '제목', '요약 (1~2줄)'],
+    [0.5, 3.1, 5.4],
+    (ap.summaries ?? []).map((r) => [String(r.no ?? ''), cutTo(r.title, 60), cutTo(`${r.basis === '발췌문' ? '발췌문 기준: ' : r.basis === '초록' ? '초록 기준: ' : ''}${r.summary ?? ''}`, 110)]),
+    0.45,
+    ROWS_SUM,
+  )
+
+  // 유첨 5. 기술 시계열 (키워드마다 한 장, 최대 2장): 왼쪽 판정 글, 오른쪽 논문 · 특허 연도별 그래프
+  for (const t of (ap.timeline ?? []).slice(0, 2)) {
+    const c = open('유첨 5. 기술 시계열', 'team-timeline')
+    const leftW = 4.6
+    const tl = [{ runs: [{ text: `「${t.keyword}」 기술 단계  `, bold: true }, { text: `[${t.stage ?? '판정 없음'}]`, bold: true, color: COLOR.accent }] }]
+    if (t.why) tl.push({ runs: [{ text: t.why }], indent: true })
+    for (const l of t.lines ?? []) {
+      tl.push({ runs: [{ text: l.head, bold: true }] })
+      tl.push({ runs: [{ text: l.text }], indent: true })
+    }
+    if (t.note) tl.push({ runs: [{ text: t.note, color: COLOR.sub }] })
+    let y = c.y
+    for (const l of tl) {
+      const w = leftW - (l.indent ? 0.25 : 0)
+      const h = bulletHeight(w, runsText(l.runs), SIZE.note) + 0.04
+      if (y + h > BOTTOM) break
+      y += bulletLine(c.els, M + (l.indent ? 0.25 : 0), y, w, l.runs, SIZE.note, l.indent ? '·' : '•') + 0.04
+    }
+    const rx = M + leftW + 0.25
+    const rw = CW - leftW - 0.25
+    const gh = (BOTTOM - c.y - 0.12) / 2
+    const as = t.as_of ?? '-'
+    chartBox(c.els, rx, c.y, rw, gh, { kind: (t.papers?.labels?.length ?? 0) > 12 ? 'line' : 'vbar', title: '논문 수 (연도별)', labels: t.papers?.labels ?? [], values: t.papers?.values ?? [], xTitle: '연도', yTitle: '논문 수 (편)', unit: '편', source: t.source ?? '-', asOf: as, empty: '자료 부족' })
+    chartBox(c.els, rx, c.y + gh + 0.12, rw, gh, { kind: (t.patents?.labels?.length ?? 0) > 12 ? 'line' : 'vbar', title: '특허 수 (연도별 · 같은 발명 한 번)', labels: t.patents?.labels ?? [], values: t.patents?.values ?? [], xTitle: '연도', yTitle: '특허 수 (건)', unit: '건', source: '디스플레이 특허 DB', asOf: as, empty: '자료 부족' })
+  }
+  return pages
 }

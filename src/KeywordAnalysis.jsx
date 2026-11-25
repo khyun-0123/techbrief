@@ -383,7 +383,7 @@ function KeywordAnalysis({ keyword, autoNote = null, onSearch, onScopeSearch, on
           render: (closeBtn) => (
             <div className="ka-pane">
               <div className="ka-pane-head">
-                <h3>연관 키워드 · 볼 범위</h3>
+                <h3>연관 키워드</h3>
                 {related && nodes.length > 0 && viewChips}
                 {related && nodes.length > 0 && (
                   <button type="button" className="pane-zoom" onClick={() => setBigMap(true)} title="마인드맵 · 워드클라우드를 한 화면 크게">

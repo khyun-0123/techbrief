@@ -162,7 +162,7 @@ function timelineSlide(an, createdAt) {
     patents: series(an.patentYears),
     source: `${an.papers?.basis === 'openalex' ? 'OpenAlex 논문 수(단계 판정과 같은 값)' : '테크브리프 논문 DB'} · 디스플레이 특허 DB${an.attention || an.surges?.length ? ' · 네이버 검색 관심도' : ''}`,
     as_of: `${last}년까지${an.at ? ` · 분석 ${ymd(an.at)}` : ''}`,
-    note: '숫자는 규칙으로 센 값 (AI가 만든 숫자 아님) · 판단 기준은 33 문서',
+    note: '', // 11/25 팀 검수: 「숫자는 규칙으로 센 값 · 33 문서」 줄은 보고서 읽는 사람에게 필요 없어 뺌
   }
 }
 

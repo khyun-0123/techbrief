@@ -1,12 +1,34 @@
 // AI 요약 대기열 — 「선별 추가」·「요약 추가」를 누르면 여기에 들어가 한 건씩 요약된다 (10 보고서 계획 2절)
 // 모델은 진행률을 알려 주지 않으므로, 게이지는 지금까지 걸린 평균 시간으로 계산한 '예상' 값이다
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { requestSummary } from './api.js'
+import { lookupSummaries, requestSummary } from './api.js'
 import { track } from './usage.js'
 import { load } from './utils.js'
 
 const AVG_KEY = 'techbrief-summary-avg-ms'
 const DEFAULT_AVG_MS = 25_000 // 맥미니 qwen3:14b 실측 22~33초
+
+// 오래 기다리다 연결이 끊겨도 이어 받기 (11/25 팀 검수: 300초 넘게 걸리면 가끔 서버 오류)
+// - AI 대기열이 길면 요약 요청이 응답을 오래 붙잡는다. 앞단(Railway 등)이 시간 제한으로 끊어도 서버는 요약을 끝까지 하고 DB에 저장함
+// - 그래서 1분 넘게 기다리다 실패하면 10초마다 저장된 요약을 찾아본다 (최대 15분). 「다시 요약」은 새로 만든 것만 받음
+const RECOVER_AFTER_MS = 60_000
+const RECOVER_EVERY_MS = 10_000
+const RECOVER_FOR_MS = 15 * 60_000
+const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+async function summaryWithRecovery(article, opts) {
+  const t0 = Date.now()
+  try {
+    return await requestSummary(article, opts)
+  } catch (err) {
+    if (Date.now() - t0 < RECOVER_AFTER_MS) throw err
+    while (Date.now() - t0 < RECOVER_FOR_MS) {
+      await wait(RECOVER_EVERY_MS)
+      const hit = (await lookupSummaries([article.id]).catch(() => null))?.summaries?.[article.id]
+      if (hit && (!opts.refresh || Date.parse(hit.createdAt ?? '') >= t0)) return hit
+    }
+    throw err
+  }
+}
 
 // status: 'queued' | 'running' | 'done' | 'error'
 export function useSummaryQueue({ onDone }) {
@@ -39,7 +61,7 @@ export function useSummaryQueue({ onDone }) {
     setJobs((list) => list.map((j) => (j.id === next.id ? { ...j, status: 'running', startedAt } : j)))
 
     track('summary', next.article.keyword ?? '')
-    requestSummary(next.article, { refresh: next.refresh, select: next.select })
+    summaryWithRecovery(next.article, { refresh: next.refresh, select: next.select })
       .then((result) => {
         const took = Date.now() - startedAt
         onDoneRef.current?.(next.id, result)

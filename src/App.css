@@ -7524,6 +7524,33 @@ a.brand:focus-visible {
   font-size: 14px;
   font-weight: 700;
 }
+.km-phead-toggle {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.km-ptoggle-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-xs);
+  color: var(--tb-color-text-sub);
+}
+.km-phead-toggle:hover .km-ptoggle-text {
+  color: var(--tb-color-text);
+}
+.km-chev {
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+.km-chev.open {
+  transform: none;
+}
 .km-ptoggle {
   padding: 3px 10px;
   border: 1px solid var(--tb-color-line);
@@ -10472,4 +10499,25 @@ body:has(.collect-next) .progress-panel {
   .collect-page:has(> .collect-next) .list-panel > .pager {
     padding-right: 250px;
   }
+}
+
+/* 보고서에서 빠지는 자료 (11/25 팀 검수: 10건 넘게 체크하면 중요도 낮은 자료가 빠지는데 목록에서 안 보였음) */
+.candidate.left-out .candidate-text .title {
+  color: var(--tb-color-text-sub);
+}
+.badge-leftout {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border: 1px dashed var(--tb-color-text-sub);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tb-color-text-sub);
+  vertical-align: 1px;
+}
+.report-leftout {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--tb-color-text-sub);
 }

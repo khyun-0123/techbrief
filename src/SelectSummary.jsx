@@ -42,6 +42,7 @@ function SelectSummary({
   const { aiBlocked } = useOps()
   const [sort, setSort] = useState('importance')
   const [openId, setOpenId] = useState(null)
+  const [leftOutIds, setLeftOutIds] = useState([]) // 「중요도 높은 10건으로」일 때 보고서에서 빠지는 자료 (ReportComposer가 알려 줌)
   // 보는 키워드 태그 (11/23 조장: 선별·요약은 늘 키워드 하나 중심 — 「전체」 없앰).
   // 처음 값 = 자료 현황에서 찾던 말(focusTag), 그 태그가 없으면 첫 태그
   const [folderPick, setFolder] = useState(focusTag)
@@ -263,8 +264,9 @@ function SelectSummary({
                   const jobStatus = aiSummaries[a.id] && job?.status !== 'running' && job?.status !== 'queued' ? 'done' : job?.status
                   const open = openId === a.id
                   const checked = includedIds.includes(a.id)
+                  const out = checked && leftOutIds.includes(a.id)
                   return (
-                    <li key={a.id} className={['candidate', open && 'open', checked && 'checked'].filter(Boolean).join(' ')}>
+                    <li key={a.id} className={['candidate', open && 'open', checked && 'checked', out && 'left-out'].filter(Boolean).join(' ')}>
                       <div className="candidate-row">
                         <input
                           type="checkbox"
@@ -276,6 +278,11 @@ function SelectSummary({
                         />
                         <button type="button" className="candidate-text" aria-expanded={open} onClick={() => setOpenId(open ? null : a.id)}>
                           <span className="title">
+                            {out && (
+                              <span className="badge-leftout" title="체크했지만 「중요도 높은 10건으로」라 보고서에서 빠져요. 넣으려면 「N건 모두」를 고르거나 다른 자료의 체크를 빼세요">
+                                보고서에서 빠짐
+                              </span>
+                            )}
                             {importanceOf(a) === 'high' && <span className="badge-important">{IMPORTANCE_LABEL.high}</span>}
                             {a.material && <span className="badge-material">직접 추가</span>}
                             {a.title}
@@ -318,6 +325,7 @@ function SelectSummary({
             onOpenReport={onOpenReport}
             folderSummary={folderSummary}
             tagTopic={folder}
+            onLeftOut={setLeftOutIds}
           />
         </div>
       )}

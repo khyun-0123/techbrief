@@ -254,7 +254,7 @@ function El({ el, total }) {
           <tbody>
             {el.rows.map((r, ri) => (
               <tr key={ri} style={{ height: px(r.h) }}>
-                {r.cells.map((c, i) => (i === 0 && el.headCol ? <th key={i}>{c}</th> : <td key={i}>{c}</td>))}
+                {r.cells.map((c, i) => ((i === 0 && el.headCol) || (ri === 0 && el.headRow) ? <th key={i}>{c}</th> : <td key={i}>{c}</td>))}
               </tr>
             ))}
           </tbody>

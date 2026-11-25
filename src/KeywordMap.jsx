@@ -41,13 +41,15 @@ function readColors() {
 }
 
 // 그릴 말 고르기 (가이드 「단어 고르기」): 함께 나온 이슈 minCo개 이상인 말 중 1단계 = 위에서 가지 수만큼,
-// 2단계 = 가지마다 돌아가며 하나씩(키워드 수까지). 같은 말은 한 번만
+// 2단계 = 가지마다 돌아가며 하나씩(키워드 수까지), 한 가지에 가지 수까지. 같은 말은 한 번만
+// 11/25 팀 검수: 가지 수는 원안(맵팀 11/14)대로 「점마다 뻗는 가지 수」 — 검색어에서 k개, 1단계 말마다 다시 k개까지.
+// 예전엔 1단계 개수만 정해 2단계가 레버와 상관없이 붙어 「깊이 설정이 안 먹는다」로 보였음
 // extra: 고른 말인데 위 기준에 안 들어 맵에 없던 1단계 말 — 늘 그린다 (11/14: 레버가 고른 8위 이하 말이 칩에만 있고 맵에 안 보였음)
 function pickGraph(nodes, branches, edges, branchN, totalN, minCo, extra = []) {
   const base = nodes.filter((n) => n.score >= minCo).slice(0, branchN)
   const l1 = [...base, ...nodes.filter((n) => extra.includes(n.word) && !base.includes(n))]
   const seen = new Set(l1.map((n) => n.word.toLowerCase()))
-  const lists = l1.map((n) => (branches?.[n.word] ?? []).filter((c) => c.score >= minCo && !seen.has(c.word.toLowerCase())))
+  const lists = l1.map((n) => (branches?.[n.word] ?? []).filter((c) => c.score >= minCo && !seen.has(c.word.toLowerCase())).slice(0, branchN))
   const l2 = []
   for (let j = 0; l1.length + l2.length < totalN; j++) {
     let any = false
@@ -849,19 +851,23 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
           </div>
         )}
         <section className="km-panel" data-collapsed={!panelOpen} aria-label="표시 설정">
-          <div className="km-phead">
+          {/* 11/25 팀 검수: 「숨기기」 단추 대신 머리 줄 전체를 눌러 펼치고 접기 */}
+          <button type="button" className="km-phead km-phead-toggle" aria-expanded={panelOpen} onClick={() => setPanelOpen((o) => !o)}>
             <h3>표시 설정</h3>
-            <button type="button" className="km-ptoggle" aria-expanded={panelOpen} onClick={() => setPanelOpen((o) => !o)}>
-              {panelOpen ? '숨기기' : '펼치기'}
-            </button>
-          </div>
+            <span className="km-ptoggle-text">
+              {panelOpen ? '접기' : '펼치기'}
+              <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" className={panelOpen ? 'km-chev open' : 'km-chev'}>
+                <path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+          </button>
           {panelOpen && (
             <div className="km-pbody">
               {/* 11/17 조장: 「보기(마인드맵 · 워드클라우드)」는 칸 머리 단추와 같아 뺐다 (맵팀 가이드와 다름, 38 문서) */}
               <div className="km-prow">
-                <label className="km-ctl" title="검색어에서 바로 뻗는 가지(1단계 말)의 개수">
+                <label className="km-ctl" title="점마다 뻗는 가지 수 — 검색어에서 이만큼, 1단계 말마다 다시 이만큼까지 (전체 키워드 수 안에서)">
                   <span className="km-lbl">
-                    1단계 가지 수 <output>{brN}</output>
+                    가지 수 <output>{brN}</output>
                   </span>
                   <input type="range" min={brMin} max={brAvail} value={brN} disabled={brAvail <= brMin} onChange={(e) => setBranchN(Number(e.target.value))} aria-valuetext={`${brN}개 (${brMin}~${brAvail})`} />
                 </label>
