@@ -160,7 +160,7 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
       {/* 위 제목 띠 (11/22 조장 A안, TitleBand.jsx): 왼쪽 = 지금 분석 중인 키워드 · 단계 · 자사 위협/기회, 오른쪽 = 다른 키워드 검색칸(최근·즐겨찾기는 칸 안) · 분석 */}
       <TitleBand
         over={focus ? (auto ? '키워드 분석 · 요즘 뜨는 기술 1위' : '키워드 분석') : '대시보드'}
-        title={focus ?? '키워드를 골라 주세요'}
+        title={focus ? `「${focus}」` : '키워드를 골라 주세요'} // 11/26: 자료 현황 · 선별·요약과 같이 키워드를 「」로
         badges={
           focus && (
             <>
