@@ -202,7 +202,8 @@ function pickRows(rows, cited, cap) {
 }
 
 // ── 만들기 ──
-export function build(data) {
+// cover(pres, slide): 주면 1쪽을 이 함수가 그린다 (서버 「PPT로 저장」 — 앱 양식 1쪽 + 보고서팀 유첨)
+export function build(data, { cover } = {}) {
   const pres = new PptxGenJS()
   pres.layout = 'LAYOUT_4x3' // 10 × 7.5in
   pres.title = data?.title ?? '테크브리프 보고서 양식'
@@ -215,47 +216,52 @@ export function build(data) {
 
   // ════ 본문 ════
   pres.addSection({ title: '본문' })
-  const s1 = pres.addSlide({ masterName: '본문', sectionTitle: '본문' })
-  drawCard(s1, pres, COL_X[0], ROW_Y[0], CELL_W, L.rows[0], '기술 개요', '핵심 사실 근거')
-  drawCard(s1, pres, COL_X[1], ROW_Y[0], CELL_W, L.rows[0], '업계 동향', '핵심 사실 근거')
-  drawCard(s1, pres, COL_X[0], ROW_Y[1], CELL_W, L.rows[1], '기술 언급량 추이')
-  drawCard(s1, pres, COL_X[1], ROW_Y[1], CELL_W, L.rows[1], '③ 시사점 및 제언', 'AI 판단 · 검토 후 사용')
-  // 변화 요약 상자 + 시사점 칸 안 구분선 · 「할 일」
-  const sx = COL_X[0] + PAD + 2.85
-  s1.addShape(pres.ShapeType.roundRect, { x: sx, y: ROW_Y[1] + HEAD + 0.1, w: IN_W - 2.85, h: 1.0, rectRadius: 0.08, fill: { color: C.pink }, line: { type: 'none' }, objectName: '변화 요약 상자' })
-  s1.addText('변화 요약', { ...base, x: sx + 0.1, y: ROW_Y[1] + HEAD + 0.18, w: IN_W - 3.05, h: LH(SIZE.body), fontSize: SIZE.body, bold: true, objectName: '변화 요약 제목' })
-  const jy = ROW_Y[1] + HEAD + 2 * LH(SIZE.body) + 0.07
-  s1.addShape(pres.ShapeType.line, { x: COL_X[1] + PAD, y: jy, w: IN_W, h: 0, line: { color: C.line, width: 0.75 }, objectName: '시사점 구분선' })
-  s1.addText('할 일', { ...base, x: COL_X[1] + PAD, y: jy + 0.07, w: IN_W, h: LH(SIZE.body), fontSize: SIZE.body, bold: true, objectName: '할 일 제목' })
-
-  put(s1, 'title', data?.title)
-  put(s1, 'byline', [data?.date && `작성일 ${data.date}`, data?.dept && `작성부서 ${data.dept}`].filter(Boolean).join('\n'))
-  put(s1, 'headline', data?.headline)
-  for (const [name, area] of [
-    ['facts_tech', '기술'],
-    ['facts_industry', '업계'],
-  ]) {
-    const list = (data?.facts ?? []).filter((f) => f.area === area)
-    put(s1, name, list.length ? bullets(list.map((f) => [{ text: f.text }, ...refRuns(f.refs)])) : [{ text: '근거 기사 2건 이상으로 확인된 사실 없음 — 유첨 1 참고', options: { color: C.sub } }])
-  }
-  // 추이 그래프 (빈 양식은 0으로 된 틀 — 차트에서 「데이터 편집」으로 채움)
   const tr = data?.trend ?? { unit: '일', labels: [' ', '  ', '   ', '    ', '     '], values: [0, 0, 0, 0, 0] } // 빈 양식: 눈금 이름 없이 틀만
-  addBarOrLine(s1, pres, trendKind(tr.labels.length), { x: COL_X[0] + PAD - 0.05, y: ROW_Y[1] + HEAD, w: 2.85, h: L.rows[1] - HEAD - 0.1 - LH(SIZE.note) - 0.06 }, tr.labels, tr.values, tr.unit === '주' ? '주 (시작일 M/D)' : '날짜 (M/D)', tr.unit === '주' ? '주간 기사 수 (건)' : '기사 수 (건)')
-  const last = tr.values.at(-1) ?? 0
-  const prev = tr.values.length >= 2 ? tr.values.at(-2) : null
-  const change = prev == null ? '비교할 구간 없음' : prev > 0 ? `${last >= prev ? '+' : ''}${(((last - prev) / prev) * 100).toFixed(1)}%` : `${prev}건 → ${last}건`
-  put(s1, 'change_basis', `${tr.unit === '주' ? '전주' : '전일'} 대비`)
-  put(s1, 'change_value', change)
-  put(s1, 'trend_caption', `※ ${tr.source ?? ''} · ${tr.period ?? ''}`)
-  const jt = data?.judgment?.type ?? '검토 필요'
-  const tag = { 기회: C.opp, 위협: C.threat, '기회·위협 공존': C.ink, '검토 필요': C.sub }[jt] ?? C.ink
-  put(s1, 'judgment', [{ text: '자사 판단  ', options: { bold: true } }, { text: `[${jt}] `, options: { bold: true, color: tag } }, { text: data?.judgment?.reason ?? '' }])
-  put(s1, 'actions', bullets((data?.actions ?? []).map((a) => [{ text: a.what }, ...(a.priority_or_due ? [{ text: ` — ${a.priority_or_due}`, options: { bold: true } }] : [])])))
-  const src = data?.source
-  put(s1, 'source', src ? `수집 기간 ${src.period} | ${src.counts ?? `기사 ${src.article_count}건`} | 매체 ${src.media_count}곳 | 키워드: ${(src.keywords ?? []).join(', ') || '-'}` : '')
-  // 원본에 한 줄 요약이 없으면 (다른 서버 보고서) 지어내지 않고 회색으로 「없음」
-  put(s1, 'summary', data?.one_line_summary || [{ text: '없음 — 원본 보고서에 한 줄 요약 칸이 없음 (직접 입력)', options: { bold: false, color: C.sub } }])
-  s1.addNotes('본문 1장. 개체 틀을 눌러 AI 결과(templates/report-prompt.md 프롬프트의 「붙여 넣기용」 블록)를 칸 이름대로 붙여 넣는다: title · byline · headline · facts_tech(area=기술) · facts_industry(area=업계) · judgment · actions · source · summary(one_line_summary). 추이 그래프는 차트 → 데이터 편집에서 trend.labels / values로 바꾸고, 변화 요약은 마지막 구간을 바로 앞 구간과 비교. 글자 크기를 줄이지 말고, 넘치면 문장을 줄이거나 유첨 1로 옮긴다.')
+  if (cover) {
+    // 11/25 PPT 하나로: 1쪽은 앱 양식 1쪽(핵심 사실 / AI 해설 구분 · 기회 / 위협 / 할 일 카드)을 그린다. 기술 언급량 추이는 유첨 2에 있음
+    cover(pres, pres.addSlide({ sectionTitle: '본문' }))
+  } else {
+    const s1 = pres.addSlide({ masterName: '본문', sectionTitle: '본문' })
+    drawCard(s1, pres, COL_X[0], ROW_Y[0], CELL_W, L.rows[0], '기술 개요', '핵심 사실 근거')
+    drawCard(s1, pres, COL_X[1], ROW_Y[0], CELL_W, L.rows[0], '업계 동향', '핵심 사실 근거')
+    drawCard(s1, pres, COL_X[0], ROW_Y[1], CELL_W, L.rows[1], '기술 언급량 추이')
+    drawCard(s1, pres, COL_X[1], ROW_Y[1], CELL_W, L.rows[1], '③ 시사점 및 제언', 'AI 판단 · 검토 후 사용')
+    // 변화 요약 상자 + 시사점 칸 안 구분선 · 「할 일」
+    const sx = COL_X[0] + PAD + 2.85
+    s1.addShape(pres.ShapeType.roundRect, { x: sx, y: ROW_Y[1] + HEAD + 0.1, w: IN_W - 2.85, h: 1.0, rectRadius: 0.08, fill: { color: C.pink }, line: { type: 'none' }, objectName: '변화 요약 상자' })
+    s1.addText('변화 요약', { ...base, x: sx + 0.1, y: ROW_Y[1] + HEAD + 0.18, w: IN_W - 3.05, h: LH(SIZE.body), fontSize: SIZE.body, bold: true, objectName: '변화 요약 제목' })
+    const jy = ROW_Y[1] + HEAD + 2 * LH(SIZE.body) + 0.07
+    s1.addShape(pres.ShapeType.line, { x: COL_X[1] + PAD, y: jy, w: IN_W, h: 0, line: { color: C.line, width: 0.75 }, objectName: '시사점 구분선' })
+    s1.addText('할 일', { ...base, x: COL_X[1] + PAD, y: jy + 0.07, w: IN_W, h: LH(SIZE.body), fontSize: SIZE.body, bold: true, objectName: '할 일 제목' })
+
+    put(s1, 'title', data?.title)
+    put(s1, 'byline', [data?.date && `작성일 ${data.date}`, data?.dept && `작성부서 ${data.dept}`].filter(Boolean).join('\n'))
+    put(s1, 'headline', data?.headline)
+    for (const [name, area] of [
+      ['facts_tech', '기술'],
+      ['facts_industry', '업계'],
+    ]) {
+      const list = (data?.facts ?? []).filter((f) => f.area === area)
+      put(s1, name, list.length ? bullets(list.map((f) => [{ text: f.text }, ...refRuns(f.refs)])) : [{ text: '근거 기사 2건 이상으로 확인된 사실 없음 — 유첨 1 참고', options: { color: C.sub } }])
+    }
+    // 추이 그래프 (빈 양식은 0으로 된 틀 — 차트에서 「데이터 편집」으로 채움)
+    addBarOrLine(s1, pres, trendKind(tr.labels.length), { x: COL_X[0] + PAD - 0.05, y: ROW_Y[1] + HEAD, w: 2.85, h: L.rows[1] - HEAD - 0.1 - LH(SIZE.note) - 0.06 }, tr.labels, tr.values, tr.unit === '주' ? '주 (시작일 M/D)' : '날짜 (M/D)', tr.unit === '주' ? '주간 기사 수 (건)' : '기사 수 (건)')
+    const last = tr.values.at(-1) ?? 0
+    const prev = tr.values.length >= 2 ? tr.values.at(-2) : null
+    const change = prev == null ? '비교할 구간 없음' : prev > 0 ? `${last >= prev ? '+' : ''}${(((last - prev) / prev) * 100).toFixed(1)}%` : `${prev}건 → ${last}건`
+    put(s1, 'change_basis', `${tr.unit === '주' ? '전주' : '전일'} 대비`)
+    put(s1, 'change_value', change)
+    put(s1, 'trend_caption', `※ ${tr.source ?? ''} · ${tr.period ?? ''}`)
+    const jt = data?.judgment?.type ?? '검토 필요'
+    const tag = { 기회: C.opp, 위협: C.threat, '기회·위협 공존': C.ink, '검토 필요': C.sub }[jt] ?? C.ink
+    put(s1, 'judgment', [{ text: '자사 판단  ', options: { bold: true } }, { text: `[${jt}] `, options: { bold: true, color: tag } }, { text: data?.judgment?.reason ?? '' }])
+    put(s1, 'actions', bullets((data?.actions ?? []).map((a) => [{ text: a.what }, ...(a.priority_or_due ? [{ text: ` — ${a.priority_or_due}`, options: { bold: true } }] : [])])))
+    const src = data?.source
+    put(s1, 'source', src ? `수집 기간 ${src.period} | ${src.counts ?? `기사 ${src.article_count}건`} | 매체 ${src.media_count}곳 | 키워드: ${(src.keywords ?? []).join(', ') || '-'}` : '')
+    // 원본에 한 줄 요약이 없으면 (다른 서버 보고서) 지어내지 않고 회색으로 「없음」
+    put(s1, 'summary', data?.one_line_summary || [{ text: '없음 — 원본 보고서에 한 줄 요약 칸이 없음 (직접 입력)', options: { bold: false, color: C.sub } }])
+    s1.addNotes('본문 1장. 개체 틀을 눌러 AI 결과(templates/report-prompt.md 프롬프트의 「붙여 넣기용」 블록)를 칸 이름대로 붙여 넣는다: title · byline · headline · facts_tech(area=기술) · facts_industry(area=업계) · judgment · actions · source · summary(one_line_summary). 추이 그래프는 차트 → 데이터 편집에서 trend.labels / values로 바꾸고, 변화 요약은 마지막 구간을 바로 앞 구간과 비교. 글자 크기를 줄이지 말고, 넘치면 문장을 줄이거나 유첨 1로 옮긴다.')
+  }
 
   // ════ 유첨 1. 상세 분석 ════
   pres.addSection({ title: '유첨' })
@@ -395,8 +401,8 @@ export async function fixFonts(buf) {
 //   변환한 JSON도 out.pptx 옆에 out.json으로 남긴다 (칸에 무엇이 들어갔는지 확인 · 손으로 고친 뒤 다시 만들기)
 // 11/17 (테크브리프 앱): 서버가 build · fixFonts를 가져다 쓰므로, 명령줄로 직접 실행할 때만 아래가 돈다
 // 데이터 → 완성된 pptx 버퍼 (서버 · 명령줄 공용)
-export async function renderPptx(data) {
-  return fixFonts(await build(data).write({ outputType: 'nodebuffer' }))
+export async function renderPptx(data, opts) {
+  return fixFonts(await build(data, opts).write({ outputType: 'nodebuffer' }))
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

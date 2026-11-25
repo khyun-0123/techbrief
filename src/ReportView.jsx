@@ -4,7 +4,8 @@
 //   (체크박스를 줄마다 두면 정신없어서). 뺀 줄은 복사 · PDF · PPT에서 빠진다
 // - AI 해설 보충은 보고서를 만들 때 대기열에서 자동으로 한다(자료 조사 수준). 보충한 줄은 「근거 보충」 표시
 import { useState } from 'react'
-import { exportPptx, printReport } from './reportExport.js'
+import { exportPptx } from './reportExport.js'
+import { printSlides as printReport } from './ReportSlide.jsx'
 import { analysisUrl, APPENDIX, evidenceLabel, formatDate, kindOf, SECTIONS, sourcesLine } from './reportStore.js'
 import { secondsSince, track } from './usage.js'
 import { ACCESS_LABEL, ACCESS_TITLE, paperAccess } from './paperAccess.js'

@@ -1189,8 +1189,21 @@ async function handleApiInner(req, res) {
       // 추이 그래프: 보고서 주제어가 든 모은 기사 수 → 없으면 맞는 수집 키워드 (11/17)
       const [topicItems, trendItems] = await Promise.all([topicTrendItems(entry, query).catch(() => []), getTrends().then((t) => t.items).catch(() => [])])
       const data = reportToTemplate(entry, { topicItems, trendItems })
-      const buf = await renderPptx(data)
-      const name = encodeURIComponent(`${(entry.report?.title ?? '보고서').replace(/[\\/:*?"<>|]/g, '_')}_담당자양식.pptx`)
+      // 11/25 PPT 하나로 (45 문서 7장): 1쪽 = 앱 양식 1쪽(화면 미리보기와 같은 핵심 요약), 유첨 = 보고서팀 양식.
+      // 앱 1쪽에 못 들어가 2쪽으로 옮기던 사실은 유첨 1 「본문에서 옮긴 사실」로. ?form=team 이면 예전 보고서팀 양식 1쪽 그대로
+      const teamCover = new URL(req.url, 'http://x').searchParams.get('form') === 'team'
+      let cover
+      if (!teamCover) {
+        const { reportPages, applyReportStyle } = await import('../src/reportSlides.js')
+        const { drawPage } = await import('../src/reportExport.js')
+        applyReportStyle(await getReportStyle())
+        const deck = reportPages(entry, { topic: { items: topicItems }, trends: { items: trendItems } })
+        const moved = (deck.moved ?? []).map((f) => ({ text: f.text, refs: f.refs ?? [] }))
+        if (moved.length) data.appendix = { ...data.appendix, single_facts: [...moved, ...(data.appendix?.single_facts ?? []).filter((x) => !moved.some((m) => m.text === x.text))] }
+        cover = (pres, slide) => drawPage(pres, deck.pages[0], { slide })
+      }
+      const buf = await renderPptx(data, { cover })
+      const name = encodeURIComponent(`${(entry.report?.title ?? '보고서').replace(/[\\/:*?"<>|]/g, '_')}${teamCover ? '_보고서팀양식' : ''}.pptx`)
       res.writeHead(200, {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         'Content-Disposition': `attachment; filename*=UTF-8''${name}`,

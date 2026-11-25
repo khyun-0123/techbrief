@@ -33,6 +33,121 @@ function fixTheme(xml) {
 }
 
 // .pptx 파일 내용(ArrayBuffer)을 만든다. 화면에서는 exportPptx가 내려받기로 넘긴다
+// 쪽 하나 그리기 (11/25: 서버의 「PPT로 저장」이 이 함수로 1쪽 핵심 요약만 그려 보고서팀 양식 유첨 앞에 붙인다)
+// total: 쪽 번호 「n / 전체」의 전체 (없으면 n만)
+export function drawPage(pptx, page, { slide = pptx.addSlide(), total } = {}) {
+  const base = { fontFace: FONT.latin, margin: 0, valign: 'top', paraSpaceBefore: 0, paraSpaceAfter: 0 }
+  const S = pptx.ShapeType
+  const axis = { fontFace: FONT.latin, size: 10 }
+
+  slide.background = { color: 'FFFFFF' }
+  for (const el of page.els) {
+    if (el.t === 'text') {
+      slide.addText(
+        el.runs.map((r) => ({ text: r.text, options: { ...runOpts(r), ...(r.size ? { fontSize: r.size } : {}), ...(r.link ? { hyperlink: { url: r.link } } : {}) } })),
+        { ...base, x: el.x, y: el.y, w: el.w, h: el.h, fontSize: el.size, lineSpacing: el.size * lineGap(), color: el.color ?? COLOR.ink, bold: Boolean(el.bold), align: el.align ?? 'left' },
+      )
+    } else if (el.t === 'rect') {
+      slide.addShape(el.radius ? S.roundRect : S.rect, {
+        x: el.x,
+        y: el.y,
+        w: el.w,
+        h: el.h,
+        ...(el.radius ? { rectRadius: Math.min(0.5, el.radius / Math.min(el.w, el.h)) } : {}),
+        fill: el.fill ? { color: el.fill } : { type: 'none' },
+        line: el.line ? { color: el.line, width: 1.25 } : { type: 'none' },
+      })
+    } else if (el.t === 'tri') {
+      slide.addShape(S.rtTriangle, { x: el.x, y: el.y, w: el.w, h: el.h, fill: { color: el.fill }, line: { type: 'none' }, flipH: true })
+    } else if (el.t === 'check') {
+      slide.addText('✓', { ...base, shape: S.ellipse, x: el.x, y: el.y, w: el.d, h: el.d, fill: { color: COLOR.accent }, color: 'FFFFFF', fontSize: 10, bold: true, align: 'center', valign: 'middle' })
+    } else if (el.t === 'line') {
+      slide.addShape(S.line, { x: el.x, y: el.y, w: el.w, h: 0, line: { color: el.color ?? COLOR.line, width: 0.75 } })
+    } else if (el.t === 'pageno') {
+      slide.addText(total ? `${el.no} / ${total}` : `${el.no}`, { ...base, x: PAGE.w - PAGE.m - 1, y: PAGE.h - 0.42, w: 1, h: LH(SIZE.note), fontSize: SIZE.note, lineSpacing: SIZE.note * lineGap(), color: COLOR.ink, bold: true, align: 'right' })
+    } else if (el.t === 'table') {
+      const cell = (text, opts = {}) => ({ text, options: { fontFace: FONT.latin, fontSize: el.size, color: COLOR.ink, valign: 'middle', ...opts } })
+      slide.addTable(
+        el.rows.map((r) => r.cells.map((c, i) => (i === 0 && el.headCol ? cell(c, { bold: true, fill: { color: COLOR.gray } }) : cell(c)))),
+        { x: el.x, y: el.y, w: el.w, colW: el.cols, rowH: el.rows.map((r) => r.h), border: { type: 'solid', pt: 0.75, color: COLOR.line }, margin: 0.05, fontFace: FONT.latin, fontSize: el.size, autoPage: false },
+      )
+    } else if (el.t === 'chart') {
+      if (!el.values.length || el.values.every((v) => !v)) {
+        slide.addText(el.empty, { ...base, x: el.x, y: el.y + el.h / 2 - 0.2, w: el.w, h: 0.3, fontSize: 10, color: COLOR.sub, align: 'center' })
+        continue
+      }
+      const box = { x: el.x, y: el.y, w: el.w, h: el.h, showTitle: false }
+      if (el.kind === 'pie' || el.kind === 'donut') {
+        slide.addChart(el.kind === 'donut' ? pptx.ChartType.doughnut : pptx.ChartType.pie, [{ name: el.title ?? el.yTitle, labels: el.labels.map((l, i) => `${l} (${el.values[i]}${el.unit})`), values: el.values }], {
+          ...box,
+          chartColors: PIE_COLORS.slice(0, el.values.length),
+          showPercent: true,
+          showValue: false,
+          showLegend: !el.legendOutside, // 범례는 reportSlides.js가 글 상자로 따로 놓음 (화면과 같은 자리)
+          legendPos: 'r',
+          legendFontSize: 10,
+          legendFontFace: FONT.latin,
+          dataLabelColor: 'FFFFFF',
+          dataLabelFontSize: 10,
+          dataLabelFontFace: FONT.latin,
+          dataLabelFontBold: true,
+          ...(el.kind === 'donut' ? { holeSize: 55 } : {}),
+        })
+        continue
+      }
+      const max = Math.max(1, ...el.values)
+      const common = {
+        ...box,
+        chartColors: [COLOR.accent],
+        showLegend: false,
+        catAxisLabelFontSize: axis.size,
+        catAxisLabelFontFace: axis.fontFace,
+        valAxisLabelFontSize: axis.size,
+        valAxisLabelFontFace: axis.fontFace,
+        valAxisMinVal: 0,
+        valAxisMajorUnit: max <= 5 ? 1 : undefined,
+        valGridLine: { color: 'E5E5E5', size: 0.5 },
+        showValAxisTitle: true,
+        valAxisTitle: el.yTitle,
+        valAxisTitleFontSize: axis.size,
+        valAxisTitleFontFace: axis.fontFace,
+        showCatAxisTitle: el.kind !== 'hbar',
+        catAxisTitle: el.xTitle,
+        catAxisTitleFontSize: axis.size,
+        catAxisTitleFontFace: axis.fontFace,
+      }
+      if (el.kind === 'line') {
+        // 가로축 라벨: 고른 것(최대 7개 · 첫/마지막)만 남기고 나머지는 빈칸, 겹치면 45도 (reportSlides.js axisLayout)
+        const shown = new Set(el.ticks ?? el.labels.map((_, i) => i))
+        const labels = el.labels.map((l, i) => (shown.has(i) ? l : ''))
+        slide.addChart(pptx.ChartType.line, [{ name: el.yTitle, labels, values: el.values }], {
+          ...common,
+          lineSize: 2,
+          lineDataSymbol: 'circle',
+          lineDataSymbolSize: 5,
+          catAxisLabelRotate: el.rotate ? -45 : 0,
+          catAxisLabelFrequency: 1,
+        })
+      } else {
+        const hbar = el.kind === 'hbar'
+        // 가로막대는 PPT가 아래부터 그리므로 순서를 뒤집어 1위가 위에 오게
+        const labels = hbar ? [...el.labels].reverse() : el.labels
+        const values = hbar ? [...el.values].reverse() : el.values
+        slide.addChart(pptx.ChartType.bar, [{ name: el.yTitle, labels, values }], {
+          ...common,
+          barDir: hbar ? 'bar' : 'col',
+          showValue: true,
+          dataLabelFontSize: 10,
+          dataLabelFontFace: FONT.latin,
+          dataLabelColor: COLOR.ink,
+          catAxisLabelRotate: !hbar && el.labels.length > 6 ? -35 : 0,
+        })
+      }
+    }
+  }
+  return slide
+}
+
 // extra: 화면이 받아 둔 추가 데이터 (기사 수 추이용 /api/trends) — 미리보기와 같은 그래프가 되게
 export async function buildPptx(saved, { PptxGenJS, JSZip, extra } = {}) {
   PptxGenJS ??= (await import('pptxgenjs')).default
@@ -42,118 +157,7 @@ export async function buildPptx(saved, { PptxGenJS, JSZip, extra } = {}) {
   pptx.title = saved.report.title
   pptx.theme = { headFontFace: FONT.latin, bodyFontFace: FONT.latin }
   const deck = reportPages(saved, extra)
-  const base = { fontFace: FONT.latin, margin: 0, valign: 'top', paraSpaceBefore: 0, paraSpaceAfter: 0 }
-  const S = pptx.ShapeType
-  const axis = { fontFace: FONT.latin, size: 10 }
-
-  deck.pages.forEach((page) => {
-    const slide = pptx.addSlide()
-    slide.background = { color: 'FFFFFF' }
-    for (const el of page.els) {
-      if (el.t === 'text') {
-        slide.addText(
-          el.runs.map((r) => ({ text: r.text, options: { ...runOpts(r), ...(r.size ? { fontSize: r.size } : {}), ...(r.link ? { hyperlink: { url: r.link } } : {}) } })),
-          { ...base, x: el.x, y: el.y, w: el.w, h: el.h, fontSize: el.size, lineSpacing: el.size * lineGap(), color: el.color ?? COLOR.ink, bold: Boolean(el.bold), align: el.align ?? 'left' },
-        )
-      } else if (el.t === 'rect') {
-        slide.addShape(el.radius ? S.roundRect : S.rect, {
-          x: el.x,
-          y: el.y,
-          w: el.w,
-          h: el.h,
-          ...(el.radius ? { rectRadius: Math.min(0.5, el.radius / Math.min(el.w, el.h)) } : {}),
-          fill: el.fill ? { color: el.fill } : { type: 'none' },
-          line: el.line ? { color: el.line, width: 1.25 } : { type: 'none' },
-        })
-      } else if (el.t === 'tri') {
-        slide.addShape(S.rtTriangle, { x: el.x, y: el.y, w: el.w, h: el.h, fill: { color: el.fill }, line: { type: 'none' }, flipH: true })
-      } else if (el.t === 'check') {
-        slide.addText('✓', { ...base, shape: S.ellipse, x: el.x, y: el.y, w: el.d, h: el.d, fill: { color: COLOR.accent }, color: 'FFFFFF', fontSize: 10, bold: true, align: 'center', valign: 'middle' })
-      } else if (el.t === 'line') {
-        slide.addShape(S.line, { x: el.x, y: el.y, w: el.w, h: 0, line: { color: el.color ?? COLOR.line, width: 0.75 } })
-      } else if (el.t === 'pageno') {
-        slide.addText(`${el.no} / ${deck.pages.length}`, { ...base, x: PAGE.w - PAGE.m - 1, y: PAGE.h - 0.42, w: 1, h: LH(SIZE.note), fontSize: SIZE.note, lineSpacing: SIZE.note * lineGap(), color: COLOR.ink, bold: true, align: 'right' })
-      } else if (el.t === 'table') {
-        const cell = (text, opts = {}) => ({ text, options: { fontFace: FONT.latin, fontSize: el.size, color: COLOR.ink, valign: 'middle', ...opts } })
-        slide.addTable(
-          el.rows.map((r) => r.cells.map((c, i) => (i === 0 && el.headCol ? cell(c, { bold: true, fill: { color: COLOR.gray } }) : cell(c)))),
-          { x: el.x, y: el.y, w: el.w, colW: el.cols, rowH: el.rows.map((r) => r.h), border: { type: 'solid', pt: 0.75, color: COLOR.line }, margin: 0.05, fontFace: FONT.latin, fontSize: el.size, autoPage: false },
-        )
-      } else if (el.t === 'chart') {
-        if (!el.values.length || el.values.every((v) => !v)) {
-          slide.addText(el.empty, { ...base, x: el.x, y: el.y + el.h / 2 - 0.2, w: el.w, h: 0.3, fontSize: 10, color: COLOR.sub, align: 'center' })
-          continue
-        }
-        const box = { x: el.x, y: el.y, w: el.w, h: el.h, showTitle: false }
-        if (el.kind === 'pie' || el.kind === 'donut') {
-          slide.addChart(el.kind === 'donut' ? pptx.ChartType.doughnut : pptx.ChartType.pie, [{ name: el.title ?? el.yTitle, labels: el.labels.map((l, i) => `${l} (${el.values[i]}${el.unit})`), values: el.values }], {
-            ...box,
-            chartColors: PIE_COLORS.slice(0, el.values.length),
-            showPercent: true,
-            showValue: false,
-            showLegend: !el.legendOutside, // 범례는 reportSlides.js가 글 상자로 따로 놓음 (화면과 같은 자리)
-            legendPos: 'r',
-            legendFontSize: 10,
-            legendFontFace: FONT.latin,
-            dataLabelColor: 'FFFFFF',
-            dataLabelFontSize: 10,
-            dataLabelFontFace: FONT.latin,
-            dataLabelFontBold: true,
-            ...(el.kind === 'donut' ? { holeSize: 55 } : {}),
-          })
-          continue
-        }
-        const max = Math.max(1, ...el.values)
-        const common = {
-          ...box,
-          chartColors: [COLOR.accent],
-          showLegend: false,
-          catAxisLabelFontSize: axis.size,
-          catAxisLabelFontFace: axis.fontFace,
-          valAxisLabelFontSize: axis.size,
-          valAxisLabelFontFace: axis.fontFace,
-          valAxisMinVal: 0,
-          valAxisMajorUnit: max <= 5 ? 1 : undefined,
-          valGridLine: { color: 'E5E5E5', size: 0.5 },
-          showValAxisTitle: true,
-          valAxisTitle: el.yTitle,
-          valAxisTitleFontSize: axis.size,
-          valAxisTitleFontFace: axis.fontFace,
-          showCatAxisTitle: el.kind !== 'hbar',
-          catAxisTitle: el.xTitle,
-          catAxisTitleFontSize: axis.size,
-          catAxisTitleFontFace: axis.fontFace,
-        }
-        if (el.kind === 'line') {
-          // 가로축 라벨: 고른 것(최대 7개 · 첫/마지막)만 남기고 나머지는 빈칸, 겹치면 45도 (reportSlides.js axisLayout)
-          const shown = new Set(el.ticks ?? el.labels.map((_, i) => i))
-          const labels = el.labels.map((l, i) => (shown.has(i) ? l : ''))
-          slide.addChart(pptx.ChartType.line, [{ name: el.yTitle, labels, values: el.values }], {
-            ...common,
-            lineSize: 2,
-            lineDataSymbol: 'circle',
-            lineDataSymbolSize: 5,
-            catAxisLabelRotate: el.rotate ? -45 : 0,
-            catAxisLabelFrequency: 1,
-          })
-        } else {
-          const hbar = el.kind === 'hbar'
-          // 가로막대는 PPT가 아래부터 그리므로 순서를 뒤집어 1위가 위에 오게
-          const labels = hbar ? [...el.labels].reverse() : el.labels
-          const values = hbar ? [...el.values].reverse() : el.values
-          slide.addChart(pptx.ChartType.bar, [{ name: el.yTitle, labels, values }], {
-            ...common,
-            barDir: hbar ? 'bar' : 'col',
-            showValue: true,
-            dataLabelFontSize: 10,
-            dataLabelFontFace: FONT.latin,
-            dataLabelColor: COLOR.ink,
-            catAxisLabelRotate: !hbar && el.labels.length > 6 ? -35 : 0,
-          })
-        }
-      }
-    }
-  })
+  deck.pages.forEach((page) => drawPage(pptx, page, { total: deck.pages.length }))
 
   const raw = await pptx.write({ outputType: 'arraybuffer' })
   const zip = await JSZip.loadAsync(raw)
@@ -181,10 +185,26 @@ export async function loadReportExtra(saved) {
   return { trends, topic, analysis: fresh?.bundles ?? null }
 }
 
+// PPT로 저장 (11/25 하나로 — 45 문서 7장): 서버가 만든 「1쪽 핵심 요약(이 앱 쪽 엔진) + 보고서팀 유첨 1~5」를 받는다.
+// 서버에서 못 받으면(DB 없이 도는 서버 · 저장 안 된 보고서) 예전처럼 브라우저에서 이 앱 양식 전체를 만든다
+async function serverPptx(saved) {
+  if (!saved?.id) return null
+  try {
+    const res = await fetch(`/api/reports/pptx?id=${encodeURIComponent(saved.id)}`)
+    if (!res.ok) return null
+    return await res.blob()
+  } catch {
+    return null
+  }
+}
+
 export async function exportPptx(saved, extra) {
-  extra ??= await loadReportExtra(saved)
-  const data = await buildPptx(saved, { extra })
-  const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' })
+  let blob = await serverPptx(saved)
+  if (!blob) {
+    extra ??= await loadReportExtra(saved)
+    const data = await buildPptx(saved, { extra })
+    blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' })
+  }
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
   link.download = fileName(saved, 'pptx')
@@ -192,5 +212,3 @@ export async function exportPptx(saved, extra) {
   setTimeout(() => URL.revokeObjectURL(link.href), 10_000)
 }
 
-// PDF는 ReportSlide.jsx의 printSlides (같은 4:3 쪽을 인쇄 → PDF로 저장)
-export { printSlides as printReport } from './ReportSlide.jsx'

@@ -12,8 +12,8 @@
 // onDelete가 없으면 「지우기」를 숨긴다 (공용 보고서함은 관리자만 지움, 17 문서)
 import { useEffect, useRef, useState } from 'react'
 import { Seg } from './Dropdown.jsx'
-import { exportPptx, loadReportExtra, printReport } from './reportExport.js'
-import { SlideFrame } from './ReportSlide.jsx'
+import { exportPptx, loadReportExtra } from './reportExport.js'
+import { printSlides as printReport, SlideFrame } from './ReportSlide.jsx'
 import { reportPages } from './reportSlides.js'
 import { copyText, toPlainText } from './reportStore.js'
 import { clientId, secondsSince, track } from './usage.js'
@@ -513,13 +513,10 @@ function ReportArchive({ reports, onDelete, canDelete, onUpdated, initialId, sel
                               </button>
                               {menuId === `dl:${r.id}` && (
                                 <span className="mr-menu" role="menu">
-                                  <button type="button" role="menuitem" disabled={busy} onClick={() => download(r, 'pptx')}>
-                                    PPT (4:3 가로)
+                                  {/* 11/25 PPT 하나로 (45 문서 7장): 1쪽 핵심 요약 + 보고서팀 유첨 1~5. 예전 보고서팀 1쪽은 /api/reports/pptx?form=team */}
+                                  <button type="button" role="menuitem" disabled={busy} onClick={() => download(r, 'pptx')} title="1쪽 핵심 요약 + 유첨(상세 분석 · 트렌드 그래프 · 출처 목록 · 원문 요약 · 기술 시계열)">
+                                    PPT (4:3 · 1쪽 + 유첨)
                                   </button>
-                                  {/* 11/17 (39 문서 E): 보고서팀 담당자 양식 — 본문 1장 + 유첨 4장, 칸 이름이 붙은 PPT (서버가 만듦) */}
-                                  <a role="menuitem" className="mr-menu-link" href={`/api/reports/pptx?id=${encodeURIComponent(r.id)}`} download title="본문 1장 + 유첨 4장(상세 분석 · 트렌드 그래프 · 출처 목록 · 원문 요약), 칸 이름이 붙어 있어 고쳐 쓰기 쉬워요">
-                                    PPT (담당자 양식 · 본문 1장 + 유첨)
-                                  </a>
                                   <button type="button" role="menuitem" disabled={busy} onClick={() => download(r, 'copy')}>
                                     텍스트 복사
                                   </button>
