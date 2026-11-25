@@ -302,7 +302,7 @@ function MapStage({ W, H, keyword, issues, graph, pos, view, setView, colors, is
     const label = `${on ? '✓ ' : ''}${short(n.word, lv === 0 ? 18 : lv === 1 ? 14 : 11)}`
     const sub = lv === 1 ? (n.subcats ?? [])[0] : null
     const role = lv === 0 ? undefined : 'checkbox'
-    const info = lv === 0 ? { word: n.word, tag: '검색어', rows: [['함께 나온 이슈', `${issues ?? '-'}개`]] } : { word: n.word, tag: `${lv}단계`, rows: [[lv >= 2 ? `「${n.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${n.score}개`], ...(impOn && n.imp != null ? [['평균 중요도', `${n.imp}점 · 이슈 ${n.impN}개`]] : []), ...((n.subcats ?? []).length ? [['분류', n.subcats.join(' · ')]] : []), ['볼 범위', on ? '넣음' : '안 넣음']] }
+    const info = lv === 0 ? { word: n.word, tag: '검색어', rows: [['함께 나온 이슈', `${issues ?? '-'}개`]] } : { word: n.word, tag: `${lv}단계`, rows: [[lv >= 2 ? `「${n.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${n.score}개`], ...(impOn && n.imp != null ? [['평균 중요도', `${n.imp}점 · 이슈 ${n.impN}개`]] : []), ...((n.subcats ?? []).length ? [['분류', n.subcats.join(' · ')]] : [])] }
     return (
       <g
         key={`n-${n.word}`}
@@ -486,7 +486,7 @@ function CloudView({ W, H, keyword, nodes, branches, isOn, onPick, total, avoid,
               tabIndex={0}
               onMouseDown={(e) => e.preventDefault()} // 11/15: 마우스로 누를 때는 초점이 안 가게 (네모 테두리가 생기던 문제). 키보드 Tab · Enter는 그대로
               onClick={() => onPick(w.word)}
-              onPointerEnter={() => onHover({ word: w.word, tag: w.parent ? '2단계' : '1단계', rows: [[w.parent ? `「${w.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${w.score}개`], ...(by === 'imp' && w.imp != null ? [['평균 중요도', `${w.imp}점 · 이슈 ${w.impN}개`]] : []), ['볼 범위', on ? '넣음' : '안 넣음']], x: w.x, y: w.y + 4 })}
+              onPointerEnter={() => onHover({ word: w.word, tag: w.parent ? '2단계' : '1단계', rows: [[w.parent ? `「${w.parent}」와 함께` : `「${keyword}」와 함께`, `이슈 ${w.score}개`], ...(by === 'imp' && w.imp != null ? [['평균 중요도', `${w.imp}점 · 이슈 ${w.impN}개`]] : [])], x: w.x, y: w.y + 4 })}
               onPointerLeave={() => onHover(null)}
               onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onPick(w.word))}
             >

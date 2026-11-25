@@ -12,7 +12,7 @@
 // 그래프 (11/12 규칙): 데이터 성격에 맞춰 고른다 (chooseChart)
 //   - 제품 · 기업 간 비교 → 묶음 막대 · 시간에 따른 변화 → 선 · 점유율 · 구성비(5개 이하) → 도넛 · 순위 → 가로 막대 · 두 지표 관계 → 산점도
 //   - 자료에 있는 수치만 쓴다. 수치가 모자라면 그래프 없이 글로 쓴다 (chartBox)
-//   - 그래프마다 선택 이유 한 줄 · 출처 · 기준 시점. 맞는 그래프가 둘 이상이면 추천안 하나를 그리고 「다른 형태로 보기」 한 줄
+//   - 그래프마다 출처 · 기준 시점 한 줄 (11/25: 선택 이유 · 다른 형태로 보기 줄은 뺌). 맞는 그래프가 둘 이상이면 추천안 하나를 그림
 //   - 지금 보고서 데이터에는 여러 계열 비교 · 두 지표 짝이 없어 묶음 막대 · 산점도는 고르는 규칙만 있고 쓰는 쪽이 없다
 // 근거: 뺀 줄(excluded)은 넣지 않는다. 기사 확인 사실(✓ · 근거 번호)과 AI 해설·제안은 섞지 않는다
 import { ACCESS_LABEL, PAID_NOTICE, paperAccess } from './paperAccess.js'
@@ -59,17 +59,22 @@ export function applyReportStyle(style) {
 }
 export const currentReportStyle = () => ({ fonts: { ...FONT }, sizes: { ...SIZE }, accent: COLOR.accent, margin: PAGE.m, lineGap: LINE })
 
-// ── 글자 폭 어림 (한글 1em, 영문 · 숫자는 Arial Narrow라 좁게) → 줄 수 ──
+// ── 글자 폭 어림 (한글 1em, 영문 · 숫자 · 기호는 좁게) → 줄 수 ──
+// 11/25 팀 검수 「박스 밖으로 넘침」: Arial Narrow(0.47em)가 없는 PC · 미리보기에서는 영문 · 숫자가 Pretendard로 그려져
+// 20~25% 넓어진다. 글꼴이 없는 쪽 기준(0.55)으로 넉넉하게 세고, 줄 폭은 3% 남긴다 (FIT)
+const FIT = 0.97
 function units(text) {
   let u = 0
   for (const ch of String(text)) {
     if (/[ㄱ-힝一-鿿]/.test(ch)) u += 1
-    else if (ch === ' ') u += 0.28
-    else if (/[A-Za-z0-9]/.test(ch)) u += 0.47
-    else u += 0.4
+    else if (ch === ' ') u += 0.3
+    else if (/[A-Za-z0-9]/.test(ch)) u += 0.55
+    else u += 0.45
   }
   return u
 }
+// 한 줄에 들어가는지 (pt 크기 · 폭 in)
+const fitsLine = (text, pt, widthIn) => units(text) <= (widthIn * FIT) / (pt / 72)
 // 낱말 단위로 줄이기 (담당자 양식 PPT와 같은 규칙, server/reportToTemplate.js cutWords)
 export function cutWords(t, n) {
   const s = String(t ?? '').replace(/[.。]$/, '')
@@ -81,7 +86,7 @@ export function cutWords(t, n) {
 export function linesOf(text, pt, widthIn) {
   return String(text)
     .split('\n')
-    .reduce((n, part) => n + Math.max(1, Math.ceil(units(part) / (widthIn / (pt / 72)))), 0)
+    .reduce((n, part) => n + Math.max(1, Math.ceil(units(part) / ((widthIn * FIT) / (pt / 72)))), 0)
 }
 const runsText = (runs) => runs.map((r) => r.text).join('')
 
@@ -286,7 +291,8 @@ function donutLayout(els, c, x, y, w, h) {
 }
 
 function chartBox(els, x, y, w, h, c) {
-  const caption = [`선택 이유: ${c.reason}`, `출처: ${c.source} · 기준 시점: ${c.asOf}`, ...(c.alt ? [`다른 형태로 보기: ${c.alt}`] : [])].join('\n')
+  // 11/25 팀 검수: 「선택 이유」 · 「다른 형태로 보기」 줄은 뺌 — 그래프 밑은 출처 · 기준 시점 한 줄만 (보고서팀 양식과 같게)
+  const caption = `출처: ${c.source} · 기준 시점: ${c.asOf}`
   els.push(rect(x, y, w, h, { line: COLOR.line, radius: 0.1 }))
   els.push(text(x + 0.15, y + 0.1, w - 0.3, LH(SIZE.body), SIZE.body, c.title, { bold: true }))
   const capH = linesOf(caption, SIZE.note, w - 0.3) * LH(SIZE.note)
@@ -503,9 +509,16 @@ export function reportPages(saved, extra = {}) {
       { text: '근거 자료 ', bold: true },
       { text: `${evidenceLabel(saved)}   ` },
       { text: '주요 출처 ', bold: true },
-      // 한 줄에 들어가게 (11/17: 논문 학술지 이름이 길어 두 줄로 넘침) — 3곳까지, 곳마다 20자
-      { text: `${sources.slice(0, 3).map((x) => (x.length > 20 ? `${x.slice(0, 19)}…` : x)).join(', ')}${sources.length > 3 ? ` 외 ${sources.length - 3}곳` : ''}` },
+      { text: '' },
     ]
+    // 한 줄에 들어가게 (11/17: 학술지 이름이 길어 두 줄로 넘침 · 11/25: 글자 수만 세서 여전히 띠 밖으로 넘침)
+    // → 실제 폭을 재서 출처 수(3 → 1) · 곳마다 글자 수(20 → 10)를 줄인다
+    const srcW = CW - 0.3
+    const head = srcRuns.map((r) => r.text).join('')
+    const srcList = (k, n) => `${sources.slice(0, k).map((x) => (x.length > n ? `${x.slice(0, n - 1)}…` : x)).join(', ')}${sources.length > k ? ` 외 ${sources.length - k}곳` : ''}`
+    let srcText = srcList(1, 10)
+    outer: for (const k of [3, 2, 1]) for (const n of [20, 14, 10]) if (fitsLine(head + srcList(k, n), SIZE.note, srcW)) { srcText = srcList(k, n); break outer }
+    srcRuns[srcRuns.length - 1].text = srcText
     els.push(text(M + 0.15, srcY + 0.19 - LH(SIZE.note) / 2, CW - 0.3, LH(SIZE.note), SIZE.note, srcRuns, { color: COLOR.sub }))
     pages.push({ kind: 'cover', label: '1페이지 · 핵심 요약', els, fit: { hlOver, moved: movedFacts.length } })
     if (movedFacts.length) notes.push(`1쪽 분량으로 핵심 요약 사실 ${movedFacts.length}줄을 2쪽(기술 개요) 앞에 옮김`)
@@ -906,7 +919,7 @@ export function reportPages(saved, extra = {}) {
     { label: '사실의 기사 번호가 전부 근거 기사 목록에 존재', ok: usedRefs.every((n) => n >= 1 && n <= saved.articles.length) },
     { label: '기회/위협 + 할 일 2~3개 존재', ok: Boolean(brief) && opps.length + threats.length > 0 && actions.length >= 2 && actions.length <= 3, note: brief ? `기회 ${opps.length} · 위협 ${threats.length} · 할 일 ${actions.length}` : '예전 형식 — 다시 만들면 들어감' },
     { label: '출처에 수집 기간·기사 수 존재', ok: meta.period !== '-' && meta.base > 0 },
-    { label: '그래프마다 선택 이유 · 출처 · 기준 시점 · 축 단위 표기', ok: chartsAll.every((c) => c.xTitle && c.yTitle), note: [...chartsAll.map((c) => CHART_NAME[c.kind]), ...(textCharts ? [`수치 부족으로 글 ${textCharts}개`] : [])].join(' · ') },
+    { label: '그래프마다 출처 · 기준 시점 · 축 단위 표기', ok: chartsAll.every((c) => c.xTitle && c.yTitle), note: [...chartsAll.map((c) => CHART_NAME[c.kind]), ...(textCharts ? [`수치 부족으로 글 ${textCharts}개`] : [])].join(' · ') },
     {
       label: '그래프 라벨 · 축 제목 · 범례 · 값 겹침 없음 (가로축 라벨 7개 이하)',
       ok: chartsAll.every((c) => c.ok !== false && (!c.ticks || c.ticks.length <= MAX_TICKS)),

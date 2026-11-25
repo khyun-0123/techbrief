@@ -4683,9 +4683,12 @@ a.brand:focus-visible {
   background: var(--tb-color-danger-soft);
   color: var(--tb-color-danger);
 }
+/* 기회 = 검정 테두리 (11/25 팀 검수: 빨간 강조색이라 헤드라인 · 위협과 겹쳤음).
+   앱 전체 규칙 「위협만 레드, 기회는 검정 테두리」(자료 목록 cg-tag-chance · 특허 표)와 같게 */
 .report-tag-chance {
-  background: var(--tb-color-accent-soft);
-  color: var(--tb-color-accent);
+  border: 1px solid var(--tb-color-text);
+  background: transparent;
+  color: var(--tb-color-text);
 }
 .report-tag-todo {
   background: var(--tb-color-bg-strong);

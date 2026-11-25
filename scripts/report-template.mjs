@@ -121,12 +121,12 @@ function defineLayouts(pres) {
   // 유첨 5 기술 시계열 (11/17, 40 문서 R5 — 양식 확장): 왼쪽 판정 글, 오른쪽 논문 · 특허 연도별 그래프
   appendix('유첨 5', '유첨 5. 기술 시계열', [
     ph('timeline_text', { x: M, y: top, w: T5.textW, h: L.foot - 0.1 - top }, SIZE.note, '기술 단계 [성장 · 상용화 진입 등] — 판정 이유\n관심 대 실질 · 연구 폭 · 떠오르는 세부 주제 · 예상 밖 급증 · 요즘 뜨는 기술 신호\n※ 규칙으로 센 숫자 (AI가 만든 숫자 아님)'),
-    ph('timeline_caption', { x: M + T5.textW + 0.25, y: L.foot - 0.1 - 2 * LH(SIZE.note), w: CW - T5.textW - 0.25, h: 2 * LH(SIZE.note) }, SIZE.note, '출처: 테크브리프 논문 DB(OpenAlex) · 디스플레이 특허 DB | 끝난 해까지\n그래프: 꺾은선(구간 12개 넘음) · 세로막대 — 연도에 따른 추이', { color: C.sub }),
+    ph('timeline_caption', { x: M + T5.textW + 0.25, y: L.foot - 0.1 - 2 * LH(SIZE.note), w: CW - T5.textW - 0.25, h: 2 * LH(SIZE.note) }, SIZE.note, '출처: 테크브리프 논문 DB(OpenAlex) · 디스플레이 특허 DB | 끝난 해까지', { color: C.sub }),
   ])
   const chartW = (CW - 0.25) / 2
   appendix('유첨 2', '유첨 2. 트렌드 그래프', [
-    ph('caption_trend', { x: M + 0.15, y: L.foot - 0.12 - 3 * LH(SIZE.note) - 0.1, w: chartW - 0.3, h: 3 * LH(SIZE.note) }, SIZE.note, '데이터 기간: … | 단위: 건\n출처: …\n그래프: 세로막대(구간 12개 이하) · 꺾은선(넘으면)', { color: C.sub }),
-    ph('caption_keyword', { x: M + chartW + 0.25 + 0.15, y: L.foot - 0.12 - 3 * LH(SIZE.note) - 0.1, w: chartW - 0.3, h: 3 * LH(SIZE.note) }, SIZE.note, '데이터 기간: … | 단위: 건\n출처: …\n그래프: 가로막대 (많은 순)', { color: C.sub }),
+    ph('caption_trend', { x: M + 0.15, y: L.foot - 0.12 - 3 * LH(SIZE.note) - 0.1, w: chartW - 0.3, h: 3 * LH(SIZE.note) }, SIZE.note, '데이터 기간: … | 단위: 건\n출처: …', { color: C.sub }),
+    ph('caption_keyword', { x: M + chartW + 0.25 + 0.15, y: L.foot - 0.12 - 3 * LH(SIZE.note) - 0.1, w: chartW - 0.3, h: 3 * LH(SIZE.note) }, SIZE.note, '데이터 기간: … | 단위: 건\n출처: …', { color: C.sub }),
   ])
 }
 
@@ -291,8 +291,8 @@ export function build(data) {
   const chartPos = (i) => ({ x: M + i * (cw + 0.25) + 0.1, y: top + 0.2 + LH(SIZE.body), w: cw - 0.2, h: ch - 0.2 - LH(SIZE.body) - 3 * LH(SIZE.note) - 0.3 })
   addBarOrLine(s5, pres, trendKind(tr.labels.length), chartPos(0), tr.labels, tr.values, tr.unit === '주' ? '주 (시작일 M/D)' : '날짜 (M/D)', tr.unit === '주' ? '주간 기사 수 (건)' : '기사 수 (건)')
   addBarOrLine(s5, pres, 'hbar', chartPos(1), kw.labels, kw.values, '키워드', '언급 기사 수 (건)')
-  put(s5, 'caption_trend', `데이터 기간: ${tr.period ?? ''} | 단위: 건\n출처: ${tr.source ?? ''}\n그래프: ${trendKind(tr.labels.length) === 'vbar' ? '세로막대' : '꺾은선'} — 시간에 따른 추이, 구간 ${tr.labels.length}개`)
-  put(s5, 'caption_keyword', `데이터 기간: ${kw.period ?? ''} | 단위: 건\n출처: ${kw.source ?? ''}\n그래프: 가로막대 — 키워드 간 비교 (많은 순)`)
+  put(s5, 'caption_trend', `데이터 기간: ${tr.period ?? ''} | 단위: 건\n출처: ${tr.source ?? ''}`) // 11/25 팀 검수: 「그래프: …」 줄 뺌
+  put(s5, 'caption_keyword', `데이터 기간: ${kw.period ?? ''} | 단위: 건\n출처: ${kw.source ?? ''}`)
   s5.addNotes('유첨 2. 왼쪽은 trend(기간별 기사량: 구간 12개 이하 세로막대 · 넘으면 꺾은선), 오른쪽은 appendix.charts의 가로막대(키워드 빈도). 차트 → 데이터 편집에서 바꾼다. 단색만, 축 이름 · 단위 · 데이터 기간 표기.')
 
   // ════ 유첨 3. 출처 목록 / 유첨 4. 기사 원문 요약 (표) ════
@@ -358,7 +358,7 @@ export function build(data) {
       if (series.labels?.length >= 2) addBarOrLine(s6, pres, trendKind(series.labels.length), { x: rx + 0.08, y: y + 0.12 + LH(SIZE.body), w: rw - 0.16, h: gh - 0.2 - LH(SIZE.body) }, series.labels, series.values, '연도', unit)
       else s6.addText('자료 부족 — 그래프 없이 씀', { ...base, x: rx + 0.12, y: y + 0.2 + LH(SIZE.body), w: rw - 0.24, h: LH(SIZE.note), fontSize: SIZE.note, color: C.sub })
     }
-    put(s6, 'timeline_caption', t ? `출처: ${t.source ?? '테크브리프 논문 DB(OpenAlex) · 디스플레이 특허 DB'} | ${t.as_of ?? ''}\n그래프: 연도에 따른 추이 — 구간 12개 이하 세로막대 · 넘으면 꺾은선` : '')
+    put(s6, 'timeline_caption', t ? `출처: ${t.source ?? '테크브리프 논문 DB(OpenAlex) · 디스플레이 특허 DB'} | ${t.as_of ?? ''}` : '')
     s6.addNotes('유첨 5. appendix.timeline(키워드마다: stage · why · lines[head, text] · papers · patents)을 붙여 넣는다. 숫자는 규칙 계산 그대로, 관심도 · 급증은 네이버 검색 관심도라 AI 입력에 쓰지 않는다 (23 문서).')
   }
 
