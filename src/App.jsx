@@ -239,6 +239,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [keywords, setKeywords] = useState(() => load(KEYWORDS_KEY, DEFAULT_KEYWORDS))
   const [selectedIds, setSelectedIds] = useState(() => load(SELECTED_KEY, []))
   const [selTags, setSelTags] = useState(() => load(TAGS_KEY, {})) // { 기사 id: [키워드 태그] } — 없으면 그 기사의 수집 키워드
+  const [autoSel, setAutoSel] = useState(null) // 자료 현황 「자동 선택」으로 방금 담은 것 { tag, ids, important, fill, term, pool } — 되돌리기용
   const [materials, setMaterials] = useState([]) // 직접 추가한 자료 (서버)
   const [showAdd, setShowAdd] = useState(false)
   const [showMove, setShowMove] = useState(false) // 내 자료 옮기기 (11/08)
@@ -1159,6 +1160,21 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     }
   }
 
+  // 자료 현황 「자동 선택」 (11/25 팀 검수): 지금 찾기 결과에서 대시보드 자동 선별과 같은 규칙(autoPick.js)으로 골라 선별에 담는다
+  // 중요 자료는 모두(최대 10건) · 모자라면 5건까지 점수순 · 고른 말마다 최소 1건 · 같은 이슈는 하나. 이미 선별한 건 그대로 둔다
+  function autoSelectHere() {
+    const list = visible.map((a) => ({ ...a, scopeHits: scopeHitsOf.get(a.id) ?? [] }))
+    const res = pickMaterials(list, search?.scope?.terms ?? [])
+    const fresh = res.picked.filter((c) => !selectedIds.includes(c.article.id))
+    for (const c of fresh) toggleSelected(byId.get(c.article.id) ?? c.article)
+    const count = (why) => fresh.filter((c) => c.why === why).length
+    setAutoSel({ tag: currentTag, ids: fresh.map((c) => c.article.id), already: res.picked.length - fresh.length, important: count('important'), fill: count('fill'), term: count('term'), pool: res.pool })
+  }
+  function undoAutoSelect() {
+    for (const id of autoSel?.ids ?? []) if (selectedIds.includes(id)) handleExclude(id)
+    setAutoSel(null)
+  }
+
   // 선별에서 빠진 기사는 보고서 포함 목록에서도 뺀다
   const candidates = pool.filter((a) => selectedIds.includes(a.id))
   const pickedHere = currentTag ? candidates.filter((a) => selTagsFor(a).includes(currentTag)) : [] // 자료 현황 아래 바: 지금 키워드로 선별한 자료
@@ -1304,13 +1320,13 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                     : `${llmLabel}(AI 서버)에 닿지 않아요. 요약·보고서를 만들 수 없어요`
                 }
               >
-                ● AI {health.modelReachable ? '연결' : '끊김'}
+                ● AI <span className="conn-word">{health.modelReachable ? '연결' : '끊김'}</span>
               </span>
               <span
                 className={health.db?.enabled && health.db.ok ? 'db-status on' : 'db-status off'}
                 title={!health.db?.enabled ? 'DB 없이 실행 중 (서버를 끄면 자료가 사라져요)' : health.db.ok ? `DB 연결됨 · 기사 ${health.db.articles} · 요약 ${health.db.summaries} · 보고서 ${health.db.reports}` : health.db.error}
               >
-                ● DB {!health.db?.enabled ? '없음' : health.db.ok ? '연결' : '오류'}
+                ● DB <span className="conn-word">{!health.db?.enabled ? '없음' : health.db.ok ? '연결' : '오류'}</span>
               </span>
             </span>
           )}
@@ -1926,7 +1942,35 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                   <span className="muted"> · 목록에서 「선별」을 눌러 담아요</span>
                 )}
               </p>
+              {autoSel?.tag === currentTag && (
+                <p className="collect-auto-note" role="status">
+                  자동 선택 {autoSel.ids.length}건 담음
+                  {autoSel.ids.length > 0 && (
+                    <span className="muted">
+                      {' '}
+                      ({[autoSel.important && `중요 ${autoSel.important}`, autoSel.fill && `점수순 채움 ${autoSel.fill}`, autoSel.term && `고른 말 ${autoSel.term}`].filter(Boolean).join(' · ')}
+                      {autoSel.already > 0 && ` · 이미 선별 ${autoSel.already}`} · 후보 이슈 {autoSel.pool}개)
+                    </span>
+                  )}
+                  {autoSel.ids.length > 0 && (
+                    <button type="button" className="btn-text" onClick={undoAutoSelect}>
+                      되돌리기
+                    </button>
+                  )}
+                </p>
+              )}
               <div className="ka-next-actions">
+                {view && (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={autoSelectHere}
+                    disabled={visible.length === 0}
+                    title="지금 목록에서 중요 자료는 모두(최대 10건), 모자라면 5건까지 점수순으로, 고른 말마다 1건 이상 — 같은 이슈는 하나만 담아요"
+                  >
+                    자동 선택
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn primary ka-next-go"

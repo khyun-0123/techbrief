@@ -3,7 +3,8 @@
 import { dbEnabled, query } from '../db/index.js'
 import { getSetting, getSummaries, setSetting } from '../db/store.js'
 import { findReruns, groupArticles, sameIssue, titleGrams } from './dedupe.js'
-import { collectFeeds, FEEDS, fetchFeedAll, PAPER_KEYWORD_DAYS, tierOf } from './feeds.js'
+import { allFeeds, collectFeeds, EVERY_CHOICES, fetchFeedAll, PAPER_KEYWORD_DAYS, setCustomFeeds, testFeed, tierOf } from './feeds.js'
+import { randomBytes } from 'node:crypto'
 import { searchNews } from './naver.js'
 import { findMention, getLists } from './lists.js'
 import { EXPERT_SOURCES, toArticle } from './normalize.js'
@@ -140,13 +141,25 @@ async function cleanupDb() {
 }
 
 // 네이버 밖 출처 (feeds.js). 관리자가 끈 출처와 지난 수집 결과는 app_settings에 둔다
-const SOURCES_KEY = 'feed_sources' // { disabled: [id] }
+// 11/25: custom(관리 페이지에서 더한 RSS 출처) · every(출처마다 수집 주기, 시간 · 0 = 자동 최신화 때마다)
+const SOURCES_KEY = 'feed_sources' // { disabled: [id], custom: [{ id, name, tier, url, lang, addedAt }], every: { id: hours } }
 const SOURCES_STATUS_KEY = 'feed_sources_status' // { at, results: [{ id, ok, items, matched, added, error }] }
+const SOURCES_LAST_KEY = 'feed_sources_last' // { id: 마지막으로 받은 때 } — 수집 주기 계산용
+const MAX_CUSTOM_FEEDS = 20
+
+async function savedSources() {
+  const saved = await getSetting(SOURCES_KEY, { disabled: [] })
+  const custom = Array.isArray(saved.custom) ? saved.custom.slice(0, MAX_CUSTOM_FEEDS) : []
+  setCustomFeeds(custom)
+  return { ...saved, custom }
+}
+const knownFeed = (id) => allFeeds().some((f) => f.id === id)
 
 export async function getSources({ counts = false } = {}) {
-  const saved = await getSetting(SOURCES_KEY, { disabled: [] })
-  const disabled = (saved.disabled ?? []).filter((id) => FEEDS.some((f) => f.id === id))
-  return { disabled, status: await getSetting(SOURCES_STATUS_KEY, null), ...(counts ? { stored: await storedByFeed() } : {}) }
+  const saved = await savedSources()
+  const disabled = (saved.disabled ?? []).filter(knownFeed)
+  const every = Object.fromEntries(Object.entries(saved.every ?? {}).filter(([id, h]) => knownFeed(id) && EVERY_CHOICES.includes(h)))
+  return { disabled, every, choices: EVERY_CHOICES, status: await getSetting(SOURCES_STATUS_KEY, null), last: await getSetting(SOURCES_LAST_KEY, {}), ...(counts ? { stored: await storedByFeed() } : {}) }
 }
 
 // 출처마다 최근 14일 · 전체 저장 건수 (11/17, 관리 페이지): 「정상 · 받은 글 580」인데 한 번도 저장되지 않은 출처가 5곳 있었음 (36 문서 4-1)
@@ -163,10 +176,57 @@ async function storedByFeed() {
 }
 
 export async function saveSources(input = {}) {
-  const disabled = [...new Set((input.disabled ?? []).map(String))].filter((id) => FEEDS.some((f) => f.id === id))
-  await setSetting(SOURCES_KEY, { disabled })
+  const saved = await savedSources()
+  const disabled = [...new Set((input.disabled ?? []).map(String))].filter(knownFeed)
+  const every = input.every === undefined ? (saved.every ?? {}) : Object.fromEntries(Object.entries(input.every ?? {}).filter(([id, h]) => knownFeed(id) && EVERY_CHOICES.includes(Number(h)) && Number(h) > 0).map(([id, h]) => [id, Number(h)]))
+  await setSetting(SOURCES_KEY, { ...saved, disabled, every })
   return getSources()
 }
+
+// 출처 더하기 (11/25): 받아 보고 글이 있을 때만 넣는다
+export async function addCustomFeed(input = {}) {
+  const saved = await savedSources()
+  if (saved.custom.length >= MAX_CUSTOM_FEEDS) throw Object.assign(new Error(`출처는 ${MAX_CUSTOM_FEEDS}곳까지 더할 수 있어요.`), { status: 400 })
+  const name = String(input.name ?? '').trim()
+  if (name.length < 1 || name.length > 40) throw Object.assign(new Error('이름은 1~40자로 넣어 주세요.'), { status: 400 })
+  let url
+  try {
+    url = new URL(String(input.url ?? '').trim())
+  } catch {
+    throw Object.assign(new Error('피드 주소를 https://… 형태로 넣어 주세요.'), { status: 400 })
+  }
+  if (!/^https?:$/.test(url.protocol)) throw Object.assign(new Error('http(s) 주소만 넣을 수 있어요.'), { status: 400 })
+  if (allFeeds().some((f) => f.url === url.href)) throw Object.assign(new Error('이미 있는 출처예요.'), { status: 400 })
+  const test = await testFeed({ url: url.href })
+  if (!test.ok) throw Object.assign(new Error(`받아 보지 못했어요 — ${test.error}`), { status: 400 })
+  const feed = { id: `u-${randomBytes(4).toString('hex')}`, name, tier: Number(input.tier) === 1 ? 1 : 2, url: url.href, lang: input.lang === 'en' ? 'en' : 'ko', addedAt: new Date().toISOString() }
+  const every = test.recommend?.hours ? { ...(saved.every ?? {}), [feed.id]: test.recommend.hours } : saved.every
+  await setSetting(SOURCES_KEY, { ...saved, custom: [...saved.custom, feed], every })
+  setCustomFeeds([...saved.custom, feed])
+  return { feed, test }
+}
+
+// 더한 출처 지우기 (기본 출처는 끄기만). 이미 모은 글은 그대로 둔다
+export async function deleteCustomFeed(id) {
+  const saved = await savedSources()
+  const feed = saved.custom.find((f) => f.id === id)
+  if (!feed) throw Object.assign(new Error(allFeeds().some((f) => f.id === id) ? '기본 출처는 지울 수 없어요. 끄기만 할 수 있어요.' : '없는 출처예요.'), { status: allFeeds().some((f) => f.id === id) ? 403 : 400 })
+  const custom = saved.custom.filter((f) => f.id !== id)
+  const { [id]: _e, ...every } = saved.every ?? {}
+  await setSetting(SOURCES_KEY, { ...saved, custom, every, disabled: (saved.disabled ?? []).filter((x) => x !== id) })
+  setCustomFeeds(custom)
+  return feed.name
+}
+
+// 전체 점검 (11/25): 켜 둔 RSS 출처를 모두 받아 보고 주기를 추천한다 (논문 검색 제외, 저장하지 않음). 6곳씩
+export async function checkAllFeeds() {
+  const { disabled } = await getSources()
+  const feeds = allFeeds().filter((f) => !f.paper && !disabled.includes(f.id))
+  const out = []
+  for (let i = 0; i < feeds.length; i += 6) out.push(...(await Promise.all(feeds.slice(i, i + 6).map((f) => testFeed({ id: f.id })))))
+  return { at: new Date().toISOString(), results: out }
+}
+export { testFeed }
 
 // 네이버 검색 결과에 바로 중요도를 매긴다 (11/17, 맵 「중요도순」 · 37 문서 Q1): DB에 없는 기사라 저장 점수가 없으므로
 // 「기사 찾기」와 같은 규칙(toIssues: 같은 이슈 묶기 · 관련도 · 재탕)으로 그 자리에서. url → 이슈 점수
@@ -193,8 +253,11 @@ export async function importFeedAll(id) {
 
 // 피드 기사 저장 (네이버와 같은 표). 출처마다 새로 넣은 수를 센다
 async function collectFromFeeds(words) {
-  const { disabled } = await getSources()
-  const { articles, results } = await collectFeeds(words, { disabled })
+  const { disabled, every, last, status } = await getSources()
+  // 수집 주기 (11/25): 정한 시간이 안 지난 출처는 이번에 건너뛰고 지난 결과를 그대로 둔다 (10분 여유)
+  const now = Date.now()
+  const skip = Object.entries(every).filter(([id, h]) => h > 0 && last?.[id] && now - Date.parse(last[id]) < h * 3_600_000 - 600_000).map(([id]) => id)
+  const { articles, results } = await collectFeeds(words, { disabled, skip })
   for (const r of results) {
     const mine = articles.filter((a) => a.section === `feed:${r.id}`)
     if (dbEnabled()) r.added = await saveToDb(mine)
@@ -203,7 +266,11 @@ async function collectFromFeeds(words) {
       for (const a of mine) memory.set(a.id, { ...memory.get(a.id), ...a })
     }
   }
-  await setSetting(SOURCES_STATUS_KEY, { at: new Date().toISOString(), results }) // DB가 없으면 서버 메모리에
+  const prev = Object.fromEntries((status?.results ?? []).filter(Boolean).map((r) => [r.id, r]))
+  const kept = skip.map((id) => ({ ...(prev[id] ?? { id, ok: true }), id, skipped: true, added: 0 }))
+  await setSetting(SOURCES_STATUS_KEY, { at: new Date().toISOString(), results: [...results.filter(Boolean), ...kept] }) // DB가 없으면 서버 메모리에
+  const at = new Date().toISOString()
+  await setSetting(SOURCES_LAST_KEY, { ...(last ?? {}), ...Object.fromEntries(results.filter((r) => r?.ok).map((r) => [r.id, at])) })
   return results
 }
 

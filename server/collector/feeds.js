@@ -12,6 +12,7 @@ import { knownTerms, openAlexQuery } from '../queryTerms.js'
 import { BROAD_KEYWORD } from './relevance.js'
 import { articleId, cleanText } from './normalize.js'
 import { keywordPapers, recentPapers } from '../papers/journals.js'
+import { safeFetch } from '../safeFetch.js'
 
 export const TIER_LABEL = { 1: '1차', 2: '2차', 3: '3차' }
 
@@ -49,7 +50,14 @@ export const FEEDS = [
   { id: 'eetimes', name: 'EE Times', tier: 2, url: 'https://www.eetimes.com/feed/', lang: 'en' },
   { id: 'ieee-spectrum', name: 'IEEE Spectrum', tier: 2, url: 'https://spectrum.ieee.org/feeds/feed.rss', lang: 'en' },
 ]
-const BY_ID = new Map(FEEDS.map((f) => [f.id, f]))
+// 관리 페이지에서 더한 출처 (11/25 조장: 「수집할 API를 사이트에서 켜고 끄고 추가하고 주기 바꾸고 시험」)
+// collector/index.js getSources()가 DB 값을 읽을 때마다 넣는다. custom: true → 주소를 safeFetch로 연다(내부 주소 막음)
+const CUSTOM = (globalThis.__techbriefCustomFeeds ??= { list: [] })
+export function setCustomFeeds(list) {
+  CUSTOM.list = (list ?? []).map((f) => ({ id: f.id, name: f.name, tier: f.tier === 1 ? 1 : 2, url: f.url, lang: f.lang === 'en' ? 'en' : undefined, custom: true }))
+}
+export const allFeeds = () => [...FEEDS, ...CUSTOM.list]
+const byId = (id) => allFeeds().find((f) => f.id === id)
 
 const FEED_DAYS = 14 // 이보다 오래된 글은 넣지 않는다 (화면 목록은 7일)
 const PAPER_DAYS = 7 // 학술지 14곳 최근 7일 (OpenAlex에 새 논문이 보이기까지 보통 하루, SID Digest는 몇 주)
@@ -64,7 +72,7 @@ const UA = 'Mozilla/5.0 (techbrief news collector)'
 
 // 저장된 기사의 출처 단계: 피드 기사는 section 'feed:<id>', 네이버 기사는 전문 매체면 2차, 아니면 3차
 export function tierOf(article, expertSources) {
-  const feed = String(article.section ?? '').startsWith('feed:') ? BY_ID.get(article.section.slice(5)) : null
+  const feed = String(article.section ?? '').startsWith('feed:') ? byId(article.section.slice(5)) : null
   if (feed) return feed.tier
   return expertSources.has(article.source) ? 2 : 3
 }
@@ -89,10 +97,70 @@ function parseFeed(xml) {
   })
 }
 
-async function getText(url, ua = UA) {
-  const res = await fetch(url, { headers: { 'User-Agent': ua, Accept: 'application/rss+xml, application/xml, text/xml, */*' }, signal: AbortSignal.timeout(TIMEOUT_MS) })
+async function getText(url, ua = UA, { safe = false } = {}) {
+  const headers = { 'User-Agent': ua, Accept: 'application/rss+xml, application/xml, text/xml, */*' }
+  // 관리 페이지에서 넣은 주소는 내부 주소를 막고 크기를 제한한다 (SSRF, safeFetch.js)
+  if (safe) {
+    const res = await safeFetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) }, { maxBytes: 5_000_000 })
+    if (!res.ok) throw new Error(`응답 ${res.status}`)
+    return res.buffer.toString('utf8')
+  }
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) })
   if (!res.ok) throw new Error(`응답 ${res.status}`)
   return res.text()
+}
+const feedText = (feed) => getText(feed.url, feed.ua, { safe: Boolean(feed.custom) })
+
+// ── 출처 시험 · 수집 주기 추천 (11/25) ──
+// 주기 고르기: 0 = 자동 최신화 때마다, 그 밖은 시간
+export const EVERY_CHOICES = [0, 6, 12, 24, 168]
+// 추천 기준 두 가지 중 짧은 쪽 (11/25 실측 27곳으로 다듬음):
+// ① 놓치지 않기 — RSS는 최근 글 몇십 건만 담는다. 피드가 담고 있는 기간의 절반보다 자주 받아야 밀려난 글을 놓치지 않음
+// ② 늦지 않기 — 글이 올라오는 간격(중앙값)보다 자주. 단 6시간보다 촘촘할 필요는 없고, 드문 곳도 하루 한 번 (RSS 한 번 받는 비용은 거의 없음)
+// 예외: 최근 글이 60일 넘게 없으면 일주일에 한 번 · 글 날짜가 같은 시각에 몰려 있으면(한꺼번에 올리거나 피드가 만든 시각) 간격을 못 재므로 하루 한 번
+export function recommendEvery(times) {
+  const t = [...times].filter(Number.isFinite).sort((a, b) => b - a)
+  if (t.length < 2) return { hours: 24, why: '날짜가 있는 글이 적어 하루 한 번' }
+  const H = 3_600_000
+  const sinceNewest = (Date.now() - t[0]) / H
+  if (sinceNewest > 60 * 24) return { hours: 168, why: `최근 글이 ${Math.round(sinceNewest / 24)}일 전이라 일주일에 한 번` }
+  const distinct = [...new Set(t.map((x) => Math.round(x / 60_000)))].map((m) => m * 60_000)
+  if (t.length >= 5 && distinct.length <= t.length / 2) return { hours: 24, why: `글 ${t.length}건의 날짜가 같은 시각에 몰려 있어(한꺼번에 올림) 간격을 잴 수 없어 하루 한 번` }
+  const spanH = Math.max(1, (distinct[0] - distinct[distinct.length - 1]) / H)
+  const gaps = distinct.slice(1).map((x, i) => (distinct[i] - x) / H).sort((a, b) => a - b)
+  const medianGap = gaps[Math.floor(gaps.length / 2)]
+  const limit = Math.min(spanH / 2, Math.max(medianGap, 6), 24)
+  const hours = [...EVERY_CHOICES].reverse().find((c) => c > 0 && c <= limit) ?? 0
+  const dur = (h) => (h < 24 ? `${Math.max(1, Math.round(h))}시간` : `${Math.round(h / 24)}일`)
+  return {
+    hours,
+    gapHours: medianGap,
+    keepHours: spanH,
+    why: `글 간격 보통 ${dur(medianGap)} · 피드에 최근 ${t.length}건(${dur(spanH)}치) → ${hours ? `${hours}시간마다` : '자동 최신화 때마다'} 받으면 놓치지 않음`,
+  }
+}
+
+// 한 출처(또는 아직 저장 안 한 주소)를 받아 본다: 글 수 · 가장 최근 글 · 추천 주기. 저장하지 않는다
+export async function testFeed({ id, url, ua } = {}) {
+  const feed = id ? byId(id) : { id: 'new', url, ua, custom: true }
+  if (!feed || feed.paper) throw Object.assign(new Error(feed?.paper ? '논문 검색은 시험할 수 없어요 (논문 출처 상태를 보세요).' : '없는 출처예요.'), { status: 400 })
+  const t0 = Date.now()
+  try {
+    const items = parseFeed(await feedText(feed)).filter((i) => i.title && i.link)
+    const times = items.map((i) => Date.parse(i.date)).filter(Number.isFinite)
+    return {
+      id: feed.id,
+      ok: items.length > 0,
+      ms: Date.now() - t0,
+      items: items.length,
+      newest: times.length ? new Date(Math.max(...times)).toISOString() : null,
+      sample: items.slice(0, 3).map((i) => i.title.slice(0, 80)),
+      ...(items.length ? { recommend: recommendEvery(times) } : { error: 'RSS · Atom 글을 찾지 못했어요 (피드 주소가 맞는지 확인)' }),
+    }
+  } catch (err) {
+    const msg = err?.code === 'EPRIVATE' ? '내부 주소는 쓸 수 없어요' : err?.name === 'TimeoutError' ? '15초 안에 응답이 없어요' : String(err?.message ?? err).slice(0, 120)
+    return { id: feed.id, ok: false, ms: Date.now() - t0, error: msg }
+  }
 }
 
 // 논문 (server/papers): 디스플레이 학술지 최근 7일 + 큰 학술지의 디스플레이 주제 논문
@@ -151,16 +219,17 @@ function toFeedArticle(item, feed, keyword) {
 
 // words: 자동 수집 키워드, disabled: 관리자가 끈 출처 id
 // 결과: articles(넣을 기사), results(출처마다 받은 글 수 · 맞은 글 수 · 오류)
-export async function collectFeeds(words, { disabled = [] } = {}) {
+// skip: 수집 주기가 아직 안 된 출처 id (11/25, collector/index.js가 정함)
+export async function collectFeeds(words, { disabled = [], skip = [] } = {}) {
   const since = Date.now() - FEED_DAYS * 86_400_000
   const paperSince = Date.now() - PAPER_KEYWORD_DAYS * 86_400_000
-  const feeds = FEEDS.filter((f) => !disabled.includes(f.id))
+  const feeds = allFeeds().filter((f) => !disabled.includes(f.id) && !skip.includes(f.id))
   const articles = []
   const results = []
   await Promise.all(
     feeds.map(async (feed) => {
       try {
-        const items = feed.paper ? await searchPapers(words) : parseFeed(await getText(feed.url, feed.ua))
+        const items = feed.paper ? await searchPapers(words) : parseFeed(await feedText(feed))
         let matched = 0
         for (const item of items) {
           if (!item.title || !item.link) continue
@@ -186,15 +255,15 @@ export async function collectFeeds(words, { disabled = [] } = {}) {
   const rssDois = new Set(articles.filter((a) => a.section !== 'feed:crossref').map((a) => doiOf(a.url)).filter(Boolean))
   const kept = articles.filter((a) => a.section !== 'feed:crossref' || !rssDois.has(doiOf(a.url)))
   const unique = [...new Map(kept.map((a) => [a.url, a])).values()]
-  return { articles: unique, results: FEEDS.filter((f) => !disabled.includes(f.id)).map((f) => results.find((r) => r.id === f.id)) }
+  return { articles: unique, results: feeds.map((f) => results.find((r) => r.id === f.id)) }
 }
 
 // 날짜 기준(14일) 없이 한 출처의 글을 모두 받는다 (11/17 조장: SID 논문집처럼 1년에 한 번 한꺼번에 올라오는 곳을
 // 수집 시작 전에 놓친 경우 한 번 채우기). 키워드에 안 맞은 글도 버리지 않는다 (11/09, BROAD_KEYWORD)
 export async function fetchFeedAll(id, words = []) {
-  const feed = FEEDS.find((f) => f.id === id && !f.paper)
+  const feed = allFeeds().find((f) => f.id === id && !f.paper)
   if (!feed) throw new Error(`없는 출처: ${id}`)
-  const items = parseFeed(await getText(feed.url, feed.ua))
+  const items = parseFeed(await feedText(feed))
   return items
     .filter((item) => item.title && item.link)
     .map((item) => toFeedArticle(item, feed, words.find((w) => hasKeyword(`${item.title} ${item.description}`, w)) ?? BROAD_KEYWORD))
@@ -202,5 +271,5 @@ export async function fetchFeedAll(id, words = []) {
 
 // 관리 화면용 목록
 export function feedList() {
-  return FEEDS.map(({ id, name, tier, url, lang, paper }) => ({ id, name, tier, url: url ?? 'https://api.openalex.org', lang: lang ?? 'ko', paper: Boolean(paper) }))
+  return allFeeds().map(({ id, name, tier, url, lang, paper, custom }) => ({ id, name, tier, url: url ?? 'https://api.openalex.org', lang: lang ?? 'ko', paper: Boolean(paper), custom: Boolean(custom) }))
 }

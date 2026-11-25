@@ -2544,7 +2544,37 @@ a.btn {
 }
 
 /* ── 좁은 화면 (휴대폰·작은 태블릿): 글자가 세로로 꺾이거나 겹치지 않게 ── */
-@media (max-width: 760px) {
+/* 노트북 화면 절반(약 640~900px): 메뉴 막대는 넓은 화면과 같은 한 줄 그대로, 글자만 줄인다 (11/25 팀 검수:
+   760px 이하에서 두 줄로 갈라져 「상단 모양이 이상해짐」) — 연결 상태는 점 + AI · DB만(자세한 건 마우스를 올리면) */
+@media (max-width: 900px) {
+  .conn-word {
+    display: none;
+  }
+  .topbar-side {
+    gap: 8px;
+    font-size: 12px;
+  }
+  .brand {
+    margin-right: 12px;
+    padding-right: 12px;
+  }
+  .tabs .tab {
+    padding-inline: 10px;
+  }
+}
+/* 780px 이하: 사용 안내 · 설정은 아이콘만 (이름은 마우스를 올리면 · 화면 읽기 프로그램은 aria-label) — 720px에서 「내 보고서」 탭이 잘리던 것 */
+@media (max-width: 780px) {
+  .guide-btn-text,
+  .settings-btn-text {
+    display: none;
+  }
+  .guide-btn::after {
+    content: none !important;
+  }
+}
+
+/* 좁은 화면 (680px 이하)만 두 줄: 탭은 둘째 줄 전체 폭, 넘치면 옆으로 밀어서 */
+@media (max-width: 680px) {
   .topbar {
     grid-template-columns: auto minmax(0, 1fr);
     row-gap: 8px;
@@ -2558,17 +2588,13 @@ a.btn {
     font-size: 18px;
   }
 
-  /* 탭은 둘째 줄 전체 폭, 넘치면 옆으로 밀어서 */
   .tabs {
     grid-column: 1 / -1;
     grid-row: 2;
   }
+}
 
-  .topbar-side {
-    gap: 8px;
-    font-size: 12px;
-  }
-
+@media (max-width: 760px) {
   .test-banner {
     padding: 8px 16px;
   }
@@ -4629,12 +4655,23 @@ a.brand:focus-visible {
 .report-layout.stacked .report-doc {
   padding: 20px;
 }
+/* 11/25 팀 검수: 왼쪽 세로줄 상자가 제목 아래 굵은 선과 8px 떨어져 「꺾인 선이 끊긴」 것처럼 보였음 → 선 없이 꼬리표 + 글 */
 .report-direction {
-  margin: 8px 0 0;
-  padding: 8px 12px;
-  border-left: 3px solid var(--tb-color-line-focus);
-  background: var(--tb-color-bg);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 12px 0 0;
   font-size: 14px;
+  color: var(--tb-color-text-sub);
+}
+.report-direction-label {
+  flex: none;
+  padding: 0 8px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tb-color-text);
 }
 
 /* 담당자 회신 형식 (11/12, 35 문서): ① 헤드라인 · ② 핵심 사실 근거 · ③ 시사점 및 제언(기회 · 위협 · 할 일) · ④ 출처, 그 아래 유첨 */
@@ -9539,6 +9576,15 @@ a.dash-home-t:hover,
 }
 .ka-next .ka-flash {
   flex: none;
+}
+/* 자료 현황 「자동 선택」 결과 한 줄 (11/25) */
+.collect-auto-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--tb-space-2);
+  margin: 0;
+  font-size: 13px;
 }
 .ka-next-actions {
   display: flex;

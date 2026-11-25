@@ -69,7 +69,10 @@ function MaterialsPreview({ articles, aiSummaries, title, direction, jobs }) {
         <h2>{title || '제목 없음'}</h2>
         <span>재료 미리보기 · 기사 {articles.length}건</span>
       </header>
-      {direction && <p className="report-direction">방향: {direction}</p>}
+      {direction && <p className="report-direction">
+          <span className="report-direction-label">방향</span>
+          {direction}
+        </p>}
       {articles.length === 0 ? (
         <p className="hint">왼쪽에서 보고서에 넣을 기사를 체크하면, 섹션마다 어떤 내용이 들어갈지 여기에 보여 줘요.</p>
       ) : (

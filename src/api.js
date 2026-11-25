@@ -360,11 +360,11 @@ export async function fetchSources() {
   return data
 }
 
-export async function saveSourcesApi(disabled) {
+export async function saveSourcesApi(disabled, every) {
   const res = await fetch('/api/admin/sources', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ disabled }),
+    body: JSON.stringify(every ? { disabled, every } : { disabled }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
@@ -602,9 +602,11 @@ export async function fetchWordArticles(center, word) {
 async function adminCall(path, method = 'GET', body) {
   const res = await fetch(path, body === undefined ? { method } : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error ?? `서버 오류 (${res.status})`)
+  if (!res.ok) throw Object.assign(new Error(data.error ?? `서버 오류 (${res.status})`), { code: data.code ?? null, status: res.status })
   return data
 }
+// 민감한 작업 전 비밀번호 다시 확인 (11/25) — 10분 동안 유효
+export const confirmAdminApi = (password) => adminCall('/api/admin/confirm', 'POST', { password })
 // 보고서 양식 (11/20): 화면이 켜질 때 받아 reportSlides.js에 넣는다. 못 받으면 처음 값 그대로
 export async function fetchReportStyle() {
   const res = await fetch('/api/report-style')
@@ -628,5 +630,19 @@ export const saveAccessCode = (code, current) => adminCall('/api/admin/security/
 export const resetAccessCode = (current) => adminCall('/api/admin/security/access-code/reset', 'POST', { current })
 export const saveAdminPasswordApi = (current, next) => adminCall('/api/admin/security/password', 'PUT', { current, next })
 export const resetAdminPassword = (current) => adminCall('/api/admin/security/password/reset', 'POST', { current })
+// 수집 출처 시험 · 전체 점검 · 더하기 · 지우기 (11/25)
+export const testSourceApi = (v) => adminCall('/api/admin/sources/test', 'POST', v)
+export const checkSourcesApi = () => adminCall('/api/admin/sources/check', 'POST', {})
+export const addSourceApi = (v) => adminCall('/api/admin/sources/custom', 'POST', v)
+export const deleteSourceApi = (id) => adminCall(`/api/admin/sources/custom/${encodeURIComponent(id)}/delete`, 'POST', {})
 export const saveLlmModels = (v) => adminCall('/api/admin/llm-models', 'PUT', v)
+// AI 연결 (11/25): 응답에 키 글자는 없다 (있음 · 없음만)
+const connUrl = (id, action) => `/api/admin/llm-connections${id ? `/${encodeURIComponent(id)}` : ''}${action ? `/${action}` : ''}`
+export const fetchLlmConnections = () => adminCall(connUrl())
+export const addLlmConnection = (v) => adminCall(connUrl(), 'POST', v)
+export const updateLlmConnection = (id, v) => adminCall(connUrl(id), 'PUT', v)
+export const revertLlmConnection = (id) => adminCall(connUrl(id, 'revert'), 'POST', {})
+export const setLlmConnectionDisabled = (id, disabled) => adminCall(connUrl(id, 'disable'), 'POST', { disabled })
+export const deleteLlmConnection = (id) => adminCall(connUrl(id, 'delete'), 'POST', {})
+export const testLlmConnection = (id) => adminCall(connUrl(id, 'test'), 'POST', {})
 export const fetchManualInfo = () => adminCall('/api/admin/manual')

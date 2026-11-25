@@ -2195,3 +2195,185 @@ label.adm-field input {
   border-radius: 6px;
   background: none;
 }
+
+/* AI 연결 · API 키 (11/25, AdminLlmConnections.jsx) */
+.adm-table-wrap {
+  overflow-x: auto;
+}
+.adm-conn-table th[scope='row'],
+.adm-conn-table td {
+  vertical-align: top;
+}
+.adm-conn-table th small,
+.adm-conn-table td small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+}
+.adm-conn-table tr.is-off th,
+.adm-conn-table tr.is-off .adm-conn-url {
+  color: var(--tb-color-text-sub);
+}
+.adm-conn-url {
+  word-break: break-all;
+  font-size: 13px;
+}
+.adm-conn-tags {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+.adm-conn-tag {
+  padding: 0 6px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tb-color-text-sub);
+}
+.adm-conn-tag.on {
+  border-color: var(--tb-color-text);
+  color: var(--tb-color-text);
+}
+.adm-conn-tag.off {
+  border-color: var(--adm-bad);
+  color: var(--adm-bad);
+}
+.adm-conn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.adm-conn-test {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.adm-conn-form {
+  display: grid;
+  gap: 10px;
+  max-width: 520px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--tb-color-line-card);
+  border-radius: 10px;
+  background: var(--tb-color-bg);
+}
+.adm-conn-form h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.adm-conn-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.adm-conn-form label small {
+  font-weight: 400;
+}
+.adm-conn-form input {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: #fff;
+  font: inherit;
+  font-weight: 400;
+}
+.adm-conn-delete {
+  border-color: var(--adm-bad);
+  background: var(--adm-bad-soft);
+}
+.adm-btn.danger {
+  border-color: var(--adm-bad);
+  background: var(--adm-bad);
+  color: #fff;
+}
+.adm-link-btn.danger {
+  color: var(--adm-bad);
+}
+.adm-card > .adm-actions small {
+  align-self: center;
+}
+
+/* 수집 출처 주기 · 시험 · 더하기 (11/25, AdminSources.jsx) */
+.adm-src-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.adm-src-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  width: 100%;
+  font-size: 13px;
+}
+.adm-sources .adm-src-every {
+  flex: none;
+  gap: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--tb-color-text-sub);
+  cursor: default;
+}
+.adm-src-every select {
+  min-width: 128px;
+  height: 30px;
+  padding: 0 28px 0 8px;
+  font: inherit;
+  color: var(--tb-color-text);
+}
+.adm-src-test {
+  flex-basis: 100%;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.adm-src-test .adm-link-btn {
+  margin-left: 6px;
+}
+.adm-sources li > .adm-conn-form {
+  width: 100%;
+}
+.adm-src-add-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.adm-conn-form select {
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: #fff;
+  font: inherit;
+  font-weight: 400;
+}
+.adm-sources .name .adm-conn-tag {
+  margin-left: 6px;
+}
+
+/* 비밀번호 다시 확인 창 (11/25, AdminConfirm.jsx) */
+.adm-confirm {
+  max-width: 420px;
+}
+.adm-confirm-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.adm-confirm-field input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  font: inherit;
+  font-weight: 400;
+}

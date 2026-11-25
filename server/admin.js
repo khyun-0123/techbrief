@@ -111,6 +111,37 @@ export function adminOf(req) {
   return { name: session.name }
 }
 
+// ── 민감한 작업 다시 확인 (11/25, GitHub sudo 모드와 같은 방식) ──
+// API 키 넣기 · 바꾸기 · 되돌리기, 연결 · 출처 지우기는 관리자 비밀번호를 한 번 더 넣어야 한다. 맞으면 10분 동안 다시 묻지 않음
+// 틀리면 세션마다 세고 5번이면 로그아웃 (로그인 대기와 같은 횟수). 혼자 쓰는 관리자라 2차 암호는 따로 두지 않음 (11/25 조장)
+const CONFIRM_MS = 10 * 60_000
+const CONFIRM_FAILS = 5
+export function confirmAdmin(req, password) {
+  const token = readCookie(req, COOKIE)
+  const session = token && sessions.get(token)
+  if (!session) throw Object.assign(new Error('관리자만 할 수 있어요. 다시 로그인해 주세요.'), { status: 403 })
+  if (!passwordMatches(password)) {
+    session.confirmFails = (session.confirmFails ?? 0) + 1
+    if (session.confirmFails >= CONFIRM_FAILS) {
+      sessions.delete(token)
+      throw Object.assign(new Error('비밀번호를 5번 틀려 로그아웃했어요. 다시 로그인해 주세요.'), { status: 403, code: 'LOGGED_OUT' })
+    }
+    throw Object.assign(new Error(`비밀번호가 맞지 않아요. (남은 시도 ${CONFIRM_FAILS - session.confirmFails}번)`), { status: 403, code: 'CONFIRM_WRONG' })
+  }
+  session.confirmFails = 0
+  session.confirmedAt = Date.now()
+  return { until: new Date(session.confirmedAt + CONFIRM_MS).toISOString() }
+}
+// 최근 10분 안에 확인했으면 통과, 아니면 CONFIRM_REQUIRED (화면이 비밀번호 창을 띄우고 다시 보냄)
+export function requireConfirmed(req) {
+  const admin = requireAdmin(req)
+  const session = sessions.get(readCookie(req, COOKIE))
+  if (!session?.confirmedAt || Date.now() - session.confirmedAt > CONFIRM_MS) {
+    throw Object.assign(new Error('민감한 작업이라 관리자 비밀번호를 한 번 더 넣어 주세요.'), { status: 401, code: 'CONFIRM_REQUIRED' })
+  }
+  return admin
+}
+
 export function requireAdmin(req) {
   const admin = adminOf(req)
   if (!admin) throw Object.assign(new Error('관리자만 할 수 있어요. 관리 페이지(/admin)에서 로그인해 주세요.'), { status: 403 })

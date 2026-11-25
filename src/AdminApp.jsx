@@ -36,6 +36,8 @@ import AdminJudge from './AdminJudge.jsx'
 import AdminReportStyle from './AdminReportStyle.jsx'
 import AdminSecurity from './AdminSecurity.jsx'
 import AdminLlmModels from './AdminLlmModels.jsx'
+import AdminLlmConnections from './AdminLlmConnections.jsx'
+import { ConfirmHost } from './AdminConfirm.jsx'
 import AdminManual from './AdminManual.jsx'
 import { OPS_LABEL } from './ops.js'
 
@@ -736,7 +738,7 @@ function AdminApp() {
           <section className="adm-card">
             <h2>요약·보고서에 쓸 AI 서버</h2>
             <p className="adm-desc">
-              지금 {health.modelReachable ? <span className="adm-state ok">연결됨</span> : <span className="adm-state bad">연결 안 됨</span>} · 서버를 다시 켜도 이 선택이 유지돼요. 「설정 없음」 서버는 서버 설정 파일에 주소 · 열쇠를 넣어야 고를 수 있어요 (팀에 요청).
+              지금 {health.modelReachable ? <span className="adm-state ok">연결됨</span> : <span className="adm-state bad">연결 안 됨</span>} · 서버를 다시 켜도 이 선택이 유지돼요. 「설정 없음」 서버는 아래 「AI 연결 · API 키」에서 주소 · 키를 넣으면 고를 수 있어요.
             </p>
             <div className="adm-choices">
               {health.llm.providers.map((p) => (
@@ -753,11 +755,21 @@ function AdminApp() {
                     {health.llm.current === p.id && <span className="adm-choice-badge">사용 중</span>}
                     {draft.llm === p.id && <span className="adm-choice-badge pending">저장하면 바뀜</span>}
                   </strong>
-                  <span>{p.ready ? p.model : '설정 없음'}</span>
+                  <span>{p.ready ? p.model : p.disabled ? '꺼짐' : '설정 없음'}</span>
                 </button>
               ))}
             </div>
           </section>
+        )}
+        {section === 'llm' && health?.llm && (
+          <AdminLlmConnections
+            currentId={health.llm.current}
+            onToast={toastText}
+            onChanged={() => {
+              fetchHealth().then(setHealth).catch(() => {})
+              fetchAdminLog().then(setLog).catch(() => {})
+            }}
+          />
         )}
         {section === 'llm' && health?.llm && (
           <AdminLlmModels
@@ -850,6 +862,8 @@ function AdminApp() {
           </section>
         )}
       
+        {/* 민감한 작업 전 비밀번호 다시 확인 창 (11/25, AdminConfirm.jsx withConfirm) */}
+        <ConfirmHost />
         {/* 떠나기 확인 창: 브라우저 기본 경고 대신, 무엇이 저장되지 않았는지 알려 주고 고르게 한다 */}
         {leaveAsk && (
           <div className="adm-modal-backdrop" onClick={() => setLeaveAsk(null)}>

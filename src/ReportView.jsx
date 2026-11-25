@@ -121,7 +121,10 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
             {saved.articles.length > baseCount && ` · 보충 자료 ${saved.articles.length - baseCount}건`}
           </span>
         </header>
-        {report.direction && <p className="report-direction">방향: {report.direction}</p>}
+        {report.direction && <p className="report-direction">
+          <span className="report-direction-label">방향</span>
+          {report.direction}
+        </p>}
         {/* ① 헤드라인 (11/12, 담당자 회신: 결론 핵심 문장). 예전 보고서에는 없음 */}
         {report.headline?.text && (
           <p className="report-headline">

@@ -5,10 +5,13 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { recordAiCall } from '../usage.js'
+import { BUILTIN_IDS, builtinOverride, customConnections } from './connections.js'
 
 const TIMEOUT_MS = 120_000 // 요약 기본값. 보고서처럼 긴 출력은 호출할 때 늘린다
 
-const PROVIDER_IDS = ['local', 'openrouter', 'exaone']
+const PROVIDER_IDS = BUILTIN_IDS
+// 11/25: 관리 페이지에서 더한 연결(connections.js)까지 — 기본 세 곳 뒤에
+const allIds = () => [...PROVIDER_IDS, ...customConnections().map((c) => c.id)]
 // 11/20 관리자 인수인계: 모델 이름 · 예비 AI를 관리 페이지에서 (DB llm_models, index.js가 켤 때 · 저장할 때 setModelOverrides)
 // 비어 있는 칸은 설정 파일(.env.local) 값을 쓴다. 주소 · 열쇠(API 키)는 여기서 바꾸지 않는다 (설정 파일에만)
 const OV = (globalThis.__techbriefLlmOverrides ??= { models: {}, fallback: undefined })
@@ -27,7 +30,7 @@ export function checkModelOverrides(input) {
     if (Object.keys(out).length) models[id] = out
   }
   const fb = input?.fallback
-  const fallback = fb === undefined || fb === null || fb === '' ? undefined : fb === 'none' || PROVIDER_IDS.includes(fb) ? fb : undefined
+  const fallback = fb === undefined || fb === null || fb === '' ? undefined : fb === 'none' || allIds().includes(fb) ? fb : undefined
   return { models, fallback }
 }
 export function setModelOverrides(v) {
@@ -39,7 +42,16 @@ export function setModelOverrides(v) {
 export const modelOverrides = () => ({ models: OV.models, fallback: OV.fallback ?? null })
 const ov = (id, k) => OV.models[id]?.[k] || undefined
 
+// 11/25: 관리 페이지에서 넣은 주소 · 키(connections.js)를 설정 파일 값보다 먼저. 끈 연결은 ready가 아님
 function providerConfig(id) {
+  const custom = customConnections().find((c) => c.id === id)
+  if (custom) {
+    return { ...custom, numCtx: 0, reasoningEffort: '', pingPath: '/models', envHint: '관리 페이지의 주소 · API 키 · 모델', custom: true }
+  }
+  const o = builtinOverride(PROVIDER_IDS.includes(id) ? id : 'local')
+  return { ...builtinConfig(id, o), disabled: o.disabled }
+}
+function builtinConfig(id, o) {
   // K-EXAONE 2.5 (docs.exaone.ai): OpenAI 호환 /v1/chat/completions, 모델 k-exaone_v2.5. 늘 먼저 추론하고(끌 수 없음)
   // 추론은 message.reasoning_content로 따로 오므로 content만 쓰면 된다. reasoning_effort 기본값 max는 느려 low로
   // API 키는 30일마다 만료 (약관 3조 4항) → 401이 나면 Showroom에서 새로 받아 .env.local을 바꾸고 「서버 다시 켜기」
@@ -47,8 +59,8 @@ function providerConfig(id) {
     return {
       id,
       label: 'EXAONE API',
-      baseUrl: process.env.EXAONE_BASE_URL || 'https://api.exaone.ai/v1',
-      apiKey: process.env.EXAONE_API_KEY,
+      baseUrl: o.baseUrl || process.env.EXAONE_BASE_URL || 'https://api.exaone.ai/v1',
+      apiKey: o.apiKey || process.env.EXAONE_API_KEY,
       model: ov('exaone', 'model') || process.env.EXAONE_MODEL || 'k-exaone_v2.5',
       reportModel: ov('exaone', 'reportModel') || process.env.EXAONE_REPORT_MODEL,
       numCtx: 0,
@@ -61,8 +73,8 @@ function providerConfig(id) {
     return {
       id,
       label: 'OpenRouter',
-      baseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
-      apiKey: process.env.OPENROUTER_API_KEY,
+      baseUrl: o.baseUrl || process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+      apiKey: o.apiKey || process.env.OPENROUTER_API_KEY,
       model: ov('openrouter', 'model') || process.env.OPENROUTER_MODEL,
       reportModel: ov('openrouter', 'reportModel') || process.env.OPENROUTER_REPORT_MODEL,
       numCtx: 0,
@@ -74,8 +86,8 @@ function providerConfig(id) {
   return {
     id: 'local',
     label: '맥미니',
-    baseUrl: process.env.LLM_BASE_URL,
-    apiKey: process.env.LLM_API_KEY,
+    baseUrl: o.baseUrl || process.env.LLM_BASE_URL,
+    apiKey: o.apiKey || process.env.LLM_API_KEY,
     model: ov('local', 'model') || process.env.LLM_SUMMARY_MODEL,
     reportModel: ov('local', 'reportModel') || process.env.LLM_REPORT_MODEL,
     numCtx: Number(process.env.LLM_NUM_CTX) || 0,
@@ -85,23 +97,26 @@ function providerConfig(id) {
   }
 }
 
-const isReady = (c) => Boolean(c.baseUrl && c.apiKey && c.model)
+const isReady = (c) => Boolean(c.baseUrl && c.apiKey && c.model && !c.disabled)
+const notReady = (c) => (c.disabled ? `${c.label} 연결은 꺼져 있어요. 관리 페이지 「AI 연결」에서 켜 주세요.` : `${c.label} AI 설정이 없어요. 관리 페이지 「AI 연결」에서 주소 · API 키를 넣거나 서버 설정에 ${c.envHint}를 넣어 주세요.`)
 
 // 처음 값: LLM_PROVIDER(local|openrouter|exaone) → 없으면 설정이 채워진 첫 번째
 let selected = null
 function currentId() {
-  if (selected) return selected
+  // 고른 연결이 지워졌으면(11/25 새 연결 지우기) 처음 값으로
+  if (selected && allIds().includes(selected)) return selected
   const wanted = process.env.LLM_PROVIDER
   if (PROVIDER_IDS.includes(wanted)) return wanted
-  return PROVIDER_IDS.find((id) => isReady(providerConfig(id))) ?? 'local'
+  return allIds().find((id) => isReady(providerConfig(id))) ?? 'local'
 }
+export const currentProviderId = () => currentId()
 
 // id를 주면 그 AI 서버로 (관리자 테스트 페이지의 서버 비교용), 없으면 지금 고른 서버
 function config(id = currentId()) {
-  if (!PROVIDER_IDS.includes(id)) throw Object.assign(new Error('없는 AI 서버예요.'), { status: 400 })
+  if (!allIds().includes(id)) throw Object.assign(new Error('없는 AI 서버예요.'), { status: 400 })
   const c = providerConfig(id)
   if (!isReady(c)) {
-    throw new Error(`${c.label} AI 설정이 없어요. .env.local에 ${c.envHint}를 넣어 주세요.`)
+    throw new Error(notReady(c))
   }
   return { ...c, baseUrl: c.baseUrl.replace(/\/$/, '') }
 }
@@ -110,7 +125,7 @@ function config(id = currentId()) {
 // LLM_FALLBACK(local|openrouter|exaone)이 있을 때만. 자동 요약 같은 뒤에서 도는 일은 넘기지 않는다 (유료 모델 비용이 쌓이지 않게)
 function fallbackId(primary) {
   const id = OV.fallback !== undefined ? OV.fallback : process.env.LLM_FALLBACK // 관리 페이지 값 먼저 ('none' = 쓰지 않음)
-  if (!PROVIDER_IDS.includes(id) || id === primary) return null
+  if (!allIds().includes(id) || id === primary) return null
   return isReady(providerConfig(id)) ? id : null
 }
 const reachable = (err) => err?.name === 'TimeoutError' || /fetch failed|ECONN|ENOTFOUND|AI 서버 응답 오류 (5\d\d|429)/.test(String(err?.message ?? ''))
@@ -124,17 +139,17 @@ export function llmProviders() {
     fallbackSetting: OV.fallback ?? null,
     envFallback: process.env.LLM_FALLBACK || null,
     lastFallback,
-    providers: PROVIDER_IDS.map((id) => {
+    providers: allIds().map((id) => {
       const c = providerConfig(id)
-      return { id, label: c.label, model: c.model ?? '', reportModel: c.reportModel ?? '', ready: isReady(c), envModel: { local: process.env.LLM_SUMMARY_MODEL, openrouter: process.env.OPENROUTER_MODEL, exaone: process.env.EXAONE_MODEL || 'k-exaone_v2.5' }[id] ?? '', envReportModel: { local: process.env.LLM_REPORT_MODEL, openrouter: process.env.OPENROUTER_REPORT_MODEL, exaone: process.env.EXAONE_REPORT_MODEL }[id] ?? '' }
+      return { id, label: c.label, model: c.model ?? '', reportModel: c.reportModel ?? '', ready: isReady(c), disabled: Boolean(c.disabled), custom: Boolean(c.custom), envModel: { local: process.env.LLM_SUMMARY_MODEL, openrouter: process.env.OPENROUTER_MODEL, exaone: process.env.EXAONE_MODEL || 'k-exaone_v2.5' }[id] ?? '', envReportModel: { local: process.env.LLM_REPORT_MODEL, openrouter: process.env.OPENROUTER_REPORT_MODEL, exaone: process.env.EXAONE_REPORT_MODEL }[id] ?? '' }
     }),
   }
 }
 
 export function selectProvider(id) {
-  if (!PROVIDER_IDS.includes(id)) throw Object.assign(new Error('없는 AI 서버예요.'), { status: 400 })
+  if (!allIds().includes(id)) throw Object.assign(new Error('없는 AI 서버예요.'), { status: 400 })
   const c = providerConfig(id)
-  if (!isReady(c)) throw Object.assign(new Error(`${c.label} AI 설정이 없어요. .env.local에 ${c.envHint}를 넣어 주세요.`), { status: 400 })
+  if (!isReady(c)) throw Object.assign(new Error(notReady(c)), { status: 400 })
   selected = id
   console.log(`[llm] AI 서버 변경: ${c.label} (${c.model})`)
   return llmProviders()
@@ -483,6 +498,44 @@ export async function pingModel() {
   } catch {
     return false
   }
+}
+
+// 연결 시험 (11/25 관리 페이지 「AI 연결」의 시험 버튼): ① 주소 · 키 확인(pingPath) ② 짧은 응답 한 번 (대기열을 거침)
+// 꺼 둔 연결도 시험할 수 있다 (켜기 전에 확인). 맥미니는 모델을 하나만 올려 두므로, 지금 쓰는 맥미니 모델과 다르면 응답 시험은 건너뛴다
+export async function testConnection(id) {
+  if (!allIds().includes(id)) throw Object.assign(new Error('없는 AI 연결이에요.'), { status: 400 })
+  const c = providerConfig(id)
+  const cfg = { ...c, baseUrl: String(c.baseUrl ?? '').replace(/\/$/, '') }
+  const out = { id, label: c.label, ping: null, chat: null }
+  if (!cfg.baseUrl || !cfg.apiKey) return { ...out, ping: { ok: false, error: !cfg.baseUrl ? '주소가 없어요' : 'API 키가 없어요' } }
+  const t0 = Date.now()
+  try {
+    const res = await fetch(`${cfg.baseUrl}${cfg.pingPath}`, { headers: { Authorization: `Bearer ${cfg.apiKey}` }, signal: AbortSignal.timeout(15_000) })
+    out.ping = { ok: res.ok, status: res.status, ms: Date.now() - t0, ...(res.ok ? {} : { error: res.status === 401 || res.status === 403 ? 'API 키가 맞지 않아요' : `응답 ${res.status}` }) }
+  } catch (err) {
+    out.ping = { ok: false, ms: Date.now() - t0, error: err?.name === 'TimeoutError' ? '15초 안에 응답이 없어요' : '주소에 닿지 않아요' }
+  }
+  if (!out.ping.ok) return out
+  if (!cfg.model) return { ...out, chat: { skipped: '모델 이름이 없어요' } }
+  const local = (x) => x.id === 'local' || (x.baseUrl && x.baseUrl === builtinConfig('local', builtinOverride('local')).baseUrl)
+  const cur = providerConfig(currentId())
+  if (local(cfg) && !(local(cur) && cur.model === cfg.model)) return { ...out, chat: { skipped: '맥미니는 모델을 하나만 올려 두어, 지금 쓰는 모델과 다르면 응답 시험을 하지 않아요 (주소 · 키는 확인됨)' } }
+  const ctx = queueContext.getStore() ?? {}
+  try {
+    const r = await enqueue(
+      async (signal) => {
+        const t1 = Date.now()
+        const { content, model } = await callChat(cfg, { messages: [{ role: 'user', content: '연결 시험이에요. JSON으로 {"ok":"네"}만 답해 주세요.' }], schema: { type: 'object', properties: { ok: { type: 'string' } }, required: ['ok'] }, schemaName: 'ping', timeoutMs: 60_000, signal })
+        return { ok: Boolean(String(content ?? '').trim()), ms: Date.now() - t1, model }
+      },
+      PRIORITY.WAIT,
+      { kind: 'test', label: `연결 시험 · ${c.label}`, client: ctx.client ?? null },
+    )
+    out.chat = r
+  } catch (err) {
+    out.chat = { ok: false, error: String(err?.message ?? err).replace(/Bearer\s+\S+/g, 'Bearer ***').slice(0, 160) }
+  }
+  return out
 }
 
 export function providerLabel() {

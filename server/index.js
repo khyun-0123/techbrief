@@ -4,7 +4,7 @@ import { createServer } from 'node:http'
 import { gzipSync } from 'node:zlib'
 import { readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
-import { collect, getSources, listArticles, markListStale, saveSources, searchArticles, searchCollected } from './collector/index.js'
+import { addCustomFeed, checkAllFeeds, collect, deleteCustomFeed, getSources, listArticles, markListStale, saveSources, searchArticles, searchCollected, testFeed } from './collector/index.js'
 import { englishTerms, frequentSearches, listQueryTerms, pruneSearchCounts, recordSearch, setQueryTerms } from './queryTerms.js'
 import { feedList } from './collector/feeds.js'
 import { getTrends } from './trends.js'
@@ -52,7 +52,8 @@ import { activeJobs, addJob, answerJob, cancelJob, listJobs, resumableCount, set
 import { sourceStatus } from './sourceGuard.js'
 import { fetchTitlesIfMissing, patentDbStatus } from './patentDb.js'
 import { abstractsStatus, fetchAbstractsIfWanted } from './patentAbstracts.js'
-import { chatJson, llmProviders, moveJob, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, setModelOverrides, withQueueContext } from './llm/client.js'
+import { chatJson, currentProviderId, llmProviders, moveJob, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, setModelOverrides, testConnection, withQueueContext } from './llm/client.js'
+import { addCustom, deleteCustom, loadConnections, publicConnections, revertConnection, setConnectionDisabled, updateBuiltin, updateCustom, BUILTIN_IDS } from './llm/connections.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
   buildMergeMessages,
@@ -63,7 +64,7 @@ import {
   SECTION_KEYS,
   SECTION_SCHEMA,
 } from './llm/reportPrompts.js'
-import { adminConfigured, adminHere, adminOf, changeLog, clientIp, diffWords, envPasswordSet, logChange, login, logout, passwordMatches, readCookie, requireAdmin, secureCookie } from './admin.js'
+import { adminConfigured, adminHere, adminOf, changeLog, clientIp, confirmAdmin, diffWords, envPasswordSet, logChange, login, logout, passwordMatches, readCookie, requireAdmin, requireConfirmed, secureCookie } from './admin.js'
 import { ACCESS_COOKIE, ACCESS_MAX_AGE, envAccessCodeSet, tokenOf as accessTokenOf } from './accessGate.js'
 import { checkNewCode, clearAdminPassword, loadCredentials, saveAccessToken, saveAdminPassword, storedAccessToken, storedPassword } from './credentials.js'
 import { backgroundAllowed, backlogBrief, queueSearchSummaries, refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
@@ -395,12 +396,15 @@ async function handleReportSection(req, res) {
 const LLM_SETTING = 'llm_provider'
 const LLM_MODELS = 'llm_models'
 export function startScheduler() {
-  getSetting(LLM_MODELS, null) // 11/20: 관리 페이지에서 바꾼 모델 이름 · 예비 AI (서버를 다시 켜도 유지)
+  loadConnections() // 11/25: 관리 페이지에서 넣은 AI 주소 · 키 · 새 연결 (모델 · 고른 서버보다 먼저 — 새 연결을 고를 수 있게)
+    .catch((err) => console.warn(`[llm] 저장된 AI 연결을 읽지 못해 설정 파일 값으로: ${err.message}`))
+    .then(() => getSetting(LLM_MODELS, null)) // 11/20: 관리 페이지에서 바꾼 모델 이름 · 예비 AI (서버를 다시 켜도 유지)
     .then((v) => v && setModelOverrides(v))
     .catch((err) => console.warn(`[llm] 저장된 모델 설정을 쓸 수 없어 설정 파일 값으로: ${err.message}`))
     .then(() => getSetting(LLM_SETTING, null))
     .then((id) => id && selectProvider(id))
     .catch((err) => console.warn(`[llm] 저장된 AI 서버를 쓸 수 없어 기본값으로: ${err.message}`))
+  getSources().catch(() => {}) // 11/25: 관리 페이지에서 더한 출처를 미리 읽어 둔다 (출처 단계 tierOf가 켜질 때부터 알게)
   startRefreshScheduler()
   listArticles().catch(() => {}) // 11/17: 자료 현황 목록을 켜질 때 미리 계산해 둔다 (첫 화면이 계산을 기다리지 않게)
   startTechTrends({ allowed: backgroundAllowed }) // 기술 트렌드: 켜진 뒤 1분, 그 뒤 하루마다 (TECH_TRENDS=off면 안 함)
@@ -600,15 +604,45 @@ async function handleApiInner(req, res) {
     }
     if (req.method === 'PUT' && req.url === '/api/admin/sources') {
       const admin = requireAdmin(req)
-      const before = (await getSources()).disabled
+      const prev = await getSources()
+      const before = prev.disabled
       const after = await saveSources(await readJson(req))
       const names = Object.fromEntries(feedList().map((f) => [f.id, f.name]))
+      const everyText = (h) => (h ? (h >= 168 ? '일주일마다' : `${h}시간마다`) : '최신화 때마다')
       for (const f of feedList()) {
         const was = !before.includes(f.id)
         const now = !after.disabled.includes(f.id)
         if (was !== now) await logChange(admin, '수집 출처', `${names[f.id]}: ${was ? '켜짐' : '꺼짐'} → ${now ? '켜짐' : '꺼짐'}`)
+        const e0 = prev.every?.[f.id] ?? 0
+        const e1 = after.every?.[f.id] ?? 0
+        if (e0 !== e1) await logChange(admin, '수집 주기', `${names[f.id]}: ${everyText(e0)} → ${everyText(e1)}`)
       }
       return send(res, 200, { list: feedList(), ...after })
+    }
+    // 출처 시험 · 전체 점검 · 더하기 · 지우기 (11/25 조장). 시험은 저장하지 않는다
+    if (req.method === 'POST' && req.url === '/api/admin/sources/test') {
+      requireAdmin(req)
+      const { id, url } = await readJson(req)
+      return send(res, 200, await testFeed(id ? { id: String(id) } : { url: String(url ?? '') }))
+    }
+    if (req.method === 'POST' && req.url === '/api/admin/sources/check') {
+      requireAdmin(req)
+      return send(res, 200, await checkAllFeeds())
+    }
+    if (req.method === 'POST' && req.url === '/api/admin/sources/custom') {
+      const admin = requireAdmin(req)
+      const { feed, test } = await addCustomFeed(await readJson(req))
+      await logChange(admin, '수집 출처', `출처 더함: ${feed.name} (${feed.url})${test.recommend?.hours ? ` · 주기 ${test.recommend.hours}시간` : ''}`)
+      return send(res, 200, { list: feedList(), ...(await getSources({ counts: true })), added: feed, test })
+    }
+    if (req.method === 'POST' && req.url.startsWith('/api/admin/sources/custom/') && req.url.endsWith('/delete')) {
+      const admin = requireAdmin(req)
+      const id = decodeURIComponent(req.url.slice('/api/admin/sources/custom/'.length, -'/delete'.length))
+      if (!feedList().some((f) => f.id === id && f.custom)) return send(res, 403, { error: '기본 출처는 지울 수 없어요. 끄기만 할 수 있어요.' })
+      requireConfirmed(req)
+      const name = await deleteCustomFeed(id)
+      await logChange(admin, '수집 출처', `출처 지움: ${name} (이미 모은 글은 그대로)`)
+      return send(res, 200, { list: feedList(), ...(await getSources({ counts: true })) })
     }
     // 테스트 페이지 「요약 시험」: 저장하지 않고 고른 AI 서버로 요약 (관리자만, AI 비용이 들어서)
     if (req.method === 'POST' && req.url === '/api/admin/test/summary') {
@@ -640,6 +674,61 @@ async function handleApiInner(req, res) {
       await setSetting(LLM_SETTING, provider)
       await logChange(admin, 'AI 모델', providerLabel())
       return send(res, 200, result)
+    }
+    // 민감한 작업 전 비밀번호 다시 확인 (11/25) → 10분 동안 유효
+    if (req.method === 'POST' && req.url === '/api/admin/confirm') {
+      requireAdmin(req)
+      const { password } = await readJson(req)
+      return send(res, 200, confirmAdmin(req, password))
+    }
+    // ── AI 연결 (11/25): 주소 · API 키 넣기(단방향) · 되돌리기 · 끄기 · 새 연결 더하기 · 지우기(새 연결만, 비밀번호 다시) · 시험 ──
+    // 응답에는 키 글자가 없다 (publicConnections: 있음 · 없음 · 어디서 온 값). 변경 기록에도 키는 남기지 않는다
+    if (req.url === '/api/admin/llm-connections' || req.url.startsWith('/api/admin/llm-connections/')) {
+      const admin = requireAdmin(req)
+      const [, , , , rawId, action] = req.url.split('?')[0].split('/')
+      const sensitive = (req.method === 'POST' && !rawId) || (req.method === 'PUT' && rawId && !action) || ['revert', 'delete'].includes(action)
+      if (sensitive) requireConfirmed(req) // 11/25: 키를 넣거나 바꾸거나 되돌리거나 지우는 일은 최근 10분 안에 비밀번호 확인
+      const id = rawId ? decodeURIComponent(rawId) : ''
+      const reply = () => send(res, 200, { connections: publicConnections(), llm: llmProviders() })
+      const nameOf = (x) => llmProviders().providers.find((p) => p.id === x)?.label ?? x
+      if (req.method === 'GET' && !id) return reply()
+      if (req.method === 'POST' && !id) {
+        const newId = await addCustom(await readJson(req))
+        await logChange(admin, 'AI 연결', `새 연결 「${nameOf(newId)}」 더함`)
+        return reply()
+      }
+      if (req.method === 'PUT' && id && !action) {
+        const body = await readJson(req)
+        const changed = BUILTIN_IDS.includes(id) ? await updateBuiltin(id, body) : await updateCustom(id, body)
+        await logChange(admin, 'AI 연결', `「${nameOf(id)}」 ${changed.join(' · ')} 바꿈`)
+        return reply()
+      }
+      if (req.method === 'POST' && action === 'revert') {
+        const to = await revertConnection(id)
+        await logChange(admin, 'AI 연결', `「${nameOf(id)}」 ${to}으로 되돌림`)
+        return reply()
+      }
+      if (req.method === 'POST' && action === 'disable') {
+        const { disabled } = await readJson(req)
+        if (disabled && currentProviderId() === id) return send(res, 409, { error: '지금 쓰는 AI 연결은 끌 수 없어요. 먼저 다른 AI 서버를 고르세요.' })
+        await setConnectionDisabled(id, Boolean(disabled))
+        await logChange(admin, 'AI 연결', `「${nameOf(id)}」 ${disabled ? '끔' : '켬'}`)
+        return reply()
+      }
+      if (req.method === 'POST' && action === 'delete') {
+        if (BUILTIN_IDS.includes(id)) return send(res, 403, { error: '기본 AI 연결은 지울 수 없어요. 바꾸거나 끌 수만 있어요.' })
+        if (currentProviderId() === id) return send(res, 409, { error: '지금 쓰는 AI 연결은 지울 수 없어요. 먼저 다른 AI 서버를 고르세요.' })
+        const label = await deleteCustom(id)
+        // 예비 AI로 고른 연결이면 예비 AI 설정을 비운다
+        const models = await getSetting(LLM_MODELS, null)
+        if (models?.fallback === id) await setSetting(LLM_MODELS, setModelOverrides({ ...models, fallback: '' }))
+        await logChange(admin, 'AI 연결', `새 연결 「${label}」 지움`)
+        return reply()
+      }
+      if (req.method === 'POST' && action === 'test') {
+        return send(res, 200, await testConnection(id))
+      }
+      return send(res, 404, { error: '없는 요청이에요.' })
     }
     if (req.method === 'PUT' && req.url === '/api/admin/llm-models') {
       // 모델 이름 · 예비 AI (11/20). 빈 칸은 설정 파일 값. 열쇠 · 주소는 설정 파일에만
@@ -1329,7 +1418,7 @@ async function handleApiInner(req, res) {
   } catch (err) {
     const status = err.status ?? (err.name === 'TimeoutError' ? 504 : 502)
     console.error(`[api] ${req.method} ${req.url} → ${status}: ${err.message}`)
-    send(res, status, { error: err.message, ...(err.locked && { locked: true }), ...(err.ops && { ops: true }) })
+    send(res, status, { error: err.message, ...(err.locked && { locked: true }), ...(err.ops && { ops: true }), ...(err.code && /^[A-Z_]+$/.test(err.code) && { code: err.code }) })
   }
 }
 

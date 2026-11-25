@@ -33,7 +33,7 @@ export default function AdminLlmModels({ llm, onSaved, onToast }) {
   return (
     <section className="adm-card">
       <h2>모델 이름 · 예비 AI</h2>
-      <p className="adm-desc">AI 서버마다 쓸 모델 이름을 바꿀 수 있어요. 비워 두면 서버 설정 파일 값을 써요. AI 서버 주소와 열쇠(API 키)는 서버 설정 파일에서만 바꿔요.</p>
+      <p className="adm-desc">기본 AI 서버마다 쓸 모델 이름을 바꿀 수 있어요. 비워 두면 서버 설정 파일 값을 써요. 주소 · API 키는 위 「AI 연결 · API 키」에서, 새 연결의 모델은 그 연결의 「바꾸기」에서 바꿔요.</p>
       <table className="adm-table adm-llm-table">
         <thead>
           <tr>
@@ -43,7 +43,7 @@ export default function AdminLlmModels({ llm, onSaved, onToast }) {
           </tr>
         </thead>
         <tbody>
-          {llm.providers.map((p) => (
+          {llm.providers.filter((p) => !p.custom).map((p) => (
             <tr key={p.id}>
               <th scope="row">
                 {p.label}
