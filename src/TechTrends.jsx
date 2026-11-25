@@ -252,8 +252,8 @@ function SourceList({ src, win, onPick }) {
   )
 }
 
-// onClose (11/17): 대시보드 「펼쳐 보기」 판 안에서 쓸 때 — 카드 테두리 없이, 제목 줄에 「접기」
-function TechTrends({ onPick, verdicts, onVerdict, onClose, closeRef }) {
+// onClose (11/17): 대시보드 「펼쳐 보기」 판 안에서 쓸 때 — 카드 테두리 없이. 11/23 조장: 제목 줄 「접기」 없앰(판 오른쪽 ‹ 손잡이로 닫음)
+function TechTrends({ onPick, verdicts, onVerdict, onClose }) {
   const [period, setPeriod] = useState('week')
   const [range, setRange] = useState({ from: '', to: '' })
   const [applied, setApplied] = useState(null)
@@ -299,11 +299,6 @@ function TechTrends({ onPick, verdicts, onVerdict, onClose, closeRef }) {
               {p.label}
             </button>
           ))}
-          {onClose && (
-            <button ref={closeRef} type="button" className="trend-drawer-close" onClick={onClose}>
-              <span aria-hidden="true">‹</span> 접기
-            </button>
-          )}
         </div>
       </div>
 

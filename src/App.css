@@ -2808,8 +2808,16 @@ a.brand:focus-visible {
 .settings {
   position: relative;
 }
-.settings-btn span {
-  margin-right: 2px;
+/* 11/23: 사용 안내 · 설정 단추 — 아이콘(15px) + 글자를 한 줄 가운데로 */
+.guide-btn,
+.settings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1;
+}
+.topbar-icon {
+  flex: none;
 }
 .settings-menu {
   position: fixed; /* 자리는 SettingsMenu.jsx가 버튼 위치로 정함 */
@@ -10332,5 +10340,49 @@ body:has(.dash-next .ka-next) .progress-panel {
 @media (max-width: 600px) {
   .tb-search .fm-label {
     display: none; /* 휴대폰: 검색칸 안에서는 「10 ▾」만 (단추 이름은 「최근·즐겨찾기 10개」로 읽힘) */
+  }
+}
+
+/* 자료 현황 아래 고정 바 (11/23 조장: 대시보드 아래 바와 같은 모양) — 화면 틀에서는 목록 아래 자리, 스크롤 화면에서는 아래에 붙음 */
+.collect-page > .collect-next {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+}
+@media (min-width: 901px) and (min-height: 600px) {
+  .collect-page:has(> .collect-next) {
+    padding-bottom: 0;
+  }
+  .collect-page > .collect-next {
+    margin-top: var(--tb-space-4);
+  }
+}
+@media (max-height: 559px) {
+  .collect-page > .collect-next {
+    position: static;
+  }
+}
+html:has(.collect-next) {
+  scroll-padding-bottom: 120px;
+}
+body:has(.collect-next) .queue-fab,
+body:has(.collect-next) .progress-panel {
+  bottom: 110px;
+}
+@media (max-width: 600px) {
+  body:has(.collect-next) .queue-fab,
+  body:has(.collect-next) .progress-panel {
+    bottom: 150px;
+  }
+}
+/* 11/23: 설정 단추를 감싼 칸도 한 줄 가운데로 (사용 안내와 높이 맞춤) */
+.settings {
+  display: inline-flex;
+  align-items: center;
+}
+/* 자료 현황 아래 바가 있으면 AI 대기열 단추가 목록 아래 쪽 넘김 줄 오른쪽에 걸림 → 그만큼 비움 */
+@media (min-width: 901px) and (min-height: 600px) {
+  .collect-page:has(> .collect-next) .list-panel > .pager {
+    padding-right: 250px;
   }
 }

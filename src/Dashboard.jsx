@@ -25,7 +25,7 @@ import { LAST_ANALYZED_KEY } from './utils.js'
 
 
 
-function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, onGoReports, favorites, recent, onToggleFavorite, onRemoveRecent, onSearch, onScopeSearch, onAutoReport, onGoCollect, onRemember }) {
+function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, onGoReports, favorites, recent, onToggleFavorite, onRemoveRecent, onSearch, onScopeSearch, onAutoReport, onGoCollect, onRemember, onFocus }) {
   // 보고서의 「분석 열기 ↗」 링크(/?analyze=키워드, 11/17)로 들어오면 그 키워드 분석을 바로 연다
   const [linked] = useState(() => {
     try {
@@ -45,6 +45,11 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
   // 첫 화면: 사람이 고른 말이 없으면 요즘 뜨는 기술 1위로 (11/22). TrendRail이 받은 뒤 한 번 부른다 — 그 사이 사람이 찾았으면 그대로
   const focusRef = useRef(focus)
   focusRef.current = focus
+  // 자료 현황이 이어서 찾게 지금 분석 중인 말을 알림 (11/23 조장). 1위를 저절로 연 것은 auto
+  useEffect(() => {
+    if (focus) onFocus?.({ word: focus, auto })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus, auto])
   const onFirstTrend = (name) => {
     if (!name) return setTrendFailed(true)
     setFirstTrend(name)
@@ -210,10 +215,9 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
               verdicts={verdictData?.verdicts}
               onVerdict={openVerdict}
               onClose={closeDrawer}
-              closeRef={drawerClose}
             />
             {/* 11/17 조장: 판 오른쪽 가장자리 손잡이 — 눌러서 닫기 */}
-            <button type="button" className="trend-drawer-grip" onClick={closeDrawer} aria-label="요즘 뜨는 기술 접기" title="접기">
+            <button ref={drawerClose} type="button" className="trend-drawer-grip" onClick={closeDrawer} aria-label="요즘 뜨는 기술 접기" title="접기">
               <span aria-hidden="true">‹</span>
             </button>
           </div>

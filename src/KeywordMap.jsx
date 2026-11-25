@@ -656,7 +656,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
   const [crowdOff, setCrowdOff] = useState(false) // 안내를 닫았으면 이 맵에서는 다시 안 띄움
   // 고른 1단계 말 중 기준(가지 수 · 함께 나온 이슈)에 안 들어 빠진 것은 덧붙여 그린다. 맵 안 점을 고를 때는 그래프가 그대로라 배치가 안 흔들림
   const extraKey = useMemo(() => {
-    const base = new Set(nodes.filter((n) => n.score >= minCo).slice(0, branchN).map((n) => n.word))
+    const base = new Set(nodes.filter((n) => n.score >= minCo).slice(0, branchN).map((n) => n.word)) // 레버 값 그대로 (아래 brN · coN과 거의 같음 — 덧붙일 말만 고름)
     return nodes
       .filter((n) => !base.has(n.word) && isOn(n.word))
       .map((n) => n.word)
@@ -668,7 +668,21 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
   const newExtra = extraKey ? extraKey.split('\u0001').filter((w) => !keptList.includes(w)) : []
   if (newExtra.length) setKept([...keptList, ...newExtra].join('\u0001'))
   const extraAll = [...keptList, ...newExtra].join('\u0001')
-  const graph = useMemo(() => pickGraph(nodes, branches, edges, branchN, totalN, minCo, extraAll ? extraAll.split('\u0001') : []), [nodes, branches, edges, branchN, totalN, minCo, extraAll])
+  // 레버 양 끝 = 지금 고를 수 있는 최소 · 최대 (11/23 조장: 끝까지 밀었는데 맵이 그대로거나, 끝이 아닌데 더 안 움직이는 일이 없게)
+  // - 함께 나온 이슈: 1개 ~ 1단계 말이 3개(적으면 그 수) 남는 가장 큰 값
+  // - 가지 수: 3(적으면 그 수) ~ 그 기준을 넘는 1단계 말 수(15까지)
+  // - 키워드 수: 가지 수 ~ 그 가지들로 그릴 수 있는 1 · 2단계 말 전부
+  const coMax = Math.max(1, Math.min(20, [...nodes].sort((a, b) => b.score - a.score)[Math.min(3, nodes.length) - 1]?.score ?? 1))
+  const coN = Math.min(Math.max(minCo, 1), coMax)
+  const brAvail = Math.min(15, nodes.filter((n) => n.score >= coN).length)
+  const brMin = Math.min(3, brAvail)
+  const brN = Math.max(brMin, Math.min(branchN, brAvail))
+  const extraList = useMemo(() => (extraAll ? extraAll.split('\u0001') : []), [extraAll])
+  const full = useMemo(() => pickGraph(nodes, branches, edges, brN, Infinity, coN, extraList), [nodes, branches, edges, brN, coN, extraList])
+  const kwMax = full.l1.length + full.l2.filter((n) => n.lv === 2).length
+  const kwMin = Math.min(kwMax, full.l1.length)
+  const kwN = Math.max(kwMin, Math.min(totalN, kwMax))
+  const graph = useMemo(() => pickGraph(nodes, branches, edges, brN, kwN, coN, extraList), [nodes, branches, edges, brN, kwN, coN, extraList])
   // 펼침: 처음엔 모두 접힘 — 「+n」으로 펼침 (11/16 검수: 「맵에 글이 너무 많다」 → 처음엔 검색어 + 1단계 말만 글자, 24개 → 8개 안팎.
   // 예전: 1단계 위 3개를 처음부터 펼침)
   // 11/23 조장 (가)안: 맵 칸이 세로로 넉넉하면 1단계 위 몇 개 가지는 처음부터 펼침 — 칸 높이 440px 이상 2개 · 560px 이상 3개 · 720px 이상 4개,
@@ -816,7 +830,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
     <div className={large ? 'km km-large' : 'km'}>
       <div ref={box} className="km-stage" data-overlaps={overlaps}>
         {mode === 'cloud' ? (
-          <CloudView W={W} H={H} keyword={keyword} nodes={nodes} branches={branches} isOn={isOn} onPick={onToggle} total={totalN} avoid={CLOUD_AVOID} colors={colors} svgRef={svgRef} onHover={setHover} by={by} />
+          <CloudView W={W} H={H} keyword={keyword} nodes={nodes} branches={branches} isOn={isOn} onPick={onToggle} total={kwN} avoid={CLOUD_AVOID} colors={colors} svgRef={svgRef} onHover={setHover} by={by} />
         ) : (
           <MapStage W={W} H={H} keyword={keyword} issues={issues} graph={graph} pos={pos} view={view} setView={setView} colors={colors} isOn={isOn} onPick={onToggle} hidden={hidden} onHide={onHide} svgRef={svgRef} onDragNode={onDragNode} onHover={setHover} impOn={by === 'imp'} />
         )}
@@ -847,23 +861,23 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
               <div className="km-prow">
                 <label className="km-ctl" title="검색어에서 바로 뻗는 가지(1단계 말)의 개수">
                   <span className="km-lbl">
-                    1단계 가지 수 <output>{branchN}</output>
+                    1단계 가지 수 <output>{brN}</output>
                   </span>
-                  <input type="range" min="3" max={maxBranch} value={branchN} onChange={(e) => setBranchN(Number(e.target.value))} />
+                  <input type="range" min={brMin} max={brAvail} value={brN} disabled={brAvail <= brMin} onChange={(e) => setBranchN(Number(e.target.value))} aria-valuetext={`${brN}개 (${brMin}~${brAvail})`} />
                 </label>
                 <label className="km-ctl" title="맵에 그릴 말 전체 개수 — 2단계 말은 가지마다 고르게 나눠 붙임">
                   <span className="km-lbl">
-                    전체 키워드 수 <output>{totalN}</output>
+                    전체 키워드 수 <output>{kwN}</output>
                   </span>
-                  <input type="range" min="10" max="80" step="5" value={totalN} onChange={(e) => setTotalN(Number(e.target.value))} />
+                  <input type="range" min={kwMin} max={kwMax} value={kwN} disabled={kwMax <= kwMin} onChange={(e) => setTotalN(Number(e.target.value))} aria-valuetext={`${kwN}개 (${kwMin}~${kwMax})`} />
                 </label>
               </div>
               {mode === 'map' && (
                 <label className="km-ctl">
                   <span className="km-lbl">
-                    함께 나온 이슈 <output>{minCo}</output>개 이상만
+                    함께 나온 이슈 <output>{coN}</output>개 이상만
                   </span>
-                  <input type="range" min="1" max="20" value={minCo} onChange={(e) => setMinCo(Number(e.target.value))} />
+                  <input type="range" min="1" max={coMax} value={coN} disabled={coMax <= 1} onChange={(e) => setMinCo(Number(e.target.value))} aria-valuetext={`${coN}개 이상 (1~${coMax})`} />
                 </label>
               )}
               <div className="km-ctl">
@@ -920,7 +934,7 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
           </div>
         )}
         {mode === 'map' && graph.l1.length === 0 && (
-          <p className="km-empty">{filterName ? `${filterName}에 드는 말이 없어요. ${filterReset}를 「전체」로 바꿔 보세요.` : `함께 나온 이슈가 ${minCo}개 이상인 말이 없어요. 「함께 나온 이슈」 기준을 낮춰 보세요.`}</p>
+          <p className="km-empty">{filterName ? `${filterName}에 드는 말이 없어요. ${filterReset}를 「전체」로 바꿔 보세요.` : `함께 나온 이슈가 ${coN}개 이상인 말이 없어요. 「함께 나온 이슈」 기준을 낮춰 보세요.`}</p>
         )}
         {mode === 'cloud' && filterName && cloudEmpty && <p className="km-empty">{filterName}에 드는 말이 없어요. {filterReset}를 「전체」로 바꿔 보세요.</p>}
         <div className="km-legend">
