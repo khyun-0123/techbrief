@@ -930,5 +930,6 @@ export function reportPages(saved, extra = {}) {
     },
     { label: '텍스트 박스 밖으로 넘친 글자 없음', ok: !cover.fit.hlOver, note: cover.fit.hlOver ? '헤드라인이 2줄을 넘음' : '' },
   ]
-  return { meta, pages, checks, notes, trendChart }
+  // moved: 1쪽에 못 들어가 2쪽(기술 개요)으로 옮긴 핵심 사실 — 서버 「PPT로 저장」은 1쪽만 쓰므로 유첨 1로 받는다 (11/25)
+  return { meta, pages, checks, notes, trendChart, moved: sec.tech.facts.filter((f) => f.from === 'summary') }
 }
