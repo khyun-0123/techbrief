@@ -142,7 +142,8 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
   const [level, setLevel] = useState(saved0.level ?? 'owned')
   const [summarizeNew, setSummarizeNew] = useState(saved0.summarizeNew === true) // 「보유 자료까지」에서만 고름. 「추가 자료 조사까지」는 늘 요약 (11/20)
   const summarizeOn = level === 'research' || summarizeNew
-  const [mode, setMode] = useState('top')
+  // 11/25 조장: 체크해서 고른 자료를 묻지 않고 빼지 않는다 — 10건이 넘으면 방식을 미리 고르지 않고 사용자가 고르게 (예전 기본값 'top')
+  const [mode, setMode] = useState(null)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const { aiBlocked } = useOps()
@@ -158,8 +159,8 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
   const tooMany = picked.length > REPORT_LIMIT
   const overMax = picked.length > REPORT_MAX_ALL
   const useAll = tooMany && mode === 'all' && !overMax
-  const articles = tooMany && !useAll ? topByImportance(picked, REPORT_LIMIT) : picked
-  const leftOut = tooMany && !useAll ? picked.filter((a) => !articles.includes(a)) : []
+  const articles = tooMany && mode === 'top' ? topByImportance(picked, REPORT_LIMIT) : picked
+  const leftOut = tooMany && mode === 'top' ? picked.filter((a) => !articles.includes(a)) : []
   // 빠지는 자료를 왼쪽 목록에도 표시 (11/25 팀 검수: 10건이 넘으면 어떤 자료가 빠지는지 안 보였음)
   const leftOutKey = leftOut.map((a) => a.id).join('|')
   useEffect(() => {
@@ -175,9 +176,15 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
   const missing = articles.filter((a) => !aiSummaries[a.id])
   const jobOf = (id) => queue.jobs.find((j) => j.id === id)
   const pending = missing.filter((a) => ['queued', 'running'].includes(jobOf(a.id)?.status))
-  const canSend = articles.length > 0 && missing.length === 0 && !sending && !aiBlocked && !(tooMany && mode === 'all' && overMax)
+  const needMode = tooMany && !mode
+  const canSend = articles.length > 0 && missing.length === 0 && !sending && !aiBlocked && !needMode && !(tooMany && mode === 'all' && overMax)
 
   async function handleSend() {
+    // 10건만 쓰기를 골랐으면 빠질 자료를 보여 주고 한 번 더 묻는다
+    if (tooMany && mode === 'top' && leftOut.length) {
+      const list = leftOut.map((a) => `· ${a.title.length > 40 ? `${a.title.slice(0, 39)}…` : a.title}`).join('\n')
+      if (!window.confirm(`체크한 자료 중 중요도 낮은 ${leftOut.length}건이 이번 보고서에서 빠져요.\n\n${list}\n\n이대로 ${REPORT_LIMIT}건으로 만들까요? (넣으려면 취소 → 「${picked.length}건 모두」)`)) return
+    }
     setSending(true)
     setError('')
     try {
@@ -329,17 +336,18 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
               </p>
             )}
             {tooMany && (
-              <div className="report-mode-choices" role="radiogroup" aria-label="자료가 많을 때">
-                <button type="button" role="radio" aria-checked={mode === 'top'} className="report-mode-choice" onClick={() => setMode('top')}>
-                  <strong>중요도 높은 {REPORT_LIMIT}건으로</strong>
-                  <span>빠름. 나머지 {picked.length - REPORT_LIMIT}건은 빠져요 (왼쪽 목록에 「빠짐」 표시).</span>
-                </button>
+              <div className="report-mode-choices" role="radiogroup" aria-label={`체크한 자료가 ${picked.length}건 — 넣는 방식`}>
                 <button type="button" role="radio" aria-checked={mode === 'all'} className="report-mode-choice" onClick={() => setMode('all')} disabled={overMax}>
                   <strong>{picked.length}건 모두</strong>
-                  <span>{overMax ? `한 번에 ${REPORT_MAX_ALL}건까지만 돼요.` : '오래 걸려요.'}</span>
+                  <span>{overMax ? `한 번에 ${REPORT_MAX_ALL}건까지만 돼요.` : `체크한 자료를 다 써요. ${REPORT_LIMIT}건씩 나눠 쓰고 합쳐 오래 걸려요 (약 ${Math.ceil(picked.length / REPORT_LIMIT) + 1}배).`}</span>
+                </button>
+                <button type="button" role="radio" aria-checked={mode === 'top'} className="report-mode-choice" onClick={() => setMode('top')}>
+                  <strong>중요도 높은 {REPORT_LIMIT}건만</strong>
+                  <span>빨라요. 나머지 {picked.length - REPORT_LIMIT}건은 빠지고, 만들기 전에 한 번 더 물어요.</span>
                 </button>
               </div>
             )}
+            {needMode && <p className="report-leftout">체크한 자료가 {picked.length}건이에요. 위에서 넣는 방식을 고르거나, 왼쪽에서 체크를 빼 {REPORT_LIMIT}건 이하로 맞추세요.</p>}
           </div>
 
           <div className="composer-articles">
@@ -395,7 +403,7 @@ function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderS
             )}
             {error && <p className="ai-error" role="alert">{error}</p>}
             <button type="button" className="btn primary composer-go" onClick={handleSend} disabled={!canSend} title={aiBlocked ? AI_BLOCKED_TITLE : picked.length === 0 ? '왼쪽에서 보고서에 넣을 자료를 체크하세요' : undefined}>
-              {sending ? '대기열에 넣는 중…' : `체크한 자료 ${articles.length}건으로 보고서 만들기`}
+              {sending ? '대기열에 넣는 중…' : needMode ? `넣는 방식을 고르세요 (체크 ${picked.length}건)` : `체크한 자료 ${articles.length}건으로 보고서 만들기`}
             </button>
             <p className="hint composer-go-note">대기열에 들어가요. 다른 탭에 가도 오른쪽 아래 진행 창에서 볼 수 있고, 완성되면 「내 보고서」에 저장돼요.</p>
           </div>
