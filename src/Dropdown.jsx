@@ -3,6 +3,7 @@
 // - options: [{ value, label, hint? }] 또는 묶음 [{ group: '출처 단계', options: [...] }]
 // - 키보드 (WAI-ARIA listbox): 단추에서 ↓ · Enter · Space = 열기, 목록에서 ↑↓ · Home · End = 이동, Enter = 고르기, Esc = 닫기, 글자 = 그 글자로 시작하는 항목
 // - 화면 아래쪽이 좁으면 위로 펼침. 바깥을 누르면 닫힘
+// - searchable (11/25 팀 검수: 출처가 많아 찾기 어려움): 목록 위 검색칸 — 이름에 든 글자로 거름, 검색칸에서도 ↑↓ · Enter · Esc
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 
 // 묶음을 펼친 목록. head = 그 묶음의 첫 항목이면 묶음 이름 (목록에서 제목 줄로)
@@ -11,10 +12,25 @@ const flat = (options) =>
     .flatMap((o) => (o.group ? o.options.map((x) => ({ ...x, group: o.group })) : [o]))
     .map((o, i, all) => ({ ...o, head: o.group && (i === 0 || all[i - 1].group !== o.group) ? o.group : null }))
 
-export default function Dropdown({ value, onChange, options, label, title, disabled = false, className = '', size = 'md', placeholder = '고르기' }) {
+export default function Dropdown({ value, onChange, options, label, title, disabled = false, className = '', size = 'md', placeholder = '고르기', searchable = false }) {
   const id = useId()
-  const items = flat(options)
-  const current = items.find((o) => String(o.value) === String(value))
+  const all = flat(options)
+  const current = all.find((o) => String(o.value) === String(value))
+  const [q, setQ] = useState('')
+  const query = q.trim().toLowerCase()
+  // 검색 중이면 이름에 그 글자가 든 항목만 (묶음 제목은 남은 항목 기준으로 다시)
+  // 순서: 이름이 그 글자로 시작 → 낱말이 그 글자로 시작 → 이름 중간에 든 것
+  const rank = (o) => {
+    const t = String(o.label).toLowerCase()
+    return t.startsWith(query) ? 0 : t.split(/[\s·(/-]+/).some((w) => w.startsWith(query)) ? 1 : 2
+  }
+  const items = query
+    ? all
+        .filter((o) => String(o.label).toLowerCase().includes(query))
+        .sort((x, y) => rank(x) - rank(y))
+        .map((o) => ({ ...o, group: null, head: null }))
+    : all
+  const search = useRef(null)
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const [up, setUp] = useState(false)
@@ -24,7 +40,8 @@ export default function Dropdown({ value, onChange, options, label, title, disab
 
   const openList = () => {
     if (disabled) return
-    setActive(Math.max(0, items.findIndex((o) => String(o.value) === String(value))))
+    setQ('')
+    setActive(Math.max(0, all.findIndex((o) => String(o.value) === String(value))))
     setOpen(true)
   }
   const close = (focus = true) => {
@@ -41,10 +58,12 @@ export default function Dropdown({ value, onChange, options, label, title, disab
   useLayoutEffect(() => {
     if (!open) return
     const r = btn.current.getBoundingClientRect()
-    const h = Math.min(320, items.length * 36 + 16)
+    const h = Math.min(320, all.length * 36 + 16) + (searchable ? 48 : 0)
     setUp(window.innerHeight - r.bottom < h + 8 && r.top > h + 8)
-    list.current?.focus()
-  }, [open, items.length])
+    ;(searchable ? search.current : list.current)?.focus()
+    // 열 때 한 번만 (검색으로 목록이 줄어도 위아래를 바꾸지 않음)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
   // 고른 항목이 보이게
   useEffect(() => {
     if (open) list.current?.querySelector(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest' })
@@ -61,6 +80,7 @@ export default function Dropdown({ value, onChange, options, label, title, disab
 
   const move = (to) => {
     const n = items.length
+    if (!n) return
     let i = (to + n) % n
     for (let k = 0; k < n && items[i].disabled; k++) i = (i + 1) % n
     setActive(i)
@@ -70,7 +90,9 @@ export default function Dropdown({ value, onChange, options, label, title, disab
     else if (e.key === 'ArrowUp') move(active - 1)
     else if (e.key === 'Home') move(0)
     else if (e.key === 'End') move(items.length - 1)
-    else if (e.key === 'Enter' || e.key === ' ') choose(items[active])
+    else if (e.key === 'Enter' || e.key === ' ') {
+      if (items[active]) choose(items[active])
+    }
     else if (e.key === 'Escape') close()
     else if (e.key === 'Tab') setOpen(false)
     else if (e.key.length === 1) {
@@ -119,6 +141,39 @@ export default function Dropdown({ value, onChange, options, label, title, disab
           aria-activedescendant={`${id}-o${active}`}
           onKeyDown={onListKey}
         >
+          {searchable && (
+            <li className="dd-search" role="presentation">
+              <input
+                ref={search}
+                type="search"
+                value={q}
+                placeholder={`${label ?? ''} 찾기`.trim()}
+                aria-label={`${label ?? '항목'} 찾기`}
+                aria-controls={`${id}-list`}
+                onChange={(e) => {
+                  setQ(e.target.value)
+                  setActive(0)
+                }}
+                onKeyDown={(e) => {
+                  e.stopPropagation()
+                  if (e.key === 'ArrowDown') move(active + 1)
+                  else if (e.key === 'ArrowUp') move(active - 1)
+                  else if (e.key === 'Enter') {
+                    if (items[active]) choose(items[active])
+                  }
+                  else if (e.key === 'Escape') close()
+                  else if (e.key === 'Tab') setOpen(false)
+                  else return
+                  e.preventDefault()
+                }}
+              />
+            </li>
+          )}
+          {searchable && query && !items.length && (
+            <li className="dd-empty" role="presentation">
+              「{q.trim()}」가 든 항목이 없어요
+            </li>
+          )}
           {items.map((o, i) => {
             const head = o.head
             const on = String(o.value) === String(value)

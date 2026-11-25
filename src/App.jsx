@@ -1497,6 +1497,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 label="출처"
                 size="lg"
                 className="dd-source"
+                searchable
                 options={[
                   { value: 'all', label: '모든 출처' },
                   { value: 'material', label: `직접 추가한 자료 (${materials.length})` },

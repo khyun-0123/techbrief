@@ -8071,6 +8071,40 @@ button.ka-auto-note {
   top: auto;
   bottom: calc(100% + 4px);
 }
+.dd-list:has(.dd-search) {
+  max-height: 380px;
+  padding-top: 0;
+}
+/* 목록 위 검색칸 (11/25 팀 검수: 출처가 많아 찾기 어려움) — 목록을 내려도 늘 보임 */
+.dd-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 -6px 4px;
+  padding: 6px 6px 4px;
+  background: var(--tb-color-surface);
+}
+.dd-search input {
+  width: 100%;
+  min-width: 200px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: 8px;
+  background: var(--tb-color-surface);
+  color: var(--tb-color-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+.dd-search input:focus-visible {
+  outline: 2px solid var(--tb-color-text);
+  outline-offset: 1px;
+}
+.dd-empty {
+  padding: 10px;
+  color: var(--tb-color-text-faint);
+  font-size: var(--fs-sm);
+}
 .dd-group {
   padding: 8px 10px 4px;
   color: var(--tb-color-text-faint);
