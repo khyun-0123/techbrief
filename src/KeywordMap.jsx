@@ -915,14 +915,14 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
                     <span className="km-lbl">
                       가지 수 <output>{brN}</output>
                     </span>
-                    <input type="range" min={brMin} max={brAvail} value={brN} disabled={brAvail <= brMin} onChange={(e) => setBranchN(Number(e.target.value))} aria-valuetext={`${brN}개 (${brMin}~${brAvail})`} />
+                    <input type="range" className="km-lever" style={{ '--f': (brN - brMin) / Math.max(1, brAvail - brMin) }} min={brMin} max={brAvail} value={brN} disabled={brAvail <= brMin} onChange={(e) => setBranchN(Number(e.target.value))} aria-valuetext={`${brN}개 (${brMin}~${brAvail})`} />
                   </label>
                 ) : (
                   <label className="km-ctl" title="워드클라우드에 그릴 말 개수">
                     <span className="km-lbl">
                       키워드 수 <output>{kwN}</output>
                     </span>
-                    <input type="range" min={kwMin} max={kwMax} value={kwN} disabled={kwMax <= kwMin} onChange={(e) => setTotalN(Number(e.target.value))} aria-valuetext={`${kwN}개 (${kwMin}~${kwMax})`} />
+                    <input type="range" className="km-lever" style={{ '--f': (kwN - kwMin) / Math.max(1, kwMax - kwMin) }} min={kwMin} max={kwMax} value={kwN} disabled={kwMax <= kwMin} onChange={(e) => setTotalN(Number(e.target.value))} aria-valuetext={`${kwN}개 (${kwMin}~${kwMax})`} />
                   </label>
                 )}
               </div>
@@ -952,6 +952,8 @@ export default function KeywordMap({ keyword, issues, nodes: rawNodes, edges, br
                   </span>
                   <input
                     type="range"
+                    className="km-lever"
+                    style={{ '--f': coIdx / Math.max(1, coList.length - 1) }}
                     min="0"
                     max={Math.max(0, coList.length - 1)}
                     value={coIdx}
