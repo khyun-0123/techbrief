@@ -296,7 +296,7 @@ async function run(job) {
   entry.report.createdBy = job.clientId // 「내가 만든 보고서」 (브라우저 무작위 번호, 이름 · IP 없음)
   if (research.filled) {
     entry.report.warnings = [
-      `자료 조사(${job.levelLabel}): AI 해설 ${research.gaps}줄 중 ${research.filled}줄을 우리 자료${job.level === 'research' ? ' · 새로 찾은 자료' : ''}로 보충했어요`,
+      `자료 조사(${job.levelLabel}): AI 해설 ${research.gaps}줄 중 ${research.filled}줄을 수집 자료${job.level === 'research' ? ' · 새로 찾은 자료' : ''}로 보충했어요`,
       ...(entry.report.warnings ?? []).filter((w) => !/^AI 해설·제안 \d+개/.test(w)),
     ]
     const left = Object.values(entry.report.sections).flatMap((s) => s.bullets).filter((b) => kindOfBullet(b) === 'ai').length

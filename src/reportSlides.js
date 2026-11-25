@@ -34,7 +34,7 @@ export const COLOR = {
   aiInk: 'B45309',
 }
 export const PIE_COLORS = ['A50034', 'D9577E', 'F2A7BC', '6B6B6B', 'B5B5B5']
-export const SUPPLEMENT_LABEL = { data: '우리 자료', wiki: '위키백과', 'data+wiki': '우리 자료 · 위키백과' }
+export const SUPPLEMENT_LABEL = { data: '수집 자료', wiki: '위키백과', 'data+wiki': '수집 자료 · 위키백과' }
 
 let LINE = 1.35 // 줄 간격 (글자 크기의 몇 배)
 export const LH = (pt) => (pt * LINE) / 72 // 줄 높이 (인치)
@@ -205,7 +205,7 @@ function factLine(els, x, y, w, f, size = SIZE.body) {
   return n * LH(size)
 }
 function factHeight(w, f, size = SIZE.body) {
-  return linesOf(`${f.text}${refLabel(f.refs)}${f.supplement ? '  (근거 보충 · 우리 자료)' : ''}`, size, w - 0.3) * LH(size)
+  return linesOf(`${f.text}${refLabel(f.refs)}${f.supplement ? '  (근거 보충 · 수집 자료 · 위키백과)' : ''}`, size, w - 0.3) * LH(size)
 }
 function bulletLine(els, x, y, w, runs, size = SIZE.body, mark = '•') {
   const n = linesOf(runsText(runs), size, w - 0.18)
@@ -830,7 +830,7 @@ export function reportPages(saved, extra = {}) {
     // 논문은 유료 여부 표시. 유료면 제목 · 저자 · 출처까지만 쓰고 그 뒤 자리에 안내 문구 + 원문 링크 (11/12 유료 논문 처리)
     const items = saved.articles.map((a, i) => {
       const access = paperAccess(a)
-      const badge = a.analysis ? '우리 분석 · 규칙 계산' : access ? ACCESS_LABEL[access] : a.supplement ? `보충 · ${a.supplement === 'wiki' ? '위키백과' : '우리 자료'}` : a.fulltext === false ? '발췌문 기준' : a.fulltext ? '원문 반영' : ''
+      const badge = a.analysis ? 'DB 분석 · 규칙 계산' : access ? ACCESS_LABEL[access] : a.supplement ? `보충 · ${a.supplement === 'wiki' ? '위키백과' : '수집 자료'}` : a.fulltext === false ? '발췌문 기준' : a.fulltext ? '원문 반영' : ''
       const who = a.authors?.length ? `${a.authors.slice(0, 3).join(', ')}${a.authors.length > 3 ? ' 외' : ''}  |  ` : ''
       // [분석] 근거: 날짜 · 링크 없음 → 출처만 (11/14)
       const metaText = a.analysis ? a.source ?? '테크브리프 분석' : `${who}${a.source ?? '-'}  |  ${a.publishedAt ? md(a.publishedAt) : '-'}`

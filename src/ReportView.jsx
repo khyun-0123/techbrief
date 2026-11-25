@@ -11,7 +11,7 @@ import { ACCESS_LABEL, ACCESS_TITLE, paperAccess } from './paperAccess.js'
 
 // 시사점 및 제언의 표시 (담당자 회신: 자사에 기회인지 위협인지, 할 일은 무엇인지)
 const TAG_CLASS = { 기회: 'chance', 위협: 'threat', '할 일': 'todo' }
-const SUPPLEMENT_LABEL = { data: '우리 자료', wiki: '위키백과', 'data+wiki': '우리 자료 · 위키백과' }
+const SUPPLEMENT_LABEL = { data: '수집 자료', wiki: '위키백과', 'data+wiki': '수집 자료 · 위키백과' } // 11/25: 「우리 자료」 → 수집해 둔 기사 · 논문 · 직접 추가한 자료에서 찾은 근거
 
 // tools: 보고서 맨 위 오른쪽 도구 줄 (복사·지우기 등) · onChange(entry): 고친 보고서 저장 (없으면 보기만)
 // stacked: 좁은 칸(선별·요약 오른쪽)에서는 근거 목록을 보고서 아래에
@@ -316,8 +316,8 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
               <span className="report-ref-num">[{i + 1}]</span>
               <div>
                 <div className="title">
-                  {a.supplement && <span className="basis basis-supplement">보충 · {a.supplement === 'wiki' ? '위키백과' : '우리 자료'}</span>}
-                  {a.analysis && <span className="basis basis-supplement">우리 분석</span>} {a.title}
+                  {a.supplement && <span className="basis basis-supplement">보충 근거 · {a.supplement === 'wiki' ? '위키백과' : '수집 자료'}</span>}
+                  {a.analysis && <span className="basis basis-supplement" title="특허 · 논문 DB에서 규칙으로 센 수치 자료">DB 분석</span>} {a.title}
                 </div>
                 <div className="meta">
                   {a.source}
@@ -364,8 +364,8 @@ function ReportView({ saved, onRegenerate, regenKey, busy, tools, trailing, lead
               <span className="report-ref-num">[{i + 1}]</span>
               <div>
                 <div className="title">
-                  {a.supplement && <span className="basis basis-supplement">보충 · {a.supplement === 'wiki' ? '위키백과' : '우리 자료'}</span>}
-                  {a.analysis && <span className="basis basis-supplement">우리 분석</span>} {a.title}
+                  {a.supplement && <span className="basis basis-supplement">보충 근거 · {a.supplement === 'wiki' ? '위키백과' : '수집 자료'}</span>}
+                  {a.analysis && <span className="basis basis-supplement" title="특허 · 논문 DB에서 규칙으로 센 수치 자료">DB 분석</span>} {a.title}
                 </div>
                 <div className="meta">
                   {a.source}

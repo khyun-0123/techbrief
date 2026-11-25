@@ -114,7 +114,7 @@ export function evidenceCounts(saved) {
 }
 export function evidenceLabel(saved) {
   const c = evidenceCounts(saved)
-  return [c.news && `기사 ${c.news}`, c.paper && `논문 ${c.paper}`, c.patent && `특허 ${c.patent}`, c.analysis && `우리 분석 ${c.analysis}`, c.supplement && `보충 ${c.supplement}`].filter(Boolean).join(' · ')
+  return [c.news && `기사 ${c.news}`, c.paper && `논문 ${c.paper}`, c.patent && `특허 ${c.patent}`, c.analysis && `DB 분석 ${c.analysis}`, c.supplement && `보충 ${c.supplement}`].filter(Boolean).join(' · ')
 }
 // [분석] 줄 → 앱의 키워드 분석을 새 창으로 (/?analyze=키워드). 키워드를 남기지 않은 예전 보고서는 보고서 분석 묶음 · 주제어로
 export function analysisUrl(saved, a) {

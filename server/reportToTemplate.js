@@ -308,7 +308,7 @@ export function reportToTemplate(entry, { trends = null, trendItems = null, topi
       const nT = arts.filter((a) => a.patent && !isAnalysis(a)).length // 11/22 특허 자료
       const nP = arts.filter((a) => a.paper && !a.patent && !isAnalysis(a)).length
       const nN = arts.length - nA - nP - nT
-      return { period, article_count: nN, media_count: media.size, keywords, counts: [`기사 ${nN}건`, nP && `논문 ${nP}편`, nT && `특허 ${nT}건`, nA && `우리 분석 ${nA}`].filter(Boolean).join(' · ') }
+      return { period, article_count: nN, media_count: media.size, keywords, counts: [`기사 ${nN}건`, nP && `논문 ${nP}편`, nT && `특허 ${nT}건`, nA && `DB 분석 ${nA}`].filter(Boolean).join(' · ') }
     })(),
     one_line_summary: fitBox(r.oneLine ?? '', 11, 7.7, 1), // 양식 한 줄 요약 칸: 11pt · 7.7in · 1줄
     appendix: {
