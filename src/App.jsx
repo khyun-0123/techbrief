@@ -1161,13 +1161,15 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   }
 
   // 자료 현황 「자동 선택」 (11/25 팀 검수): 지금 찾기 결과에서 대시보드 자동 선별과 같은 규칙(autoPick.js)으로 골라 선별에 담는다
-  // 중요 자료는 모두(최대 10건) · 모자라면 5건까지 점수순 · 고른 말마다 최소 1건 · 같은 이슈는 하나. 이미 선별한 건 그대로 둔다
+  // 11/26 조장: 대시보드 자동 진행과 같은 기준 — 「중요」는 모두(최대 40) · 적으면 5건까지 점수순 · 같은 이슈는 하나
+  // 이미 다른 키워드로 선별한 자료에도 지금 키워드 태그를 붙인다 (예전엔 안 붙여 「LED필름」 칸에 새로 담긴 2건만 보였음)
   function autoSelectHere() {
     const list = visible.map((a) => ({ ...a, scopeHits: scopeHitsOf.get(a.id) ?? [] }))
     const res = pickMaterials(list, search?.scope?.terms ?? [])
     const fresh = res.picked.filter((c) => !selectedIds.includes(c.article.id))
     for (const c of fresh) toggleSelected(byId.get(c.article.id) ?? c.article)
-    const count = (why) => fresh.filter((c) => c.why === why).length
+    for (const c of res.picked) if (selectedIds.includes(c.article.id) && currentTag) addTag(byId.get(c.article.id) ?? c.article, currentTag)
+    const count = (why) => res.picked.filter((c) => c.why === why).length
     setAutoSel({ tag: currentTag, ids: fresh.map((c) => c.article.id), already: res.picked.length - fresh.length, important: count('important'), fill: count('fill'), term: count('term'), pool: res.pool })
   }
   function undoAutoSelect() {
@@ -1944,12 +1946,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
               </p>
               {autoSel?.tag === currentTag && (
                 <p className="collect-auto-note" role="status">
-                  자동 선택 {autoSel.ids.length}건 담음
-                  {autoSel.ids.length > 0 && (
+                  자동 선택 {autoSel.ids.length + autoSel.already}건 (새로 담음 {autoSel.ids.length})
+                  {autoSel.ids.length + autoSel.already > 0 && (
                     <span className="muted">
                       {' '}
                       ({[autoSel.important && `중요 ${autoSel.important}`, autoSel.fill && `점수순 채움 ${autoSel.fill}`, autoSel.term && `고른 말 ${autoSel.term}`].filter(Boolean).join(' · ')}
-                      {autoSel.already > 0 && ` · 이미 선별 ${autoSel.already}`} · 후보 이슈 {autoSel.pool}개)
+                      {autoSel.already > 0 && ` · 이미 선별한 ${autoSel.already}건에도 「${autoSel.tag}」 태그`} · 후보 이슈 {autoSel.pool}개)
                     </span>
                   )}
                   {autoSel.ids.length > 0 && (
@@ -1966,7 +1968,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                     className="btn"
                     onClick={autoSelectHere}
                     disabled={visible.length === 0}
-                    title="지금 목록에서 중요 자료는 모두(최대 10건), 모자라면 5건까지 점수순으로, 고른 말마다 1건 이상 — 같은 이슈는 하나만 담아요"
+                    title="지금 목록에서 「중요」 자료는 모두(최대 40건), 적으면 5건까지 점수순으로 — 같은 이슈는 하나만 담아요 (대시보드 자동 진행과 같은 기준)"
                   >
                     자동 선택
                   </button>
