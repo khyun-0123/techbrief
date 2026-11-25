@@ -10552,3 +10552,24 @@ body:has(.collect-next) .progress-panel {
 .ka-facts-wrap > summary:hover {
   color: var(--tb-color-text);
 }
+
+/* 담길 자료 목록 (11/25 팀 검수): 체크한 자료 모두 · 칸 높이는 화면에 맞추고 칸 안에서 스크롤 */
+.composer-list {
+  max-height: max(180px, calc(100vh - 560px));
+  overflow-y: auto;
+  padding-right: 6px !important;
+  overscroll-behavior: contain;
+}
+.composer-list li.is-out .composer-article-title,
+.composer-list li.is-out .report-ref-num {
+  color: var(--tb-color-text-sub);
+}
+.composer-out-head {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--tb-color-line);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tb-color-text-sub);
+}
