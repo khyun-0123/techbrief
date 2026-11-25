@@ -17,6 +17,7 @@ import FavMenu from './FavMenu.jsx'
 import TitleBand, { SearchBox } from './TitleBand.jsx'
 import KeywordAnalysis from './KeywordAnalysis.jsx'
 import DashHome from './DashHome.jsx'
+import { fetchTrendVerdicts } from './api.js'
 import { consumeOpenRequest, useOpenRequest, useStoryJobs } from './storyJobs.js'
 import TechTrends from './TechTrends.jsx'
 import TrendRail, { RailHandle } from './TrendRail.jsx'
@@ -73,6 +74,20 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     }, 240)
   }, [drawerClosing])
   const [verdictData, setVerdictData] = useState(null)
+  // 분석한 키워드가 오늘 「요즘 뜨는 기술」 20위 밖이면 그 말의 판정만 따로 받는다 (11/26: 순위에 없는 마이크로LED는 「자사 기회」가 안 보였음 — 데모 대본)
+  const [focusVerdict, setFocusVerdict] = useState(null) // { term, v }
+  const inList = Boolean(focus && verdictData?.verdicts && focus in verdictData.verdicts)
+  useEffect(() => {
+    if (!focus || inList) return undefined
+    let on = true
+    fetchTrendVerdicts([focus])
+      .then((d) => on && setFocusVerdict({ term: focus, v: d.verdicts?.[focus] ?? null }))
+      .catch(() => {})
+    return () => {
+      on = false
+    }
+  }, [focus, inList])
+  const focusV = inList ? verdictData.verdicts[focus] : focusVerdict?.term === focus ? focusVerdict.v : null
   const [stage, setStage] = useState(null) // 분석 중인 키워드의 기술 단계 (KeywordAnalysis가 받으면 알려 줌 — 제목 띠에)
   const [verdictView, setVerdictView] = useState(null) // { term, info }
   const drawerClose = useRef(null)
@@ -165,7 +180,7 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
           focus && (
             <>
               {stage && <span className="tb-stage">{stage}</span>}
-              {verdictData?.verdicts?.[focus]?.verdict && <span className={`tb-verdict tb-${verdictData.verdicts[focus].verdict === '위협' ? 'threat' : 'chance'}`}>자사 {verdictData.verdicts[focus].verdict}</span>}
+              {focusV?.verdict && <span className={`tb-verdict tb-${focusV.verdict === '위협' ? 'threat' : 'chance'}`}>자사 {focusV.verdict}</span>}
             </>
           )
         }
