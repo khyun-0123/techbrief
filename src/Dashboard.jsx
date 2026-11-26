@@ -121,8 +121,12 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
     }
   })
   const railStep = drawer && !drawerClosing ? 2 : railOff ? 0 : 1
+  const [gripY, setGripY] = useState(null) // 넓게 판 손잡이 높이 = 왼쪽 막대 손잡이 가운데 (화면 기준)
   const setRailStep = (n) => {
     if (n >= 2) {
+      const h = document.querySelector('.dash-rail > .rail-handle')?.getBoundingClientRect()
+      const y = h ? Math.round(h.top + h.height / 2) : null
+      setGripY(y && y > 40 && y < window.innerHeight - 40 ? y : null) // 휴대폰처럼 손잡이가 화면 밖이면 판 가운데
       setRailOff(false)
       setDrawer(true)
       return
@@ -231,10 +235,16 @@ function Dashboard({ resetKey = 0, homeIssues = [], reports = [], onOpenReport, 
               onVerdict={openVerdict}
               onClose={closeDrawer}
             />
-            {/* 11/17 조장: 판 오른쪽 가장자리 손잡이 — 눌러서 닫기 */}
-            <button ref={drawerClose} type="button" className="trend-drawer-grip" onClick={closeDrawer} aria-label="요즘 뜨는 기술 접기" title="접기">
-              <span aria-hidden="true">‹</span>
-            </button>
+            {/* 판 오른쪽 가장자리 손잡이 (11/17) — 11/26 팀 검수 「손잡이가 따로 움직임」: 넓게 열면 손잡이가 모양(‹ 하나 · 길쭉) · 높이가 바뀌어
+                다른 곳으로 튀어 보였다 → 왼쪽 막대 손잡이(RailHandle)와 같은 ‹ › 모양, 같은 높이(gripY)에 둔다 */}
+            <div className="rail-handle is-drawer" role="group" aria-label="요즘 뜨는 기술 보기 크기: 넓게 (3단계 중 3)" style={gripY ? { top: gripY } : undefined}>
+              <button ref={drawerClose} type="button" className="rail-step" onClick={closeDrawer} aria-label="좁게 (기본)" title="좁게">
+                <span aria-hidden="true">‹</span>
+              </button>
+              <button type="button" className="rail-step" disabled aria-label="넓게 (지금)" title="넓게">
+                <span aria-hidden="true">›</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

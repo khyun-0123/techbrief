@@ -6835,6 +6835,25 @@ a.brand:focus-visible {
   cursor: pointer;
   box-shadow: 4px 0 12px rgb(17 17 17 / 8%);
 }
+/* 넓게 판 손잡이 (11/26): 왼쪽 막대 손잡이(.rail-handle)와 같은 모양, 판 오른쪽 가장자리 가운데에 걸침. 높이는 Dashboard.jsx gripY */
+.trend-drawer > .rail-handle.is-drawer {
+  position: absolute;
+  top: 50%;
+  right: auto;
+  left: 100%;
+  flex-direction: column;
+  width: 26px;
+  margin: 0;
+  transform: translate(-50%, -50%);
+}
+.trend-drawer > .rail-handle.is-drawer .rail-step {
+  width: 24px;
+  height: 28px;
+}
+.trend-drawer > .rail-handle.is-drawer .rail-step + .rail-step {
+  border-top: 1px solid var(--tb-color-line-soft);
+  border-left: 0;
+}
 .trend-drawer-grip:hover {
   color: var(--tb-color-text);
 }
