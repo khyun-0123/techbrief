@@ -113,17 +113,21 @@ function vertexBase(url) {
   if (!/\/projects\//.test(u)) u = `${u.replace(/\/v1(beta1)?$/, '')}/v1/projects/${proj}/locations/global/endpoints/openapi`
   return u
 }
+// 토큰은 서비스 계정마다 따로 기억한다 — 관리 페이지 「수집 API 키 › Google Cloud」에서 다른 계정 키로 바꾸면 바로 새 계정 토큰으로 (11/26)
 async function vertexToken() {
-  if (VTX.token && Date.now() < VTX.until) return VTX.token
-  VTX.pending ??= (async () => {
-    const key = readKey()
-    if (!key) throw new Error('Vertex AI: 서버에 Google 서비스 계정 키(GCP_KEY_JSON)가 없어요.')
+  const key = readKey()
+  if (!key) throw new Error('Vertex AI: 서버에 Google 서비스 계정 키(GCP_KEY_JSON)가 없어요. 관리 페이지 「수집 API 키 › Google Cloud」에 넣어 주세요.')
+  const who = `${key.client_email}|${key.project_id}`
+  if (VTX.token && VTX.who === who && Date.now() < VTX.until) return VTX.token
+  if (VTX.pending && VTX.pendingWho === who) return VTX.pending
+  VTX.pendingWho = who
+  VTX.pending = (async () => {
     const t = await accessToken(key, 'https://www.googleapis.com/auth/cloud-platform')
-    VTX.token = t
-    VTX.until = Date.now() + 55 * 60_000
+    Object.assign(VTX, { token: t, who, until: Date.now() + 55 * 60_000 })
     return t
   })().finally(() => {
     VTX.pending = null
+    VTX.pendingWho = null
   })
   return VTX.pending
 }
