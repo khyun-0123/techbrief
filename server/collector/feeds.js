@@ -81,8 +81,23 @@ const text = (el, sel) => el.querySelector(sel)?.textContent?.trim() ?? ''
 
 // RSS 2.0과 Atom 둘 다
 // VESA 피드는 XML 선언 앞에 빈 줄이 있어 그대로 읽으면 오류 (11/09) → 앞 공백을 떼고 읽는다
+// 11/26: LG디스플레이 뉴스룸 제목 「R&D포럼」처럼 맨 & 가 있으면 XML 해석이 통째로 실패한다
+// (「disallowed character in entity name」) → 실패하면 CDATA 밖의 맨 &만 &amp;로 바꿔 한 번 더
+function escapeBareAmp(xml) {
+  return xml
+    .split(/(<!\[CDATA\[[\s\S]*?\]\]>)/)
+    .map((part, i) => (i % 2 ? part : part.replace(/&(?!(?:[a-zA-Z][\w.-]*|#\d+|#x[0-9a-fA-F]+);)/g, '&amp;')))
+    .join('')
+}
+function xmlDoc(xml) {
+  try {
+    return new JSDOM(xml, { contentType: 'text/xml' }).window.document
+  } catch {
+    return new JSDOM(escapeBareAmp(xml), { contentType: 'text/xml' }).window.document
+  }
+}
 function parseFeed(xml) {
-  const doc = new JSDOM(xml.trimStart(), { contentType: 'text/xml' }).window.document
+  const doc = xmlDoc(xml.trimStart())
   const items = [...doc.querySelectorAll('item, entry')]
   return items.map((el) => {
     const linkEl = el.querySelector('link')
