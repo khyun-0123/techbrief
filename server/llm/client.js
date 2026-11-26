@@ -524,13 +524,23 @@ export async function chatJson({ messages, schema, schemaName = 'result', report
         cfg = config(alt)
         result = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs, signal })
       }
-      const { content, model: used, usage } = result
+      let { content, model: used, usage } = result
+      // 일부 모델은 JSON을 ```json … ``` 으로 감싸 보낸다
+      const parse = (t) => JSON.parse(String(t ?? '').replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, ''))
       let data
       try {
-        // 일부 모델은 JSON을 ```json … ``` 으로 감싸 보낸다
-        data = JSON.parse(content.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, ''))
+        data = parse(content)
       } catch {
-        throw new Error('AI 응답이 JSON 형식이 아니에요.')
+        // 11/26: 형식이 깨진 응답은 같은 곳에 한 번 더 (실측: OpenRouter Gemma 4 26B 요약 약 170건 중 1건, 보고서 초안 4건 중 1건 — 한 번 깨지면 보고서 전체가 실패했음)
+        if (signal.aborted) throw signal.reason
+        recordAiCall(kind, false, Date.now() - startedAt, { provider: cfg.id, model: used })
+        console.warn(`[llm] ${cfg.label} 응답이 JSON이 아니어서 한 번 더`)
+        ;({ content, model: used, usage } = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs, signal }))
+        try {
+          data = parse(content)
+        } catch {
+          throw new Error('AI 응답이 JSON 형식이 아니에요.')
+        }
       }
       recordAiCall(kind, true, Date.now() - startedAt, { provider: cfg.id, model: used, ...usage })
       return { data, model: used, usage }

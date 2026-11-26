@@ -251,7 +251,7 @@ export async function addCustom(input) {
     reportModel: checkModel(input.reportModel, '보고서 모델', false),
     ...(noKey ? {} : { key: seal(checkKey(input.key)) }),
     disabled: false,
-    parallel: input.parallel !== undefined && input.parallel !== '' ? checkParallel(input.parallel) : isVertexUrl(baseUrl) ? 4 : 1,
+    parallel: input.parallel !== undefined && input.parallel !== '' ? checkParallel(input.parallel) : isVertexUrl(baseUrl) ? 8 : 1,
     createdAt: new Date().toISOString(),
   }
   S.stored.custom = [...(S.stored.custom ?? []), c]
