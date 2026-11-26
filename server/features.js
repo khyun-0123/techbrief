@@ -84,6 +84,11 @@ export async function serverFlag(key) {
   return flagCache.value[key] === 'all'
 }
 export const RULE_FLAGS = FEATURES.filter((f) => f.server).map((f) => f.key)
+// 기억해 둔 계산(키워드 묶음 등)의 열쇠에 붙이는 값: 판단 규칙 스위치를 바꾸면 새로 계산, 되돌리면 예전 기억을 다시 씀
+export async function ruleSig() {
+  const on = await Promise.all(RULE_FLAGS.map((k) => serverFlag(k).catch(() => false)))
+  return on.map((b) => (b ? '1' : '0')).join('')
+}
 
 export async function saveFeatures(input = {}) {
   const now = await getFeatures()

@@ -19,6 +19,7 @@ import { supplierPatents } from './suppliers.js'
 import { buildTimeline, cachedTimeline, techStale } from './timeline.js'
 import { surgeMonths } from './timesfm.js'
 import { customOwners, judgeRule, judgeVersion, loadJudgeSettings, ownersVersion } from './judgeSettings.js'
+import { ruleSig } from './features.js'
 
 const TTL = 3 * 86_400_000
 const running = new Map()
@@ -210,16 +211,23 @@ export async function categoryTrends() {
 }
 
 // ── 묶음 만들기 ──
-const bundleKey = (keyword) => `bundle:v8:${queryKey(keyword)}:t${techCpcVersion()}` // :t (11/21) 「기술 ↔ CPC 연결표」 버전 // v8 (11/17 R11): 세부 기술 분류 비중 · 분류 추이 · v7 (11/17 R10): 소부장 기업 특허 · v5 (11/17): 특허 비교 회사 = 관리 페이지 경쟁사 목록
+// :r (11/26) 판단 규칙 스위치(features.js ruleSig) — 모두 꺼짐(0000)이면 예전 열쇠 그대로라 예전 기억을 다시 씀
+const legacyBundleKey = (keyword) => `bundle:v8:${queryKey(keyword)}:t${techCpcVersion()}`
+const bundleKey = async (keyword) => {
+  const sig = await ruleSig()
+  return /1/.test(sig) ? `${legacyBundleKey(keyword)}:r${sig}` : legacyBundleKey(keyword)
+} // :t (11/21) 「기술 ↔ CPC 연결표」 버전 // v8 (11/17 R11): 세부 기술 분류 비중 · 분류 추이 · v7 (11/17 R10): 소부장 기업 특허 · v5 (11/17): 특허 비교 회사 = 관리 페이지 경쟁사 목록
 // 기억해 둔 묶음만 (만들지 않음): 11/17 전 보고서 미리보기에 기술 시계열을 채울 때 (화면이 기다리지 않게)
 export async function cachedBundle(raw) {
   const keyword = String(raw ?? '').trim().slice(0, 50)
-  return keyword ? cacheGet(bundleKey(keyword)).catch(() => null) : null
+  if (!keyword) return null
+  // 새 규칙으로 만든 것이 아직 없으면 예전 규칙 묶음이라도 (보고서 미리보기가 비지 않게)
+  return (await cacheGet(await bundleKey(keyword)).catch(() => null)) ?? cacheGet(legacyBundleKey(keyword)).catch(() => null)
 }
 export async function prepareBundle(raw, { refresh = false } = {}) {
   const keyword = String(raw ?? '').trim().slice(0, 50)
   if (!keyword) return null
-  const key = bundleKey(keyword) // v4 (11/17): 논문 연도별 수를 단계 판정과 같은 값(long)으로. v3 (11/17, 40 문서 R1): 논문 추이 · 관심 대 실질 · 연구 폭 · 떠오르는 세부 주제 · 주요 기업 · 급증 · 신호 점수 // v2 (11/17): 11/15에 「2개국 이상 출원」을 넣고도 v1 그대로라 예전 묶음이 3일 동안 나갔음 (36 문서 2-6)
+  const key = await bundleKey(keyword) // v4 (11/17): 논문 연도별 수를 단계 판정과 같은 값(long)으로. v3 (11/17, 40 문서 R1): 논문 추이 · 관심 대 실질 · 연구 폭 · 떠오르는 세부 주제 · 주요 기업 · 급증 · 신호 점수 // v2 (11/17): 11/15에 「2개국 이상 출원」을 넣고도 v1 그대로라 예전 묶음이 3일 동안 나갔음 (36 문서 2-6)
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return hit

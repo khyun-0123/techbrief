@@ -17,7 +17,7 @@ import { abstractFromIndex, bareDoi, clean, openAlexGet } from './papers/provide
 import { corpusReady, DISPLAY_MAKERS } from './papers/corpus.js'
 import { patentHistory, patternFromTerms } from './patents.js'
 import { localPatentHistory, patentDbReady, titlePatentHistory, titlesReady } from './patentDb.js'
-import { techCpcVersion, techRuleFor } from './techCpc.js'
+import { techCpcVersion, techRuleFor, titleExclude } from './techCpc.js'
 import { englishTerms, openAlexQuery, queryKey } from './queryTerms.js'
 import { surgeMonths } from './timesfm.js'
 import { DEFAULT_JUDGE_VERSION, judgeRule, judgeVersion, loadJudgeSettings } from './judgeSettings.js'
@@ -230,12 +230,13 @@ async function patents(terms, { cacheOnly = false, display = false } = {}) {
   const titles = display || rule ? null : await titlesReady()
   if (db || titles) {
     const source = rule ? `tech-${rule.id}-${techCpcVersion()}` : display ? 'db' : titles ? 'titles' : 'db-only'
-    const key = `timeline-patents-local3:${source}:${pattern}` // local3: 해마다 2개국 이상 출원 수(intl, 11/15)
+    const ex = rule ? null : await titleExclude(pattern) // 11/26 W34: 태양전지 · 광검출기 제목 빼기 스위치 — 켜고 끈 값을 따로 기억
+    const key = `timeline-patents-local3:${source}${ex ? ':nosolar' : ''}:${pattern}` // local3: 해마다 2개국 이상 출원 수(intl, 11/15)
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return hit
     const r = source === 'titles' ? await titlePatentHistory(pattern) : await localPatentHistory(pattern, undefined, rule)
     if (r.status === 'ok') {
-      const out = { ...summarizeOwners(r), basis: source === 'titles' ? 'family-all' : 'family', inDisplay: source === 'db-only', db: r.db, ...(r.tech ? { tech: { ...r.tech, v: techCpcVersion() } } : {}) }
+      const out = { ...summarizeOwners(r), basis: source === 'titles' ? 'family-all' : 'family', inDisplay: source === 'db-only', db: r.db, ...(r.tech ? { tech: { ...r.tech, v: techCpcVersion() } } : {}), ...(r.solarEx ? { solarEx: true } : {}) }
       await cachePut(key, out, 30 * DAY).catch(() => {})
       return out
     }
@@ -662,7 +663,13 @@ export async function techStale(tl) {
   const rule = await techRuleFor(tl.terms).catch(() => null)
   const was = tl.patents?.tech
   if (rule) return was?.id !== rule.id || was?.v !== techCpcVersion()
-  return Boolean(was)
+  if (was) return true
+  // 11/26 W34: 태양전지 제목 빼기 스위치와 다르게 센 특허면 특허만 다시 셈 (특허 DB · 제목 파일로 센 것만)
+  if (['family', 'family-all'].includes(tl.patents?.basis)) {
+    const ex = Boolean(await titleExclude(patternFromTerms(tl.terms)).catch(() => null))
+    if (ex !== Boolean(tl.patents?.solarEx)) return true
+  }
+  return false
 }
 
 // 미리 분석해 둔 값만 꺼낸다 (부르지 않음): 대시보드 「미리 분석된 키워드」 · 미리 분석 일이 건너뛸지 볼 때

@@ -9,6 +9,8 @@ import { dbEnabled, query } from './db/index.js'
 import { DISPLAY_CATEGORIES, ownerName } from './displayCategories.js'
 import { cacheGet, cachePut } from './papers/index.js'
 import { localPatentHistory, patentDbReady, titlePatentHistory, titlesReady } from './patentDb.js'
+import { serverFlag } from './features.js'
+import { titleExclude } from './techCpc.js'
 import { patternFromTerms } from './patents.js'
 import { englishTerms, queryKey } from './queryTerms.js'
 import { corpusFacts, THIN_MIN } from './timeline.js'
@@ -28,7 +30,7 @@ const BROAD_KW = /^(materials? science|optoelectronics|optics|physics|engineerin
 export async function mapMaterials(raw, { refresh = false } = {}) {
   const keyword = String(raw ?? '').trim().slice(0, 50)
   if (!keyword) throw Object.assign(new Error('키워드를 입력해 주세요.'), { status: 400 })
-  const key = `map-materials:v1:${queryKey(keyword)}`
+  const key = `map-materials:v1:${(await serverFlag('patentSolarExclude').catch(() => false)) ? 'ns:' : ''}${queryKey(keyword)}` // 11/26 W34 스위치마다 따로 기억
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return { ...hit, cached: true }
@@ -78,11 +80,12 @@ export async function mapMaterials(raw, { refresh = false } = {}) {
 
   // 세부 카테고리: 그 기술 특허(디스플레이 특허 DB, 최근 6년)가 걸친 CPC 카테고리
   let categories = []
+  const ex = pattern ? await titleExclude(pattern) : null // 11/26 W34: 태양전지 · 광검출기 제목 빼기 (스위치)
   if (pattern && dbEnabled() && (await patentDbReady())) {
     const cols = DISPLAY_CATEGORIES.map((c, i) => `count(*) FILTER (WHERE EXISTS (SELECT 1 FROM unnest(cpc) x WHERE x ~ $${i + 3}))::int AS c${i}`).join(', ')
     const { rows } = await query(
-      `SELECT count(*)::int AS total, ${cols} FROM display_patents WHERE pub >= $2 AND lower(title) ~ $1`,
-      [pattern.toLowerCase().replace(/\\b/g, '\\y'), since, ...DISPLAY_CATEGORIES.map((c) => c.cpc)],
+      `SELECT count(*)::int AS total, ${cols} FROM display_patents WHERE pub >= $2 AND lower(title) ~ $1${ex ? ` AND NOT lower(title) ~ $${DISPLAY_CATEGORIES.length + 3}` : ''}`,
+      [pattern.toLowerCase().replace(/\\b/g, '\\y'), since, ...DISPLAY_CATEGORIES.map((c) => c.cpc), ...(ex ? [ex] : [])],
     ).catch(() => ({ rows: [] }))
     const r = rows[0]
     if (r?.total) categories = DISPLAY_CATEGORIES.map((c, i) => ({ id: c.id, name: c.name, count: r[`c${i}`] })).filter((c) => c.count > 0).sort((a, b) => b.count - a.count)
