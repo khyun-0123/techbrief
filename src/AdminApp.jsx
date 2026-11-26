@@ -287,15 +287,37 @@ function LoginPage({ configured, onLogin }) {
   )
 }
 
-function Tile({ label, value, sub, state }) {
+function Tile({ label, value, sub, state, wide, title }) {
   return (
-    <div className="adm-tile">
+    <div className={wide ? 'adm-tile is-wide' : 'adm-tile'} title={title}>
       <span className="adm-tile-label">{label}</span>
       <span className="adm-tile-value">{state ? <span className={`adm-state ${state}`}>{value}</span> : value}</span>
       {sub && <span className="adm-tile-sub">{sub}</span>}
     </div>
   )
 }
+
+// 쌓인 데이터 (11/26 조장: 「기사만 모은 게 아니잖아」) — 뉴스 · 1·2차 출처 · 논문 · 특허 · 직접 추가 + 요약 · 보고서
+const compact = (n) => (n >= 10_000 ? `${(n / 10_000).toFixed(n >= 100_000 ? 0 : 1)}만` : Number(n ?? 0).toLocaleString())
+function stockParts(h) {
+  const s = h?.db?.stock ?? {}
+  const feeds = s.feeds ?? 0
+  return {
+    main: [
+      ['기사', (s.news ?? h?.db?.articles ?? 0) + feeds, `뉴스 ${Number(s.news ?? 0).toLocaleString()} · 1·2차 출처(뉴스룸 · 학회 등) ${feeds.toLocaleString()}`],
+      ['논문', (s.papers ?? 0) + (s.keyword_papers ?? 0) + (s.kci_papers ?? 0), `디스플레이 논문 DB ${Number(s.papers ?? 0).toLocaleString()} · 키워드별 논문 ${Number(s.keyword_papers ?? 0).toLocaleString()} · KCI 국내 ${Number(s.kci_papers ?? 0).toLocaleString()}`],
+      ['특허', h?.patentDb?.rows ?? 0, `디스플레이 특허 DB ${Number(h?.patentDb?.rows ?? 0).toLocaleString()} (초록 ${Number(h?.patentAbstracts?.rows ?? 0).toLocaleString()})`],
+    ],
+    sub: [
+      ['직접 추가', s.materials ?? 0],
+      ['요약', h?.db?.summaries ?? 0],
+      ['보고서', h?.db?.reports ?? 0],
+    ],
+  }
+}
+const stockValue = (h) => stockParts(h).main.map(([k, n]) => `${k} ${compact(n)}`).join(' · ')
+const stockSub = (h) => stockParts(h).sub.map(([k, n]) => `${k} ${Number(n).toLocaleString()}`).join(' · ')
+const stockTitle = (h) => stockParts(h).main.map(([, , d]) => d).join('\n')
 
 function AdminApp() {
   const [me, setMe] = useState(null) // { configured, admin }
@@ -619,8 +641,10 @@ function AdminApp() {
               {health?.db?.ok && (
                 <Tile
                   label="쌓인 데이터"
-                  value={`기사 ${health.db.articles.toLocaleString()}`}
-                  sub={`요약 ${health.db.summaries.toLocaleString()} · 보고서 ${health.db.reports}`}
+                  wide
+                  value={stockValue(health)}
+                  sub={stockSub(health)}
+                  title={stockTitle(health)}
                 />
               )}
             </div>
@@ -692,7 +716,7 @@ function AdminApp() {
         )}
 
         {section === 'targets' && (
-          <div className="adm-cols">
+          <div className="adm-cols adm-targets">
             <section className="adm-card">
               <h2>자동 수집 키워드</h2>
               <p className="adm-desc">
@@ -712,7 +736,11 @@ function AdminApp() {
             <section className="adm-card">
               <h2>회사</h2>
               <p className="adm-desc">중요도 점수(경쟁사 언급)와 「자사·자회사 기사 제외」에 쓰여요. 관심 기술은 위 자동 수집 키워드를 그대로 써요 (11/17 합침).</p>
-              {view.lists && <ListsEditor lists={view.lists} onSave={(next) => change('lists', next)} />}
+              {view.lists && (
+                <div className="adm-lists-grid">
+                  <ListsEditor lists={view.lists} onSave={(next) => change('lists', next)} />
+                </div>
+              )}
             </section>
             <section className="adm-card adm-span">
               <h2>자주 찾은 새 키워드</h2>

@@ -1,7 +1,7 @@
 // AI 요약 대기열 — 「선별 추가」·「요약 추가」를 누르면 여기에 들어가 한 건씩 요약된다 (10 보고서 계획 2절)
 // 모델은 진행률을 알려 주지 않으므로, 게이지는 지금까지 걸린 평균 시간으로 계산한 '예상' 값이다
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { fetchHealth, lookupSummaries, requestSummary } from './api.js'
+import { fetchAiParallel, lookupSummaries, requestSummary } from './api.js'
 import { track } from './usage.js'
 import { load } from './utils.js'
 import { isTransient, waitForServer } from './errorReport.js'
@@ -85,8 +85,8 @@ export function useSummaryQueue({ onDone }) {
   useEffect(() => {
     let on = true
     const read = () =>
-      fetchHealth()
-        .then((h) => on && setParallel(Math.max(1, Math.min(16, Number(h?.llm?.parallel) || 1))))
+      fetchAiParallel()
+        .then((n) => on && setParallel(Math.max(1, Math.min(16, Number(n) || 1))))
         .catch(() => {})
     read()
     const t = setInterval(read, 60_000)

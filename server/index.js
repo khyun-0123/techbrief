@@ -724,6 +724,10 @@ async function handleApiInner(req, res) {
       requireAdmin(req)
       return send(res, 200, { log: await changeLog() })
     }
+    // 화면 요약 대기열이 1분마다 묻는 동시 요청 수 (11/26) — /api/health는 AI 서버 · DB까지 확인해 무거움
+    if (req.method === 'GET' && req.url === '/api/llm/parallel') {
+      return send(res, 200, { parallel: llmProviders().parallel })
+    }
     if (req.method === 'PUT' && req.url === '/api/llm') {
       // AI 서버 (맥미니 / OpenRouter). 모두에게 적용되므로 관리자만, DB에 저장해 다시 켜도 유지
       const admin = requireAdmin(req)
