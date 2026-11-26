@@ -1336,8 +1336,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             <button type="button" onClick={() => setScreen('collect')} title="오늘(24시간) 모은 이슈 · 자료 — 자료 현황으로">
               오늘 이슈 <strong>{todayCount}</strong> · 자료 <strong>{todayArticleCount}</strong>
             </button>
-            <button type="button" onClick={() => setScreen('select')} title="선별한 자료 — 선별·요약으로">
-              선별 <strong>{selectedIds.length}</strong>
+            <button type="button" onClick={() => setScreen('select')} title={selectedIds.length > candidates.length ? `선별한 자료 — 선별·요약으로 (예전에 선별한 ${selectedIds.length - candidates.length}건은 지금 목록에서 찾지 못해 세지 않음)` : '선별한 자료 — 선별·요약으로'}>
+              선별 <strong>{candidates.length}</strong>
             </button>
           </span>
           {/* 연결 상태만 보여 준다 (11/09: 모델 이름은 메뉴 막대에서 빼고 마우스를 올리면 보임). 모델은 관리자 화면에서 고른다 (17 문서) */}
@@ -1383,7 +1383,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
             </svg>
             <span className="guide-btn-text">사용 안내</span>
           </button>
-          <SettingsMenu admin={admin} reportCount={liveReports.filter((r) => r.mine).length} selectedCount={selectedIds.length} onBundle={downloadBundle} onMove={() => setShowMove(true)} />
+          <SettingsMenu admin={admin} reportCount={liveReports.filter((r) => r.mine).length} selectedCount={candidates.length} onBundle={downloadBundle} onMove={() => setShowMove(true)} />
         </span>
       </nav>
       {ops.mode !== 'normal' && (isTest || ops.mode !== 'maintenance') && (
@@ -1435,7 +1435,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
           stats={{
             todayIssues: todayCount,
             todayArticles: todayArticleCount,
-            selected: selectedIds.length,
+            selected: candidates.length,
             collectedLabel: refreshRunning ? '최신화 중…' : collectedAt ? `마지막 수집 ${new Date(collectedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 수집 전',
           }}
           keywords={keywords}
