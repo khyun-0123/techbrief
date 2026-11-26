@@ -17,9 +17,10 @@ import { relatedWords } from './related.js'
 import { mapMaterials } from './mapMaterials.js'
 import { prepareBundle } from './keywordBundle.js'
 import { searchPaperArticles } from './searchPapers.js'
+import { PER_RUN as PREFETCH_PER_RUN, prefetchOn, prefetchPeriods } from './papers/prefetch.js'
 
 // 맵 · 맵 재료 · 보고서용 묶음 (하나가 실패해도 나머지는 계속)
-async function warmExtras(query) {
+async function warmExtras(query, prefetch = null) {
   let n = 0
   for (const [name, job] of [
     ['맵', () => relatedWords(query, { background: true })],
@@ -33,6 +34,18 @@ async function warmExtras(query) {
       if (!['보고서 묶음', '키워드 논문'].includes(name) && r && !r.cached) n += 1 // 새로 만든 맵 · 맵 재료 수 (묶음은 기억 여부를 돌려주지 않아 세지 않음)
     } catch (err) {
       console.warn(`[timeline-jobs] ${name} ${query}: ${err.message}`)
+    }
+  }
+  // 11/26 D2: 처음 · 성장기 논문 미리 모으기 (실험 기능 「논문 미리 모으기」, 처음 값 끄기). 한 번 돌 때 최대 PREFETCH_PER_RUN개 말만 새로 받음
+  if (prefetch && prefetch.left > 0) {
+    try {
+      const r = await prefetchPeriods(query)
+      if (r.status === 'done') {
+        prefetch.left -= 1
+        prefetch.done.push(query)
+      }
+    } catch (err) {
+      console.warn(`[timeline-jobs] 논문 미리 모으기 ${query}: ${err.message}`)
     }
   }
   return n
@@ -76,6 +89,7 @@ export async function runPrecompute() {
   const failed = []
   try {
     const targets = await precomputeTargets()
+    const prefetch = (await prefetchOn()) ? { left: PREFETCH_PER_RUN, done: [] } : null
     await setSetting(STATE_KEY, { ...(await getSetting(STATE_KEY, {})), phase: 'running', startedAt: started, total: targets.length })
     for (const t of targets) {
       const { timeline, story } = await cachedTimeline(t.query)
@@ -86,20 +100,20 @@ export async function runPrecompute() {
         skipped += 1
         // 「예상 밖 급증」(TimesFM, 11/16)만 없으면 채워 둔다 (기억해 둔 값이 있으면 바로 끝남)
         if (timeline.naver?.status === 'ok') await surgeMonths(timeline.naver.months).catch((err) => console.warn(`[timesfm] ${err.message}`))
-        extras += await warmExtras(t.query)
+        extras += await warmExtras(t.query, prefetch)
         continue
       }
       try {
         await buildTimeline(t.query, { background: true, refresh: Boolean(timeline) && Date.now() - Date.parse(timeline.at) >= FRESH_MS })
         await timelineStory(t.query, { background: true, refresh: Boolean(story) })
         made += 1
-        extras += await warmExtras(t.query)
+        extras += await warmExtras(t.query, prefetch)
       } catch (err) {
         // 사람 요청에 자리를 내준 것(PreemptedError)은 다음 차례에 다시
         failed.push({ query: t.query, error: err.preempted ? '사람 요청 먼저 (다음에 다시)' : err.message })
       }
     }
-    const state = { phase: null, startedAt: started, endedAt: new Date().toISOString(), total: targets.length, made, skipped, extras, failed: failed.slice(0, 10) }
+    const state = { phase: null, startedAt: started, endedAt: new Date().toISOString(), total: targets.length, made, skipped, extras, prefetched: prefetch?.done ?? null, failed: failed.slice(0, 10) }
     await setSetting(STATE_KEY, state)
     console.log(`[timeline-jobs] 미리 분석 ${made}개 · 건너뜀 ${skipped}개 · 맵 · 맵 재료 새로 ${extras}개 · 실패 ${failed.length}개`)
     return state

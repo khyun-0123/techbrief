@@ -71,6 +71,7 @@ import { ACCESS_COOKIE, ACCESS_MAX_AGE, envAccessCodeSet, tokenOf as accessToken
 import { checkNewCode, clearAdminPassword, loadCredentials, saveAccessToken, saveAdminPassword, storedAccessToken, storedPassword } from './credentials.js'
 import { backgroundAllowed, backlogBrief, queueSearchSummaries, refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
 import { featureList, FEATURES, getFeatures, saveFeatures } from './features.js'
+import { prefetchLater } from './papers/prefetch.js'
 import { summarizeArticle, summarizeOnly } from './summarize.js'
 import { pruneUsage, recordClientEvent, usageStats } from './usage.js'
 import { checkOps, getOps, OPS_LABEL, publicOps, saveOps } from './ops.js'
@@ -895,6 +896,8 @@ async function handleApiInner(req, res) {
       if (open && !refresh) recordSearch(query, clientIp(req), { open: true }).catch(() => {})
       // 11/12: 분석한 키워드는 보고서에 쓸 묶음을 뒤에서 미리 만들어 둔다 (keywordBundle.js, 3일 기억)
       prepareBundle(query, { refresh: Boolean(refresh) }).catch((err) => console.warn(`[bundle] ${query}: ${err.message}`))
+      // 11/26 D2: 실험 기능 「논문 미리 모으기」가 켜져 있으면 처음 · 성장기 논문을 뒤에서 받아 둔다 (papers/prefetch.js, 한 말 30일에 한 번)
+      if (open) prefetchLater(query)
       return send(res, 200, tl)
     }
     if (req.method === 'GET' && req.url === '/api/timeline/ready') {

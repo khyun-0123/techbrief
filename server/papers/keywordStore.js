@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto'
 import { dbEnabled, query } from '../db/index.js'
 import { queryKey } from '../queryTerms.js'
 
-const MAX_KEEP = 300 // 한 말에 남기는 논문 수 (최근 것 우선)
+const MAX_KEEP = 300 // 한 말에 남기는 논문 수 (최근 것 우선, 미리 모은 시기별 논문은 따로)
 const keyOf = (w) => (w.doi ? `doi:${String(w.doi).toLowerCase()}` : `t:${createHash('sha1').update(String(w.title ?? '').toLowerCase()).digest('hex').slice(0, 16)}`)
 
 export async function saveKeywordPapers(rawQuery, works, provider) {
@@ -24,13 +24,14 @@ export async function saveKeywordPapers(rawQuery, works, provider) {
   })
   await query(
     `INSERT INTO keyword_papers (query, key, work, provider, published) VALUES ${tuples.join(',')}
-     ON CONFLICT (query, key) DO UPDATE SET work = EXCLUDED.work, provider = EXCLUDED.provider, published = EXCLUDED.published, fetched_at = now()`,
+     ON CONFLICT (query, key) DO UPDATE SET work = EXCLUDED.work, provider = CASE WHEN keyword_papers.provider = 'prefetch' THEN 'prefetch' ELSE EXCLUDED.provider END, published = EXCLUDED.published, fetched_at = now()`,
     params,
   )
-  // 너무 쌓이면 오래된 논문부터 정리 (발행일 기준)
+  // 너무 쌓이면 오래된 논문부터 정리 (발행일 기준). 미리 모은 시기별 논문(provider 'prefetch', papers/prefetch.js — 한 말 최대 120편)은
+  // 처음 · 성장기 논문이라 발행일로 지우면 먼저 지워진다 → 세지도 지우지도 않는다
   await query(
     `DELETE FROM keyword_papers WHERE query = $1 AND key IN (
-       SELECT key FROM keyword_papers WHERE query = $1 ORDER BY published DESC NULLS LAST OFFSET $2)`,
+       SELECT key FROM keyword_papers WHERE query = $1 AND provider IS DISTINCT FROM 'prefetch' ORDER BY published DESC NULLS LAST OFFSET $2)`,
     [q, MAX_KEEP],
   )
   return list.length
@@ -51,6 +52,6 @@ export async function storedKeywordPapers(rawQuery, { from, to } = {}) {
 // 관리 · 문서용: 키워드마다 저장된 수
 export async function keywordPaperStats() {
   if (!dbEnabled()) return []
-  const { rows } = await query(`SELECT query, count(*)::int AS n, max(fetched_at) AS at FROM keyword_papers GROUP BY query ORDER BY n DESC`)
+  const { rows } = await query(`SELECT query, count(*)::int AS n, count(*) FILTER (WHERE provider = 'prefetch')::int AS prefetched, max(fetched_at) AS at FROM keyword_papers GROUP BY query ORDER BY n DESC`)
   return rows
 }
