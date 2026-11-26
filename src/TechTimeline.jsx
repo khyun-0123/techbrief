@@ -123,6 +123,12 @@ function TechTimeline({ query, onClose, initialData = null, job: givenJob = null
                 {data.breadth.fwci && ` · 인용 영향 FWCI ${data.breadth.fwci.mean} (1 = 분야 평균, ${data.breadth.fwci.years} 논문 ${data.breadth.fwci.papers}편)`}
               </p>
             )}
+            {data.momentum && !data.momentum.few && (
+              <p className="hint" title="최근 2년 논문(관련도 상위 최대 200편)의 FWCI 평균과 분야 상위 10% 인용 논문 비율. 갓 나온 논문이 많아 값이 흔들려 단계 판정에는 쓰지 않아요 (OpenAlex)">
+                인용 모멘텀(참고): 최근 2년({data.momentum.years}) 논문 {data.momentum.papers}편 FWCI 평균 {data.momentum.mean}
+                {data.momentum.top10Share != null && ` · 분야 상위 10% 인용 ${Math.round(data.momentum.top10Share * 100)}% (분야 평균 10%)`}
+              </p>
+            )}
             {data.thin && (
               <p className="hint" role="note">
                 참고: {data.thin}

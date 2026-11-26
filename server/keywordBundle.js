@@ -263,9 +263,9 @@ export async function prepareBundle(raw, { refresh = false } = {}) {
       rising: (tl?.corpus?.rising ?? []).slice(0, 5).map((x) => ({ name: x.name, before: x.before, recent: x.recent })),
       // 최근 시기 논문의 주요 기업
       makers: tl?.makers?.at(-1)?.makers?.slice(0, 5) ?? [],
-      // 연구 폭: 기관 수 · 기업 저자 비율 · FWCI(참고)
+      // 연구 폭: 기관 수 · 기업 저자 비율 · FWCI(참고) · 인용 모멘텀(11/26, 최근 2년 · 참고 — 화면 · 데이터만, PPT 글줄은 발표 뒤에 정함)
       breadth: tl?.breadth
-        ? { years: tl.breadth.years, institutions: tl.breadth.institutions ?? null, top: (tl.breadth.topInstitutions ?? []).slice(0, 3).map((x) => x.name), companyShare: st?.companyShareNow ?? null, fwci: tl.breadth.fwci?.mean ?? null }
+        ? { years: tl.breadth.years, institutions: tl.breadth.institutions ?? null, top: (tl.breadth.topInstitutions ?? []).slice(0, 3).map((x) => x.name), companyShare: st?.companyShareNow ?? null, fwci: tl.breadth.fwci?.mean ?? null, momentum: tl.momentum && !tl.momentum.few ? { years: tl.momentum.years, papers: tl.momentum.papers, fwci: tl.momentum.mean, top10Share: tl.momentum.top10Share } : null }
         : null,
       // ⚠ 네이버 숫자 — 화면 · PPT용. AI 입력(bundleFacts · headlineSeeds)에는 넣지 않는다 (23 문서 2-2)
       attention: st?.attention ? { label: st.attention.label, basis: st.attention.basis } : null,
