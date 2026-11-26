@@ -2,6 +2,7 @@
 // - 서비스마다 필요한 칸이 다르다. 서버가 보내는 칸 목록(server/apiKeys.js SERVICES)대로 칸을 그린다
 //   (비밀값 · 아이디 · 이메일 · MAC 주소 · 서비스 계정 JSON 붙여넣기)
 // - 키는 넣기만 한다(단방향). 화면에는 칸마다 「있음 · 없음 · 어디서 온 값」만. 바꾸기 · 되돌리기는 관리자 비밀번호를 한 번 더 (AI 연결과 같음)
+import { Unsaved } from './unsaved.js'
 import { useEffect, useState } from 'react'
 import { withConfirm } from './AdminConfirm.jsx'
 import { fetchApiKeys, resetApiKeys, revertApiKeys, updateApiKeys } from './api.js'
@@ -47,6 +48,7 @@ export default function AdminApiKeys({ onToast }) {
 
   return (
     <>
+      <Unsaved id="apiKeys" label="수집 API 키(입력 중)" when={Boolean(edit && Object.values(edit.values).some((v) => String(v ?? '').trim()))} />
       <p className="adm-desc">
         뉴스 · 논문 · 특허를 가져오는 API의 키예요. 서비스마다 필요한 칸이 달라 칸 목록대로 보여 줘요. <b>넣기만 할 수 있어요</b> — 암호화해 저장하고 화면에는 「있음 · 없음」만 보여요. 사이트에서 넣은 값이 서버 설정(Railway 변수)보다 먼저 쓰이고, 「서버 설정 값으로」를 누르면 사이트 값을 지워요. 바꾸거나 되돌릴 때는 관리자 비밀번호를 한 번 더 물어요.
       </p>

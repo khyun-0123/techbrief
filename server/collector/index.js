@@ -145,6 +145,16 @@ async function cleanupDb() {
 // 11/25: custom(관리 페이지에서 더한 RSS 출처) · every(출처마다 수집 주기, 시간 · 0 = 자동 최신화 때마다)
 const SOURCES_KEY = 'feed_sources' // { disabled: [id], custom: [{ id, name, tier, url, lang, addedAt }], every: { id: hours } }
 const SOURCES_STATUS_KEY = 'feed_sources_status' // { at, results: [{ id, ok, items, matched, added, error }] }
+
+// 11/26 조장: 「오류로 한 번 뜬 뒤 시험해서 정상으로 받았는데 오류 문구가 안 사라진다」 — 상태 줄은 지난 「수집」 결과라
+// 다음 수집(2시간 뒤)까지 남았다. 시험이 정상이면 그 출처의 오류를 시험 결과로 바꿔 둔다 (받은 글 수 · 시험한 때). 실패한 시험은 건드리지 않음
+export async function markFeedTested(test) {
+  if (!test?.ok || !test.id || test.id === 'new') return
+  const status = await getSetting(SOURCES_STATUS_KEY, null)
+  if (!status?.results) return
+  const results = status.results.filter(Boolean).map((r) => (r.id === test.id && !r.ok ? { id: r.id, ok: true, items: test.items, matched: null, added: null, testedAt: new Date().toISOString() } : r))
+  await setSetting(SOURCES_STATUS_KEY, { ...status, results })
+}
 const SOURCES_LAST_KEY = 'feed_sources_last' // { id: 마지막으로 받은 때 } — 수집 주기 계산용
 const MAX_CUSTOM_FEEDS = 20
 

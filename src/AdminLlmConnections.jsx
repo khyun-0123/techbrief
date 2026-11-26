@@ -1,6 +1,7 @@
 // 관리 페이지 「AI 서버」 › AI 연결 (11/25 조장: 「사이트에서 모든 걸」) — 주소 · API 키 넣기 · 되돌리기 · 끄기 · 시험 · 새 연결
 // - API 키는 넣기만 한다(단방향). 서버는 「있음 · 없음 · 어디서 온 값」만 보낸다 (server/llm/connections.js)
 // - 기본 세 곳은 지울 수 없고 바꾸기 · 되돌리기 · 끄기만. 새로 더한 연결은 관리자 비밀번호를 다시 넣어야 지운다
+import { Unsaved } from './unsaved.js'
 import { useEffect, useState } from 'react'
 import { withConfirm } from './AdminConfirm.jsx'
 import { addLlmConnection, deleteLlmConnection, fetchLlmConnections, revertLlmConnection, setLlmConnectionDisabled, setLlmConnectionParallel, testLlmConnection, updateLlmConnection } from './api.js'
@@ -76,6 +77,7 @@ export default function AdminLlmConnections({ currentId, onChanged, onToast }) {
 
   return (
     <section className="adm-card">
+      <Unsaved id="llmConn" label="AI 연결(입력 중)" when={Boolean((edit && (edit.baseUrl || edit.key || (edit.label && edit.label !== (rows.find((r) => r.id === edit.id)?.label ?? '')))) || (adding && (adding.label || adding.baseUrl || adding.key)))} />
       <h2>AI 연결 · API 키</h2>
       <p className="adm-desc">
         AI 서버 주소와 API 키를 여기서 넣고 바꿔요. <b>API 키는 넣기만 할 수 있어요</b> — 암호화해 저장하고, 화면에는 「있음 · 없음」만 보여요. 바꾼 뒤에도 「되돌리기」로 바로 전 값으로 돌아갈 수 있어요. 기본 세 곳은 지울 수 없고 끌 수만 있어요. 키를 넣거나 바꾸거나 지울 때는 관리자 비밀번호를 한 번 더 물어요(10분 동안 유지).

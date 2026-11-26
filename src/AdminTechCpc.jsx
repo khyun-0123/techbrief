@@ -1,6 +1,7 @@
 // 관리 페이지 「판정 기준 › 기술 ↔ CPC 연결표」 (11/21, server/techCpc.js)
 // 특허 제목에 그 말이 드문 기술(탠덤 OLED 등)도 세부 기술 분류(CPC)로 센다. 켠 기술은 특허 수 · 단계 · 자사 위협 · 기회를 그 기술 특허로 계산
 // CPC를 잘못 고르면 엉뚱한 특허가 섞이므로 「미리 세기」로 건수와 표본 제목을 본 뒤 켠다
+import { Unsaved } from './unsaved.js'
 import { useCallback, useEffect, useState } from 'react'
 import { fetchTechCpc, previewTechCpc, saveTechCpcApi } from './api.js'
 
@@ -126,6 +127,7 @@ export default function AdminTechCpc({ onToast }) {
   }
   return (
     <section className="adm-card">
+      <Unsaved id="techCpc" label="기술 ↔ CPC 연결표" when={changed} />
       <h2>
         기술 ↔ CPC 연결표 <span className="adm-tag adm-tag-muted">AI 안 씀</span>
       </h2>

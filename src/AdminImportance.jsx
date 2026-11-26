@@ -1,6 +1,7 @@
 // 관리 페이지 「중요도 기준」 (11/15 팀 회의: 중요도 기준을 관리자 페이지에서 수정) — server/importanceRule.js
 // 다섯 칸 배점(합 100)과 「중요」 기준 점수를 바꾼다. 저장 전에 미리보기(지금 자료로 중요 몇 건이 되는지 · 새로 들어오고 빠지는 이슈)를 먼저 보게 한다
 // 칸마다 계산 규칙은 그대로이고 칸 점수만 「새 배점 ÷ 기본 배점」만큼 늘리거나 줄인다. 저장하면 다음 목록부터 바로 반영
+import { Unsaved } from './unsaved.js'
 import { useCallback, useEffect, useState } from 'react'
 import { fetchImportanceRule, previewImportanceRule, saveImportanceRuleApi } from './api.js'
 
@@ -63,6 +64,7 @@ export default function AdminImportance({ onToast, onChanged }) {
   const canSave = changed && valid && same(previewed, draft) && preview && !busy
   return (
     <div className="adm-stack">
+      <Unsaved id="importance" label="중요도 배점" when={changed} />
       <section className="adm-card">
         <h2>
           중요도 배점 <span className="adm-tag adm-tag-muted">AI 안 씀</span>

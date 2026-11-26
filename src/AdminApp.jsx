@@ -35,6 +35,7 @@ import AdminImportance from './AdminImportance.jsx'
 import AdminJudge from './AdminJudge.jsx'
 import AdminTunables from './AdminTunables.jsx'
 import { Pager, Pane, SubTabs, usePages } from './AdminTabs.jsx'
+import { useUnsavedList } from './unsaved.js'
 import AdminReportStyle from './AdminReportStyle.jsx'
 import AdminSecurity from './AdminSecurity.jsx'
 import AdminApiKeys from './AdminApiKeys.jsx'
@@ -340,6 +341,9 @@ function AdminApp() {
   const leavingRef = useRef(false) // 저장 뒤 새로고침할 때는 떠나기 경고를 건너뛴다
   // 저장하지 않은 채 다른 곳으로 가려 할 때 띄우는 확인 창 { to: 주소 | 'logout' }
   const [leaveAsk, setLeaveAsk] = useState(null)
+  // 이벤트 처리에서 최신 값을 보려고 (hashchange는 처음 한 번만 붙임)
+  const localRef = useRef([])
+  const sectionRef = useRef('')
 
   useEffect(() => {
     try {
@@ -353,7 +357,15 @@ function AdminApp() {
     fetchAdminMe()
       .then(setMe)
       .catch(() => setMe({ configured: false, admin: null, offline: true }))
-    const onHash = () => setSection(sectionFromHash())
+    // 뒤로 가기 등으로 메뉴가 바뀔 때도 카드 안 바꾼 값이 있으면 묻는다
+    const onHash = () => {
+      const next = sectionFromHash()
+      if (localRef.current.length && next !== sectionRef.current && !window.confirm(`저장하지 않은 변경이 있어요: ${localRef.current.join(', ')}\n다른 메뉴로 가면 사라져요. 그래도 갈까요?`)) {
+        window.history.replaceState(null, '', `#${sectionRef.current}`)
+        return
+      }
+      setSection(next)
+    }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
@@ -403,7 +415,12 @@ function AdminApp() {
     return () => clearInterval(timer)
   }, [admin, refresh?.running])
 
-  function go(key) {
+  function go(key, force = false) {
+    // 다른 메뉴로 가면 카드 안 바꾼 값(local)은 사라진다 → 먼저 묻는다 (위 draft는 메뉴를 옮겨도 남음)
+    if (!force && key !== section && localRef.current.length) {
+      setLeaveAsk({ to: `#${key}` })
+      return
+    }
     window.history.replaceState(null, '', `#${key}`)
     setSection(key)
     setToast(null)
@@ -437,10 +454,15 @@ function AdminApp() {
   const DRAFT_SECTION = { keywords: 'targets', lists: 'targets', refresh: 'refresh', llm: 'llm', features: 'features' }
   const dirty = Object.keys(draft)
   const dirtySections = new Set(dirty.map((k) => DRAFT_SECTION[k]))
+  // 11/26: 카드마다 자기 「저장 · 적용」이 있는 곳(수집 출처 · 세부 설정 등)의 바꾼 값 (unsaved.js). 위 draft와 함께 떠나기 경고
+  const local = useUnsavedList()
+  const anyDirty = dirty.length + local.length
+  localRef.current = local
+  sectionRef.current = section
 
-  // 저장하지 않고 페이지를 떠나려 하면 브라우저가 한 번 묻는다
+  // 저장하지 않고 페이지를 떠나려 하면(새로고침 · 닫기) 브라우저가 한 번 묻는다
   useEffect(() => {
-    if (dirty.length === 0) return
+    if (anyDirty === 0) return
     const warn = (e) => {
       if (leavingRef.current) return
       e.preventDefault()
@@ -448,7 +470,7 @@ function AdminApp() {
     }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty.length])
+  }, [anyDirty])
 
   // 「저장」: 바꾼 것만 차례로 저장하고, 관리 페이지를 새로고침해 서버 값으로 다시 그린다
   // then: 저장 뒤 할 일 (확인 창의 「저장하고 이동」). 없으면 새로고침
@@ -497,19 +519,24 @@ function AdminApp() {
   }
 
   function handleLogout() {
-    if (dirty.length) setLeaveAsk({ to: 'logout' })
+    if (anyDirty) setLeaveAsk({ to: 'logout' })
     else logoutNow()
   }
 
   // 관리 페이지 밖으로 가는 링크: 저장하지 않은 변경이 있으면 바로 가지 않고 확인 창
   function guardLink(e) {
-    if (dirty.length === 0) return
+    if (anyDirty === 0) return
     e.preventDefault()
     setLeaveAsk({ to: e.currentTarget.getAttribute('href') })
   }
 
   function leaveTo(to) {
     if (to === 'logout') return logoutNow()
+    // 관리 페이지 안 다른 메뉴 (카드 안 바꾼 값을 버리고)
+    if (to.startsWith('#')) {
+      setLeaveAsk(null)
+      return go(to.slice(1), true)
+    }
     leavingRef.current = true
     window.location.assign(to)
   }
@@ -922,35 +949,43 @@ function AdminApp() {
             >
               <h2 id="leave-title">아직 저장하지 않은 변경이 있어요</h2>
               <p id="leave-desc">
-                {leaveAsk.to === 'logout' ? '로그아웃하면' : '이 페이지를 떠나면'} 아래 바꾼 내용이 사라져요.
+                {leaveAsk.to === 'logout' ? '로그아웃하면' : leaveAsk.to.startsWith('#') ? '다른 메뉴로 가면' : '이 페이지를 떠나면'} 아래 바꾼 내용이 사라져요.
+                {local.length > 0 && ' 카드 안에서 바꾼 것은 그 카드의 「저장 · 적용」을 눌러야 저장돼요.'}
               </p>
               <ul>
-                {dirty.map((k) => (
+                {(leaveAsk.to.startsWith('#') ? [] : dirty).map((k) => (
                   <li key={k}>{DRAFT_LABEL[k]}</li>
+                ))}
+                {local.map((l) => (
+                  <li key={l}>{l}</li>
                 ))}
               </ul>
               <div className="adm-modal-actions">
                 <button type="button" className="adm-btn danger-text" onClick={() => leaveTo(leaveAsk.to)} disabled={saving}>
-                  저장하지 않고 {leaveAsk.to === 'logout' ? '로그아웃' : '떠나기'}
+                  저장하지 않고 {leaveAsk.to === 'logout' ? '로그아웃' : leaveAsk.to.startsWith('#') ? '이동' : '떠나기'}
                 </button>
                 <span className="adm-modal-spacer" />
                 <button type="button" className="adm-btn" onClick={() => setLeaveAsk(null)} disabled={saving} autoFocus>
                   머무르기
                 </button>
-                <button type="button" className="adm-btn primary" onClick={() => saveAll(() => leaveTo(leaveAsk.to))} disabled={saving}>
-                  {saving ? '저장 중…' : `저장하고 ${leaveAsk.to === 'logout' ? '로그아웃' : '이동'}`}
-                </button>
+                {local.length === 0 && (
+                  <button type="button" className="adm-btn primary" onClick={() => saveAll(() => leaveTo(leaveAsk.to))} disabled={saving}>
+                    {saving ? '저장 중…' : `저장하고 ${leaveAsk.to === 'logout' ? '로그아웃' : '이동'}`}
+                  </button>
+                )}
               </div>
             </div>
           </div>
         )}
 
         {/* 저장 막대: 바꾼 것이 있을 때만, 화면 아래에 붙어 있다 */}
-        {dirty.length > 0 && (
+        {anyDirty > 0 && (
           <div className="adm-savebar" role="region" aria-label="저장하지 않은 변경">
             <span>
-              <strong>저장하지 않은 변경 {dirty.length}개</strong> · {dirty.map((k) => DRAFT_LABEL[k]).join(', ')}
+              <strong>저장하지 않은 변경 {anyDirty}개</strong> · {[...dirty.map((k) => DRAFT_LABEL[k]), ...local].join(', ')}
+              {local.length > 0 && <small> — 카드 안에서 바꾼 것은 그 카드의 「저장 · 적용」으로 저장해요</small>}
             </span>
+            {dirty.length > 0 && (
             <div>
               <button type="button" className="adm-btn" onClick={discardAll} disabled={saving}>
                 되돌리기
@@ -959,6 +994,7 @@ function AdminApp() {
                 {saving ? '저장 중…' : '저장'}
               </button>
             </div>
+            )}
           </div>
         )}
       </main>

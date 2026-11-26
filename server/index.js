@@ -4,7 +4,7 @@ import { createServer } from 'node:http'
 import { gzipSync } from 'node:zlib'
 import { readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
-import { addCustomFeed, checkAllFeeds, collect, deleteCustomFeed, getSources, listArticles, markListStale, saveSources, searchArticles, searchCollected, testFeed } from './collector/index.js'
+import { addCustomFeed, checkAllFeeds, collect, deleteCustomFeed, getSources, listArticles, markFeedTested, markListStale, saveSources, searchArticles, searchCollected, testFeed } from './collector/index.js'
 import { englishTerms, frequentSearches, listQueryTerms, pruneSearchCounts, recordSearch, setQueryTerms } from './queryTerms.js'
 import { feedList } from './collector/feeds.js'
 import { getTrends } from './trends.js'
@@ -681,7 +681,9 @@ async function handleApiInner(req, res) {
     if (req.method === 'POST' && req.url === '/api/admin/sources/test') {
       requireAdmin(req)
       const { id, url } = await readJson(req)
-      return send(res, 200, await testFeed(id ? { id: String(id) } : { url: String(url ?? '') }))
+      const test = await testFeed(id ? { id: String(id) } : { url: String(url ?? '') })
+      if (id) await markFeedTested(test).catch(() => {}) // 정상이면 지난 수집 오류를 지움
+      return send(res, 200, test)
     }
     if (req.method === 'POST' && req.url === '/api/admin/sources/check') {
       requireAdmin(req)

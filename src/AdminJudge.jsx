@@ -1,6 +1,7 @@
 // 관리 페이지 「판정 기준」 (11/20, 관리자 인수인계 — server/judgeSettings.js)
 // ① 기술 단계 · 자사 위협 · 기회를 정하는 숫자 기준 ② 자사 · 경쟁사의 특허 출원인 이름
 // 예전에는 둘 다 코드에 있어 바꾸려면 프로그램을 고쳐 다시 올려야 했다. 경쟁사를 더해도 출원인 이름이 사전에 없으면 특허 비교에서 조용히 빠졌다
+import { Unsaved } from './unsaved.js'
 import { Pane, SubTabs } from './AdminTabs.jsx'
 import { useCallback, useEffect, useState } from 'react'
 import { checkOwner, fetchJudge, saveJudge, saveOwnerApi } from './api.js'
@@ -34,6 +35,7 @@ function OwnerRow({ c, onSaved, onToast }) {
   return (
     <tr>
       <th scope="row">
+        <Unsaved id={`owner-${c.role}-${c.name}`} label={`회사 특허 이름 › ${c.name}`} when={text.trim() !== (c.source === 'custom' ? c.like.join(', ') : '')} />
         {c.name}
         <span className="muted"> · {c.role === 'own' ? '자사' : '경쟁사'}</span>
       </th>
@@ -138,6 +140,7 @@ export default function AdminJudge({ onToast }) {
   return (
     <SubTabs section="judge" tabs={[['nums', '판정 숫자'], ['cpc', '기술 ↔ CPC 연결표'], ['abstract', '초록으로도 세면?'], ['names', '회사 특허 이름', missing.length ? `빈 칸 ${missing.length}` : null]]}>
       <Pane tab="nums">
+      <Unsaved id="judge" label="판정 숫자" when={changed} />
       <section className="adm-card">
         <h2>
           판정 숫자 <span className="adm-tag adm-tag-muted">AI 안 씀</span>
