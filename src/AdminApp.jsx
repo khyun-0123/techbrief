@@ -34,6 +34,7 @@ import AdminSearchTerms from './AdminSearchTerms.jsx'
 import AdminImportance from './AdminImportance.jsx'
 import AdminJudge from './AdminJudge.jsx'
 import AdminTunables from './AdminTunables.jsx'
+import { Pager, Pane, SubTabs, usePages } from './AdminTabs.jsx'
 import AdminReportStyle from './AdminReportStyle.jsx'
 import AdminSecurity from './AdminSecurity.jsx'
 import AdminApiKeys from './AdminApiKeys.jsx'
@@ -100,7 +101,7 @@ function readFlash() {
 }
 
 function sectionFromHash() {
-  const id = window.location.hash.slice(1)
+  const id = window.location.hash.slice(1).split('/')[0] // #targets/sources → 세부 탭은 AdminTabs.jsx
   return SECTIONS.some(([key]) => key === id) ? id : 'overview'
 }
 
@@ -716,45 +717,53 @@ function AdminApp() {
         )}
 
         {section === 'targets' && (
-          <div className="adm-cols adm-targets">
-            <section className="adm-card">
-              <h2>자동 수집 키워드</h2>
-              <p className="adm-desc">
-                자동 최신화가 이 키워드로 네이버 뉴스를 모으고, 대시보드 · 자료 현황에 모두에게 추천으로 보여요. 수집하지 않는 말은 추천하지 않아요 (11/16, 예전 「추천 검색어」를 합침). 각자의 ☆ 즐겨찾기 · 최근 검색어는 사람(IP)마다 따로예요.
-              </p>
-              {keywords && (
-                <ChipList
-                  id="keywords"
-                  label="키워드 추가"
-                  hint={keywords.stored ? '일반 사용자는 「논문 · 뉴스에서 찾기」로 다른 말도 찾을 수 있어요' : 'DB가 없어 저장할 수 없어요 (DATABASE_URL 확인)'}
-                  placeholder="예: 마이크로LED"
-                  words={view.keywords}
-                  onChange={keywords.stored ? (next) => change('keywords', next) : undefined}
-                />
-              )}
-            </section>
-            <section className="adm-card">
-              <h2>회사</h2>
-              <p className="adm-desc">중요도 점수(경쟁사 언급)와 「자사·자회사 기사 제외」에 쓰여요. 관심 기술은 위 자동 수집 키워드를 그대로 써요 (11/17 합침).</p>
-              {view.lists && (
-                <div className="adm-lists-grid">
-                  <ListsEditor lists={view.lists} onSave={(next) => change('lists', next)} />
-                </div>
-              )}
-            </section>
-            <section className="adm-card adm-span">
-              <h2>자주 찾은 새 키워드</h2>
-              <AdminSearchTerms onToast={setToast} />
-            </section>
-            <section className="adm-card adm-span">
-              <h2>수집 출처</h2>
-              <AdminSources onToast={setToast} />
-            </section>
-            <section className="adm-card adm-span">
-              <h2>수집 API 키</h2>
-              <AdminApiKeys onToast={setToast} />
-            </section>
-          </div>
+          <SubTabs section="targets" tabs={[['base', '키워드 · 회사'], ['new', '자주 찾은 새 키워드'], ['sources', '수집 출처'], ['keys', '수집 API 키']]}>
+            <Pane tab="base" className="adm-cols adm-targets">
+              <section className="adm-card">
+                <h2>자동 수집 키워드</h2>
+                <p className="adm-desc">
+                  자동 최신화가 이 키워드로 네이버 뉴스를 모으고, 대시보드 · 자료 현황에 모두에게 추천으로 보여요. 수집하지 않는 말은 추천하지 않아요 (11/16, 예전 「추천 검색어」를 합침). 각자의 ☆ 즐겨찾기 · 최근 검색어는 사람(IP)마다 따로예요.
+                </p>
+                {keywords && (
+                  <ChipList
+                    id="keywords"
+                    label="키워드 추가"
+                    hint={keywords.stored ? '일반 사용자는 「논문 · 뉴스에서 찾기」로 다른 말도 찾을 수 있어요' : 'DB가 없어 저장할 수 없어요 (DATABASE_URL 확인)'}
+                    placeholder="예: 마이크로LED"
+                    words={view.keywords}
+                    onChange={keywords.stored ? (next) => change('keywords', next) : undefined}
+                  />
+                )}
+              </section>
+              <section className="adm-card">
+                <h2>회사</h2>
+                <p className="adm-desc">중요도 점수(경쟁사 언급)와 「자사·자회사 기사 제외」에 쓰여요. 관심 기술은 위 자동 수집 키워드를 그대로 써요 (11/17 합침).</p>
+                {view.lists && (
+                  <div className="adm-lists-grid">
+                    <ListsEditor lists={view.lists} onSave={(next) => change('lists', next)} />
+                  </div>
+                )}
+              </section>
+            </Pane>
+            <Pane tab="new">
+              <section className="adm-card adm-span">
+                <h2>자주 찾은 새 키워드</h2>
+                <AdminSearchTerms onToast={setToast} />
+              </section>
+            </Pane>
+            <Pane tab="sources">
+              <section className="adm-card adm-span">
+                <h2>수집 출처</h2>
+                <AdminSources onToast={setToast} />
+              </section>
+            </Pane>
+            <Pane tab="keys">
+              <section className="adm-card adm-span">
+                <h2>수집 API 키</h2>
+                <AdminApiKeys onToast={setToast} />
+              </section>
+            </Pane>
+          </SubTabs>
         )}
 
         {section === 'refresh' && refresh && (
@@ -958,8 +967,29 @@ function AdminApp() {
 }
 
 function LogTable({ log, compact = false }) {
+  // 11/26: 「변경 기록」 화면은 「무엇을」로 거르고 30건씩 (예전: 200건을 한 표에 — 화면 세 개 길이)
+  const [kind, setKind] = useState('')
+  const kinds = [...new Set(log.map((e) => e.action))]
+  const filtered = kind ? log.filter((e) => e.action === kind) : log
+  const p = usePages(filtered, compact ? filtered.length || 1 : 30)
   if (log.length === 0) return <p className="adm-empty">아직 기록이 없어요. 수집 대상·자동 최신화·AI 모델·실험 기능을 바꾸면 여기에 남아요.</p>
   return (
+    <>
+    {!compact && kinds.length > 1 && (
+      <div className="adm-log-filter">
+        <label>
+          무엇을{' '}
+          <select value={kind} onChange={(e) => (setKind(e.target.value), p.setPage(0))}>
+            <option value="">모두 ({log.length})</option>
+            {kinds.map((k) => (
+              <option key={k} value={k}>
+                {k} ({log.filter((e) => e.action === k).length})
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    )}
     <table className="adm-table">
       <thead>
         <tr>
@@ -970,7 +1000,7 @@ function LogTable({ log, compact = false }) {
         </tr>
       </thead>
       <tbody>
-        {log.map((e, i) => (
+        {p.items.map((e, i) => (
           <tr key={`${e.at}-${i}`}>
             <td className="adm-nowrap adm-log-at">{formatAt(e.at)}</td>
             {!compact && <td className="adm-nowrap adm-log-who">{e.name}</td>}
@@ -982,6 +1012,8 @@ function LogTable({ log, compact = false }) {
         ))}
       </tbody>
     </table>
+    {!compact && <Pager p={p} />}
+    </>
   )
 }
 

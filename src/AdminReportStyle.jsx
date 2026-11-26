@@ -84,8 +84,11 @@ export default function AdminReportStyle({ onToast }) {
   }
   const pages = deck?.pages.length ?? 0
 
+  // 11/26: 넓은 화면에서는 설정(왼쪽)과 미리보기(오른쪽, 따라 내려옴)를 나란히 — 예전엔 위아래로 화면 두 개 반
   return (
     <div className="adm-stack">
+      <div className="adm-style-split">
+      <div className="adm-stack">
       <section className="adm-card">
         <h2>글꼴</h2>
         <p className="adm-desc">
@@ -168,8 +171,9 @@ export default function AdminReportStyle({ onToast }) {
           {changed && <span className="muted">저장하지 않은 변경이 있어요</span>}
         </div>
       </section>
+      </div>
 
-      <section className="adm-card">
+      <section className="adm-card adm-style-preview">
         <div className="adm-ops-head">
           <div>
             <h2>미리보기</h2>
@@ -191,6 +195,7 @@ export default function AdminReportStyle({ onToast }) {
         </div>
         {deck ? <SlideFrame deck={deck} index={Math.min(page, pages - 1)} /> : sample && <p className="adm-alert-inline">값을 다 채우면 미리보기가 나와요.</p>}
       </section>
+      </div>
 
       <section className="adm-card">
         <h2>바꾼 기록</h2>
