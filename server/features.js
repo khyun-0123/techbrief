@@ -29,6 +29,13 @@ FEATURES.push({
   desc: '첫 화면이 자료 전체(약 4MB) 대신 오늘 숫자 · 중요 자료만 받고, 자료 현황은 서버에서 한 쪽씩 받아요. 거르기 · 찾기 규칙은 예전과 같아요',
   default: 'test',
 })
+// 11/26 (45 문서 8장 「모든 출처에 검색」): 자료 현황 「출처」 칸 맨 위 검색칸. 끄면 예전처럼 목록만 (배포 없이 관리 페이지에서 되돌리기)
+FEATURES.push({
+  key: 'sourceSearch',
+  label: '「출처」 칸 안 검색',
+  desc: '자료 현황 「출처」(모든 출처) 칸을 열면 맨 위 검색칸으로 출처 이름을 찾아 골라요. 끄면 예전처럼 목록만 보여요',
+  default: 'all',
+})
 export const FEATURE_STATES = ['off', 'test', 'all']
 const KEY = 'features'
 

@@ -34,6 +34,7 @@ export default function Dropdown({ value, onChange, options, label, title, disab
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const [up, setUp] = useState(false)
+  const [shift, setShift] = useState(0) // 오른쪽 자리가 모자라면 목록을 왼쪽으로 당김 (11/26: 390 폭에서 「출처」 목록이 화면 밖으로 나가 페이지가 옆으로 밀림)
   const btn = useRef(null)
   const list = useRef(null)
   const typed = useRef({ text: '', at: 0 })
@@ -60,7 +61,9 @@ export default function Dropdown({ value, onChange, options, label, title, disab
     const r = btn.current.getBoundingClientRect()
     const h = Math.min(320, all.length * 36 + 16) + (searchable ? 48 : 0)
     setUp(window.innerHeight - r.bottom < h + 8 && r.top > h + 8)
-    ;(searchable ? search.current : list.current)?.focus()
+    const w = list.current?.offsetWidth ?? 0
+    setShift(Math.round(Math.max(8 - r.left, Math.min(0, document.documentElement.clientWidth - 8 - (r.left + w)))))
+    ;(searchable ? search.current : list.current)?.focus({ preventScroll: true })
     // 열 때 한 번만 (검색으로 목록이 줄어도 위아래를 바꾸지 않음)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -135,6 +138,7 @@ export default function Dropdown({ value, onChange, options, label, title, disab
           ref={list}
           id={`${id}-list`}
           className={`dd-list${up ? ' up' : ''}`}
+          style={shift ? { left: shift } : undefined}
           role="listbox"
           tabIndex={-1}
           aria-label={label}
