@@ -96,9 +96,54 @@ function xmlDoc(xml) {
     return new JSDOM(escapeBareAmp(xml), { contentType: 'text/xml' }).window.document
   }
 }
+
+// 11/26 2차: Railway(해외 서버)에서 LG디스플레이 뉴스룸이 &를 고쳐도 「disallowed character in tag name」 — 이 서버와 다른 응답이 옴.
+// XML로 끝내 못 읽으면 <item> · <entry> 덩어리를 글자 규칙으로 꺼낸다 (깨진 피드도 읽음).
+// 하나도 없으면 무엇이 왔는지 알려 준다 (웹페이지면 그 제목) — 차단 · 점검 페이지인지 알 수 있게
+const unCdata = (s) => String(s ?? '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+const decode = (s) =>
+  unCdata(s)
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;|&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&amp;/g, '&')
+const tagText = (block, name) => {
+  const m = block.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, 'i'))
+  return m ? decode(m[1]).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : ''
+}
+function looseItems(xml) {
+  const blocks = xml.match(/<(item|entry)[\s>][\s\S]*?<\/\1>/gi) ?? []
+  return blocks.map((b) => {
+    const href = b.match(/<link[^>]*\shref=["']([^"']+)["']/i)?.[1]
+    return {
+      title: cleanText(tagText(b, 'title')),
+      link: decode(href ?? tagText(b, 'link')),
+      description: cleanText(tagText(b, 'description') || tagText(b, 'summary') || tagText(b, 'content:encoded')).slice(0, DESC_MAX),
+      date: tagText(b, 'pubDate') || tagText(b, 'published') || tagText(b, 'updated') || tagText(b, 'dc:date'),
+    }
+  })
+}
+function notFeed(xml) {
+  const head = xml.slice(0, 4000)
+  const title = head.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, ' ').trim().slice(0, 80)
+  if (/<html[\s>]|<!doctype html/i.test(head)) return `피드 대신 웹페이지가 왔어요${title ? ` (「${title}」)` : ''} — 이 서버 위치에서 막혔거나 주소가 바뀌었을 수 있어요`
+  return `피드 형식이 아니에요 (앞부분: ${head.replace(/\s+/g, ' ').slice(0, 80)})`
+}
+
 function parseFeed(xml) {
-  const doc = xmlDoc(xml.trimStart())
+  let doc
+  try {
+    doc = xmlDoc(xml.trimStart())
+  } catch (err) {
+    const items = looseItems(xml)
+    if (items.length) return items
+    throw new Error(`${notFeed(xml)} · ${String(err.message).replace(/^about:blank:\S+\s*/, '')}`)
+  }
   const items = [...doc.querySelectorAll('item, entry')]
+  if (!items.length && /<html[\s>]|<!doctype html/i.test(xml.slice(0, 4000))) throw new Error(notFeed(xml))
   return items.map((el) => {
     const linkEl = el.querySelector('link')
     const link = linkEl?.getAttribute('href') || linkEl?.textContent?.trim() || ''
@@ -288,3 +333,4 @@ export async function fetchFeedAll(id, words = []) {
 export function feedList() {
   return allFeeds().map(({ id, name, tier, url, lang, paper, custom }) => ({ id, name, tier, url: url ?? 'https://api.openalex.org', lang: lang ?? 'ko', paper: Boolean(paper), custom: Boolean(custom) }))
 }
+

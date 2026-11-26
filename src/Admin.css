@@ -395,11 +395,11 @@
   margin-top: 0;
 }
 
-/* 수집 대상 (11/26 조장: 오른쪽이 비고 아래로 너무 길다): 키워드는 좁게 · 내용 높이만, 회사는 남은 폭 전부.
-   회사 안은 두 줄 — 왼쪽 자사 · 경쟁사, 오른쪽 소부장(가장 김) */
+/* 수집 대상 (11/26 조장: 오른쪽이 비고 아래로 너무 길다): 키워드는 좁게, 회사는 남은 폭 전부.
+   회사 안은 두 줄 — 왼쪽 자사 · 경쟁사, 오른쪽 소부장(가장 김). 두 칸 높이는 긴 쪽에 맞춤 (11/26 2차) */
 .adm-cols.adm-targets {
   grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr);
-  align-items: start;
+  align-items: stretch;
 }
 
 .adm-lists-grid {
