@@ -13,6 +13,7 @@ import { mentions, rescore, scoreArticle } from './score.js'
 import { restoreTitles } from './titles.js'
 import crypto from 'node:crypto'
 import { importanceRule, loadImportanceRule } from '../importanceRule.js'
+import { serverFlag } from '../features.js'
 
 const MAX_KEYWORDS = 10 // API 호출 수를 지키기 위한 한도
 const MAX_PAGES = 10 // 키워드마다 100건씩 최대 10번(1,000건, 네이버 한도)까지 넘겨 받는다
@@ -382,19 +383,22 @@ export async function scoreContext() {
     console.warn(`[score] 요즘 뜨는 기술 용어를 못 읽음: ${err.message}`)
   }
   let older = []
+  // 11/26 W2 스위치 (관리 페이지 「실험 기능」 rerunWeighted): 켜면 드문 낱말 무게로도 재탕을 찾고 같은 이슈 기사 제목까지 견줌. 끄면 예전 그대로
+  const rerunWeighted = await serverFlag('rerunWeighted').catch(() => false)
   if (dbEnabled()) {
     try {
       const { rows } = await query(
         `SELECT title, published_at FROM articles
-          WHERE published_at <= now() - make_interval(days => $1) AND published_at > now() - make_interval(days => $2)`, // 11/26 W2: 대표 기사만이 아니라 같은 이슈 기사 제목도 (같은 소식을 다른 말로 쓴 제목까지 견줌)
+          WHERE published_at <= now() - make_interval(days => $1) AND published_at > now() - make_interval(days => $2)
+            ${rerunWeighted ? '' : 'AND (group_id IS NULL OR group_id = id)'}`,
         [LIST_DAYS, RERUN_DAYS],
       )
-      older = rows.map((r) => ({ time: r.published_at.getTime(), grams: titleGrams(r.title), toks: titleTokens(r.title) }))
+      older = rows.map((r) => ({ time: r.published_at.getTime(), grams: titleGrams(r.title), ...(rerunWeighted ? { toks: titleTokens(r.title) } : {}) }))
     } catch (err) {
       console.warn(`[score] 지난 기사 제목을 못 읽음: ${err.message}`)
     }
   }
-  const value = { rising, older }
+  const value = { rising, older, rerunWeighted }
   globalThis.__scoreCtx = { at: Date.now(), value }
   return value
 }
@@ -410,7 +414,7 @@ function toIssues(stored, lists, ctx = { rising: [], older: [] }) {
   const earliest = (group) => group.reduce((x, y) => (y.publishedAt < x.publishedAt ? y : x))
   const pairs = [...members.entries()].map(([groupId, group]) => [group.find((a) => a.id === groupId) ?? earliest(group), group])
   // 재탕: 이 이슈보다 48시간 넘게 앞서 나온 비슷한 제목(목록 안 다른 이슈 + 그 전 21일) (dedupe.js findReruns — 글자 조각 0.35 또는 드문 낱말 무게 0.4, 11/26 W2)
-  const keyed = pairs.map(([rep]) => ({ id: rep.id, time: Date.parse(rep.publishedAt), grams: titleGrams(rep.fullTitle ?? rep.title), toks: titleTokens(rep.fullTitle ?? rep.title) }))
+  const keyed = pairs.map(([rep]) => ({ id: rep.id, time: Date.parse(rep.publishedAt), grams: titleGrams(rep.fullTitle ?? rep.title), ...(ctx.rerunWeighted ? { toks: titleTokens(rep.fullTitle ?? rep.title) } : {}) }))
   const earlierPool = [...ctx.older, ...keyed]
   const reruns = findReruns(keyed, earlierPool) // 11/16: 색인으로 (예전 isRerun 이슈마다 → 3.9초, 결과는 같음)
   return pairs
