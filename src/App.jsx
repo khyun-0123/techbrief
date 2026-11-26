@@ -268,7 +268,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const [home, setHome] = useState(null)
   const [serverPage, setServerPage] = useState(null)
   const [byIdArticles, setByIdArticles] = useState([])
-  const [pageReload, setPageReload] = useState(0)
+  const [searchCollected, setSearchCollected] = useState([]) // 한 쪽씩 보기: 찾기 결과 중 모은 자료의 모은 쪽 사본 (11/26)
   const [featuresReady, setFeaturesReady] = useState(false)
   const rulesRef = useRef(null)
   const [collectedAt, setCollectedAt] = useState(() => load(COLLECTED_AT_KEY, null))
@@ -333,7 +333,6 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       h.homeIssues = withRule(h.homeIssues, h.rule)
       setHome(h)
       setCollectedAt(h.lastCollectedAt)
-      setPageReload((n) => n + 1)
       return
     }
     const result = await fetchArticles()
@@ -694,11 +693,11 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   const isSample = !paging && fetched.length === 0
   // 화면 전체에서 쓰는 기사: 수집 기사 + 찾기에서 선별한 기사 + 지금 찾기 결과
   const pool = useMemo(() => {
-    const base = [...(paging ? [...(serverPage?.items ?? []), ...(home?.homeIssues ?? []), ...byIdArticles].map(toView) : isSample ? SAMPLE_ARTICLES : fetched.map(toView)), ...materials.map(materialView)]
+    const base = [...(paging ? [...(serverPage?.items ?? []), ...(home?.homeIssues ?? []), ...byIdArticles, ...searchCollected].map(toView) : isSample ? SAMPLE_ARTICLES : fetched.map(toView)), ...materials.map(materialView)]
     const seen = new Set(base.map((a) => a.id))
     const more = [...extraArticles, ...(searchArticles ?? [])].filter((a) => !seen.has(a.id) && seen.add(a.id))
     return [...base, ...more.map(toView)]
-  }, [isSample, fetched, extraArticles, searchArticles, materials, paging, serverPage, home, byIdArticles])
+  }, [isSample, fetched, extraArticles, searchArticles, materials, paging, serverPage, home, byIdArticles, searchCollected])
   const sources = useMemo(() => [...new Set([...(paging ? (home?.sources ?? []) : []), ...pool.map((a) => a.source)])].sort(), [pool, paging, home])
   // 출처 거르기: 'all' · 'tier:1'(1차 기업·학회·논문) · 'tier:2'(2차 전문매체) · 'tier:3'(3차 일반 뉴스) · 매체 이름
   const sourceMatch = (a) =>
@@ -797,7 +796,8 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
   // 한 쪽씩 보기 (11/17 B2): 거르기 · 쪽이 바뀌면 서버에서 그 쪽만 받는다. 검색어는 치는 동안 0.3초 기다림
   const pageQuery = paging && !searchArticles ? new URLSearchParams({ period, source, q, sort, sf: summarizedFirst ? '1' : '0', low: showLow ? '1' : '0', own: excludeOwn ? '1' : '0', page: String(page), size: String(pageSize) }).toString() : ''
   useEffect(() => {
-    if (!pageQuery) return undefined
+    // 첫 화면 값(home · 배점 rule)이 온 뒤에 받는다. home이 바뀌면(최신화) 다시 (11/26: 예전엔 rule 전에 받은 쪽이 있어 두 번씩 받았음)
+    if (!pageQuery || !home) return undefined
     let alive = true
     const t = setTimeout(() => {
       fetchArticlesPage(pageQuery)
@@ -809,12 +809,12 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       clearTimeout(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageQuery, pageReload])
+  }, [pageQuery, home])
 
   // 한 쪽씩 보기: 선별해 둔 자료 중 지금 받은 목록에 없는 것은 id로 받는다 (선별·요약 · 보고서가 그대로 보이게)
   const wantIdsKey = paging ? [...selectedIds, ...includedIds].filter((id) => !extraArticles.some((x) => x.id === id)).join(',') : ''
   useEffect(() => {
-    if (!wantIdsKey) return undefined
+    if (!wantIdsKey || !home) return undefined
     let alive = true
     fetchArticlesByIds(wantIdsKey.split(','))
       .then((d) => alive && setByIdArticles(withRule(d.items, rulesRef.current)))
@@ -822,7 +822,20 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
     return () => {
       alive = false
     }
-  }, [wantIdsKey, pageReload])
+  }, [wantIdsKey, home])
+  // 한 쪽씩 보기: 찾기 결과 중 이미 모은 자료는 모은 쪽 사본(목록 요약 · 같은 이슈 수 · 배점)을 받아 쓴다 (11/26 B2 점검)
+  // 목록 전체를 받는 방식은 모은 자료가 pool에 먼저 있어 찾기 결과보다 그쪽이 쓰였다 — 같은 모습이 되게
+  const searchIdsKey = paging && searchArticles ? searchArticles.filter((a) => !a.paper && !a.patent && !a.material).map((a) => a.id).join(',') : ''
+  useEffect(() => {
+    if (!searchIdsKey || !home) return undefined
+    let alive = true
+    fetchArticlesByIds(searchIdsKey.split(','))
+      .then((d) => alive && setSearchCollected(withRule(d.items, rulesRef.current)))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [searchIdsKey, home])
   const pageCount = Math.max(1, Math.ceil(visibleCount / pageSize))
   const currentPage = Math.min(page, pageCount)
   const paged = serverList ? (serverPage?.items ?? []).map((a) => byId.get(a.id) ?? toView(a)) : visible.slice((currentPage - 1) * pageSize, currentPage * pageSize)
@@ -1546,7 +1559,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
                 label="출처"
                 size="lg"
                 className="dd-source"
-                searchable
+                searchable={features.has('sourceSearch')}
                 options={[
                   { value: 'all', label: '모든 출처' },
                   { value: 'material', label: `직접 추가한 자료 (${materials.length})` },

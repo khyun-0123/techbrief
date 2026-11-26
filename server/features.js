@@ -44,6 +44,13 @@ FEATURES.push({
   desc: '키워드 분석의 기술 시계열에 최근 2년 논문의 FWCI 평균 · 분야 상위 10% 인용 비율을 참고로 보여 줘요 (단계 판정에는 안 씀, 키워드마다 OpenAlex 1번 · 7일 기억). 「끄기」면 계산도 하지 않아요',
   default: 'all',
 })
+// 11/26 (45 문서 8장 「모든 출처에 검색」): 자료 현황 「출처」 칸 맨 위 검색칸. 끄면 예전처럼 목록만 (배포 없이 관리 페이지에서 되돌리기)
+FEATURES.push({
+  key: 'sourceSearch',
+  label: '「출처」 칸 안 검색',
+  desc: '자료 현황 「출처」(모든 출처) 칸을 열면 맨 위 검색칸으로 출처 이름을 찾아 골라요. 끄면 예전처럼 목록만 보여요',
+  default: 'all',
+})
 export const FEATURE_STATES = ['off', 'test', 'all']
 const KEY = 'features'
 
