@@ -1,14 +1,27 @@
 // 서버(/api) 호출 모음. 접속 키는 서버에만 있고 여기에는 없다.
 
+import { reportError } from './errorReport.js'
+
+// 11/26: 오류에 status를 붙이고(502 · 503 · 504 · 연결 끊김 = 서버가 다시 켜지는 중) 오류 기록으로 보낸다 (src/errorReport.js)
 async function postJson(path, body) {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  let res
+  try {
+    res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch (cause) {
+    const err = Object.assign(new Error('서버에 연결하지 못했어요. 서버가 다시 켜지는 중일 수 있어요.'), { status: 0, transient: true, cause })
+    reportError('network', err, path)
+    throw err
+  }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    throw new Error(data.error ?? `서버 오류 (${res.status}). npm run dev가 켜져 있는지 확인해 주세요.`)
+    const restarting = [502, 503, 504].includes(res.status) && !data.error
+    const err = Object.assign(new Error(data.error ?? (restarting ? `서버가 다시 켜지는 중이에요 (${res.status}). 다시 연결되면 이어서 해요.` : `서버 오류 (${res.status})`)), { status: res.status, code: data.code })
+    if (res.status >= 500) reportError('api', err, path)
+    throw err
   }
   return data
 }
@@ -289,6 +302,14 @@ export async function adminLogin(id, password) {
 
 export function adminLogout() {
   return postJson('/api/admin/logout', {})
+}
+
+// 오류 기록 (11/26, 관리 페이지 「운영」)
+export async function fetchAdminErrors() {
+  const res = await fetch('/api/admin/errors')
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? '오류 기록을 불러오지 못했어요')
+  return data
 }
 
 export async function fetchAdminLog() {

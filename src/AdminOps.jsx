@@ -1,8 +1,8 @@
 // 관리 페이지 「운영」 (19 문서 6장)
 // - 일반 화면 운영 상태: 정상 · 공지 · AI 기능 정지 · 점검 중 — 저장 막대와 별개로 「적용」하면 바로 바뀜 (급한 조치용)
 // - 서버 다시 켜기: npm run serve로 켰을 때만. 서버 코드 · .env.local 변경 반영, 멈춘 대기열 풀기
-import { useState } from 'react'
-import { fetchHealth, restartServerApi, saveOpsApi } from './api.js'
+import { useEffect, useState } from 'react'
+import { fetchAdminErrors, fetchHealth, restartServerApi, saveOpsApi } from './api.js'
 import { OPS_LABEL } from './ops.js'
 import QueueView from './QueueView.jsx'
 import { useQueue } from './queue.js'
@@ -15,6 +15,67 @@ function QueueCard() {
       <h2>AI 대기열</h2>
       <p className="adm-desc">지금 AI가 처리 중인 일과 기다리는 일이에요. 「내 작업」은 이 브라우저에서 시킨 것, 「자동」은 자동 요약 · 미리 분석, 「다른 사람」은 다른 브라우저에서 시킨 것이에요. 사람이 시킨 일이 자동 작업보다 먼저 처리돼요.</p>
       <QueueView data={data} admin />
+    </section>
+  )
+}
+
+// 오류 기록 (11/26 조장 「오류나는거 다 로그로」, server/errorLog.js): 서버 5xx · 화면에서 난 오류(서버가 꺼져 있던 동안 것은 다시 연결된 뒤 들어옴). 30일 보관
+function ErrorsCard() {
+  const [list, setList] = useState(null)
+  const [error, setError] = useState('')
+  const [all, setAll] = useState(false)
+  const load = () =>
+    fetchAdminErrors()
+      .then((d) => {
+        setList(d.errors ?? [])
+        setError('')
+      })
+      .catch((err) => setError(err.message))
+  useEffect(() => {
+    load()
+  }, [])
+  const shown = (list ?? []).slice(0, all ? 200 : 20)
+  const when = (iso) => new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  return (
+    <section className="adm-card">
+      <h2>오류 기록</h2>
+      <p className="adm-desc">서버에서 실패한 요청(5xx)과 사용자 화면에서 난 오류예요. 502 · 연결 끊김은 대부분 서버가 다시 켜지는 동안(main 머지 → 다시 배포) 난 것이고, 요약 · 보고서는 서버가 돌아오면 저절로 이어서 해요. 30일 보관.</p>
+      {error && <p className="adm-error">{error}</p>}
+      {list && list.length === 0 && <p className="adm-desc">기록된 오류가 없어요.</p>}
+      {shown.length > 0 && (
+        <table className="adm-table">
+          <thead>
+            <tr>
+              <th>시각</th>
+              <th>어디</th>
+              <th>상태</th>
+              <th>요청</th>
+              <th>내용</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((e, i) => (
+              <tr key={`${e.created_at}-${i}`}>
+                <td>{when(e.created_at)}</td>
+                <td>{e.side === 'client' ? `화면 · ${e.kind ?? ''}` : '서버'}</td>
+                <td>{e.status ?? '—'}</td>
+                <td>{e.path ?? '—'}</td>
+                <td>{e.message}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div className="adm-actions">
+        <button type="button" className="adm-btn" onClick={load}>
+          새로 불러오기
+        </button>
+        {(list?.length ?? 0) > 20 && (
+          <button type="button" className="adm-link-btn" onClick={() => setAll((v) => !v)}>
+            {all ? '최근 20건만' : `모두 보기 (${list.length}건)`}
+          </button>
+        )}
+      </div>
     </section>
   )
 }
@@ -178,6 +239,7 @@ function AdminOps({ ops, onOps, onToast, health, refreshRunning, dirtyCount }) {
   return (
     <>
       <QueueCard />
+      <ErrorsCard />
       <section className="adm-card">
         <div className="adm-ops-head">
           <div>

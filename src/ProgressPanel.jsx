@@ -286,8 +286,8 @@ function ProgressPanel({ queue, reportJobs = [], storyJobs = [], onOpenStory, on
                       {job.title}
                     </span>
                     <span className="progress-status">
-                      {STATUS_LABEL[job.status]}
-                      {job.status === 'running' && ` ${value}%`}
+                      {job.waiting ? '연결 기다림' : STATUS_LABEL[job.status]}
+                      {job.status === 'running' && !job.waiting && ` ${value}%`}
                     </span>
                     {job.status === 'error' && (
                       <button type="button" className="icon-btn" onClick={() => retry(job.id)} title="다시 요약">
@@ -307,7 +307,8 @@ function ProgressPanel({ queue, reportJobs = [], storyJobs = [], onOpenStory, on
                     )}
                   </div>
                   <Gauge value={value} status={job.status} label={`요약 「${job.title ?? '기사'}」 진행`} />
-                  {job.status === 'error' && <p className="progress-error" role="alert">{job.error}</p>}
+                  {job.status === 'error' && <p className="progress-error" role="alert">{job.error}{job.transient ? ' 서버가 돌아오면 저절로 다시 해요.' : ''}</p>}
+                  {job.waiting && <p className="progress-sub">서버가 다시 켜지는 중이에요 — 연결되면 이어서 해요</p>}
                 </li>
               )
             })}
