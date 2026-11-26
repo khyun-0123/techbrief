@@ -55,9 +55,9 @@ import { activeJobs, addJob, answerJob, cancelJob, listJobs, resumableCount, set
 import { sourceStatus } from './sourceGuard.js'
 import { fetchTitlesIfMissing, patentDbStatus } from './patentDb.js'
 import { abstractsStatus, fetchAbstractsIfWanted } from './patentAbstracts.js'
-import { chatJson, currentProviderId, llmProviders, moveJob, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, setModelOverrides, testConnection, withQueueContext } from './llm/client.js'
+import { chatJson, currentProviderId, kickQueue, llmProviders, moveJob, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, setModelOverrides, testConnection, withQueueContext } from './llm/client.js'
 import { SERVICES as API_KEY_SERVICES, apiKeyServiceLabel, loadApiKeys, publicApiKeys, resetApiKeys, revertApiKeys, updateApiKeys } from './apiKeys.js'
-import { addCustom, deleteCustom, loadConnections, publicConnections, revertConnection, setConnectionDisabled, updateBuiltin, updateCustom, BUILTIN_IDS } from './llm/connections.js'
+import { addCustom, deleteCustom, loadConnections, publicConnections, revertConnection, setConnectionDisabled, setConnectionParallel, updateBuiltin, updateCustom, BUILTIN_IDS } from './llm/connections.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
   buildMergeMessages,
@@ -269,13 +269,11 @@ function draftReport(articles, opts) {
 // 기사가 많을 때: REPORT_CHUNK건씩 나눠 초안 조각을 쓰고(원문 본문은 묶음마다 나눠 붙임), 조각을 한 보고서로 합친다
 // 번호(n)는 처음부터 전체 기사 번호라 조각을 합쳐도 근거 번호가 그대로 맞는다
 async function draftLongReport(articles, opts) {
-  const parts = []
   const size = REPORT_CHUNK()
-  for (let i = 0; i < articles.length; i += size) {
-    const chunk = await attachBodies(articles.slice(i, i + size))
-    const { data } = await draftReport(chunk, opts)
-    parts.push(data)
-  }
+  const chunks = []
+  for (let i = 0; i < articles.length; i += size) chunks.push(articles.slice(i, i + size))
+  // 11/26: 조각을 한꺼번에 대기열에 넣는다 — 동시 요청 수가 1이면 예전처럼 차례로, 늘리면 함께 (순서는 조각 순서 그대로 합침)
+  const parts = await Promise.all(chunks.map(async (c) => (await draftReport(await attachBodies(c), opts)).data))
   const merged = await chatJson({
     messages: buildMergeMessages(articles, parts, opts),
     schema: REPORT_SCHEMA,
@@ -773,6 +771,14 @@ async function handleApiInner(req, res) {
         if (disabled && currentProviderId() === id) return send(res, 409, { error: '지금 쓰는 AI 연결은 끌 수 없어요. 먼저 다른 AI 서버를 고르세요.' })
         await setConnectionDisabled(id, Boolean(disabled))
         await logChange(admin, 'AI 연결', `「${nameOf(id)}」 ${disabled ? '끔' : '켬'}`)
+        return reply()
+      }
+      // 11/26: 동시 요청 수 (키를 건드리지 않아 비밀번호 다시 확인은 묻지 않음)
+      if (req.method === 'POST' && action === 'parallel') {
+        const { parallel } = await readJson(req)
+        const n = await setConnectionParallel(id, parallel)
+        kickQueue()
+        await logChange(admin, 'AI 연결', `「${nameOf(id)}」 동시 요청 수 ${n}`)
         return reply()
       }
       if (req.method === 'POST' && action === 'delete') {

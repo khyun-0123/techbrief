@@ -366,9 +366,11 @@ async function supplement(job, entry, gaps, research) {
       useNew = ans
     }
     if (useNew) {
-      for (const [i, c] of list.entries()) {
-        checkCancel(job)
-        step(job, `요약 안 된 기사 요약 중 ${i + 1}/${list.length}`, 45 + Math.round((i / list.length) * 20))
+      // 11/26: 한꺼번에 대기열에 넣는다 (동시 요청 수만큼 함께 돎, 1이면 예전처럼 차례로). 진행 칸은 끝난 수로
+      checkCancel(job)
+      let done = 0
+      step(job, `요약 안 된 기사 요약 중 0/${list.length}`, 45)
+      await Promise.all(list.map(async (c) => {
         try {
           const { summary } = await summarizeArticle({ id: c.id, url: c.url, title: c.title, source: c.source, description: c.description ?? '' }, [], { priority: PRIORITY.REPORT })
           const items = Object.values(summary?.items ?? {})
@@ -379,19 +381,26 @@ async function supplement(job, entry, gaps, research) {
           c.summarized = true
           research.summarized += 1
         } catch (err) {
+          if (err?.cancelled) return
           console.warn(`[report-job] 요약 실패: ${err.message}`)
+        } finally {
+          done += 1
+          if (!job.cancel) step(job, `요약 안 된 기사 요약 중 ${done}/${list.length}`, 45 + Math.round((done / list.length) * 20))
         }
-      }
+      }))
+      checkCancel(job)
     } else {
       research.skipped = list.length
     }
   }
 
   // 3) 줄마다 고쳐 쓰기 (요약된 것 · 원문 · 위키백과만)
+  // 11/26: 줄마다 따로라 한꺼번에 대기열에 넣는다 (동시 요청 수만큼 함께, 1이면 예전처럼 차례로). 새 근거 번호는 inPlace로 바로 붙여 겹치지 않게
   const n = gaps.length
-  for (const [i, g] of gaps.entries()) {
-    checkCancel(job)
-    step(job, `AI 해설 보충 중 ${i + 1}/${n}`, 65 + Math.round((i / n) * 28))
+  let fin = 0
+  checkCancel(job)
+  step(job, `AI 해설 보충 중 0/${n}`, 65)
+  const one = async (g) => {
     const passages = []
     const seen = new Set()
     for (const { c } of g.cands) {
@@ -418,17 +427,30 @@ async function supplement(job, entry, gaps, research) {
     }
     if (!passages.length) {
       research.notFound += 1
-      continue
+      return
     }
-    const r = await rewriteWithPassages(g.text, passages, entry.articles)
+    if (job.cancel) return
+    const r = await rewriteWithPassages(g.text, passages, entry.articles, { inPlace: true })
     if (!r.found) {
       research.notFound += 1
-      continue
+      return
     }
-    entry.articles.push(...r.added)
     const bullets = entry.report.sections[g.key].bullets
     bullets[g.index] = { ...bullets[g.index], ...r.bullet }
     research.filled += 1
   }
+  await Promise.all(
+    gaps.map((g) =>
+      one(g)
+        .catch((err) => {
+          if (!err?.cancelled) console.warn(`[report-job] 보충 실패: ${err.message}`)
+        })
+        .finally(() => {
+          fin += 1
+          if (!job.cancel) step(job, `AI 해설 보충 중 ${fin}/${n}`, 65 + Math.round((fin / n) * 28))
+        }),
+    ),
+  )
+  checkCancel(job)
   return research
 }
