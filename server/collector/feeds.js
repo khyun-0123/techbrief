@@ -186,6 +186,22 @@ const pageSnippet = (t) =>
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 100)
+async function viaRelay(url) {
+  const base = String(process.env.FEED_RELAY_URL ?? '').replace(/\/$/, '')
+  const key = process.env.FEED_RELAY_KEY ?? ''
+  if (!base || !key) return null
+  try {
+    const res = await fetch(`${base}/fetch?url=${encodeURIComponent(url)}`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(25_000) })
+    if (!res.ok) {
+      console.warn(`[feeds] 맥미니 중계 응답 ${res.status}: ${(await res.text().catch(() => '')).slice(0, 80)}`)
+      return null
+    }
+    return await res.text()
+  } catch (err) {
+    console.warn(`[feeds] 맥미니 중계에 닿지 않음: ${err.message}`)
+    return null
+  }
+}
 async function feedItems(feed) {
   let first
   let text = ''
@@ -220,6 +236,20 @@ async function feedItems(feed) {
           description: cleanText(decode(String(p.excerpt?.rendered ?? '').replace(/<[^>]+>/g, ' '))).slice(0, DESC_MAX),
           date: p.date_gmt ? `${p.date_gmt}Z` : p.date ?? '',
         }))
+      }
+    } catch {
+      // 아래 오류로
+    }
+  }
+  // ④ 맥미니 피드 중계 (11/26 조장: 「Railway라서 막히는 거니까 맥미니에서 받아 오자」, scripts/feed-relay.mjs)
+  //    중계 주소 · 열쇠가 있을 때만. 맥미니가 꺼져 있으면 아래 오류로
+  const relay = await viaRelay(feed.url)
+  if (relay) {
+    try {
+      const items = parseFeed(relay)
+      if (items.length) {
+        console.warn(`[feeds] ${feed.id}: 직접 못 받아 맥미니 중계로 받음`)
+        return items
       }
     } catch {
       // 아래 오류로
