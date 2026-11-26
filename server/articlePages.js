@@ -81,8 +81,8 @@ export async function articlesPage(light, params, clientId = null) {
   }
 }
 
-// 선별해 둔 자료 등 id로 (최대 300)
+// 선별해 둔 자료 · 찾기 결과 중 모은 자료를 id로 (최대 1,000 — 찾기 결과가 뉴스 500 + 1·2차 출처 200건까지라서, 11/26)
 export async function articlesByIds(light, ids) {
-  const want = new Set((Array.isArray(ids) ? ids : []).map(String).slice(0, 300))
+  const want = new Set((Array.isArray(ids) ? ids : []).map(String).slice(0, 1000))
   return { items: light.articles.filter((a) => want.has(String(a.id))) }
 }

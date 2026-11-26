@@ -3,14 +3,17 @@
 // - 기본 세 곳은 지울 수 없고 바꾸기 · 되돌리기 · 끄기만. 새로 더한 연결은 관리자 비밀번호를 다시 넣어야 지운다
 import { useEffect, useState } from 'react'
 import { withConfirm } from './AdminConfirm.jsx'
-import { addLlmConnection, deleteLlmConnection, fetchLlmConnections, revertLlmConnection, setLlmConnectionDisabled, testLlmConnection, updateLlmConnection } from './api.js'
+import { addLlmConnection, deleteLlmConnection, fetchLlmConnections, revertLlmConnection, setLlmConnectionDisabled, setLlmConnectionParallel, testLlmConnection, updateLlmConnection } from './api.js'
 
 const KEY_TEXT = {
   site: ['있음', '사이트에서 넣음', 'ok'],
   env: ['있음', '서버 설정 파일', 'ok'],
   broken: ['다시 넣어 주세요', '암호 열쇠가 바뀌어 읽을 수 없음', 'bad'],
   none: ['없음', '', 'bad'],
+  google: ['필요 없음', '서버의 Google 서비스 계정(Vertex AI)', 'ok'],
 }
+// 동시 요청 수 (11/26): 맥미니는 모델 하나라 1. 상용 API는 측정값 기준 (docs/46)
+const PARALLEL_CHOICES = [1, 2, 3, 4, 6, 8, 12, 16]
 const URL_FROM = { site: '사이트에서 넣음', env: '서버 설정 파일', default: '기본 주소', none: '' }
 const EMPTY_NEW = { label: '', baseUrl: '', model: '', reportModel: '', key: '' }
 
@@ -91,6 +94,7 @@ export default function AdminLlmConnections({ currentId, onChanged, onToast }) {
               <th scope="col">연결</th>
               <th scope="col">주소</th>
               <th scope="col">API 키</th>
+              <th scope="col" title="이 연결에 AI 요청을 한 번에 몇 개까지 보낼지. 1이면 하나씩(맥미니)">동시 요청</th>
               <th scope="col">할 일</th>
             </tr>
           </thead>
@@ -122,6 +126,25 @@ export default function AdminLlmConnections({ currentId, onChanged, onToast }) {
                   <td>
                     <span className={`adm-state ${keyState}`}>{keyWord}</span>
                     {keyFrom && <small className="muted">{keyFrom}</small>}
+                  </td>
+                  <td>
+                    <select
+                      className="adm-parallel"
+                      aria-label={`${c.label} 동시 요청 수`}
+                      value={c.parallel ?? 1}
+                      disabled={busy === `par-${c.id}`}
+                      onChange={(e) => {
+                        const v = Number(e.target.value)
+                        if (v > 1 && (c.id === 'local' || /맥미니|ollama/i.test(c.label)) && !window.confirm('맥미니(Ollama)는 모델 하나로 요청을 하나씩 처리해요. 동시에 보내도 빨라지지 않고 시간 초과가 날 수 있어요. 그래도 바꿀까요?')) return
+                        run(`par-${c.id}`, () => setLlmConnectionParallel(c.id, v), `동시 요청 수 ${v}`)
+                      }}
+                    >
+                      {[...new Set([...PARALLEL_CHOICES, c.parallel ?? 1])].sort((a, b) => a - b).map((n) => (
+                        <option key={n} value={n}>
+                          {n === 1 ? '1 (하나씩)' : n}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td>
                     <div className="adm-conn-actions">
@@ -233,6 +256,12 @@ export default function AdminLlmConnections({ currentId, onChanged, onToast }) {
           <label>
             주소
             <input value={adding.baseUrl} onChange={(e) => setAdding((a) => ({ ...a, baseUrl: e.target.value }))} placeholder="https://…/v1" inputMode="url" required />
+            <small className="muted">
+              Google Vertex AI(GCP 크레딧)는 <code>https://aiplatform.googleapis.com</code>만 넣고 모델에 <code>google/gemma-4-26b-a4b-it-maas</code> — 키는 비워 두면 서버의 Google 서비스 계정을 써요{' '}
+              <button type="button" className="adm-link-btn" onClick={() => setAdding((a) => ({ ...a, label: a.label || 'Vertex Gemma 4', baseUrl: 'https://aiplatform.googleapis.com', model: a.model || 'google/gemma-4-26b-a4b-it-maas' }))}>
+                채우기
+              </button>
+            </small>
           </label>
           <label>
             요약 모델
@@ -244,7 +273,7 @@ export default function AdminLlmConnections({ currentId, onChanged, onToast }) {
           </label>
           <label>
             API 키 <small className="muted">넣은 뒤에는 다시 볼 수 없어요</small>
-            <input type="password" value={adding.key} onChange={(e) => setAdding((a) => ({ ...a, key: e.target.value }))} autoComplete="new-password" spellCheck={false} required />
+            <input type="password" value={adding.key} onChange={(e) => setAdding((a) => ({ ...a, key: e.target.value }))} autoComplete="new-password" spellCheck={false} required={!/aiplatform\.googleapis\.com/.test(adding.baseUrl)} />
           </label>
           <div className="adm-actions">
             <button type="submit" className="adm-btn primary" disabled={busy === 'add'}>

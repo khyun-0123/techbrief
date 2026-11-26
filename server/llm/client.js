@@ -6,6 +6,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { recordAiCall } from '../usage.js'
 import { BUILTIN_IDS, builtinOverride, customConnections } from './connections.js'
+import { accessToken, readKey } from '../patents.js'
 
 const TIMEOUT_MS = 120_000 // 요약 기본값. 보고서처럼 긴 출력은 호출할 때 늘린다
 
@@ -46,10 +47,10 @@ const ov = (id, k) => OV.models[id]?.[k] || undefined
 function providerConfig(id) {
   const custom = customConnections().find((c) => c.id === id)
   if (custom) {
-    return { ...custom, numCtx: 0, reasoningEffort: '', pingPath: '/models', envHint: '관리 페이지의 주소 · API 키 · 모델', custom: true }
+    return { ...custom, numCtx: 0, reasoningEffort: '', pingPath: '/models', envHint: custom.vertex ? '관리 페이지의 주소 · 모델 (키 대신 서버의 Google 서비스 계정)' : '관리 페이지의 주소 · API 키 · 모델', custom: true }
   }
   const o = builtinOverride(PROVIDER_IDS.includes(id) ? id : 'local')
-  return { ...builtinConfig(id, o), disabled: o.disabled }
+  return { ...builtinConfig(id, o), disabled: o.disabled, parallel: o.parallel || 1 }
 }
 function builtinConfig(id, o) {
   // K-EXAONE 2.5 (docs.exaone.ai): OpenAI 호환 /v1/chat/completions, 모델 k-exaone_v2.5. 늘 먼저 추론하고(끌 수 없음)
@@ -97,7 +98,39 @@ function builtinConfig(id, o) {
   }
 }
 
-const isReady = (c) => Boolean(c.baseUrl && c.apiKey && c.model && !c.disabled)
+const isReady = (c) => Boolean(c.baseUrl && (c.apiKey || c.vertex) && c.model && !c.disabled)
+
+// ── Vertex AI (11/26): 키 대신 서버의 Google 서비스 계정(GCP_KEY_JSON)으로 1시간짜리 토큰. 만료 5분 전에 새로 받는다
+// 주소는 https://aiplatform.googleapis.com 만 넣어도 된다 → …/v1/projects/<서비스 계정 프로젝트>/locations/global/endpoints/openapi
+// {project}를 쓰면 그 자리에 프로젝트를 넣는다
+const VTX = (globalThis.__vertexToken ??= { token: null, until: 0, pending: null })
+function vertexBase(url) {
+  const key = readKey()
+  const proj = key?.project_id
+  let u = String(url ?? '').replace(/\/$/, '')
+  if (!proj) return u
+  if (u.includes('{project}')) return u.replaceAll('{project}', proj)
+  if (!/\/projects\//.test(u)) u = `${u.replace(/\/v1(beta1)?$/, '')}/v1/projects/${proj}/locations/global/endpoints/openapi`
+  return u
+}
+async function vertexToken() {
+  if (VTX.token && Date.now() < VTX.until) return VTX.token
+  VTX.pending ??= (async () => {
+    const key = readKey()
+    if (!key) throw new Error('Vertex AI: 서버에 Google 서비스 계정 키(GCP_KEY_JSON)가 없어요.')
+    const t = await accessToken(key, 'https://www.googleapis.com/auth/cloud-platform')
+    VTX.token = t
+    VTX.until = Date.now() + 55 * 60_000
+    return t
+  })().finally(() => {
+    VTX.pending = null
+  })
+  return VTX.pending
+}
+// 요청 머리글의 인증: Vertex면 Google 토큰, 아니면 API 키
+async function authOf(cfg) {
+  return `Bearer ${cfg.vertex ? await vertexToken() : cfg.apiKey}`
+}
 const notReady = (c) => (c.disabled ? `${c.label} 연결은 꺼져 있어요. 관리 페이지 「AI 연결」에서 켜 주세요.` : `${c.label} AI 설정이 없어요. 관리 페이지 「AI 연결」에서 주소 · API 키를 넣거나 서버 설정에 ${c.envHint}를 넣어 주세요.`)
 
 // 처음 값: LLM_PROVIDER(local|openrouter|exaone) → 없으면 설정이 채워진 첫 번째
@@ -118,7 +151,7 @@ function config(id = currentId()) {
   if (!isReady(c)) {
     throw new Error(notReady(c))
   }
-  return { ...c, baseUrl: c.baseUrl.replace(/\/$/, '') }
+  return { ...c, baseUrl: c.vertex ? vertexBase(c.baseUrl) : c.baseUrl.replace(/\/$/, '') }
 }
 
 // 대체 AI 서버 (11/12, 33 문서 6장 W19): 지금 서버가 연결 실패 · 시간 초과 · 5xx · 429면 「사람이 누른 요청만」 한 번 다시 보낸다
@@ -135,13 +168,14 @@ let lastFallback = null // { at, from, to, reason }
 export function llmProviders() {
   return {
     current: currentId(),
+    parallel: limitOf(currentId()), // 11/26: 화면 요약 대기열도 이만큼 함께 보낸다 (src/summaryQueue.js)
     fallback: fallbackId(currentId()),
     fallbackSetting: OV.fallback ?? null,
     envFallback: process.env.LLM_FALLBACK || null,
     lastFallback,
     providers: allIds().map((id) => {
       const c = providerConfig(id)
-      return { id, label: c.label, model: c.model ?? '', reportModel: c.reportModel ?? '', ready: isReady(c), disabled: Boolean(c.disabled), custom: Boolean(c.custom), envModel: { local: process.env.LLM_SUMMARY_MODEL, openrouter: process.env.OPENROUTER_MODEL, exaone: process.env.EXAONE_MODEL || 'k-exaone_v2.5' }[id] ?? '', envReportModel: { local: process.env.LLM_REPORT_MODEL, openrouter: process.env.OPENROUTER_REPORT_MODEL, exaone: process.env.EXAONE_REPORT_MODEL }[id] ?? '' }
+      return { id, label: c.label, model: c.model ?? '', reportModel: c.reportModel ?? '', ready: isReady(c), parallel: Math.max(1, Number(c.parallel) || 1), vertex: Boolean(c.vertex), disabled: Boolean(c.disabled), custom: Boolean(c.custom), envModel: { local: process.env.LLM_SUMMARY_MODEL, openrouter: process.env.OPENROUTER_MODEL, exaone: process.env.EXAONE_MODEL || 'k-exaone_v2.5' }[id] ?? '', envReportModel: { local: process.env.LLM_REPORT_MODEL, openrouter: process.env.OPENROUTER_REPORT_MODEL, exaone: process.env.EXAONE_REPORT_MODEL }[id] ?? '' }
     }),
   }
 }
@@ -196,7 +230,22 @@ const Q = (globalThis.__aiQueue ??= {
   seq: 0,
   lastServed: new Map(), // 브라우저 번호 → 마지막으로 AI를 쓴 때 (같은 단계 안 번갈아 주기)
 })
+// 11/26 동시 요청: 지금 도는 일 목록 [{ priority, meta, abort, provider }]. 연결마다 「동시 요청 수」(parallel)까지 함께 돈다
+Q.active ??= []
 const waiting = Q.waiting
+const active = Q.active
+// 그 연결에 동시에 보낼 수 있는 수 (관리 페이지 「AI 연결」, 처음 값 1 = 예전처럼 하나씩)
+function limitOf(providerId) {
+  try {
+    return Math.max(1, Number(providerConfig(providerId ?? currentId()).parallel) || 1)
+  } catch {
+    return 1
+  }
+}
+const busyOn = (providerId) => active.filter((a) => a.provider === providerId).length
+const providerOfJob = (j) => j.meta.provider ?? currentId()
+// 예전 이름 호환: 지금 도는 일 중 가장 높은 단계 (없으면 null)
+const runningTop = () => (active.length ? Math.min(...active.map((a) => a.priority)) : null)
 const lastServed = Q.lastServed
 
 // ── 대기열 보기 (11/15): 누가 · 무엇을 기다리는지 ──
@@ -255,14 +304,25 @@ function plannedOrder() {
   return out
 }
 
-async function pump() {
-  if (Q.running !== null || waiting.length === 0) return
-  const job = waiting.splice(pickNext(waiting, lastServed), 1)[0]
+function pump() {
+  // 자리가 남은 연결의 일만 골라 꺼낸다 (같은 규칙: 높은 단계 → 오래 못 받은 사람 → 먼저 온 것)
+  for (;;) {
+    const ready = waiting.filter((j) => busyOn(providerOfJob(j)) < limitOf(providerOfJob(j)))
+    if (!ready.length) return
+    const pick = ready[pickNext(ready, lastServed)]
+    waiting.splice(waiting.indexOf(pick), 1)
+    run(pick)
+  }
+}
+
+// 동시 요청 수를 늘렸을 때 기다리던 일을 바로 시작 (index.js)
+export const kickQueue = () => pump()
+
+async function run(job) {
   lastServed.set(job.meta.client ?? '', Date.now())
-  Q.running = job.priority
-  Q.runningMeta = { ...job.meta, startedAt: Date.now() }
   const controller = new AbortController()
-  Q.runningAbort = controller
+  const slot = { priority: job.priority, meta: { ...job.meta, startedAt: Date.now() }, abort: controller, provider: providerOfJob(job) }
+  active.push(slot)
   try {
     const value = await job.task(controller.signal)
     // 끊겼는데 응답이 이미 와 있었던 경우도 끊긴 것으로 본다 (저장 여부를 한 가지 기준으로)
@@ -271,9 +331,7 @@ async function pump() {
   } catch (err) {
     job.reject(controller.signal.aborted ? controller.signal.reason : err)
   } finally {
-    Q.running = null
-    Q.runningAbort = null
-    Q.runningMeta = null
+    active.splice(active.indexOf(slot), 1)
     pump()
   }
 }
@@ -297,7 +355,9 @@ function publicMeta(m, viewer) {
   }
 }
 export function queueList(viewer) {
-  return { running: publicMeta(Q.runningMeta, viewer), waiting: plannedOrder().map((j) => ({ ...publicMeta(j.meta, viewer), id: j.id })) }
+  const runningAll = [...active].sort((a, b) => a.meta.startedAt - b.meta.startedAt).map((a) => publicMeta(a.meta, viewer))
+  // running: 예전 화면 호환(가장 먼저 시작한 일 하나), runningAll: 동시에 도는 일 모두 (11/26)
+  return { running: runningAll[0] ?? null, runningAll, parallel: limitOf(currentId()), waiting: plannedOrder().map((j) => ({ ...publicMeta(j.meta, viewer), id: j.id })) }
 }
 
 // 기다리는 일 순서 바꾸기 (11/17). id = 대기열 번호(queueList의 id)
@@ -338,13 +398,13 @@ export function cancelAi(jobId) {
   for (let i = waiting.length - 1; i >= 0; i -= 1) {
     if (waiting[i].meta.jobId === jobId) waiting.splice(i, 1)[0].reject(reason)
   }
-  if (Q.runningMeta?.jobId === jobId && Q.runningAbort && !Q.runningAbort.signal.aborted) Q.runningAbort.abort(reason)
+  for (const a of active) if (a.meta.jobId === jobId && !a.abort.signal.aborted) a.abort.abort(reason)
 }
 
 // 대기 상황 (자동 최신화 화면에 "사용자 요청 먼저 처리 중"을 보여 줄 때 쓴다)
 export function queueStatus() {
   const ahead = waiting.filter((j) => isHuman(j.priority)).length
-  return { running: Q.running, waiting: waiting.length, userFirst: ahead + (Q.running !== null && isHuman(Q.running) ? 1 : 0) }
+  return { running: runningTop(), runningCount: active.length, waiting: waiting.length, userFirst: ahead + active.filter((a) => isHuman(a.priority)).length }
 }
 
 // Ollama는 OpenAI 호환 주소(/v1)로 부르면 입력을 약 2,000토큰까지만 읽는다 (실측: 더 긴 입력은 앞부분이 잘림).
@@ -411,10 +471,11 @@ async function callChat(cfg, { messages, schema, schemaName, report = false, tim
     body.reasoning_effort = reasoningEffort
   }
 
+  const auth = await authOf(cfg)
   const send = () =>
     fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      headers: { 'Content-Type': 'application/json', Authorization: auth },
       body: JSON.stringify(body),
       signal: withAbort(timeoutMs, signal),
     })
@@ -446,7 +507,7 @@ export async function chatJson({ messages, schema, schemaName = 'result', report
   // callKind: 요약 · 보고서가 아닌 호출의 이름 (translate 검색어 영문 표기 · timeline 흐름 정리 · reinforce 근거 보충 · section 섹션 다시 쓰기 · terms 뜨는 기술, 11/11)
   const kind = provider ? 'test' : callKind ?? (report ? 'report' : 'summary')
   const ctx = queueContext.getStore() ?? {}
-  const meta = { kind, label: String(label ?? ctx.label ?? '').slice(0, 120) || null, client: ctx.client ?? null, jobId: ctx.jobId ?? null }
+  const meta = { kind, label: String(label ?? ctx.label ?? '').slice(0, 120) || null, client: ctx.client ?? null, jobId: ctx.jobId ?? null, provider: cfg.id }
   return enqueue(async (signal) => {
     // 사용 현황(17 문서 4장)에 AI 호출 수·실패·걸린 시간을 남긴다. 대기열에서 기다린 시간은 빼고 잰다
     const startedAt = Date.now()
@@ -463,13 +524,23 @@ export async function chatJson({ messages, schema, schemaName = 'result', report
         cfg = config(alt)
         result = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs, signal })
       }
-      const { content, model: used, usage } = result
+      let { content, model: used, usage } = result
+      // 일부 모델은 JSON을 ```json … ``` 으로 감싸 보낸다
+      const parse = (t) => JSON.parse(String(t ?? '').replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, ''))
       let data
       try {
-        // 일부 모델은 JSON을 ```json … ``` 으로 감싸 보낸다
-        data = JSON.parse(content.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, ''))
+        data = parse(content)
       } catch {
-        throw new Error('AI 응답이 JSON 형식이 아니에요.')
+        // 11/26: 형식이 깨진 응답은 같은 곳에 한 번 더 (실측: OpenRouter Gemma 4 26B 요약 약 170건 중 1건, 보고서 초안 4건 중 1건 — 한 번 깨지면 보고서 전체가 실패했음)
+        if (signal.aborted) throw signal.reason
+        recordAiCall(kind, false, Date.now() - startedAt, { provider: cfg.id, model: used })
+        console.warn(`[llm] ${cfg.label} 응답이 JSON이 아니어서 한 번 더`)
+        ;({ content, model: used, usage } = await callChat(cfg, { messages, schema, schemaName, report, timeoutMs, signal }))
+        try {
+          data = parse(content)
+        } catch {
+          throw new Error('AI 응답이 JSON 형식이 아니에요.')
+        }
       }
       recordAiCall(kind, true, Date.now() - startedAt, { provider: cfg.id, model: used, ...usage })
       return { data, model: used, usage }
@@ -488,7 +559,10 @@ export function modelName() {
 // 지금 고른 AI 서버에 닿는지 짧게 확인한다
 export async function pingModel() {
   try {
-    const { baseUrl, apiKey, pingPath } = config()
+    const cfg = config()
+    const { baseUrl, apiKey, pingPath } = cfg
+    // Vertex AI는 모델 목록 주소가 없어 토큰을 받을 수 있으면 닿는 것으로 본다
+    if (cfg.vertex) return Boolean(await vertexToken())
     const res = await fetch(`${baseUrl}${pingPath}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
       // 11/17: 6초 → 15초. 맥미니 /models 첫 응답이 3.7~6.3초로 느려지자 「연결 안 됨」으로 나와 자동 요약이 멈췄음 (refresh.js runWorker)
@@ -505,15 +579,25 @@ export async function pingModel() {
 export async function testConnection(id) {
   if (!allIds().includes(id)) throw Object.assign(new Error('없는 AI 연결이에요.'), { status: 400 })
   const c = providerConfig(id)
-  const cfg = { ...c, baseUrl: String(c.baseUrl ?? '').replace(/\/$/, '') }
+  const cfg = { ...c, baseUrl: c.vertex ? vertexBase(c.baseUrl) : String(c.baseUrl ?? '').replace(/\/$/, '') }
   const out = { id, label: c.label, ping: null, chat: null }
-  if (!cfg.baseUrl || !cfg.apiKey) return { ...out, ping: { ok: false, error: !cfg.baseUrl ? '주소가 없어요' : 'API 키가 없어요' } }
+  if (!cfg.baseUrl || !(cfg.apiKey || cfg.vertex)) return { ...out, ping: { ok: false, error: !cfg.baseUrl ? '주소가 없어요' : 'API 키가 없어요' } }
   const t0 = Date.now()
-  try {
-    const res = await fetch(`${cfg.baseUrl}${cfg.pingPath}`, { headers: { Authorization: `Bearer ${cfg.apiKey}` }, signal: AbortSignal.timeout(15_000) })
-    out.ping = { ok: res.ok, status: res.status, ms: Date.now() - t0, ...(res.ok ? {} : { error: res.status === 401 || res.status === 403 ? 'API 키가 맞지 않아요' : `응답 ${res.status}` }) }
-  } catch (err) {
-    out.ping = { ok: false, ms: Date.now() - t0, error: err?.name === 'TimeoutError' ? '15초 안에 응답이 없어요' : '주소에 닿지 않아요' }
+  if (cfg.vertex) {
+    // Vertex AI: 모델 목록 주소가 없어 Google 토큰을 받는 것까지만 확인하고 응답 시험으로
+    try {
+      await vertexToken()
+      out.ping = { ok: true, ms: Date.now() - t0 }
+    } catch (err) {
+      out.ping = { ok: false, ms: Date.now() - t0, error: String(err?.message ?? err).slice(0, 120) }
+    }
+  } else {
+    try {
+      const res = await fetch(`${cfg.baseUrl}${cfg.pingPath}`, { headers: { Authorization: `Bearer ${cfg.apiKey}` }, signal: AbortSignal.timeout(15_000) })
+      out.ping = { ok: res.ok, status: res.status, ms: Date.now() - t0, ...(res.ok ? {} : { error: res.status === 401 || res.status === 403 ? 'API 키가 맞지 않아요' : `응답 ${res.status}` }) }
+    } catch (err) {
+      out.ping = { ok: false, ms: Date.now() - t0, error: err?.name === 'TimeoutError' ? '15초 안에 응답이 없어요' : '주소에 닿지 않아요' }
+    }
   }
   if (!out.ping.ok) return out
   if (!cfg.model) return { ...out, chat: { skipped: '모델 이름이 없어요' } }
@@ -529,7 +613,7 @@ export async function testConnection(id) {
         return { ok: Boolean(String(content ?? '').trim()), ms: Date.now() - t1, model }
       },
       PRIORITY.WAIT,
-      { kind: 'test', label: `연결 시험 · ${c.label}`, client: ctx.client ?? null },
+      { kind: 'test', label: `연결 시험 · ${c.label}`, client: ctx.client ?? null, provider: id },
     )
     out.chat = r
   } catch (err) {

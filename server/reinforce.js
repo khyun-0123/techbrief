@@ -192,7 +192,9 @@ export async function reinforceBullet({ text, inputs = [], existing = [] }) {
 
 // 찾은 근거 조각(passages)으로 한 줄을 고쳐 쓴다. 근거와 다시 대조해 맞을 때만 받아들인다
 // passages: [{ label, title, text, ref: { id?, n?, title, source, url, publishedAt?, wiki? }, kind: 'data' | 'wiki' }]
-export async function rewriteWithPassages(bulletText, passages, existing = []) {
+// inPlace(11/26): existing 배열에 새 자료를 바로 붙인다 — 보고서가 여러 줄을 함께 고칠 때 번호가 겹치지 않게
+// (AI 응답을 받은 뒤 번호를 매기는 부분은 기다림 없이 한 번에 끝나므로, 같은 배열을 나눠 써도 순서가 꼬이지 않는다)
+export async function rewriteWithPassages(bulletText, passages, existing = [], { inPlace = false } = {}) {
   const bullet = stripInlineRefs(String(bulletText ?? '')).trim()
   const { data, model } = await chatJson({
     messages: messages(bullet, passages),
@@ -208,7 +210,7 @@ export async function rewriteWithPassages(bulletText, passages, existing = []) {
     return { found: false, model, tried: passages.map((p) => p.title) }
   }
   // 근거 번호: 이 보고서 기사면 그 번호, 이미 보충한 자료면 그 번호, 새 자료면 뒤에 붙인다
-  const list = [...existing]
+  const list = inPlace ? existing : [...existing]
   const added = []
   const refs = used.map((n) => {
     const r = passages[n - 1].ref

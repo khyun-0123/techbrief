@@ -17,10 +17,11 @@ import { abstractFromIndex, bareDoi, clean, openAlexGet } from './papers/provide
 import { corpusReady, DISPLAY_MAKERS } from './papers/corpus.js'
 import { patentHistory, patternFromTerms } from './patents.js'
 import { localPatentHistory, patentDbReady, titlePatentHistory, titlesReady } from './patentDb.js'
-import { techCpcVersion, techRuleFor } from './techCpc.js'
+import { techCpcVersion, techRuleFor, titleExclude } from './techCpc.js'
 import { englishTerms, openAlexQuery, queryKey } from './queryTerms.js'
 import { surgeMonths } from './timesfm.js'
 import { DEFAULT_JUDGE_VERSION, judgeRule, judgeVersion, loadJudgeSettings } from './judgeSettings.js'
+import { getFeatures } from './features.js'
 
 const DAY = 86_400_000
 // 기억 열쇠. 단계 기준이 바뀌면 올린다 (v2 11/11 분야 대비, v3 11/12 특허 · 관심 대 실질, v4 11/12 기관 수 · FWCI · 성숙 규칙): 예전 단계 · 그 단계로 쓴 AI 정리는 다시 만든다 (열 때 또는 미리 분석 때)
@@ -79,6 +80,58 @@ async function researchBreadth(terms, display) {
     institutionTypes: Object.fromEntries((types.group_by ?? []).filter((g) => g.key).map((g) => [g.key_display_name, g.count])),
     fwci: fw.length ? { years: `${last - 3}~${last - 1}`, papers: fw.length, mean: Math.round((fw.reduce((a, b) => a + b, 0) / fw.length) * 100) / 100, median: Math.round(median * 100) / 100 } : null,
   }
+}
+
+// 인용 모멘텀 (11/26, 31 문서 6-4 · 33 문서 W9 · 「발표 뒤」 앞당김): 최근 2년(끝난 해) 논문이 분야 평균보다 많이 인용되나
+// - Rotolo 외 2015 「두드러진 영향」 · SciVal Topic Prominence의 생각을 따름 — 수가 같아도 지금 주목받는 기술을 가린다
+// - 재료: OpenAlex FWCI(분야 · 연도 · 문서 유형 보정 인용, 1 = 분야 평균)와 「분야 상위 10% 인용」 표시. 관련도 상위 200편
+// - 위 researchBreadth의 FWCI는 인용이 쌓일 시간을 주려고 그 앞 3년을 본다. 이건 「지금」 쪽이라 갓 나온 논문이 많아 흔들린다
+//   → 단계 판정 · AI 글에는 쓰지 않고 참고로만 (기준값 근거가 없음, 33 문서 W9). 15편 미만이면 값을 보이지 않음
+// - 비용: 키워드 하나에 OpenAlex 1번(약 $0.001), 따로 7일 기억 — 시계열 기억 열쇠(TL_KEY)를 올리지 않아 예전 분석을 다시 만들지 않는다
+const MOMENTUM_KEY = 'citation-momentum:v1:'
+const MOMENTUM_MIN = 15
+export async function citationMomentum(terms, display) {
+  const last = new Date().getFullYear() - 1
+  const search = encodeURIComponent(phraseVariants(terms).map((v) => `"${v}"`).join(' OR '))
+  const filter = ['type:article|review|conference-paper', ...(display ? [topicFilter] : []), `from_publication_date:${last - 1}-01-01`, `to_publication_date:${last}-12-31`].join(',')
+  const data = await openAlexGet(`/works?search=${search}&filter=${filter}&per-page=200&select=fwci,citation_normalized_percentile,publication_year`)
+  const rows = (data.results ?? []).filter((w) => typeof w.fwci === 'number')
+  const round = (x) => Math.round(x * 100) / 100
+  const mean = (list) => (list.length ? round(list.reduce((a, w) => a + w.fwci, 0) / list.length) : null)
+  const sorted = rows.map((w) => w.fwci).sort((a, b) => a - b)
+  const withPct = rows.filter((w) => w.citation_normalized_percentile)
+  return {
+    years: `${last - 1}~${last}`,
+    papers: rows.length,
+    total: data.meta?.count ?? null,
+    few: rows.length < MOMENTUM_MIN,
+    mean: mean(rows),
+    median: sorted.length ? round(sorted[Math.floor(sorted.length / 2)]) : null,
+    // 분야 기대값은 10%
+    top10Share: withPct.length ? round(withPct.filter((w) => w.citation_normalized_percentile.is_in_top_10_percent).length / withPct.length) : null,
+    byYear: [last - 1, last].map((y) => {
+      const list = rows.filter((w) => w.publication_year === y)
+      return { y, papers: list.length, mean: mean(list) }
+    }),
+    at: new Date().toISOString(),
+  }
+}
+
+// 시계열 결과에 인용 모멘텀을 붙인다 (기억해 둔 값이 없으면 받음 — fetch: false면 기억해 둔 것만, 실패하면 빈 값 · 시계열은 그대로)
+async function withMomentum(tl, { fetch = true } = {}) {
+  if (!tl?.terms?.length) return tl
+  // 실험 기능 「인용 모멘텀」을 끄면 계산 · 표시 모두 안 함 (배포 없이 되돌리는 길, server/features.js)
+  if (((await getFeatures().catch(() => ({}))).citationMomentum ?? 'all') === 'off') return tl
+  const key = `${MOMENTUM_KEY}${tl.display ? 'd' : 'a'}:${queryKey(tl.terms.join(' '))}`
+  let m = await cacheGet(key).catch(() => null)
+  if (!m && fetch) {
+    m = await citationMomentum(tl.terms, tl.display).catch((err) => {
+      console.warn(`[timeline] 인용 모멘텀 ${tl.query}: ${err.message}`)
+      return null
+    })
+    if (m) await cachePut(key, m, TTL).catch(() => {})
+  }
+  return m ? { ...tl, momentum: m } : tl
 }
 
 async function baselinePapers(display) {
@@ -230,12 +283,13 @@ async function patents(terms, { cacheOnly = false, display = false } = {}) {
   const titles = display || rule ? null : await titlesReady()
   if (db || titles) {
     const source = rule ? `tech-${rule.id}-${techCpcVersion()}` : display ? 'db' : titles ? 'titles' : 'db-only'
-    const key = `timeline-patents-local3:${source}:${pattern}` // local3: 해마다 2개국 이상 출원 수(intl, 11/15)
+    const ex = rule ? null : await titleExclude(pattern) // 11/26 W34: 태양전지 · 광검출기 제목 빼기 스위치 — 켜고 끈 값을 따로 기억
+    const key = `timeline-patents-local3:${source}${ex ? ':nosolar' : ''}:${pattern}` // local3: 해마다 2개국 이상 출원 수(intl, 11/15)
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return hit
     const r = source === 'titles' ? await titlePatentHistory(pattern) : await localPatentHistory(pattern, undefined, rule)
     if (r.status === 'ok') {
-      const out = { ...summarizeOwners(r), basis: source === 'titles' ? 'family-all' : 'family', inDisplay: source === 'db-only', db: r.db, ...(r.tech ? { tech: { ...r.tech, v: techCpcVersion() } } : {}) }
+      const out = { ...summarizeOwners(r), basis: source === 'titles' ? 'family-all' : 'family', inDisplay: source === 'db-only', db: r.db, ...(r.tech ? { tech: { ...r.tech, v: techCpcVersion() } } : {}), ...(r.solarEx ? { solarEx: true } : {}) }
       await cachePut(key, out, 30 * DAY).catch(() => {})
       return out
     }
@@ -443,7 +497,7 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
     const toDb = hit && Boolean(await patentDbReady()) && (!['family', 'family-all'].includes(hit.patents?.basis) || (hit.patents?.inDisplay && Boolean(await titlesReady())))
     // 11/21: 「기술 ↔ CPC 연결표」를 켜거나 바꾸거나 끈 기술은 특허만 다시 세고 단계도 다시
     const techOld = hit && (await techStale(hit))
-    if (hit && !(hit.patents?.status === 'later' && !background) && !toDb && !techOld) return { ...withThin(await withSurge(hit, { wait: background })), cached: true }
+    if (hit && !(hit.patents?.status === 'later' && !background) && !toDb && !techOld) return { ...(await withMomentum(withThin(await withSurge(hit, { wait: background })))), cached: true }
     if (hit) {
       // 미리 분석해 둔 값에 특허만 채운다
       const pat = await patents(hit.terms, { display: hit.display, cacheOnly: background }).catch((err) => ({ status: 'error', error: err.message }))
@@ -451,7 +505,7 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
       out.stage = stageOf(out.long.length ? out.long : (out.corpus?.years ?? []).map((x) => ({ y: x.y, n: x.n })), out.corpus, stagePatents(pat), out.base ?? [], out.naver, out.breadth)
       out.judgeV = judgeVersion()
       await cachePut(key, out, pat.status === 'error' ? 10 * 60_000 : TTL).catch(() => {})
-      return { ...withThin(await withSurge(out, { wait: background })), cached: false }
+      return { ...(await withMomentum(withThin(await withSurge(out, { wait: background })))), cached: false }
     }
   }
   const t = await englishTerms(q, { waitMs: 60_000 })
@@ -492,7 +546,7 @@ export async function buildTimeline(rawQuery, { refresh = false, background = fa
   // 일부 출처가 실패했으면 10분만 기억 (다음에 다시 받음)
   const failed = out.longError || out.patents.status === 'error'
   await cachePut(key, out, failed ? 10 * 60_000 : out.corpusPartial ? 3600_000 : TTL).catch(() => {})
-  return { ...(await withSurge(out, { wait: background })), cached: false }
+  return { ...(await withMomentum(await withSurge(out, { wait: background }))), cached: false }
 }
 
 // ── AI 글: 배경 · 성장 · 적용 · 전망 · 연구 제안 ──
@@ -662,7 +716,13 @@ export async function techStale(tl) {
   const rule = await techRuleFor(tl.terms).catch(() => null)
   const was = tl.patents?.tech
   if (rule) return was?.id !== rule.id || was?.v !== techCpcVersion()
-  return Boolean(was)
+  if (was) return true
+  // 11/26 W34: 태양전지 제목 빼기 스위치와 다르게 센 특허면 특허만 다시 셈 (특허 DB · 제목 파일로 센 것만)
+  if (['family', 'family-all'].includes(tl.patents?.basis)) {
+    const ex = Boolean(await titleExclude(patternFromTerms(tl.terms)).catch(() => null))
+    if (ex !== Boolean(tl.patents?.solarEx)) return true
+  }
+  return false
 }
 
 // 미리 분석해 둔 값만 꺼낸다 (부르지 않음): 대시보드 「미리 분석된 키워드」 · 미리 분석 일이 건너뛸지 볼 때
@@ -670,5 +730,6 @@ export async function cachedTimeline(rawQuery) {
   const k = queryKey(rawQuery)
   await loadJudgeSettings()
   const [tl, story] = await Promise.all([cacheGet(`${TL_KEY}${k}`).catch(() => null), cacheGet(`${STORY_KEY}${k}`).catch(() => null)])
-  return { timeline: await restaged(tl, `${TL_KEY}${k}`), story }
+  const timeline = await restaged(tl, `${TL_KEY}${k}`)
+  return { timeline: timeline ? await withMomentum(timeline, { fetch: false }) : timeline, story }
 }

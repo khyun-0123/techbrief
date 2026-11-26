@@ -5,7 +5,7 @@
 // AI 입력 제한(23 문서): 네이버 검색 관심도와 네이버 기사 문장은 보고서 AI 입력(facts)에 넣지 않는다 — 화면용 값에는 남긴다
 import { dbEnabled, query } from './db/index.js'
 import { commercialQuotes } from './commercial.js'
-import { DISPLAY_CATEGORIES } from './displayCategories.js'
+import { categoriesVersion, displayCategories } from './displayCategories.js'
 import { mapMaterials } from './mapMaterials.js'
 import { createHash } from 'node:crypto'
 import { patentDbReady, toPg } from './patentDb.js'
@@ -19,6 +19,7 @@ import { supplierPatents } from './suppliers.js'
 import { buildTimeline, cachedTimeline, techStale } from './timeline.js'
 import { surgeMonths } from './timesfm.js'
 import { customOwners, judgeRule, judgeVersion, loadJudgeSettings, ownersVersion } from './judgeSettings.js'
+import { ruleSig, serverFlag } from './features.js'
 
 const TTL = 3 * 86_400_000
 const running = new Map()
@@ -28,7 +29,7 @@ const running = new Map()
 //   → 11/13 다시 받을 때 전체 코드로 저장 (33 문서 W28). 그 전까지 0건인 카테고리는 화면에서 숨긴다
 export async function allCategoryCompetitors() {
   const out = []
-  for (const c of DISPLAY_CATEGORIES) {
+  for (const c of displayCategories()) {
     const r = await categoryCompetitors(c.id).catch(() => null)
     if (r) out.push(r)
   }
@@ -52,6 +53,15 @@ const OWNER_DICT = [
   { id: 'innolux', names: ['이노룩스', 'Innolux'], like: ['INNOLUX%'] },
   { id: 'everdisplay', names: ['에버디스플레이', 'EverDisplay', 'EDO'], like: ['%EVERDISPLAY%'] },
 ]
+// 11/26 W25 출원인 이름 묶기 (스위치 applicantAlias, 꺼지면 위 이름만): 같은 회사가 다른 이름으로 낸 특허를 더한다.
+// 로컬 특허 DB 2018년~ 실측 — Visionox 계열 「YUNGU GUAN TECH」(云谷固安) 2,412건이 '%VISIONOX%'에 안 걸려 해마다 12~93% 덜 셈,
+// CSOT의 중국어 이름 「TCL HUAXING」 · 「SHENZHEN HUAXING」 854건(2022년 676건 몰림), BOE 계열사 「BOE CRYSTAL CORE」 · 「BOE MLED」 등 'BOE …'.
+// 「TCL CORP」 · 「TCL TECH」(TV · 지주)는 CSOT가 아니라 넣지 않음. 「BOEING」은 'BOE %'(뒤에 빈칸)에 안 걸림
+const OWNER_ALIAS = {
+  boe: ['BOE %', '% BOE %'],
+  csot: ['%HUAXING%'],
+  visionox: ['YUNGU %'],
+}
 const flatName = (t) => String(t ?? '').toLowerCase().replace(/[\s·.()-]/g, '')
 const dictOf = (name) => OWNER_DICT.find((d) => d.names.some((n) => flatName(n) === flatName(name)))
 // 11/20: 관리 페이지 「판정 기준 › 회사 특허 이름」에 넣은 출원인 이름이 있으면 그것을 먼저 (코드 사전에 없는 회사도 비교 가능)
@@ -75,6 +85,9 @@ export async function compareCompanies() {
     const d = ownerOf(name)
     if (!d) unmatched.push(name)
     else if (!out.some((x) => x.id === d.id)) out.push({ ...d, name: d.id === 'csot' ? 'CSOT' : String(name).trim() })
+  }
+  if (await serverFlag('applicantAlias').catch(() => false)) {
+    for (const c of out) if (c.source === 'dict' && OWNER_ALIAS[c.id]) c.like = [...new Set([...c.like, ...OWNER_ALIAS[c.id]])]
   }
   return { companies: out, unmatched }
 }
@@ -112,9 +125,9 @@ export async function termVerdict(term) {
 }
 
 export async function categoryCompetitors(catId) {
-  const cat = DISPLAY_CATEGORIES.find((c) => c.id === catId)
+  const cat = displayCategories().find((c) => c.id === catId)
   if (!cat || !dbEnabled()) return null
-  return competitorsWhere({ id: cat.id, name: cat.name, cacheId: catId, where: (at) => ({ sql: `EXISTS (SELECT 1 FROM unnest(cpc) x WHERE x ~ $${at})`, params: [cat.cpc] }) })
+  return competitorsWhere({ id: cat.id, name: cat.name, cacheId: `${catId}${categoriesVersion()}`, where: (at) => ({ sql: `EXISTS (SELECT 1 FROM unnest(cpc) x WHERE x ~ $${at})`, params: [cat.cpc] }) })
 }
 
 // 11/21 (techCpc.js): 「기술 ↔ CPC 연결표」가 켜진 기술은 넓은 분류(OLED 소자 전체) 대신 그 기술 특허 안에서 회사별로 비교한다
@@ -143,7 +156,8 @@ export async function competitorsWhere({ id, name, cacheId, where, tech = false 
   const meta = await patentDbReady().catch(() => null)
   if (!meta) return null
   const { companies: COMPANIES, unmatched } = await compareCompanies()
-  const key = `cat-competitors:v5:${cacheId}:${meta.at}:${COMPANIES.map((c) => c.id).join(',')}:${judgeVersion()}:${ownersVersion()}` // v2: 작은 수 보정 · v3: 2개국 이상 출원 비율 (11/15) · v4: 관리 페이지 경쟁사 목록 (11/17)
+  const likeV = createHash('sha1').update(JSON.stringify(COMPANIES.map((c) => c.like))).digest('hex').slice(0, 6) // 11/26 W25: 출원인 이름 묶기 스위치
+  const key = `cat-competitors:v5:${cacheId}:${meta.at}:${COMPANIES.map((c) => c.id).join(',')}:${judgeVersion()}:${ownersVersion()}:${likeV}` // v2: 작은 수 보정 · v3: 2개국 이상 출원 비율 (11/15) · v4: 관리 페이지 경쟁사 목록 (11/17)
   const hit = await cacheGet(key).catch(() => null)
   if (hit) return hit
   const last = new Date().getFullYear() - 1
@@ -184,20 +198,21 @@ export async function categoryTrends() {
   const meta = await patentDbReady().catch(() => null)
   if (!meta) return null
   await loadJudgeSettings()
-  const key = `cat-trends:v2:${meta.at}:${judgeVersion()}`
+  const key = `cat-trends:v2:${meta.at}:${judgeVersion()}${categoriesVersion()}`
+  const CATS = displayCategories()
   const hit = await cacheGet(key).catch(() => null)
   if (hit) return hit
   const last = new Date().getFullYear() - 1
   const from = last - 7
-  const cols = DISPLAY_CATEGORIES.map((c, i) => `bool_or(x ~ $${i + 3}) AS c${i}`).join(', ')
+  const cols = CATS.map((c, i) => `bool_or(x ~ $${i + 3}) AS c${i}`).join(', ')
   const { rows } = await query(
     `WITH m AS (SELECT p.pub / 10000 AS y, ${cols} FROM display_patents p, unnest(p.cpc) x WHERE p.pub >= $1 AND p.pub < $2 GROUP BY p.family, p.pub)
-     SELECT y, ${DISPLAY_CATEGORIES.map((_, i) => `count(*) FILTER (WHERE c${i})::int AS n${i}`).join(', ')} FROM m GROUP BY y ORDER BY y`,
-    [from * 10000, (last + 1) * 10000, ...DISPLAY_CATEGORIES.map((c) => c.cpc)],
+     SELECT y, ${CATS.map((_, i) => `count(*) FILTER (WHERE c${i})::int AS n${i}`).join(', ')} FROM m GROUP BY y ORDER BY y`,
+    [from * 10000, (last + 1) * 10000, ...CATS.map((c) => c.cpc)],
   )
   const { patMin, ratioPrior } = judgeRule() // 11/20 관리 페이지 「판정 기준」
   const ratio = (before, now) => (before + now >= patMin ? Math.round(((now + ratioPrior) / (before + ratioPrior)) * 100) / 100 : null)
-  const items = DISPLAY_CATEGORIES.map((c, i) => {
+  const items = CATS.map((c, i) => {
     const years = rows.map((r) => ({ y: Number(r.y), n: r[`n${i}`] }))
     const sum = (a, b) => years.filter((x) => x.y >= a && x.y <= b).reduce((s, x) => s + x.n, 0)
     const before = sum(last - 5, last - 3)
@@ -210,16 +225,23 @@ export async function categoryTrends() {
 }
 
 // ── 묶음 만들기 ──
-const bundleKey = (keyword) => `bundle:v8:${queryKey(keyword)}:t${techCpcVersion()}` // :t (11/21) 「기술 ↔ CPC 연결표」 버전 // v8 (11/17 R11): 세부 기술 분류 비중 · 분류 추이 · v7 (11/17 R10): 소부장 기업 특허 · v5 (11/17): 특허 비교 회사 = 관리 페이지 경쟁사 목록
+// :r (11/26) 판단 규칙 스위치(features.js ruleSig) — 모두 꺼짐(0000)이면 예전 열쇠 그대로라 예전 기억을 다시 씀
+const legacyBundleKey = (keyword) => `bundle:v8:${queryKey(keyword)}:t${techCpcVersion()}${categoriesVersion()}`
+const bundleKey = async (keyword) => {
+  const sig = await ruleSig()
+  return /1/.test(sig) ? `${legacyBundleKey(keyword)}:r${sig}` : legacyBundleKey(keyword)
+} // :t (11/21) 「기술 ↔ CPC 연결표」 버전 // v8 (11/17 R11): 세부 기술 분류 비중 · 분류 추이 · v7 (11/17 R10): 소부장 기업 특허 · v5 (11/17): 특허 비교 회사 = 관리 페이지 경쟁사 목록
 // 기억해 둔 묶음만 (만들지 않음): 11/17 전 보고서 미리보기에 기술 시계열을 채울 때 (화면이 기다리지 않게)
 export async function cachedBundle(raw) {
   const keyword = String(raw ?? '').trim().slice(0, 50)
-  return keyword ? cacheGet(bundleKey(keyword)).catch(() => null) : null
+  if (!keyword) return null
+  // 새 규칙으로 만든 것이 아직 없으면 예전 규칙 묶음이라도 (보고서 미리보기가 비지 않게)
+  return (await cacheGet(await bundleKey(keyword)).catch(() => null)) ?? cacheGet(legacyBundleKey(keyword)).catch(() => null)
 }
 export async function prepareBundle(raw, { refresh = false } = {}) {
   const keyword = String(raw ?? '').trim().slice(0, 50)
   if (!keyword) return null
-  const key = bundleKey(keyword) // v4 (11/17): 논문 연도별 수를 단계 판정과 같은 값(long)으로. v3 (11/17, 40 문서 R1): 논문 추이 · 관심 대 실질 · 연구 폭 · 떠오르는 세부 주제 · 주요 기업 · 급증 · 신호 점수 // v2 (11/17): 11/15에 「2개국 이상 출원」을 넣고도 v1 그대로라 예전 묶음이 3일 동안 나갔음 (36 문서 2-6)
+  const key = await bundleKey(keyword) // v4 (11/17): 논문 연도별 수를 단계 판정과 같은 값(long)으로. v3 (11/17, 40 문서 R1): 논문 추이 · 관심 대 실질 · 연구 폭 · 떠오르는 세부 주제 · 주요 기업 · 급증 · 신호 점수 // v2 (11/17): 11/15에 「2개국 이상 출원」을 넣고도 v1 그대로라 예전 묶음이 3일 동안 나갔음 (36 문서 2-6)
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return hit
@@ -263,9 +285,9 @@ export async function prepareBundle(raw, { refresh = false } = {}) {
       rising: (tl?.corpus?.rising ?? []).slice(0, 5).map((x) => ({ name: x.name, before: x.before, recent: x.recent })),
       // 최근 시기 논문의 주요 기업
       makers: tl?.makers?.at(-1)?.makers?.slice(0, 5) ?? [],
-      // 연구 폭: 기관 수 · 기업 저자 비율 · FWCI(참고)
+      // 연구 폭: 기관 수 · 기업 저자 비율 · FWCI(참고) · 인용 모멘텀(11/26, 최근 2년 · 참고 — 화면 · 데이터만, PPT 글줄은 발표 뒤에 정함)
       breadth: tl?.breadth
-        ? { years: tl.breadth.years, institutions: tl.breadth.institutions ?? null, top: (tl.breadth.topInstitutions ?? []).slice(0, 3).map((x) => x.name), companyShare: st?.companyShareNow ?? null, fwci: tl.breadth.fwci?.mean ?? null }
+        ? { years: tl.breadth.years, institutions: tl.breadth.institutions ?? null, top: (tl.breadth.topInstitutions ?? []).slice(0, 3).map((x) => x.name), companyShare: st?.companyShareNow ?? null, fwci: tl.breadth.fwci?.mean ?? null, momentum: tl.momentum && !tl.momentum.few ? { years: tl.momentum.years, papers: tl.momentum.papers, fwci: tl.momentum.mean, top10Share: tl.momentum.top10Share } : null }
         : null,
       // ⚠ 네이버 숫자 — 화면 · PPT용. AI 입력(bundleFacts · headlineSeeds)에는 넣지 않는다 (23 문서 2-2)
       attention: st?.attention ? { label: st.attention.label, basis: st.attention.basis } : null,

@@ -63,7 +63,7 @@ export function parseKci(xml) {
   }).filter((w) => w.title)
 }
 
-// ── OAI-PMH (11/17 조사, 아직 쓰지 않음) ──
+// ── OAI-PMH (11/17 조사 → 11/26 한 번 채우기로 만듦: server/papers/kciOai.js · npm run kci-oai) ──
 // https://open.kci.go.kr/oai/request — 키 없이 전체 논문 메타데이터(oai_kci: 학술지 · 제목 · 저자 · 초록 · 연구분야 · 피인용)를 받는 통로
 // - 기본 접속 이름(curl)은 KCI 웹 방화벽이 막음(400), 이름을 밝히면 열림 (11/17 실측)
 // - from/until은 「KCI가 기록을 고친 날」(datestamp)이라 한 주(11/9~16)에 184,001건 · 분야 순서로 나옴 → 키워드로 고를 수 없어 전부 훑어야 함 (한 쪽 100건 약 4초)

@@ -54,10 +54,9 @@ function seconds(ms) {
 export function queueRows(data) {
   if (!data) return []
   const rows = []
-  if (data.running) {
-    const r = data.running
-    rows.push({ key: 'run', who: r.who, kind: r.kindLabel, title: r.label ?? r.kindLabel, state: `처리 중 · ${seconds(r.runningMs)}`, busy: true })
-  }
+  // 11/26: 동시 요청 수를 늘리면 여럿이 함께 돈다 (runningAll). 예전 서버는 running 하나
+  const runs = data.runningAll ?? (data.running ? [data.running] : [])
+  runs.forEach((r, i) => rows.push({ key: `run${i}`, who: r.who, kind: r.kindLabel, title: r.label ?? r.kindLabel, state: `처리 중 · ${seconds(r.runningMs)}`, busy: true }))
   data.waiting.forEach((w, i) =>
     rows.push({ key: `w${w.id ?? i}`, id: w.id, mine: w.mine, step: w.priority, manual: w.manual, demoted: w.demoted, who: w.who, kind: w.kindLabel, title: w.label ?? w.kindLabel, state: `대기 ${i + 1}번째`, waiting: true }),
   )

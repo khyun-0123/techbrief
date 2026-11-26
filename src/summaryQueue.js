@@ -1,7 +1,7 @@
 // AI 요약 대기열 — 「선별 추가」·「요약 추가」를 누르면 여기에 들어가 한 건씩 요약된다 (10 보고서 계획 2절)
 // 모델은 진행률을 알려 주지 않으므로, 게이지는 지금까지 걸린 평균 시간으로 계산한 '예상' 값이다
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { lookupSummaries, requestSummary } from './api.js'
+import { fetchHealth, lookupSummaries, requestSummary } from './api.js'
 import { track } from './usage.js'
 import { load } from './utils.js'
 import { isTransient, waitForServer } from './errorReport.js'
@@ -79,7 +79,22 @@ export function useSummaryQueue({ onDone }) {
   }, [pendingKey])
   const [avgMs, setAvgMs] = useState(() => load(AVG_KEY, DEFAULT_AVG_MS))
   const [now, setNow] = useState(() => Date.now())
-  const busy = useRef(false)
+  const inFlight = useRef(new Set()) // 지금 보내 둔 요약의 id (상태가 바뀌기 전에 같은 일을 두 번 보내지 않게)
+  // 11/26: 지금 AI 연결의 「동시 요청 수」만큼 함께 보낸다 (맥미니 1 = 예전처럼 한 건씩). 1분마다 서버에 물어봄
+  const [parallel, setParallel] = useState(1)
+  useEffect(() => {
+    let on = true
+    const read = () =>
+      fetchHealth()
+        .then((h) => on && setParallel(Math.max(1, Math.min(16, Number(h?.llm?.parallel) || 1))))
+        .catch(() => {})
+    read()
+    const t = setInterval(read, 60_000)
+    return () => {
+      on = false
+      clearInterval(t)
+    }
+  }, [])
   const onDoneRef = useRef(onDone)
   useEffect(() => {
     onDoneRef.current = onDone
@@ -93,40 +108,43 @@ export function useSummaryQueue({ onDone }) {
     return () => clearInterval(timer)
   }, [hasRunning])
 
-  // 대기 중인 작업을 하나씩 실행한다
+  // 대기 중인 작업을 실행한다 — 동시 요청 수(parallel)만큼 함께 (11/26, 처음 값 1 = 한 건씩)
   useEffect(() => {
-    if (busy.current) return
-    const next = jobs.find((j) => j.status === 'queued')
-    if (!next) return
-    busy.current = true
+    if (inFlight.current.size >= parallel) return
+    const starts = jobs.filter((j) => j.status === 'queued' && !inFlight.current.has(j.id)).slice(0, parallel - inFlight.current.size)
+    if (!starts.length) return
+    for (const j of starts) inFlight.current.add(j.id)
     const startedAt = Date.now()
+    const ids = new Set(starts.map((j) => j.id))
     // 대기열과 요약 서버를 맞추는 effect라 여기서 상태를 바꾼다 (다음 작업을 '진행 중'으로 표시)
     // oxlint-disable-next-line react/set-state-in-effect
-    setJobs((list) => list.map((j) => (j.id === next.id ? { ...j, status: 'running', startedAt } : j)))
+    setJobs((list) => list.map((j) => (ids.has(j.id) ? { ...j, status: 'running', startedAt } : j)))
 
-    track('summary', next.article.keyword ?? '')
-    summaryWithRecovery(next.article, { refresh: next.refresh, select: next.select }, (waiting) => setJobs((list) => list.map((j) => (j.id === next.id ? { ...j, waiting } : j))))
-      .then((result) => {
-        const took = Date.now() - startedAt
-        onDoneRef.current?.(next.id, result)
-        setJobs((list) => list.map((j) => (j.id === next.id ? { ...j, status: 'done', finishedAt: Date.now(), took } : j)))
-        // 서버 캐시로 바로 끝난 경우(1초 미만)는 평균에 넣지 않는다
-        if (took > 1000) {
-          setAvgMs((prev) => {
-            const avg = Math.round(prev * 0.7 + took * 0.3)
-            localStorage.setItem(AVG_KEY, JSON.stringify(avg))
-            return avg
-          })
-        }
-      })
-      .catch((err) => {
-        setJobs((list) => list.map((j) => (j.id === next.id ? { ...j, status: 'error', error: err.message, transient: isTransient(err), waiting: false } : j)))
-      })
-      .finally(() => {
-        busy.current = false
-        setNow(Date.now()) // 다음 작업을 시작하도록 다시 그린다
-      })
-  }, [jobs, now])
+    for (const next of starts) {
+      track('summary', next.article.keyword ?? '')
+      summaryWithRecovery(next.article, { refresh: next.refresh, select: next.select }, (waiting) => setJobs((list) => list.map((j) => (j.id === next.id ? { ...j, waiting } : j))))
+        .then((result) => {
+          const took = Date.now() - startedAt
+          onDoneRef.current?.(next.id, result)
+          setJobs((list) => list.map((j) => (j.id === next.id ? { ...j, status: 'done', finishedAt: Date.now(), took } : j)))
+          // 서버 캐시로 바로 끝난 경우(1초 미만)는 평균에 넣지 않는다. 여럿을 함께 보내면 한 건 시간이 길어지므로 평균은 「한 건 끝날 때까지」 그대로
+          if (took > 1000) {
+            setAvgMs((prev) => {
+              const avg = Math.round(prev * 0.7 + took * 0.3)
+              localStorage.setItem(AVG_KEY, JSON.stringify(avg))
+              return avg
+            })
+          }
+        })
+        .catch((err) => {
+          setJobs((list) => list.map((j) => (j.id === next.id ? { ...j, status: 'error', error: err.message, transient: isTransient(err), waiting: false } : j)))
+        })
+        .finally(() => {
+          inFlight.current.delete(next.id)
+          setNow(Date.now()) // 다음 작업을 시작하도록 다시 그린다
+        })
+    }
+  }, [jobs, now, parallel])
 
   // 서버가 다시 켜지느라 오류로 멈춘 작업은 서버가 돌아오면 저절로 다시 대기로 (11/26 조장 「재접속되면 작업 대기 상태로」)
   const stuck = jobs.some((j) => j.status === 'error' && j.transient)
@@ -177,11 +195,12 @@ export function useSummaryQueue({ onDone }) {
   )
 
   const finished = jobs.filter((j) => j.status === 'done' || j.status === 'error').length
-  const running = jobs.find((j) => j.status === 'running')
-  const overall = jobs.length ? Math.round(((finished + progressOf(running) / 100) / jobs.length) * 100) : 0
-  const remainingMs = jobs
-    .filter((j) => j.status === 'queued')
-    .reduce((ms) => ms + avgMs, running ? Math.max(0, avgMs - (now - running.startedAt)) : 0)
+  const runningList = jobs.filter((j) => j.status === 'running')
+  const overall = jobs.length ? Math.round(((finished + runningList.reduce((n, j) => n + progressOf(j) / 100, 0)) / jobs.length) * 100) : 0
+  // 남은 시간: 함께 보내는 수(parallel)로 나눔. 도는 것 중 가장 늦게 끝날 것 + 대기 건수 ÷ parallel × 평균
+  const queuedN = jobs.filter((j) => j.status === 'queued').length
+  const runLeft = runningList.reduce((m, j) => Math.max(m, avgMs - (now - j.startedAt)), 0)
+  const remainingMs = Math.max(0, runLeft) + Math.ceil(queuedN / parallel) * avgMs
 
   return { jobs, enqueue, remove, clearFinished, retry, progressOf, overall, remainingMs, avgMs, now }
 }

@@ -23,7 +23,7 @@ import { dbEnabled, query } from './db/index.js'
 import { getSetting, setSetting } from './db/store.js'
 import { accessToken, readKey } from './patents.js'
 import { checkSource, reportBytes, reportSource } from './sourceGuard.js'
-import { techWhere } from './techCpc.js'
+import { techWhere, titleExclude } from './techCpc.js'
 
 const META = 'patent_db'
 export const SINCE = 20100101
@@ -272,17 +272,19 @@ export async function localPatentHistory(pattern, since = SINCE, rule = null) {
   if (!meta) return { status: 'no_db' }
   await ensureTable()
   const tech = rule ? techWhere(rule, 3, 'lower(title) ~ $1') : null
+  // 11/26 W34: 연결표 밖 기술은 태양전지 · 광검출기 제목을 뺌 (스위치 patentSolarExclude, 꺼지면 null)
+  const ex = rule ? null : await titleExclude(pattern)
   const { rows } = await query(
     // intl (11/15 팀 회의 「해외 특허가 더 중요할 수 있다」): 같은 발명을 2개 나라(관청) 이상에 낸 특허 수 — 국제 특허군 지표
-    `WITH m AS (SELECT family, pub / 10000 AS y, owners, countries FROM display_patents WHERE pub >= $2 AND ${tech ? tech.sql : 'lower(title) ~ $1'})
+    `WITH m AS (SELECT family, pub / 10000 AS y, owners, countries FROM display_patents WHERE pub >= $2 AND ${tech ? tech.sql : ex ? 'lower(title) ~ $1 AND NOT lower(title) ~ $3' : 'lower(title) ~ $1'})
      SELECT y, NULL::text AS name, count(*)::int AS n, 1 AS total, count(*) FILTER (WHERE cardinality(countries) >= 2)::int AS intl FROM m GROUP BY y
      UNION ALL
      SELECT y, o, count(*)::int, 0, 0 FROM m, unnest(m.owners) o GROUP BY y, o HAVING count(*) >= 2`,
-    [toPg(pattern.toLowerCase()), Number(since), ...(tech?.params ?? [])],
+    [toPg(pattern.toLowerCase()), Number(since), ...(tech?.params ?? (ex ? [ex] : []))],
   )
   const years = rows.filter((r) => r.total === 1).map((r) => ({ y: Number(r.y), n: r.n, intl: r.intl })).sort((a, b) => a.y - b.y)
   const owners = rows.filter((r) => r.total === 0).map((r) => ({ y: Number(r.y), name: r.name, n: r.n }))
-  return { status: 'ok', years, owners, fieldYears: await displayFieldYears(meta), db: { at: meta.at, maxPub: meta.maxPub }, ...(rule ? { tech: { id: rule.id, name: rule.name } } : {}) }
+  return { status: 'ok', years, owners, fieldYears: await displayFieldYears(meta), db: { at: meta.at, maxPub: meta.maxPub }, ...(rule ? { tech: { id: rule.id, name: rule.name } } : {}), ...(ex ? { solarEx: true } : {}) }
 }
 
 // 특허 분야 전체(디스플레이 특허 DB 전부)의 해마다 건수 — 분야 대비 증가용 (받은 날이 같으면 기억)
@@ -318,6 +320,8 @@ export function titlePatentHistory(pattern, since = SINCE) {
 async function grepTitles(pattern, since) {
   const meta = await titlesReady()
   if (!meta) return { status: 'no_titles' }
+  const ex = await titleExclude(pattern) // 11/26 W34
+  const exRe = ex ? new RegExp(ex) : null
   const fromYm = Math.floor(Number(since) / 100)
   const years = new Map()
   const owners = new Map()
@@ -325,7 +329,8 @@ async function grepTitles(pattern, since) {
   // 정규식은 RE2(BigQuery)와 PCRE가 같은 꼴만 쓴다 ((?:) · \s · \b · []). 제목만 소문자라 소문자 정규식은 제목에만 걸린다
   const child = spawn('nice', ['-n', '10', 'grep', '-P', pattern.toLowerCase(), titlesFile()], { env: { ...process.env, LC_ALL: 'C' } })
   const take = (line) => {
-    const [, ym, , who] = line.split('\t')
+    const [title, ym, , who] = line.split('\t')
+    if (exRe && exRe.test(title)) return
     const n = Number(ym)
     if (!n || n < fromYm) return
     const y = Math.floor(n / 100)
@@ -352,6 +357,7 @@ async function grepTitles(pattern, since) {
     fieldYears: meta.titleYears ? Object.entries(meta.titleYears).map(([y, n]) => ({ y: Number(y), n })) : null,
     owners: [...owners].filter(([, n]) => n >= 2).map(([k, n]) => ({ y: Number(k.split('\t')[0]), name: k.split('\t')[1], n })),
     db: { at: meta.at, maxPub: meta.maxPub },
+    ...(ex ? { solarEx: true } : {}),
   }
 }
 

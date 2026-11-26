@@ -57,6 +57,15 @@ function checkUrl(v) {
   if (!/^https?:$/.test(u.protocol) || u.username || u.password) throw bad('AI 서버 주소는 http(s) 주소만 넣을 수 있어요 (주소 안에 아이디 · 비밀번호는 넣지 않아요).')
   return s.slice(0, 300)
 }
+// Vertex AI (11/26 조장 「GCP 크레딧으로 젬마 병렬」): 키 대신 서버의 Google 서비스 계정(GCP_KEY_JSON)으로 1시간짜리 토큰을 받아 쓴다 (client.js)
+export const isVertexUrl = (u) => /^https:\/\/([a-z0-9-]+-)?aiplatform\.googleapis\.com(\/|$)/.test(String(u ?? ''))
+// 동시에 보낼 AI 요청 수 (11/26): 맥미니는 모델 하나라 1, 상용 API는 여럿. 1이면 예전과 똑같이 하나씩
+export const PARALLEL_MAX = 16
+function checkParallel(v) {
+  const n = Number(v)
+  if (!Number.isInteger(n) || n < 1 || n > PARALLEL_MAX) throw bad(`동시 요청 수는 1~${PARALLEL_MAX} 사이 정수로 넣어 주세요.`)
+  return n
+}
 function checkKey(v) {
   const s = String(v ?? '').trim()
   if (s.length < 8 || s.length > 500 || /\s/.test(s)) throw bad('API 키는 띄어쓰기 없이 8~500자로 넣어 주세요.')
@@ -104,7 +113,7 @@ async function persist() {
 // client.js가 쓰는 값 (키 포함 — 서버 안에서만)
 export function builtinOverride(id) {
   const b = S.stored.builtin?.[id] ?? {}
-  return { baseUrl: b.baseUrl || '', apiKey: S.plain.get(id) || '', disabled: Boolean(b.disabled) }
+  return { baseUrl: b.baseUrl || '', apiKey: S.plain.get(id) || '', disabled: Boolean(b.disabled), parallel: b.parallel || 1 }
 }
 export function customConnections() {
   return (S.stored.custom ?? []).map((c) => ({
@@ -115,6 +124,8 @@ export function customConnections() {
     model: c.model,
     reportModel: c.reportModel || '',
     disabled: Boolean(c.disabled),
+    parallel: c.parallel || 1,
+    vertex: isVertexUrl(c.baseUrl),
   }))
 }
 export const isCustomId = (id) => (S.stored.custom ?? []).some((c) => c.id === id)
@@ -136,6 +147,7 @@ export function publicConnections() {
       baseUrl: b.baseUrl || process.env[ENV_URL[id]] || DEFAULT_URL[id] || '',
       baseUrlFrom: b.baseUrl ? 'site' : process.env[ENV_URL[id]] ? 'env' : DEFAULT_URL[id] ? 'default' : 'none',
       disabled: Boolean(b.disabled),
+      parallel: b.parallel || 1,
       revert: b.prev ? (b.prev.key || b.prev.baseUrl ? 'previous' : 'env') : null,
       changedAt: b.changedAt ?? null,
     }
@@ -147,12 +159,14 @@ export function publicConnections() {
     baseUrl: c.baseUrl,
     model: c.model,
     reportModel: c.reportModel || '',
-    key: S.plain.has(c.id) ? 'site' : S.broken.has(c.id) ? 'broken' : 'none',
+    key: S.plain.has(c.id) ? 'site' : S.broken.has(c.id) ? 'broken' : isVertexUrl(c.baseUrl) ? 'google' : 'none',
     disabled: Boolean(c.disabled),
+    parallel: c.parallel || 1,
+    vertex: isVertexUrl(c.baseUrl),
     revert: c.prev ? 'previous' : null,
     changedAt: c.changedAt ?? null,
   }))
-  return { builtin, custom, secret: secretSource(), max: MAX_CUSTOM }
+  return { builtin, custom, secret: secretSource(), max: MAX_CUSTOM, parallelMax: PARALLEL_MAX }
 }
 
 // 기본 세 곳: 주소 · 키 바꾸기 (빈 칸은 그대로 둠)
@@ -209,17 +223,35 @@ export async function setConnectionDisabled(id, disabled) {
   await persist()
 }
 
+// 동시 요청 수 바꾸기 (11/26). 키를 건드리지 않아 비밀번호 다시 확인은 묻지 않는다
+export async function setConnectionParallel(id, value) {
+  const n = checkParallel(value)
+  if (BUILTIN_IDS.includes(id)) {
+    S.stored.builtin = { ...S.stored.builtin, [id]: { ...(S.stored.builtin?.[id] ?? {}), parallel: n } }
+  } else {
+    const i = (S.stored.custom ?? []).findIndex((c) => c.id === id)
+    if (i < 0) throw bad('없는 AI 연결이에요.')
+    S.stored.custom[i] = { ...S.stored.custom[i], parallel: n }
+  }
+  await persist()
+  return n
+}
+
 // 새 연결 (OpenAI 호환 /chat/completions)
 export async function addCustom(input) {
   if ((S.stored.custom ?? []).length >= MAX_CUSTOM) throw bad(`새 연결은 ${MAX_CUSTOM}개까지 더할 수 있어요.`)
+  const baseUrl = checkUrl(input.baseUrl)
+  // Vertex AI 주소면 키 없이 (서버의 Google 서비스 계정으로)
+  const noKey = isVertexUrl(baseUrl) && !String(input.key ?? '').trim()
   const c = {
     id: `c-${randomBytes(4).toString('hex')}`,
     label: checkLabel(input.label),
-    baseUrl: checkUrl(input.baseUrl),
+    baseUrl,
     model: checkModel(input.model, '요약 모델', true),
     reportModel: checkModel(input.reportModel, '보고서 모델', false),
-    key: seal(checkKey(input.key)),
+    ...(noKey ? {} : { key: seal(checkKey(input.key)) }),
     disabled: false,
+    parallel: input.parallel !== undefined && input.parallel !== '' ? checkParallel(input.parallel) : isVertexUrl(baseUrl) ? 8 : 1,
     createdAt: new Date().toISOString(),
   }
   S.stored.custom = [...(S.stored.custom ?? []), c]

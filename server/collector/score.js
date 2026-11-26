@@ -4,6 +4,7 @@ import { findMention } from './lists.js'
 import { EXPERT_SOURCES } from './normalize.js'
 import { offTopicOf } from './relevance.js'
 import { DEFAULT_RULE, importanceRule } from '../importanceRule.js'
+import { tune } from '../tunables.js'
 
 // 이 점수 이상이면 "중요도 높음". 11/09 재설계 뒤 실제 데이터(모은 이슈 421개)로 다시 맞춤:
 // 새 점수는 보도량이 10점으로 줄어 최고점이 60 근처 → 예전(60점 이상 8건, 약 2%)과 비슷한 비율이 되도록 45점 (약 4%)
@@ -22,11 +23,9 @@ const RELEVANCE_WEIGHT = { high: 1, mid: 0.5, low: 0.2 }
 // 예전: 보도량 40 · 경쟁사 25 · 최신성 20 · 전문 매체 15 · 관심 기술 15 · 사건 낱말 10
 
 // 신규성 ① 새 기술 · 처음 나온 소식 낱말 (제목). 1개 6점, 2개 이상 10점
-const NEW_WORDS = ['최초', '세계 첫', '첫 ', '신기술', '개발', '공개', '상용화', '시연', '신제품', '출시', '양산', '특허', '표준', '시제품', '선보', 'first', 'unveil', 'launch', 'develop', 'breakthrough', 'prototype', 'demonstrat', 'introduc', 'record']
 // 사업 연관성의 사업 사건 낱말 (제목). 5점
-const BIZ_WORDS = ['수주', '공급', '투자', '인수', '합병', '협력', '계약', '증설', '수율', '공정', '라인', '점유율', 'supply', 'invest', 'acquir', 'partner', 'contract', 'capacity', 'yield']
 // 사진 · 인사 · 홍보 · 증시 시황 · 자동 생성 주가 기사 (×0.3, 11/11 — 예전 −15점)
-const NOISE_WORDS = ['[포토]', '[사진]', '[인사]', '[부고]', '할인', '이벤트', '모집', '강좌', '특강', '경진대회', '[공시]', '마감시황', '코스피', '코스닥', '주가']
+// → 11/26: 세 낱말 목록은 관리 페이지 「세부 설정 › 중요도 낱말 목록」(server/tunables.js newWords · bizWords · noiseWords, 기본값 = 예전 코드 목록)
 const STOCK_PATTERN = /\d[\d,]*원으로|\d+(\.\d+)?% (상승|하락|급등|급락)|강보합|약보합|상한가|하한가|목표주가/
 
 const has = (text, words) => words.filter((w) => text.toLowerCase().includes(w.toLowerCase()))
@@ -63,7 +62,7 @@ export function scoreArticle(article, groupSize, competitors = [], { relevance =
   const text = `${title} ${article.description ?? ''}`
 
   // 1. 신규성 (최대 30): 첫 소식 10 + 새 기술 · 처음 낱말 최대 10 + 요즘 뜨는 기술 용어 10
-  const newWords = [...has(title, NEW_WORDS), ...(RECORD.test(title) ? ['성능 기록'] : [])].slice(0, 2)
+  const newWords = [...has(title, tune('newWords')), ...(RECORD.test(title) ? ['성능 기록'] : [])].slice(0, 2)
   // 11/11: 뜨는 기술 용어는 처음 잡힌 지 30일 안일 때만 (오래 뜬 용어는 더는 새 소식이 아님. 검수: 찾기 결과 1,754개 중 684개가 이 10점)
   const fresh = (t) => !t.firstSeen || Date.now() - Date.parse(t.firstSeen) <= RISING_FRESH_DAYS * 86_400_000
   const risingName = rising.find((t) => fresh(t) && (mentions(text, t.name) || mentions(text, t.en)))?.name ?? null
@@ -76,7 +75,7 @@ export function scoreArticle(article, groupSize, competitors = [], { relevance =
   const competitorName = competitorInTitle ?? findMention(text, competitors)
   const interestInTitle = findMention(title, interests)
   const interestName = interestInTitle ?? findMention(text, interests)
-  const bizWords = has(title.replace(BIZ_FALSE, ''), BIZ_WORDS).slice(0, 2)
+  const bizWords = has(title.replace(BIZ_FALSE, ''), tune('bizWords')).slice(0, 2)
   const ownName = findMention(text, own)
   const business = Math.min(
     25,
@@ -99,7 +98,7 @@ export function scoreArticle(article, groupSize, competitors = [], { relevance =
   // 잡음: 사진 · 인사 · 증시 시황, 그리고 제목 주제가 생활 · 행사 · 쇼핑 · 정치(예: 시의회 방문)인 기사 (relevance.js 주제 목록)
   const offTopic = ['생활·행사', '쇼핑', '정책·정치'].includes(offTopicOf(title))
   // 11/11: −15점 대신 ×0.3 (점수가 높은 시황 · 홍보 기사도 확실히 내려가게)
-  const noise = NOISE_WORDS.some((w) => title.includes(w)) || STOCK_PATTERN.test(title) || offTopic ? NOISE_WEIGHT : 1
+  const noise = tune('noiseWords').some((w) => title.includes(w)) || STOCK_PATTERN.test(title) || offTopic ? NOISE_WEIGHT : 1
   const weight = RELEVANCE_WEIGHT[relevance] ?? 1
   // 관리 페이지 배점 (11/15): 칸마다 「새 배점 ÷ 기본 배점」만큼. 기본값이면 그대로
   const rule = importanceRule()

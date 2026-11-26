@@ -29,18 +29,94 @@ FEATURES.push({
   desc: '첫 화면이 자료 전체(약 4MB) 대신 오늘 숫자 · 중요 자료만 받고, 자료 현황은 서버에서 한 쪽씩 받아요. 거르기 · 찾기 규칙은 예전과 같아요',
   default: 'test',
 })
+// 11/26 (39 문서 3장 D2 · 「발표 뒤」 앞당김): 디스플레이 논문 DB에 없는 말의 처음 · 성장기 논문을 OpenAlex에서 미리 받아 쌓기 (server/papers/prefetch.js)
+// 화면이 아니라 서버 일이라 「테스트에서만」 · 「모두」 둘 다 켜짐. 비용(한 말 약 $0.003, 6시간에 최대 2개 말 + 사람이 연 말)이 있어 처음은 끄기
+FEATURES.push({
+  key: 'papersPrefetch',
+  label: '논문 미리 모으기 (처음 · 성장기)',
+  desc: '디스플레이 논문 DB에 없는 키워드의 2017년까지 · 2018~2021 · 2022~ 논문을 시기마다 40편씩 받아 둬요. 미리 분석 때 2개씩, 키워드 분석을 열 때 그 말. 「테스트에서만」이나 「모두」면 켜짐 (OpenAlex 한 말 약 $0.003)',
+  default: 'off',
+})
+// 11/26 (31 문서 6-4 · 33 문서 W9): 기술 시계열 「인용 모멘텀(참고)」 줄. 문제가 생기면 배포 없이 「끄기」로 — 끄면 OpenAlex도 부르지 않고 화면 · 보고서 묶음에서 빠짐
+FEATURES.push({
+  key: 'citationMomentum',
+  label: '인용 모멘텀 (기술 시계열 참고 줄)',
+  desc: '키워드 분석의 기술 시계열에 최근 2년 논문의 FWCI 평균 · 분야 상위 10% 인용 비율을 참고로 보여 줘요 (단계 판정에는 안 씀, 키워드마다 OpenAlex 1번 · 7일 기억). 「끄기」면 계산도 하지 않아요',
+  default: 'all',
+})
+// 11/26 (45 문서 8장 「모든 출처에 검색」): 자료 현황 「출처」 칸 맨 위 검색칸. 끄면 예전처럼 목록만 (배포 없이 관리 페이지에서 되돌리기)
+FEATURES.push({
+  key: 'sourceSearch',
+  label: '「출처」 칸 안 검색',
+  desc: '자료 현황 「출처」(모든 출처) 칸을 열면 맨 위 검색칸으로 출처 이름을 찾아 골라요. 끄면 예전처럼 목록만 보여요',
+  default: 'all',
+})
+// ── 판단 규칙 바꾸기 스위치 (11/26, 33 문서 6장 W2 · W34 · W27 · W25) ──
+// 서버 계산(중요도 · 특허 세기 · 상용화 문장)을 바꾼 것들. 배포 없이 관리 페이지 「실험 기능」에서 되돌린다.
+// - 「모두에게」 = 새 규칙, 「꺼짐」 = 예전 규칙 그대로 (예전 코드는 지우지 않고 남겨 둠)
+// - 서버 계산은 사람마다 나눌 수 없어 「테스트에서만」도 예전 규칙(꺼짐과 같음)
+// - 바꾸면 자료 현황 목록 · 중요도를 다시 계산한다 (server/index.js PUT /api/features → onRuleFlagChange)
+FEATURES.push(
+  {
+    key: 'rerunWeighted',
+    server: true,
+    label: '[판단 규칙] 「첫 소식」 재탕 판정 보강 (W2)',
+    desc: '며칠 뒤 다른 말로 다시 쓴 같은 소식도 재탕으로 봐요(드문 낱말 무게 · 같은 이슈 기사 제목까지). 끄면 예전 판정(글자 조각 0.35, 대표 기사만). 바꾸면 중요도를 다시 계산해요',
+    default: 'all',
+  },
+  {
+    key: 'patentSolarExclude',
+    server: true,
+    label: '[판단 규칙] 특허 셀 때 태양전지 · 광검출기 제목 빼기 (W34)',
+    desc: '제목으로 세는 모든 기술에서 태양전지 · 광검출기 · 엑스선 검출기 특허를 빼요(검색어가 그 말이면 빼지 않음). 끄면 예전처럼 「기술 ↔ CPC 연결표」 기술에만',
+    default: 'all',
+  },
+  {
+    key: 'commercialYearStrict',
+    server: true,
+    label: '[판단 규칙] 상용화 시점 문장 고르기 강화 (W27)',
+    desc: '투자 · 실적 · 주가 · 과거 일 문장을 빼고, 연도 바로 뒤에 양산 · 출시 말이 오는 문장만 골라요. 끄면 예전 규칙(연도 + 양산 · 출시 낱말)',
+    default: 'all',
+  },
+  {
+    key: 'applicantAlias',
+    server: true,
+    label: '[판단 규칙] 특허 출원인 이름 묶기 (W25)',
+    desc: '같은 회사의 여러 이름(BOE 계열사 · CSOT/TCL · 삼성디스플레이 · LG디스플레이 등)을 한 회사로 묶어 세요. 끄면 예전처럼 이름 글자 그대로',
+    default: 'all',
+  },
+)
 export const FEATURE_STATES = ['off', 'test', 'all']
 const KEY = 'features'
 
+// 판단 규칙 스위치 값 (10초 기억 — 점수 · 특허를 셀 때마다 DB를 읽지 않게). 바꾸면 바로 비움
+let flagCache = { at: 0, value: null }
 export async function getFeatures() {
   const saved = await getSetting(KEY, {})
   return Object.fromEntries(FEATURES.map((f) => [f.key, FEATURE_STATES.includes(saved[f.key]) ? saved[f.key] : f.default]))
+}
+export async function serverFlag(key) {
+  if (!flagCache.value || Date.now() - flagCache.at > 10_000) {
+    try {
+      flagCache = { at: Date.now(), value: await getFeatures() }
+    } catch {
+      flagCache = { at: Date.now(), value: Object.fromEntries(FEATURES.map((f) => [f.key, f.default])) }
+    }
+  }
+  return flagCache.value[key] === 'all'
+}
+export const RULE_FLAGS = FEATURES.filter((f) => f.server).map((f) => f.key)
+// 기억해 둔 계산(키워드 묶음 등)의 열쇠에 붙이는 값: 판단 규칙 스위치를 바꾸면 새로 계산, 되돌리면 예전 기억을 다시 씀
+export async function ruleSig() {
+  const on = await Promise.all(RULE_FLAGS.map((k) => serverFlag(k).catch(() => false)))
+  return on.map((b) => (b ? '1' : '0')).join('')
 }
 
 export async function saveFeatures(input = {}) {
   const now = await getFeatures()
   for (const f of FEATURES) if (FEATURE_STATES.includes(input[f.key])) now[f.key] = input[f.key]
   await setSetting(KEY, now)
+  flagCache = { at: 0, value: null }
   return now
 }
 

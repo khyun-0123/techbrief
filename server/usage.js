@@ -2,6 +2,7 @@
 // client_id는 브라우저가 만든 무작위 값 — 대략적인 사용자 수를 세는 데만 쓴다
 // DB가 없으면 서버 메모리에 둔다 (서버를 끄면 비워짐)
 import { dbEnabled, query } from './db/index.js'
+import { loadTunables, tunablesReadFailed, tune } from './tunables.js'
 
 // 화면이 보내는 종류. 그 밖의 값은 버린다
 export const CLIENT_TYPES = ['visit', 'search', 'select', 'summary', 'open', 'report', 'export']
@@ -9,7 +10,8 @@ export const CLIENT_TYPES = ['visit', 'search', 'select', 'summary', 'open', 're
 const EXPORT_FORMATS = ['pdf', 'ppt', 'copy']
 const REVIEW_MAX_S = 30 * 86_400 // export value(초) 상한
 
-export const KEEP_DAYS = 90 // 원본 기록 보관 기간 (17 문서 4-2)
+export const KEEP_DAYS = 90 // 원본 기록 보관 기간 (17 문서 4-2) — 처음 값. 11/26부터 관리 페이지 「세부 설정 › 보관 기간」(tunables.js usageKeepDays)
+const keepDays = () => tune('usageKeepDays')
 const DETAIL_MAX = 80
 const PER_MINUTE = 120 // 브라우저 하나가 1분에 보낼 수 있는 기록 수 (잘못된 반복 호출 막기)
 
@@ -92,13 +94,15 @@ const aiOkOf = (e) => (e.detail ?? '').split('|')[0].endsWith(':ok')
 
 // 90일 지난 원본 기록 지우기 (서버가 켜질 때와 하루 한 번)
 export async function pruneUsage() {
+  const days = Number((await loadTunables({ fresh: true })).usageKeepDays) || KEEP_DAYS // 지우기 전에 저장된 기간을 다시 읽음
+  if (tunablesReadFailed()) return // 저장된 기간을 모르면 지우지 않음 (다음 날 다시)
   if (!dbEnabled()) {
-    const limit = Date.now() - KEEP_DAYS * 86_400_000
+    const limit = Date.now() - days * 86_400_000
     const keep = memory.filter((e) => e.created_at.getTime() >= limit)
     memory.splice(0, memory.length, ...keep)
     return
   }
-  await query(`DELETE FROM usage_events WHERE created_at < now() - make_interval(days => $1)`, [KEEP_DAYS])
+  await query(`DELETE FROM usage_events WHERE created_at < now() - make_interval(days => $1)`, [days])
 }
 
 // ── 집계 ──
@@ -238,7 +242,7 @@ export async function usageStats(days, keywords = []) {
       aiFailed: ai.length - aiOk.length,
       aiAvgMs: aiOk.length ? Math.round(aiOk.reduce((s, e) => s + (e.value ?? 0), 0) / aiOk.length) : null,
     },
-    keepDays: KEEP_DAYS,
+    keepDays: keepDays(),
     stored: dbEnabled(),
   }
 }

@@ -9,6 +9,7 @@
 import { createHash } from 'node:crypto'
 import { dbEnabled, query } from './db/index.js'
 import { getSetting, setSetting } from './db/store.js'
+import { serverFlag } from './features.js'
 
 const KEY = 'tech_cpc'
 const HISTORY = 'tech_cpc_history'
@@ -16,6 +17,17 @@ const TTL = 60_000
 
 // 태양전지 · 광검출기 · 엑스선 검출기: 디스플레이 기술과 같은 재료 · 구조 말(perovskite · tandem)을 쓰지만 다른 분야
 export const NON_DISPLAY_TITLE = 'solar|photovolt|photodetector|x-ray|scintillat'
+
+// 11/26 W34: 연결표 밖 기술(제목으로만 세는 기술)에도 태양전지 · 광검출기 제목을 뺀다 — 관리 페이지 「실험 기능」 patentSolarExclude
+// 중국 공보 번역은 태양전지를 「perovskite battery」(钙钛矿电池)로 써서 battery도 뺀다 (11/26 로컬 특허 DB: 2020년~ 「perovskite」 제목 7,982건 중
+// solar 등 3,910건 + battery 596건 — 표본 12건 모두 태양전지), 「perovskite-silicon tandem cells」 같은 태양전지 탠덤도.
+// 검색어가 이 말들 자체(예: 「태양전지」)면 빼지 않는다. 꺼짐이면 null → 예전처럼 제목 그대로
+export const NON_DISPLAY_WIDE = `${NON_DISPLAY_TITLE}|batter|tandem cell|perovskite cell`
+export async function titleExclude(pattern) {
+  if (!(await serverFlag('patentSolarExclude').catch(() => false))) return null
+  if (new RegExp(NON_DISPLAY_WIDE, 'i').test(String(pattern ?? ''))) return null
+  return NON_DISPLAY_WIDE
+}
 
 // match: 키워드나 영문 검색어에 걸리는 말 (소문자) · cpc: 그 기술 CPC (PostgreSQL 정규식, 코드 앞부분)
 // with: 그 CPC만으로는 넓을 때 함께 있어야 하는 CPC · withTitle: 또는 제목에 이 말 · exclude: 빼는 제목

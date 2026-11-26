@@ -306,7 +306,7 @@ export async function setSetting(key, value) {
 
 // ── 선별한 기사의 원문 본문 (article_texts) ──
 // 「선별 추가」로 요약을 요청한 기사만 저장한다. DB가 없으면 서버 메모리에 (서버를 끄면 비워짐)
-const TEXT_KEEP_DAYS = 90
+const TEXT_KEEP_DAYS = 90 // 처음 값. 11/26부터 관리 페이지 「세부 설정 › 보관 기간」(server/tunables.js textKeepDays)
 const memoryTexts = new Map() // id → { url, body, fetchedAt }
 
 export async function getArticleText(id) {
@@ -349,7 +349,11 @@ export async function articleUrlOf(id) {
 
 export async function pruneArticleTexts() {
   if (!dbEnabled()) return
-  await query(`DELETE FROM article_texts WHERE fetched_at < now() - interval '${TEXT_KEEP_DAYS} days'`)
+  // 지우기 전에 저장된 보관 기간을 꼭 다시 읽는다 (켜질 때 읽기 전 기본값으로 지우면, 늘려 둔 기간의 원문까지 지워짐)
+  const { loadTunables, tunablesReadFailed } = await import('../tunables.js') // tunables.js가 이 파일을 가져오므로 실행할 때 가져옴
+  const days = Number((await loadTunables({ fresh: true })).textKeepDays) || TEXT_KEEP_DAYS
+  if (tunablesReadFailed()) return // 저장된 기간을 모르면 지우지 않음 (다음 날 다시)
+  await query(`DELETE FROM article_texts WHERE fetched_at < now() - make_interval(days => $1)`, [days])
 }
 
 // ── 브라우저별 선별 폴더 (selections) ──

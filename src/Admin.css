@@ -2396,3 +2396,19 @@ label.adm-field input {
   font: inherit;
   font-weight: 400;
 }
+/* 세부 설정 (11/26): 낱말 목록 · 세부 기술 분류 (한 줄에 하나) */
+.adm .adm-tune-list {
+  display: grid;
+  gap: 4px;
+  margin-top: var(--tb-space-3, 12px);
+}
+.adm .adm-tune-list textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: #fff;
+  font: 400 12px/1.5 ui-monospace, monospace;
+  resize: vertical;
+}

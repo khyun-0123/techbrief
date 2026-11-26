@@ -10,6 +10,7 @@ import { feedList } from './collector/feeds.js'
 import { getTrends } from './trends.js'
 import { paperProviderStatus } from './papers/index.js'
 import { corpusStatus, startCorpus } from './papers/corpus.js'
+import { kciOaiStatus } from './papers/kciOai.js'
 import { buildTimeline, timelineStory } from './timeline.js'
 import { readyTimelines, runPrecompute, startPrecompute } from './timelineJobs.js'
 import { relatedWords, wordArticles } from './related.js'
@@ -18,6 +19,7 @@ import { kiwiStatus } from './kiwi.js'
 import { fillMap, mapMaterials } from './mapMaterials.js'
 import { allCategoryCompetitors, bundleFacts, categoryTrends, headlineSeeds, ownerOf, prepareBundle, termVerdict } from './keywordBundle.js'
 import { DEFAULT_STYLE, describeStyle, getReportStyle, LAYOUT_FIELDS, reportStyleHistory, saveReportStyle, SIZE_FIELDS } from './reportStyle.js'
+import { describeTunables, GROUPS as TUNE_GROUPS, loadTunables, saveTunables, tune, tunablesHistory, tunablesView } from './tunables.js'
 import { checkOwnerPatterns, DEFAULT_JUDGE, describeJudge, judgeHistory, judgeRule, loadJudgeSettings, RULE_FIELDS, saveJudgeRule, saveOwner } from './judgeSettings.js'
 import { scopeSearch } from './scopeSearch.js'
 import { popularPapers } from './papers/journals.js'
@@ -53,9 +55,9 @@ import { activeJobs, addJob, answerJob, cancelJob, listJobs, resumableCount, set
 import { sourceStatus } from './sourceGuard.js'
 import { fetchTitlesIfMissing, patentDbStatus } from './patentDb.js'
 import { abstractsStatus, fetchAbstractsIfWanted } from './patentAbstracts.js'
-import { chatJson, currentProviderId, llmProviders, moveJob, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, setModelOverrides, testConnection, withQueueContext } from './llm/client.js'
+import { chatJson, currentProviderId, kickQueue, llmProviders, moveJob, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, setModelOverrides, testConnection, withQueueContext } from './llm/client.js'
 import { SERVICES as API_KEY_SERVICES, apiKeyServiceLabel, loadApiKeys, publicApiKeys, resetApiKeys, revertApiKeys, updateApiKeys } from './apiKeys.js'
-import { addCustom, deleteCustom, loadConnections, publicConnections, revertConnection, setConnectionDisabled, updateBuiltin, updateCustom, BUILTIN_IDS } from './llm/connections.js'
+import { addCustom, deleteCustom, loadConnections, publicConnections, revertConnection, setConnectionDisabled, setConnectionParallel, updateBuiltin, updateCustom, BUILTIN_IDS } from './llm/connections.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
   buildMergeMessages,
@@ -70,7 +72,8 @@ import { adminConfigured, adminHere, adminOf, changeLog, clientIp, confirmAdmin,
 import { ACCESS_COOKIE, ACCESS_MAX_AGE, envAccessCodeSet, tokenOf as accessTokenOf } from './accessGate.js'
 import { checkNewCode, clearAdminPassword, loadCredentials, saveAccessToken, saveAdminPassword, storedAccessToken, storedPassword } from './credentials.js'
 import { backgroundAllowed, backlogBrief, queueSearchSummaries, refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
-import { featureList, FEATURES, getFeatures, saveFeatures } from './features.js'
+import { featureList, FEATURES, getFeatures, RULE_FLAGS, saveFeatures } from './features.js'
+import { prefetchLater } from './papers/prefetch.js'
 import { summarizeArticle, summarizeOnly } from './summarize.js'
 import { pruneUsage, recordClientEvent, usageStats } from './usage.js'
 import { checkOps, getOps, OPS_LABEL, publicOps, saveOps } from './ops.js'
@@ -95,9 +98,10 @@ const trashDays = async () => {
 const REPORT_TIMEOUT_MS = 240_000 // 보고서는 출력이 길어 요약보다 오래 걸린다
 // 보고서 한 번에 넣는 기사 수 (맥미니 문맥 크기 기준). 넘으면 화면이 고르게 한다 (21 문서 6-3)
 // - 중요도 높은 10건만 (빠름) / 전부 (REPORT_CHUNK건씩 나눠 쓰고 합침, 오래 걸림, 최대 MAX_REPORT_ALL건)
-const MAX_REPORT_ARTICLES = 10
+// 11/26: 한 번에 넣는 수는 관리 페이지 「세부 설정 › 보고서 한도」(server/tunables.js reportArticles, 기본 10). 나눠 쓰는 묶음은 그보다 크지 않게
+const MAX_REPORT_ARTICLES = () => tune('reportArticles')
 const MAX_REPORT_ALL = 40
-const REPORT_CHUNK = 8
+const REPORT_CHUNK = () => Math.min(8, MAX_REPORT_ARTICLES())
 
 const MAX_BODY = 1_000_000 // 보고서 요청·보고서함 옮기기에는 기사 요약 여러 건이 들어간다
 
@@ -236,7 +240,7 @@ async function attachBodies(articles) {
   return articles
 }
 
-function readReportArticles(body, max = MAX_REPORT_ARTICLES) {
+function readReportArticles(body, max = MAX_REPORT_ARTICLES()) {
   const all = body.articles ?? []
   if (all.length > max) {
     throw Object.assign(new Error(`기사가 너무 많아요 (${all.length}건). ${max}건 이하로 골라 주세요.`), { status: 400 })
@@ -265,12 +269,11 @@ function draftReport(articles, opts) {
 // 기사가 많을 때: REPORT_CHUNK건씩 나눠 초안 조각을 쓰고(원문 본문은 묶음마다 나눠 붙임), 조각을 한 보고서로 합친다
 // 번호(n)는 처음부터 전체 기사 번호라 조각을 합쳐도 근거 번호가 그대로 맞는다
 async function draftLongReport(articles, opts) {
-  const parts = []
-  for (let i = 0; i < articles.length; i += REPORT_CHUNK) {
-    const chunk = await attachBodies(articles.slice(i, i + REPORT_CHUNK))
-    const { data } = await draftReport(chunk, opts)
-    parts.push(data)
-  }
+  const size = REPORT_CHUNK()
+  const chunks = []
+  for (let i = 0; i < articles.length; i += size) chunks.push(articles.slice(i, i + size))
+  // 11/26: 조각을 한꺼번에 대기열에 넣는다 — 동시 요청 수가 1이면 예전처럼 차례로, 늘리면 함께 (순서는 조각 순서 그대로 합침)
+  const parts = await Promise.all(chunks.map(async (c) => (await draftReport(await attachBodies(c), opts)).data))
   const merged = await chatJson({
     messages: buildMergeMessages(articles, parts, opts),
     schema: REPORT_SCHEMA,
@@ -295,7 +298,7 @@ async function requireReportOwner(req, id) {
 // 보고서 한 건 만들기 (아직 저장 전). 대기열(reportJobs)과 예전 바로 만들기(/api/reports)가 같이 쓴다
 export async function buildReportEntry(body) {
   const all = body.mode === 'all'
-  const picked = readReportArticles(body, all ? MAX_REPORT_ALL : MAX_REPORT_ARTICLES)
+  const picked = readReportArticles(body, all ? MAX_REPORT_ALL : MAX_REPORT_ARTICLES())
   for (const a of picked) if (await materialBlocksAi(String(a.id ?? ''))) throw Object.assign(new Error(`AI 입력을 허용하지 않은 자료가 있어요: ${a.title}`), { status: 403 })
   // 11/14: 주제 키워드를 제목에. 11/17 조장: 제목 앞에 날짜(MM.DD), 같은 날 같은 제목이면 저장할 때 끝에 번호 2 · 3 …(saveReport unique)
   const baseTitle = (body.title?.trim() || `${String(body.topics?.[0] ?? '').trim() || '테크'} 동향 브리핑`).replace(/^\d{1,2}\.\d{1,2}\s+/, '')
@@ -310,7 +313,7 @@ export async function buildReportEntry(body) {
   ).filter(Boolean)
   const facts = bundles.flatMap(bundleFacts).map((f, i) => ({ ...f, n: picked.length + i + 1 }))
   const opts = { title, periodLabel: body.periodLabel ?? '오늘', direction, topics, seeds: bundles.flatMap(headlineSeeds).slice(0, 4) }
-  const long = picked.length > MAX_REPORT_ARTICLES
+  const long = picked.length > MAX_REPORT_ARTICLES()
   const articles = [...(long ? picked : await attachBodies(picked)), ...facts]
   const { data, model } = long ? await draftLongReport(articles, opts) : await draftReport(articles, opts)
   const sections = Object.fromEntries(
@@ -347,7 +350,7 @@ export async function buildReportEntry(body) {
     model,
     createdAt,
     periodLabel: body.periodLabel ?? '오늘',
-    ...(long ? { chunks: Math.ceil(articles.length / REPORT_CHUNK) } : {}),
+    ...(long ? { chunks: Math.ceil(articles.length / REPORT_CHUNK()) } : {}),
     // fulltext: 원문 본문을 반영했는지 (화면 근거 기사 목록에 표시). 본문 자체는 저장하지 않는다
     articles: articles.map((a) => {
       const { title: t, source, url, publishedAt, body: b, analysis, description, paper, patent, authors } = a
@@ -378,7 +381,7 @@ async function handleReportSection(req, res) {
   const body = await readJson(req)
   // 기사가 많은 보고서(전부 넣기)는 원문 본문 없이 이 섹션의 요약 항목만으로 다시 쓴다 (문맥 크기)
   const picked = readReportArticles(body, MAX_REPORT_ALL)
-  const articles = picked.length > MAX_REPORT_ARTICLES ? picked : await attachBodies(picked)
+  const articles = picked.length > MAX_REPORT_ARTICLES() ? picked : await attachBodies(picked)
   if (!SECTION_KEYS.includes(body.key)) return send(res, 400, { error: '없는 섹션이에요.' })
   const { data, model } = await chatJson({
     messages: buildSectionMessages(articles, { key: body.key, report: body.report, direction: body.report?.direction }),
@@ -410,7 +413,11 @@ export function startScheduler() {
     .catch((err) => console.warn(`[llm] 저장된 AI 서버를 쓸 수 없어 기본값으로: ${err.message}`))
   getSources().catch(() => {}) // 11/25: 관리 페이지에서 더한 출처를 미리 읽어 둔다 (출처 단계 tierOf가 켜질 때부터 알게)
   startRefreshScheduler()
-  listArticles().catch(() => {}) // 11/17: 자료 현황 목록을 켜질 때 미리 계산해 둔다 (첫 화면이 계산을 기다리지 않게)
+  // 11/26: 관리 페이지 「세부 설정」(낱말 목록 · 같은 소식 묶기)을 먼저 읽고 목록을 계산 (읽기 전에 계산하면 기본값으로 한 번 계산됨)
+  loadTunables()
+    .catch(() => {})
+    .then(() => listArticles())
+    .catch(() => {}) // 11/17: 자료 현황 목록을 켜질 때 미리 계산해 둔다 (첫 화면이 계산을 기다리지 않게)
   startTechTrends({ allowed: backgroundAllowed }) // 기술 트렌드: 켜진 뒤 1분, 그 뒤 하루마다 (TECH_TRENDS=off면 안 함)
   startCorpus({ allowed: backgroundAllowed }) // 디스플레이 논문 DB: 켜진 뒤 3분, 그 뒤 6시간마다 (PAPER_CORPUS=off면 안 함, papers/corpus.js)
   startPrecompute({ allowed: backgroundAllowed }) // 기술 시계열 미리 분석: 켜진 뒤 10분, 그 뒤 6시간마다 (TIMELINE_PRECOMPUTE=off면 안 함, timelineJobs.js)
@@ -614,7 +621,7 @@ async function handleApiInner(req, res) {
     }
     // 실험 기능: 누구나 읽고(화면이 무엇을 보일지 정함), 관리자만 바꾼다
     if (req.method === 'GET' && req.url === '/api/features') {
-      return send(res, 200, { features: await getFeatures(), list: featureList() })
+      return send(res, 200, { features: await getFeatures(), list: featureList(), limits: { reportArticles: tune('reportArticles') } }) // limits: 11/26 관리 페이지 「세부 설정」 (화면 보고서 한도)
     }
     if (req.method === 'PUT' && req.url === '/api/features') {
       const admin = requireAdmin(req)
@@ -623,6 +630,11 @@ async function handleApiInner(req, res) {
       const STATE = { off: '꺼짐', test: '테스트에서만', all: '모두에게' }
       for (const f of FEATURES) {
         if (before[f.key] !== after[f.key]) await logChange(admin, '실험 기능', `${f.label}: ${STATE[before[f.key]]} → ${STATE[after[f.key]]}`)
+      }
+      // 판단 규칙 스위치(11/26)를 바꿨으면 점수 재료 기억을 비우고 목록 · 중요도를 새 규칙으로 다시 계산 (끝날 때까지는 기존 점수)
+      if (RULE_FLAGS.some((k) => (before[k] === 'all') !== (after[k] === 'all'))) {
+        globalThis.__scoreCtx = { at: 0, value: null }
+        markListStale()
       }
       return send(res, 200, { features: after, list: featureList() })
     }
@@ -646,7 +658,7 @@ async function handleApiInner(req, res) {
     // 수집 출처 (14 문서 4-B): 네이버 밖 출처 목록 · 켜기/끄기 · 지난 수집 결과. 관리자만
     if (req.method === 'GET' && req.url === '/api/admin/sources') {
       requireAdmin(req)
-      return send(res, 200, { list: feedList(), ...(await getSources({ counts: true })), papers: await paperProviderStatus(), corpus: await corpusStatus().catch(() => null) })
+      return send(res, 200, { list: feedList(), ...(await getSources({ counts: true })), papers: await paperProviderStatus(), corpus: await corpusStatus().catch(() => null), kciOai: await kciOaiStatus().catch(() => null) })
     }
     if (req.method === 'PUT' && req.url === '/api/admin/sources') {
       const admin = requireAdmin(req)
@@ -759,6 +771,14 @@ async function handleApiInner(req, res) {
         if (disabled && currentProviderId() === id) return send(res, 409, { error: '지금 쓰는 AI 연결은 끌 수 없어요. 먼저 다른 AI 서버를 고르세요.' })
         await setConnectionDisabled(id, Boolean(disabled))
         await logChange(admin, 'AI 연결', `「${nameOf(id)}」 ${disabled ? '끔' : '켬'}`)
+        return reply()
+      }
+      // 11/26: 동시 요청 수 (키를 건드리지 않아 비밀번호 다시 확인은 묻지 않음)
+      if (req.method === 'POST' && action === 'parallel') {
+        const { parallel } = await readJson(req)
+        const n = await setConnectionParallel(id, parallel)
+        kickQueue()
+        await logChange(admin, 'AI 연결', `「${nameOf(id)}」 동시 요청 수 ${n}`)
         return reply()
       }
       if (req.method === 'POST' && action === 'delete') {
@@ -895,6 +915,8 @@ async function handleApiInner(req, res) {
       if (open && !refresh) recordSearch(query, clientIp(req), { open: true }).catch(() => {})
       // 11/12: 분석한 키워드는 보고서에 쓸 묶음을 뒤에서 미리 만들어 둔다 (keywordBundle.js, 3일 기억)
       prepareBundle(query, { refresh: Boolean(refresh) }).catch((err) => console.warn(`[bundle] ${query}: ${err.message}`))
+      // 11/26 D2: 실험 기능 「논문 미리 모으기」가 켜져 있으면 처음 · 성장기 논문을 뒤에서 받아 둔다 (papers/prefetch.js, 한 말 30일에 한 번)
+      if (open) prefetchLater(query)
       return send(res, 200, tl)
     }
     if (req.method === 'GET' && req.url === '/api/timeline/ready') {
@@ -1157,6 +1179,31 @@ async function handleApiInner(req, res) {
       requireAdmin(req)
       const { compareAbstracts } = await import('./abstractCompare.js')
       return send(res, 200, await compareAbstracts(await readJson(req)))
+    }
+    // 세부 설정 (11/26, notes/admin-review-1120 S5 · S7~S12): 코드에만 있던 숫자 · 낱말 목록 · 세부 기술 분류. 묶음(카드)마다 저장 · 처음 값으로
+    if (req.method === 'GET' && req.url === '/api/admin/tunables') {
+      requireAdmin(req)
+      await loadTunables({ fresh: true })
+      return send(res, 200, { ...tunablesView(), history: (await tunablesHistory()).slice(0, 10).map(({ at, name, group }) => ({ at, name, group })) })
+    }
+    const tuneMatch = req.url.match(/^\/api\/admin\/tunables\/([a-z]+)(\/reset)?$/)
+    if (tuneMatch && ((req.method === 'PUT' && !tuneMatch[2]) || (req.method === 'POST' && tuneMatch[2]))) {
+      const admin = requireAdmin(req)
+      const group = tuneMatch[1]
+      const reset = Boolean(tuneMatch[2])
+      const { before, after, changed } = await saveTunables(group, reset ? {} : (await readJson(req))?.values, admin?.name)
+      if (changed.length) {
+        if (['words', 'dedupe'].includes(group)) markListStale() // 점수 · 묶음을 새 값으로 다시 계산 (끝날 때까지는 기존 값)
+        if (group === 'categories') {
+          const { staleTechVerdicts } = await import('./techVerdicts.js')
+          staleTechVerdicts()
+          markListStale()
+        }
+        const title = TUNE_GROUPS.find((g) => g.id === group)?.title ?? group
+        const pick = (o) => Object.fromEntries(changed.filter((k) => k in o).map((k) => [k, o[k]]))
+        await logChange(admin, '세부 설정', `${title}${reset ? ' 처음 값으로' : ''}: ${describeTunables(pick(before))} → ${describeTunables(pick(after))}`)
+      }
+      return send(res, 200, { ...tunablesView(), updated: changed })
     }
     if (req.method === 'GET' && req.url === '/api/admin/judge') {
       requireAdmin(req)

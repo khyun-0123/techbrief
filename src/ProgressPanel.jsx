@@ -209,7 +209,7 @@ function ProgressPanel({ queue, reportJobs = [], storyJobs = [], onOpenStory, on
   // 펼쳐 두면 더 자주 받아 온다
   const server = useQueue(open ? 3000 : 8000)
   const serverCounts = countBy(queueRows(server))
-  const busy = server?.running ? 1 : 0
+  const busy = server?.runningAll?.length ?? (server?.running ? 1 : 0)
   const waitingN = (server?.waiting.length ?? 0) + (server?.backlog?.remaining ?? 0)
 
   // 내 작업도 서버 대기열도 없으면 작은 단추 하나만
