@@ -18,6 +18,7 @@ import { mapMaterials } from './mapMaterials.js'
 import { prepareBundle } from './keywordBundle.js'
 import { searchPaperArticles } from './searchPapers.js'
 import { PER_RUN as PREFETCH_PER_RUN, prefetchOn, prefetchPeriods } from './papers/prefetch.js'
+import { tune } from './tunables.js'
 
 // 맵 · 맵 재료 · 보고서용 묶음 (하나가 실패해도 나머지는 계속)
 async function warmExtras(query, prefetch = null) {
@@ -66,10 +67,10 @@ export async function precomputeTargets() {
     out.set(k, e)
   }
   for (const k of await getKeywords().catch(() => [])) add(k, '자동 수집')
-  for (const r of await frequentSearches({ days: 14, limit: 20 }).catch(() => [])) add(r.query, '많이 찾음')
+  for (const r of await frequentSearches({ days: 14, limit: tune('frequentLimit') }).catch(() => [])) add(r.query, '많이 찾음')
   try {
     const tt = await getTechTrends({ period: 'week' })
-    for (const r of (tt.composite ?? []).slice(0, 10)) {
+    for (const r of (tt.composite ?? []).slice(0, tune('trendingLimit'))) {
       if (r.en) await rememberTerms(r.name, [r.en]).catch(() => {}) // 영문 이름을 알면 번역 건너뜀
       add(r.name, '요즘 뜨는 기술')
     }
@@ -132,7 +133,7 @@ export function startPrecompute({ allowed = async () => true } = {}) {
       .then((ok) => (ok ? runPrecompute() : null))
       .catch((err) => console.warn(`[timeline-jobs] 실패: ${err.message}`))
       .finally(() => {
-        run.timer = setTimeout(tick, 6 * 3600_000)
+        run.timer = setTimeout(tick, tune('precomputeHours') * 3600_000) // 11/26: 관리 페이지 「세부 설정 › 미리 분석」 (기본 6시간)
       })
   }
   run.timer = setTimeout(tick, 10 * 60_000)

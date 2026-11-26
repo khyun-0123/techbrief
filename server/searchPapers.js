@@ -14,13 +14,14 @@ import { corpusReady, paperScore2, searchCorpus } from './papers/corpus.js'
 import { kciReady, searchKci } from './papers/kci.js'
 import { scienceonReady, searchScienceon } from './papers/scienceon.js'
 import { saveKeywordPapers, storedKeywordPapers } from './papers/keywordStore.js'
+import { tune } from './tunables.js'
 
 const DAYS = { today: 90, week: 365, all: 365 * 3 } // 논문은 하루 · 일주일 안에 거의 없어 넓게
 const LIMIT = 100
 const RECENT_SLOTS = 25
 const CORPUS_MIN = 15
 const ABSTRACT_MAX = 2_000
-const PAPER_HIGH = 60 // 논문 점수는 기사 점수와 따로라 「중요」 기준도 따로
+const PAPER_HIGH = () => tune('paperHigh') // 논문 점수는 기사 점수와 따로라 「중요」 기준도 따로 (11/26: 관리 페이지 「세부 설정 › 보관 기간」 칸, 기본 60)
 
 const fromCorpus = (r) => ({
   title: r.title,
@@ -154,7 +155,7 @@ export async function searchPaperArticles(query, period = 'all', terms = null) {
       cited: w.cited ?? 0,
       relevance: 'high',
       importance: score,
-      importanceLevel: score >= PAPER_HIGH ? 'high' : 'normal',
+      importanceLevel: score >= PAPER_HIGH() ? 'high' : 'normal',
       paperParts: parts,
       paperKeywords: (w.keywords ?? []).slice(0, 6).map((k) => k.name),
       sameIssue: 0,

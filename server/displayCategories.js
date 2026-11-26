@@ -1,17 +1,9 @@
 // 디스플레이 세부 기술 카테고리 (11/12, 교수님 의견 R11 · 35 문서): 디스플레이를 큰 틀이 아니라 들어가는 기술로 나눠 본다
 // 특허는 CPC 분류로 나눈다 (제목에 기대지 않음 — 기업 특허 제목은 「Display device」처럼 일반적이라, 33 문서 W21)
 // 묶음은 CPC 분류표 정의를 따랐고, 어떤 코드를 어느 카테고리에 넣을지는 [우리 판단] — 전문가 확인 필요 (33 문서)
-export const DISPLAY_CATEGORIES = [
-  { id: 'oled', name: 'OLED 소자', cpc: '^(H10K5|H01L51/5|H01L27/32|H05B33)' },
-  { id: 'material', name: '발광 재료 · 양자점', cpc: '^(C09K11|H10K85)' },
-  { id: 'led', name: '마이크로 · 미니 LED', cpc: '^(H01L33|H10H|H01L25/075|H01L27/15)' },
-  { id: 'tft', name: 'TFT 백플레인', cpc: '^(H01L27/12|H01L29/786|H10D86|H10D30/67)' },
-  { id: 'drive', name: '구동 · 회로', cpc: '^G09G' },
-  { id: 'lcd', name: '액정', cpc: '^G02F1/13' },
-  { id: 'form', name: '폴더블 · 기기 구조', cpc: '^(G09F9|G06F1/1652|H04M1/0268)' },
-  { id: 'touch', name: '터치 일체형', cpc: '^G06F3/0412' },
-  { id: 'xr', name: 'AR · VR 광학', cpc: '^(G02B27/01|G02B30|G03H1)' },
-]
+// 11/26: 9개 분류는 관리 페이지 「세부 설정 › 세부 기술 분류」에서 고친다 (server/tunables.js DEFAULT_CATEGORIES가 예전 목록 그대로)
+// 쓰는 곳은 displayCategories()로 그때그때 읽는다. 바꾸면 categoriesVersion()이 기억해 둔 계산의 열쇠에 붙어 다시 센다
+export { categoriesVersion, displayCategories } from './tunables.js'
 
 // 특허 출원인 이름 (Google 정리 이름, 대문자) → 화면 이름. 목록에 없는 이름은 법인 꼬리(CO LTD · INC …)를 떼고 보여 준다
 // 같은 회사의 다른 이름 묶기는 아직 일부만 (33 문서 W25: CSOT 이름 변경 가능성)

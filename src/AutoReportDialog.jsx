@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AUTO_PICK, reasonOf } from './autoPick.js'
 import { Seg } from './Dropdown.jsx'
 import EtaBar from './EtaBar.jsx'
+import { reportLimit } from './limits.js'
 
 const LEVELS = [
   ['selected', '선택한 자료만', '가장 빨라요'],
@@ -12,10 +13,10 @@ const LEVELS = [
   ['research', '추가 자료 조사까지', '논문 · 뉴스를 새로 찾아 보충, 가장 오래 걸림'],
 ]
 const WHY = { important: '중요', fill: '채움', term: '고른 말', added: '직접 추가' }
-const ONE_SHOT = 10 // 이보다 많으면 서버가 나눠 쓰고 합침 (server/index.js MAX_REPORT_ARTICLES · REPORT_CHUNK 8)
 const SUMMARY_SEC = 25 // 요약 한 건 평균 (summaryQueue.js 기본값과 같음)
 
 export default function AutoReportDialog({ run, onStart, onClose, onOpenSelect }) {
+  const ONE_SHOT = reportLimit() // 이보다 많으면 서버가 나눠 쓰고 합침 (server/index.js MAX_REPORT_ARTICLES — 11/26 관리 페이지 「세부 설정」, 기본 10)
   const closeRef = useRef(null)
   useEffect(() => {
     closeRef.current?.focus()

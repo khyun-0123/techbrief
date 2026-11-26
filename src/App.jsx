@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import { setLimits } from './limits.js'
 import {
   deleteMaterialApi,
   answerReportJob,
@@ -363,6 +364,7 @@ function App({ mode = 'normal', ops = { mode: 'normal' } }) {
       .catch(() => {})
     fetchFeatures()
       .then((f) => {
+        setLimits(f.limits) // 11/26: 보고서 한 번에 넣는 수 (관리 페이지 「세부 설정」)
         setFeatureStates(f.features)
         setFeatureList(f.list)
       })
