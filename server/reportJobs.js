@@ -22,6 +22,7 @@ import { summarizeArticle } from './summarize.js'
 import { lookupWiki } from './wiki.js'
 import { kindOfBullet } from './reportShared.js'
 import { isProposal } from './llm/evidence.js'
+import { tune } from './tunables.js'
 
 export const LEVELS = {
   selected: '선택한 자료만',
@@ -30,7 +31,7 @@ export const LEVELS = {
 }
 const SUMMARY_MS = 40_000 // 요약 1건 예상 (맥미니, 원문 포함)
 const MAX_GAPS = 8 // 보충할 줄 최대
-const MAX_NEW_SUMMARIES = 6 // 새로 요약할 기사 최대
+const MAX_NEW_SUMMARIES = () => tune('newSummaries') // 새로 요약할 기사 최대 (11/26: 관리 페이지 「세부 설정 › 보고서 한도」, 기본 6)
 const KEEP_MS = 6 * 3600_000 // 끝난 작업을 목록에 두는 시간
 const PASSAGE_MAX = 600
 
@@ -346,7 +347,7 @@ async function supplement(job, entry, gaps, research) {
   for (const g of gaps) g.cands = g.cands.map((x) => (!x.c.summarized && have.has(x.c.url) ? { ...x, c: have.get(x.c.url) } : x))
   const need = new Map()
   for (const g of gaps) for (const { c } of g.cands) if (!c.summarized && c.url && !need.has(c.url)) need.set(c.url, c)
-  const list = [...need.values()].slice(0, MAX_NEW_SUMMARIES)
+  const list = [...need.values()].slice(0, MAX_NEW_SUMMARIES())
   let useNew = false
   // 11/19: 보고서를 만들기 전에 화면에서 미리 고른 값(summarizeNew)이 있으면 묻지 않는다 — 돌려 두고 자리를 비워도 멈추지 않게.
   // 값이 없을 때(예전 화면)만 진행 창에서 묻고, 3분 안에 답이 없으면 「아니요」

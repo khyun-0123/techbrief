@@ -16,10 +16,12 @@ import { cacheGet, cachePut } from './papers/index.js'
 import { queryKey } from './queryTerms.js'
 import { isException, isStop, subcatsOf } from './wordFilter.js'
 import { loadKiwi, nounsOf } from './kiwi.js'
+import { tune, mapStopSet } from './tunables.js'
 
 const TTL = 6 * 3600_000 // 맵 점의 기사(wordArticles)
 const MAP_TTL = 24 * 3600_000 // 맵 (11/17: 6시간 → 24시간, 미리 분석 작업이 6시간마다 대상 맵을 만들어 둔다 · 37 문서 P3)
-const MAX_NODES = 24
+// 점 개수 · 선 기준(함께 나온 수) · 더 빼는 말: 11/26 관리 페이지 「세부 설정 › 연관 키워드 맵」(server/tunables.js, 기본 24 · 3 · 없음)
+const MAX_NODES = () => tune('mapNodes')
 
 // 조사 · 어미 (낱말 끝에서 뗀다). 긴 것부터
 const JOSA = ['으로부터', '에서는', '에서도', '으로는', '으로도', '에게서', '까지는', '보다는', '이라는', '라는', '에서', '으로', '에게', '까지', '부터', '보다', '처럼', '마다', '이나', '에는', '에도', '와의', '과의', '하고', '이며', '이고', '은', '는', '이', '가', '을', '를', '의', '에', '와', '과', '도', '로', '만', '며']
@@ -57,7 +59,15 @@ function stripJosa(w) {
 const KIWI_STOP = new Set('얘기 인터뷰 향상 증가 감소 개선 도입 부분 의심 언론 평균 전화 관련 이용 사용 경우 정도 가능성 필요성 측면 상태 내용 사실 생각 모습 이야기 질문 답변 발언 설명 보도 취재 기사 매체 업계 관계자'.split(' '))
 
 // 한 글에서 후보 낱말 (겹치지 않게). kiwi가 있으면 한글은 Kiwi 명사로 (11/15)
+// 관리 페이지 「세부 설정 › 연관 키워드 맵 › 더 빼는 말」(11/26)을 마지막에 뺀다 (비어 있으면 그대로)
 export function wordsOf(text, kiwi = null) {
+  const out = baseWordsOf(text, kiwi)
+  const extra = mapStopSet()
+  if (extra.size) for (const w of [...out]) if (extra.has(w.toLowerCase())) out.delete(w)
+  return out
+}
+
+function baseWordsOf(text, kiwi) {
   const out = new Set()
   const t = cleanText(text)
   // 영문 · 숫자 용어: QD-OLED, OLED, 240Hz, 4K, HKC
@@ -135,7 +145,7 @@ async function collectedDocs(center) {
 // - 교차선: 1단계 말 둘이 함께 나온 이슈 3개 이상이고 NPMI 0.15 초과 (팀 규칙 그대로)
 // - 2단계: 1단계 말(상위 14개)마다, 그 말이 든 이슈에서 함께 나온 다른 말 상위 5개 (2개 이슈 이상, 키워드 · 1단계 말 제외)
 // 교차선 기준 (맵팀 규칙): 두 말이 함께 나온 이슈 수 (11/17: 맵팀이 값을 바꾸면 여기 한 곳만. 38 문서 5장에 3 · 4일 때 차이)
-const EDGE_MIN = 3
+const EDGE_MIN = () => tune('edgeMin')
 const CHILD_FOR = 14
 const CHILD_MAX = 5
 const GRAND_MAX = 4 // 3단계 (11/15): 2단계 말마다, 그 말이 든 이슈에서 함께 나온 다른 말 상위 4개 (2개 이슈 이상, 키워드 · 1단계 · 부모 · 형제 제외)
@@ -162,11 +172,12 @@ function linksOf(nodes, issueWords, merged) {
   const lows = nodes.map((n) => n.word.toLowerCase())
   const has = lows.map((w) => issueWords.map((s) => s.has(w)))
   const edges = []
+  const edgeMin = EDGE_MIN()
   for (let i = 0; i < lows.length; i++)
     for (let j = i + 1; j < lows.length; j++) {
       let both = 0
       for (let k = 0; k < N; k++) if (has[i][k] && has[j][k]) both++
-      if (both < EDGE_MIN) continue
+      if (both < edgeMin) continue
       const pa = nodes[i].score / N
       const pb = nodes[j].score / N
       const pab = both / N
@@ -321,7 +332,7 @@ export async function relatedWords(rawCenter, { refresh = false, background = fa
   const nodes = [...merged.values()]
     .filter((x) => x.n >= min && x.n < issues.length * 0.9) // 너무 드문 말 · 거의 모든 글에 나오는 말은 뺀다
     .sort((a, b) => b.n - a.n)
-    .slice(0, MAX_NODES)
+    .slice(0, MAX_NODES())
     .map((x) => ({ word: x.w, kind: kindOf(x.w, lists), score: x.n, share: Math.round((x.n / Math.max(1, issues.length)) * 100) / 100, broad: tooBroad(x.w), subcats: subcatsOf(x.w), ...impOf(x.w, issueWords, issueImp) }))
     .map((n) => ({ ...n, auto: autoOk(n) }))
   const { edges, children } = linksOf(nodes, issueWords, merged)

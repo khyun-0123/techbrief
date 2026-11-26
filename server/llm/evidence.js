@@ -2,9 +2,11 @@
 // 모델은 기사에 없는 일반 지식에도 '기사 근거'나 기사 번호를 붙이는 경우가 있다.
 // 문장과 원래 기사 텍스트(제목·요약문·같은 이슈 기사)가 글자 단위로 얼마나 겹치는지 보고,
 // 기준보다 적게 겹치면 근거 번호를 지운다. 사실 확인을 완벽히 대신하지는 못한다.
+import { tune } from '../tunables.js'
 
 // 실제 요약·보고서 문장으로 측정: 기사 근거 문장 0.39 이상, AI 보충 문장 0.33 이하 → 0.35
-const MIN_OVERLAP = Number(process.env.EVIDENCE_MIN_OVERLAP ?? 0.35)
+// 11/26: 관리 페이지 「세부 설정 › 보고서 한도 › 근거 확인 기준」(server/tunables.js evidenceOverlap, .env.local EVIDENCE_MIN_OVERLAP이 처음 값)
+const MIN_OVERLAP = () => tune('evidenceOverlap')
 
 function bigrams(text) {
   const norm = text.replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase()
@@ -23,7 +25,7 @@ export function overlap(text, evidence) {
   return common / A.size
 }
 
-export function isSupported(text, evidence, min = MIN_OVERLAP) {
+export function isSupported(text, evidence, min = MIN_OVERLAP()) {
   return overlap(text, evidence) >= min
 }
 

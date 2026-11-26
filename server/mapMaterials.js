@@ -6,7 +6,7 @@
 // - 세부 카테고리: 그 기술 특허가 걸친 CPC 카테고리 (displayCategories.js)
 // fillMap(뉴스 노드, 재료)은 어떤 맵(지금 임시 맵 · 워드클라우드팀 맵)에도 같은 모양으로 재료를 덧붙인다: 노드 { word, kind, score, src: ['뉴스' | '특허' | '논문'] }
 import { dbEnabled, query } from './db/index.js'
-import { DISPLAY_CATEGORIES, ownerName } from './displayCategories.js'
+import { categoriesVersion, displayCategories, ownerName } from './displayCategories.js'
 import { cacheGet, cachePut } from './papers/index.js'
 import { localPatentHistory, patentDbReady, titlePatentHistory, titlesReady } from './patentDb.js'
 import { patternFromTerms } from './patents.js'
@@ -28,7 +28,7 @@ const BROAD_KW = /^(materials? science|optoelectronics|optics|physics|engineerin
 export async function mapMaterials(raw, { refresh = false } = {}) {
   const keyword = String(raw ?? '').trim().slice(0, 50)
   if (!keyword) throw Object.assign(new Error('키워드를 입력해 주세요.'), { status: 400 })
-  const key = `map-materials:v1:${queryKey(keyword)}`
+  const key = `map-materials:v1:${queryKey(keyword)}${categoriesVersion()}`
   if (!refresh) {
     const hit = await cacheGet(key).catch(() => null)
     if (hit) return { ...hit, cached: true }
@@ -79,13 +79,14 @@ export async function mapMaterials(raw, { refresh = false } = {}) {
   // 세부 카테고리: 그 기술 특허(디스플레이 특허 DB, 최근 6년)가 걸친 CPC 카테고리
   let categories = []
   if (pattern && dbEnabled() && (await patentDbReady())) {
-    const cols = DISPLAY_CATEGORIES.map((c, i) => `count(*) FILTER (WHERE EXISTS (SELECT 1 FROM unnest(cpc) x WHERE x ~ $${i + 3}))::int AS c${i}`).join(', ')
+    const CATS = displayCategories()
+    const cols = CATS.map((c, i) => `count(*) FILTER (WHERE EXISTS (SELECT 1 FROM unnest(cpc) x WHERE x ~ $${i + 3}))::int AS c${i}`).join(', ')
     const { rows } = await query(
       `SELECT count(*)::int AS total, ${cols} FROM display_patents WHERE pub >= $2 AND lower(title) ~ $1`,
-      [pattern.toLowerCase().replace(/\\b/g, '\\y'), since, ...DISPLAY_CATEGORIES.map((c) => c.cpc)],
+      [pattern.toLowerCase().replace(/\\b/g, '\\y'), since, ...CATS.map((c) => c.cpc)],
     ).catch(() => ({ rows: [] }))
     const r = rows[0]
-    if (r?.total) categories = DISPLAY_CATEGORIES.map((c, i) => ({ id: c.id, name: c.name, count: r[`c${i}`] })).filter((c) => c.count > 0).sort((a, b) => b.count - a.count)
+    if (r?.total) categories = CATS.map((c, i) => ({ id: c.id, name: c.name, count: r[`c${i}`] })).filter((c) => c.count > 0).sort((a, b) => b.count - a.count)
   }
 
   const out = { ...empty, display, basis, patentTotal: pat?.status === 'ok' ? pat.years.reduce((a, y) => a + y.n, 0) : null, patents, papers, companies, categories, at: new Date().toISOString() }

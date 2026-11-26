@@ -5,7 +5,7 @@
 // AI 입력 제한(23 문서): 네이버 검색 관심도와 네이버 기사 문장은 보고서 AI 입력(facts)에 넣지 않는다 — 화면용 값에는 남긴다
 import { dbEnabled, query } from './db/index.js'
 import { commercialQuotes } from './commercial.js'
-import { DISPLAY_CATEGORIES } from './displayCategories.js'
+import { categoriesVersion, displayCategories } from './displayCategories.js'
 import { mapMaterials } from './mapMaterials.js'
 import { createHash } from 'node:crypto'
 import { patentDbReady, toPg } from './patentDb.js'
@@ -28,7 +28,7 @@ const running = new Map()
 //   → 11/13 다시 받을 때 전체 코드로 저장 (33 문서 W28). 그 전까지 0건인 카테고리는 화면에서 숨긴다
 export async function allCategoryCompetitors() {
   const out = []
-  for (const c of DISPLAY_CATEGORIES) {
+  for (const c of displayCategories()) {
     const r = await categoryCompetitors(c.id).catch(() => null)
     if (r) out.push(r)
   }
@@ -112,9 +112,9 @@ export async function termVerdict(term) {
 }
 
 export async function categoryCompetitors(catId) {
-  const cat = DISPLAY_CATEGORIES.find((c) => c.id === catId)
+  const cat = displayCategories().find((c) => c.id === catId)
   if (!cat || !dbEnabled()) return null
-  return competitorsWhere({ id: cat.id, name: cat.name, cacheId: catId, where: (at) => ({ sql: `EXISTS (SELECT 1 FROM unnest(cpc) x WHERE x ~ $${at})`, params: [cat.cpc] }) })
+  return competitorsWhere({ id: cat.id, name: cat.name, cacheId: `${catId}${categoriesVersion()}`, where: (at) => ({ sql: `EXISTS (SELECT 1 FROM unnest(cpc) x WHERE x ~ $${at})`, params: [cat.cpc] }) })
 }
 
 // 11/21 (techCpc.js): 「기술 ↔ CPC 연결표」가 켜진 기술은 넓은 분류(OLED 소자 전체) 대신 그 기술 특허 안에서 회사별로 비교한다
@@ -184,20 +184,21 @@ export async function categoryTrends() {
   const meta = await patentDbReady().catch(() => null)
   if (!meta) return null
   await loadJudgeSettings()
-  const key = `cat-trends:v2:${meta.at}:${judgeVersion()}`
+  const key = `cat-trends:v2:${meta.at}:${judgeVersion()}${categoriesVersion()}`
+  const CATS = displayCategories()
   const hit = await cacheGet(key).catch(() => null)
   if (hit) return hit
   const last = new Date().getFullYear() - 1
   const from = last - 7
-  const cols = DISPLAY_CATEGORIES.map((c, i) => `bool_or(x ~ $${i + 3}) AS c${i}`).join(', ')
+  const cols = CATS.map((c, i) => `bool_or(x ~ $${i + 3}) AS c${i}`).join(', ')
   const { rows } = await query(
     `WITH m AS (SELECT p.pub / 10000 AS y, ${cols} FROM display_patents p, unnest(p.cpc) x WHERE p.pub >= $1 AND p.pub < $2 GROUP BY p.family, p.pub)
-     SELECT y, ${DISPLAY_CATEGORIES.map((_, i) => `count(*) FILTER (WHERE c${i})::int AS n${i}`).join(', ')} FROM m GROUP BY y ORDER BY y`,
-    [from * 10000, (last + 1) * 10000, ...DISPLAY_CATEGORIES.map((c) => c.cpc)],
+     SELECT y, ${CATS.map((_, i) => `count(*) FILTER (WHERE c${i})::int AS n${i}`).join(', ')} FROM m GROUP BY y ORDER BY y`,
+    [from * 10000, (last + 1) * 10000, ...CATS.map((c) => c.cpc)],
   )
   const { patMin, ratioPrior } = judgeRule() // 11/20 관리 페이지 「판정 기준」
   const ratio = (before, now) => (before + now >= patMin ? Math.round(((now + ratioPrior) / (before + ratioPrior)) * 100) / 100 : null)
-  const items = DISPLAY_CATEGORIES.map((c, i) => {
+  const items = CATS.map((c, i) => {
     const years = rows.map((r) => ({ y: Number(r.y), n: r[`n${i}`] }))
     const sum = (a, b) => years.filter((x) => x.y >= a && x.y <= b).reduce((s, x) => s + x.n, 0)
     const before = sum(last - 5, last - 3)
@@ -210,7 +211,7 @@ export async function categoryTrends() {
 }
 
 // ── 묶음 만들기 ──
-const bundleKey = (keyword) => `bundle:v8:${queryKey(keyword)}:t${techCpcVersion()}` // :t (11/21) 「기술 ↔ CPC 연결표」 버전 // v8 (11/17 R11): 세부 기술 분류 비중 · 분류 추이 · v7 (11/17 R10): 소부장 기업 특허 · v5 (11/17): 특허 비교 회사 = 관리 페이지 경쟁사 목록
+const bundleKey = (keyword) => `bundle:v8:${queryKey(keyword)}:t${techCpcVersion()}${categoriesVersion()}` // :t (11/21) 「기술 ↔ CPC 연결표」 버전 // v8 (11/17 R11): 세부 기술 분류 비중 · 분류 추이 · v7 (11/17 R10): 소부장 기업 특허 · v5 (11/17): 특허 비교 회사 = 관리 페이지 경쟁사 목록
 // 기억해 둔 묶음만 (만들지 않음): 11/17 전 보고서 미리보기에 기술 시계열을 채울 때 (화면이 기다리지 않게)
 export async function cachedBundle(raw) {
   const keyword = String(raw ?? '').trim().slice(0, 50)

@@ -5,6 +5,7 @@
 // 기간: 예전에는 「오늘 · 이번 주 · 이번 달」을 골랐지만 보고서 머리글에만 붙는 글자였다 → 기사 날짜로 자동 (11/8)
 import { useEffect, useState } from 'react'
 import { createReportJob } from './api.js'
+import { reportLimit } from './limits.js'
 import { articleKey } from './reportStore.js'
 import { byRank } from './autoPick.js'
 import { clientId, track } from './usage.js'
@@ -15,7 +16,6 @@ const DRAFT_INPUT_KEY = 'techbrief-report-input' // 제목 · 방향 · 조사 �
 const LAST_SCOPE_KEY = 'techbrief.lastScope' // 대시보드에서 마지막으로 고른 범위 (App.jsx runScopeSearch, 11/10)
 // 범위 → 보고서 방향 한 줄 (예: 게이밍 모니터 — QD-OLED · 주사율 · LG디스플레이 중심)
 const scopeLine = (sc) => (sc?.query && sc.terms?.length ? `${sc.query} — ${sc.terms.join(' · ')} 중심` : null)
-const REPORT_LIMIT = 10 // 서버 MAX_REPORT_ARTICLES
 const REPORT_MAX_ALL = 40
 const ACTIVE = ['queued', 'running', 'need_confirm']
 
@@ -121,6 +121,7 @@ const autoTitleOf = (topic) => {
 }
 
 function ReportComposer({ articles: picked, aiSummaries, queue, reports, folderSummary, tagTopic = null, reportJobs = [], onJobAdded, onOpenReport, onLeftOut }) {
+  const REPORT_LIMIT = reportLimit() // 서버 한 번에 넣는 수 (11/26: 관리 페이지 「세부 설정」, 기본 10)
   const [saved0] = useState(() => load(DRAFT_INPUT_KEY, {}))
   // 제목 (11/14): 비워 두면 「주제 키워드 동향 브리핑 · 월/일」 — 예전 기본값 「테크 동향 브리핑」 하나로 17건 중 11건이 같은 제목이었음
   const [title, setTitle] = useState(saved0.title && saved0.title !== GENERIC_TITLE ? saved0.title : '')

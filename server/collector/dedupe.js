@@ -1,9 +1,13 @@
 // 같은 이슈 기사 묶기 — AI 없이 규칙으로 처리한다 (08 개발 계획안 5-2)
 // 제목을 글자 2개 단위로 쪼개 겹치는 정도(자카드 유사도)를 본다
 
-// 이 값 이상이면 같은 이슈. 실제 기사(OLED·마이크로LED 200건)로 비교해 0.35로 정함. .env.local에서 바꿀 수 있다
-const SIMILARITY = Number(process.env.DEDUPE_SIMILARITY ?? 0.35)
-const WINDOW_HOURS = 48 // 이 시간 안에 나온 기사끼리만 묶는다
+import { tune } from '../tunables.js'
+
+// 이 값 이상이면 같은 이슈. 실제 기사(OLED·마이크로LED 200건)로 비교해 0.35로 정함. .env.local(DEDUPE_SIMILARITY)이 처음 값
+// 묶는 기간: 이 시간 안에 나온 기사끼리만 묶는다 (48시간)
+// → 11/26: 둘 다 관리 페이지 「세부 설정 › 같은 소식 묶기」(server/tunables.js dedupeSimilarity · dedupeHours)
+const SIMILARITY = () => tune('dedupeSimilarity')
+const WINDOW_MS = () => tune('dedupeHours') * 3600_000
 
 export function normalizeTitle(title) {
   return title
@@ -32,14 +36,16 @@ export function titleGrams(title) {
 
 // 같은 이슈인지: 48시간 안 + 제목 조각이 기준 이상 겹침 (groupArticles와 같은 규칙)
 export function sameIssue(a, b) {
-  return Math.abs(a.time - b.time) <= WINDOW_HOURS * 3600_000 && jaccard(a.grams, b.grams) >= SIMILARITY
+  return Math.abs(a.time - b.time) <= WINDOW_MS() && jaccard(a.grams, b.grams) >= SIMILARITY()
 }
 
-// 재탕 (11/09 중요도 재설계 · 신규성): 이 이슈보다 MIN_GAP_HOURS 이상 앞서 나온 비슷한 제목이 있으면 「처음 나온 소식」이 아니다
+// 재탕 (11/09 중요도 재설계 · 신규성): 이 이슈보다 묶는 기간(48시간) 넘게 앞서 나온 비슷한 제목이 있으면 「처음 나온 소식」이 아니다
 // (48시간 안이면 같은 이슈로 이미 묶였으므로, 그보다 오래된 것만 본다). earlier: [{ time, grams }]
-const MIN_GAP_HOURS = WINDOW_HOURS
+// (재탕 간격 = 묶는 기간)
 export function isRerun(item, earlier) {
-  return earlier.some((e) => item.time - e.time > MIN_GAP_HOURS * 3600_000 && jaccard(item.grams, e.grams) >= SIMILARITY)
+  const gap = WINDOW_MS()
+  const min = SIMILARITY()
+  return earlier.some((e) => item.time - e.time > gap && jaccard(item.grams, e.grams) >= min)
 }
 
 // 재탕인 것들의 id를 한 번에 찾는다 (11/16). isRerun을 이슈마다 부르면 이슈 2,700개 × 제목 4,100개를 모두 견줘 3.9초가 걸렸다
@@ -55,7 +61,8 @@ export function findReruns(items, earlier) {
       else index.set(g, [i])
     }
   })
-  const gap = MIN_GAP_HOURS * 3600_000
+  const gap = WINDOW_MS()
+  const min = SIMILARITY()
   const common = new Uint16Array(earlier.length)
   const out = new Set()
   for (const item of items) {
@@ -74,7 +81,7 @@ export function findReruns(items, earlier) {
       const c = common[i]
       common[i] = 0
       if (out.has(item.id)) continue
-      if (item.time - e.time > gap && c / (item.grams.size + e.grams.size - c) >= SIMILARITY) out.add(item.id)
+      if (item.time - e.time > gap && c / (item.grams.size + e.grams.size - c) >= min) out.add(item.id)
     }
   }
   return out
@@ -89,13 +96,15 @@ export function groupArticles(articles) {
   const sorted = [...articles].sort((x, y) => x.publishedAt.localeCompare(y.publishedAt))
   const reps = [] // { article, time, grams }
   const groupOf = new Map()
+  const win = WINDOW_MS()
+  const min = SIMILARITY()
 
   for (const a of sorted) {
     const time = Date.parse(a.publishedAt)
     // 제목 조각은 기사마다 한 번만 만든다 (비교할 때마다 다시 만들면 2천여 건에 9초 걸림)
     const grams = bigrams(normalizeTitle(a.title))
     const rep = reps.find(
-      (r) => Math.abs(time - r.time) <= WINDOW_HOURS * 3600_000 && jaccard(grams, r.grams) >= SIMILARITY,
+      (r) => Math.abs(time - r.time) <= win && jaccard(grams, r.grams) >= min,
     )
     if (rep) {
       groupOf.set(a.id, rep.article.id)
