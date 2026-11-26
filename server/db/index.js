@@ -237,6 +237,38 @@ CREATE INDEX IF NOT EXISTS papers_doc_idx ON papers USING gin (doc);
 CREATE INDEX IF NOT EXISTS papers_published_idx ON papers (published DESC);
 CREATE INDEX IF NOT EXISTS papers_doi_idx ON papers (doi);
 
+-- KCI 국내 논문 (11/26, M12 · server/papers/kciOai.js): KCI OAI-PMH로 한 번 채운 전자 · 재료 · 물리 분야 논문.
+-- 디스플레이 논문 DB(papers, OpenAlex 영문)와 섞지 않는다 — 기업 저자 비율 · 「논문 DB · 2018년~」 설명의 범위가 바뀌지 않게 (39 문서 3-1 「문제」)
+-- 원문은 받지 않는다(제목 · 저자 · 초록 · 링크만, KCI 공개 메타데이터)
+CREATE TABLE IF NOT EXISTS kci_papers (
+  id            text PRIMARY KEY,            -- KCI 논문 번호 (ART…)
+  oai_id        text,                        -- oai:kci.go.kr:ARTI/…
+  title         text NOT NULL,
+  title_en      text,
+  authors       jsonb,                       -- [{ name, affiliation }]
+  journal       text,
+  publisher     text,
+  category      text,                        -- KCI 연구분야 (예: 전자/정보통신공학)
+  year          integer,
+  published     date,
+  abstract      text,
+  abstract_en   text,
+  language      text,
+  doi           text,
+  url           text,
+  cited         integer NOT NULL DEFAULT 0,
+  matched       text,                        -- 남긴 까닭: field(연구분야) · term(디스플레이 말)
+  source        text NOT NULL DEFAULT 'kci-oai', -- 넣은 통로. 되돌리기: DELETE FROM kci_papers WHERE source = 'kci-oai'
+  datestamp     date,                        -- KCI가 기록을 고친 날
+  fetched_at    timestamptz NOT NULL DEFAULT now(),
+  doc           tsvector GENERATED ALWAYS AS (
+                  setweight(to_tsvector('simple', coalesce(title, '') || ' ' || coalesce(title_en, '')), 'A') ||
+                  setweight(to_tsvector('simple', coalesce(abstract, '') || ' ' || coalesce(abstract_en, '')), 'B')) STORED
+);
+CREATE INDEX IF NOT EXISTS kci_papers_doc_idx ON kci_papers USING gin (doc);
+CREATE INDEX IF NOT EXISTS kci_papers_year_idx ON kci_papers (year DESC);
+CREATE INDEX IF NOT EXISTS kci_papers_source_idx ON kci_papers (source);
+
 CREATE TABLE IF NOT EXISTS app_settings (
   key        text PRIMARY KEY,
   value      jsonb NOT NULL,

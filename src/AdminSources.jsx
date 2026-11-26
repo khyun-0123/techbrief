@@ -33,11 +33,25 @@ function CorpusLine({ c }) {
   )
 }
 
-function PaperProviders({ list, corpus }) {
+// KCI 국내 논문 한 번 채우기 (11/26, server/papers/kciOai.js · npm run kci-oai). 돌린 적이 없으면 안 보임
+function KciOaiLine({ k }) {
+  if (!k) return null
+  return (
+    <p className="adm-desc">
+      <b>KCI 국내 논문 (전자 · 재료 · 물리)</b> {k.papers.toLocaleString()}편{k.first ? ` (${k.first} ~ ${k.last}년)` : ''}
+      {k.from && ` · 받은 범위 ${k.from} ~ ${k.until}`}
+      {k.done ? ` · 끝 (${formatAt(k.finishedAt)})` : k.day ? ` · ${k.day}까지 읽음 ${(k.scanned ?? 0).toLocaleString()}건 중 ${(k.kept ?? 0).toLocaleString()}건 남김 (마지막 ${formatAt(k.updatedAt)})` : ''}
+      {k.error && <span className="adm-state bad"> · 오류 {k.error} — 같은 명령으로 다시 돌리면 이어 받아요</span>}
+    </p>
+  )
+}
+
+function PaperProviders({ list, corpus, kciOai }) {
   if (!list?.length) return null
   return (
     <div className="adm-sources-group">
       <CorpusLine c={corpus} />
+      <KciOaiLine k={kciOai} />
       <h3>논문 출처 (위에서부터 쓰고, 막히면 다음 곳)</h3>
       <ul className="adm-sources">
         {list.map((p) => (
@@ -330,7 +344,7 @@ function AdminSources({ onToast }) {
           </ul>
         </div>
       ))}
-      <PaperProviders list={data.papers} corpus={data.corpus} />
+      <PaperProviders list={data.papers} corpus={data.corpus} kciOai={data.kciOai} />
       <div className="adm-sources-actions">
         <span className="adm-desc">
           쓸 수 없는 곳: 삼성디스플레이 · BOE 뉴스룸(RSS 없음), Display Daily · Counterpoint(접속 차단), Google 뉴스 RSS(개인 피드 리더 전용 약관). 공시(OpenDART)는 기술 내용이 적어 붙이지 않음(11/09).
