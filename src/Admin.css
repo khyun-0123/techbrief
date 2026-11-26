@@ -2283,6 +2283,25 @@ label.adm-field input {
   font: inherit;
   font-weight: 400;
 }
+.adm-conn-form textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: #fff;
+  font: 400 12px/1.5 ui-monospace, monospace;
+  resize: vertical;
+}
+/* 수집 API 키 (11/26): 칸마다 상태 한 줄 */
+.adm-key-fields {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.adm-key-name {
+  font-weight: 600;
+}
 .adm-conn-delete {
   border-color: var(--adm-bad);
   background: var(--adm-bad-soft);

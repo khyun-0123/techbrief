@@ -673,4 +673,10 @@ export const revertLlmConnection = (id) => adminCall(connUrl(id, 'revert'), 'POS
 export const setLlmConnectionDisabled = (id, disabled) => adminCall(connUrl(id, 'disable'), 'POST', { disabled })
 export const deleteLlmConnection = (id) => adminCall(connUrl(id, 'delete'), 'POST', {})
 export const testLlmConnection = (id) => adminCall(connUrl(id, 'test'), 'POST', {})
+// 수집 API 키 (11/26) — 응답에는 칸마다 상태만 (server/apiKeys.js)
+const keyUrl = (id, action) => `/api/admin/api-keys${id ? `/${encodeURIComponent(id)}` : ''}${action ? `/${action}` : ''}`
+export const fetchApiKeys = () => adminCall(keyUrl())
+export const updateApiKeys = (id, values) => adminCall(keyUrl(id), 'PUT', { values })
+export const revertApiKeys = (id) => adminCall(keyUrl(id, 'revert'), 'POST', {})
+export const resetApiKeys = (id) => adminCall(keyUrl(id, 'reset'), 'POST', {})
 export const fetchManualInfo = () => adminCall('/api/admin/manual')

@@ -259,3 +259,6 @@ export async function deleteCustom(id) {
   await persist()
   return c.label
 }
+
+// 수집 API 키(server/apiKeys.js)도 같은 암호 열쇠로 잠근다 (11/26)
+export { seal, open as unseal, secretSource }

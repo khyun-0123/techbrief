@@ -54,6 +54,7 @@ import { sourceStatus } from './sourceGuard.js'
 import { fetchTitlesIfMissing, patentDbStatus } from './patentDb.js'
 import { abstractsStatus, fetchAbstractsIfWanted } from './patentAbstracts.js'
 import { chatJson, currentProviderId, llmProviders, moveJob, PRIORITY, modelName, pingModel, providerLabel, queueList, selectProvider, setModelOverrides, testConnection, withQueueContext } from './llm/client.js'
+import { SERVICES as API_KEY_SERVICES, apiKeyServiceLabel, loadApiKeys, publicApiKeys, resetApiKeys, revertApiKeys, updateApiKeys } from './apiKeys.js'
 import { addCustom, deleteCustom, loadConnections, publicConnections, revertConnection, setConnectionDisabled, updateBuiltin, updateCustom, BUILTIN_IDS } from './llm/connections.js'
 import { evidenceOf, hasHan, isProposal, isSupported, STRONG_OVERLAP, stripInlineRefs } from './llm/evidence.js'
 import {
@@ -399,6 +400,8 @@ const LLM_MODELS = 'llm_models'
 export function startScheduler() {
   loadConnections() // 11/25: 관리 페이지에서 넣은 AI 주소 · 키 · 새 연결 (모델 · 고른 서버보다 먼저 — 새 연결을 고를 수 있게)
     .catch((err) => console.warn(`[llm] 저장된 AI 연결을 읽지 못해 설정 파일 값으로: ${err.message}`))
+    .then(() => loadApiKeys()) // 11/26: 관리 페이지에서 넣은 수집 API 키 → process.env (같은 암호 열쇠라 AI 연결 뒤에)
+    .catch((err) => console.warn(`[api-keys] 저장된 수집 API 키를 읽지 못해 서버 설정 값으로: ${err.message}`))
     .then(() => getSetting(LLM_MODELS, null)) // 11/20: 관리 페이지에서 바꾼 모델 이름 · 예비 AI (서버를 다시 켜도 유지)
     .then((v) => v && setModelOverrides(v))
     .catch((err) => console.warn(`[llm] 저장된 모델 설정을 쓸 수 없어 설정 파일 값으로: ${err.message}`))
@@ -770,6 +773,33 @@ async function handleApiInner(req, res) {
       }
       if (req.method === 'POST' && action === 'test') {
         return send(res, 200, await testConnection(id))
+      }
+      return send(res, 404, { error: '없는 요청이에요.' })
+    }
+    // ── 수집 API 키 (11/26): 서비스마다 다른 칸(apiKeys.js SERVICES) · 넣기만 · 되돌리기 · 서버 설정 값으로. 응답 · 기록에 키 글자 없음 ──
+    if (req.url === '/api/admin/api-keys' || req.url.startsWith('/api/admin/api-keys/')) {
+      const admin = requireAdmin(req)
+      const [, , , , rawId, action] = req.url.split('?')[0].split('/')
+      const id = rawId ? decodeURIComponent(rawId) : ''
+      if (req.method === 'GET' && !id) return send(res, 200, publicApiKeys())
+      if (!id || !API_KEY_SERVICES.some((s) => s.id === id)) return send(res, 404, { error: '없는 서비스예요.' })
+      requireConfirmed(req) // 키를 넣거나 되돌리는 일은 최근 10분 안에 비밀번호 확인 (AI 연결과 같음)
+      const name = apiKeyServiceLabel(id)
+      if (req.method === 'PUT' && !action) {
+        const { values } = await readJson(req)
+        const changed = await updateApiKeys(id, values)
+        await logChange(admin, '수집 API 키', `「${name}」 ${changed.join(' · ')} 바꿈`)
+        return send(res, 200, publicApiKeys())
+      }
+      if (req.method === 'POST' && action === 'revert') {
+        await revertApiKeys(id)
+        await logChange(admin, '수집 API 키', `「${name}」 바로 전 값으로 되돌림`)
+        return send(res, 200, publicApiKeys())
+      }
+      if (req.method === 'POST' && action === 'reset') {
+        await resetApiKeys(id)
+        await logChange(admin, '수집 API 키', `「${name}」 서버 설정 값으로 되돌림`)
+        return send(res, 200, publicApiKeys())
       }
       return send(res, 404, { error: '없는 요청이에요.' })
     }

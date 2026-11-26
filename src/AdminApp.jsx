@@ -35,6 +35,7 @@ import AdminImportance from './AdminImportance.jsx'
 import AdminJudge from './AdminJudge.jsx'
 import AdminReportStyle from './AdminReportStyle.jsx'
 import AdminSecurity from './AdminSecurity.jsx'
+import AdminApiKeys from './AdminApiKeys.jsx'
 import AdminLlmModels from './AdminLlmModels.jsx'
 import AdminLlmConnections from './AdminLlmConnections.jsx'
 import { ConfirmHost } from './AdminConfirm.jsx'
@@ -718,6 +719,10 @@ function AdminApp() {
             <section className="adm-card adm-span">
               <h2>수집 출처</h2>
               <AdminSources onToast={setToast} />
+            </section>
+            <section className="adm-card adm-span">
+              <h2>수집 API 키</h2>
+              <AdminApiKeys onToast={setToast} />
             </section>
           </div>
         )}
