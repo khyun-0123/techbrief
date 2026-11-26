@@ -385,6 +385,52 @@
   margin-top: 0;
 }
 
+/* 수집 대상 (11/26 조장: 오른쪽이 비고 아래로 너무 길다): 키워드는 좁게 · 내용 높이만, 회사는 남은 폭 전부.
+   회사 안은 두 줄 — 왼쪽 자사 · 경쟁사, 오른쪽 소부장(가장 김) */
+.adm-cols.adm-targets {
+  grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr);
+  align-items: start;
+}
+
+.adm-lists-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto 1fr; /* 왼쪽 자사 · 경쟁사가 위로 붙게 (남는 높이는 아래 줄로) */
+  align-items: start;
+  column-gap: var(--tb-space-6);
+}
+
+.adm-lists-grid > .list-group:nth-child(3) {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  padding-top: 0;
+  border-top: none;
+  padding-left: var(--tb-space-6);
+  border-left: 1px solid var(--adm-line);
+  margin-left: calc(-1 * var(--tb-space-6) / 2);
+}
+
+@media (max-width: 1100px) {
+  .adm-cols.adm-targets {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .adm-lists-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adm-lists-grid > .list-group:nth-child(3) {
+    grid-column: auto;
+    grid-row: auto;
+    padding: var(--tb-space-4) 0 0;
+    border-left: none;
+    border-top: 1px solid var(--adm-line);
+    margin-left: 0;
+  }
+}
+
 .adm .chips {
   display: flex;
   flex-wrap: wrap;

@@ -692,7 +692,7 @@ function AdminApp() {
         )}
 
         {section === 'targets' && (
-          <div className="adm-cols">
+          <div className="adm-cols adm-targets">
             <section className="adm-card">
               <h2>자동 수집 키워드</h2>
               <p className="adm-desc">
@@ -712,7 +712,11 @@ function AdminApp() {
             <section className="adm-card">
               <h2>회사</h2>
               <p className="adm-desc">중요도 점수(경쟁사 언급)와 「자사·자회사 기사 제외」에 쓰여요. 관심 기술은 위 자동 수집 키워드를 그대로 써요 (11/17 합침).</p>
-              {view.lists && <ListsEditor lists={view.lists} onSave={(next) => change('lists', next)} />}
+              {view.lists && (
+                <div className="adm-lists-grid">
+                  <ListsEditor lists={view.lists} onSave={(next) => change('lists', next)} />
+                </div>
+              )}
             </section>
             <section className="adm-card adm-span">
               <h2>자주 찾은 새 키워드</h2>
