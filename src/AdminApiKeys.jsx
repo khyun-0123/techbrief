@@ -12,7 +12,7 @@ const STATE = {
   broken: ['다시 넣어 주세요', '암호 열쇠가 바뀌어 읽을 수 없음', 'bad'],
   none: ['없음', '', 'bad'],
 }
-const PLACEHOLDER = { email: 'name@example.com', mac: '00-11-22-33-44-55', json: '{ "type": "service_account", … } 파일 내용을 그대로' }
+const PLACEHOLDER = { url: 'https://<맥미니>.ts.net/feed-relay', email: 'name@example.com', mac: '00-11-22-33-44-55', json: '{ "type": "service_account", … } 파일 내용을 그대로' }
 
 export default function AdminApiKeys({ onToast }) {
   const [data, setData] = useState(null)
@@ -115,7 +115,7 @@ export default function AdminApiKeys({ onToast }) {
                               <textarea rows={4} value={edit.values[f.env] ?? ''} onChange={(e) => setV(f.env, e.target.value)} placeholder={PLACEHOLDER.json} spellCheck={false} autoComplete="off" />
                             ) : (
                               <input
-                                type={f.kind === 'secret' ? 'password' : f.kind === 'email' ? 'email' : 'text'}
+                                type={f.kind === 'secret' ? 'password' : f.kind === 'email' ? 'email' : f.kind === 'url' ? 'url' : 'text'}
                                 value={edit.values[f.env] ?? ''}
                                 onChange={(e) => setV(f.env, e.target.value)}
                                 placeholder={PLACEHOLDER[f.kind] ?? ''}

@@ -70,6 +70,17 @@ export const SERVICES = [
     use: '특허 찾기 · 검색어 번역',
     fields: [{ env: 'GCP_KEY_JSON', label: '서비스 계정 JSON', kind: 'json' }],
   },
+  {
+    // 11/26: Railway(해외)에서 막히는 피드(LG디스플레이 뉴스룸)를 한국의 맥미니가 대신 받음 (scripts/feed-relay.mjs, docs/47)
+    id: 'feed-relay',
+    label: '맥미니 피드 중계',
+    use: 'Railway에서 막히는 피드(LG디스플레이 뉴스룸)',
+    optional: true,
+    fields: [
+      { env: 'FEED_RELAY_URL', label: '중계 주소', kind: 'url' },
+      { env: 'FEED_RELAY_KEY', label: '중계 열쇠', kind: 'secret' },
+    ],
+  },
 ]
 const FIELD = new Map(SERVICES.flatMap((s) => s.fields.map((f) => [f.env, { ...f, service: s.id }])))
 
@@ -137,6 +148,7 @@ function check(f, raw) {
   }
   if (/\s/.test(s)) throw bad(`${f.label}에는 띄어쓰기를 넣지 않아요.`)
   if (f.kind === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)) throw bad(`${f.label}: 이메일 형식으로 넣어 주세요.`)
+  if (f.kind === 'url' && !/^https:\/\/[^\s/@]+(\/[^\s]*)?$/.test(s)) throw bad(`${f.label}: https://… 주소로 넣어 주세요.`)
   if (f.kind === 'mac' && !/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/.test(s)) throw bad(`${f.label}: 00-11-22-33-44-55 형식으로 넣어 주세요.`)
   if ((f.kind === 'secret' || f.kind === 'text') && (s.length < 2 || s.length > 500)) throw bad(`${f.label}: 2~500자로 넣어 주세요.`)
   return s
