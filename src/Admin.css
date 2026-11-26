@@ -262,6 +262,16 @@
   background: #fff;
 }
 
+.adm-tile.is-wide {
+  grid-column: span 2; /* 쌓인 데이터: 기사 · 논문 · 특허를 한 줄에 (11/26) */
+}
+
+@media (max-width: 560px) {
+  .adm-tile.is-wide {
+    grid-column: auto;
+  }
+}
+
 .adm-tile-label {
   display: block;
   color: var(--adm-muted);

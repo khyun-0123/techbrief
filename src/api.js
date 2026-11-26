@@ -179,6 +179,13 @@ export function requestReportSection({ articles, aiSummaries, key, report, repor
   })
 }
 
+// 지금 AI 연결의 동시 요청 수 (11/26, 화면 요약 대기열)
+export async function fetchAiParallel() {
+  const res = await fetch('/api/llm/parallel')
+  if (!res.ok) throw new Error('서버 응답 없음')
+  return (await res.json()).parallel
+}
+
 // 상단 메뉴의 AI 연결 상태
 export async function fetchHealth() {
   const res = await fetch('/api/health')

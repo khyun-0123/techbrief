@@ -302,6 +302,24 @@ export async function query(text, params) {
   return p.query(text, params)
 }
 
+// 쌓인 자료 종류별 수 (11/26 조장: 「기사만 모은 게 아니잖아」) — 표가 커서 5분 기억. 없는 표(아직 안 받은 KCI 등)는 0
+const STOCK = (globalThis.__tbStock ??= { at: 0, value: null })
+async function stockCounts() {
+  if (STOCK.value && Date.now() - STOCK.at < 5 * 60_000) return STOCK.value
+  const n = (t, where = '') => `(SELECT CASE WHEN to_regclass('${t}') IS NULL THEN 0 ELSE (SELECT count(*) FROM ${t} ${where}) END)::int`
+  const { rows } = await query(
+    `SELECT ${n('articles', "WHERE coalesce(section, '') NOT LIKE 'feed:%'")} AS news,
+            ${n('articles', "WHERE section LIKE 'feed:%'")} AS feeds,
+            ${n('papers')} AS papers,
+            ${n('keyword_papers')} AS keyword_papers,
+            ${n('kci_papers')} AS kci_papers,
+            ${n('materials')} AS materials`,
+  )
+  STOCK.value = rows[0]
+  STOCK.at = Date.now()
+  return STOCK.value
+}
+
 // 상단 상태 표시·점검용
 export async function dbStatus() {
   if (!dbEnabled()) return { enabled: false }
@@ -311,7 +329,8 @@ export async function dbStatus() {
               (SELECT count(*) FROM summaries WHERE alias_of IS NULL)::int AS summaries,
               (SELECT count(*) FROM reports)::int AS reports`,
     )
-    return { enabled: true, ok: true, ...rows[0] }
+    const stock = await stockCounts().catch(() => null)
+    return { enabled: true, ok: true, ...rows[0], stock }
   } catch (err) {
     return { enabled: true, ok: false, error: err.message }
   }
