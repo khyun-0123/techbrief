@@ -127,7 +127,7 @@ function weightedReruns(items, earlier, gap, out) {
 // items: [{ id, time, grams, toks? }] · earlier: [{ time, grams, toks? }]
 export function findReruns(items, earlier) {
   const out = findRerunsGrams(items, earlier)
-  if (RERUN_WEIGHTED > 0 && RERUN_WEIGHTED <= 1 && items.some((i) => i.toks)) weightedReruns(items, earlier, MIN_GAP_HOURS * 3600_000, out)
+  if (RERUN_WEIGHTED > 0 && RERUN_WEIGHTED <= 1 && items.some((i) => i.toks)) weightedReruns(items, earlier, WINDOW_MS(), out)
   return out
 }
 
