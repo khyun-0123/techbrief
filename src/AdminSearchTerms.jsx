@@ -2,6 +2,7 @@
 // - 자동 수집 키워드는 회의를 거쳐 관리자가 넣는다(11/10 조장). 이 표는 그 판단 자료: 최근 N일 동안 「논문 · 뉴스에서 찾기」로 찾은 말
 //   (이미 자동 수집 키워드인 말은 뺌. 11/16 추천 검색어는 자동 수집 키워드로 합침). 사람은 날짜마다 IP를 해시로 세서 더한 값
 // - 한글 검색어는 AI가 영문 검색어 1~3개를 만들어 논문 · 영문 출처를 찾는다. 틀렸으면 여기서 고친다 (고친 값은 AI가 덮어쓰지 않음)
+import { Pager, usePages } from './AdminTabs.jsx'
 import { useCallback, useEffect, useState } from 'react'
 import { fetchSearchTerms, saveQueryTermsApi } from './api.js'
 
@@ -86,6 +87,8 @@ function AdminSearchTerms({ onToast }) {
     }
   }
 
+  // 11/26: 15개씩 쪽 나누기 (훅이라 일찍 돌아가기 전에)
+  const pg = usePages(data?.frequent ?? [], 15)
   if (error) return <p className="adm-desc">{error}</p>
   if (!data) return <p className="adm-desc">불러오는 중…</p>
   const translatedOnly = data.translations.filter((t) => !data.frequent.some((f) => f.query === t.query))
@@ -117,7 +120,7 @@ function AdminSearchTerms({ onToast }) {
             </tr>
           </thead>
           <tbody>
-            {data.frequent.map((r) => (
+            {pg.items.map((r) => (
               <tr key={r.query}>
                 <td>
                   <b>{r.query}</b>
@@ -132,6 +135,7 @@ function AdminSearchTerms({ onToast }) {
           </tbody>
         </table>
       )}
+      <Pager p={pg} />
       {translatedOnly.length > 0 && (
         <details>
           <summary className="adm-desc">기간 밖이거나 자동 수집 키워드인 말의 영문 검색어 {translatedOnly.length}개</summary>

@@ -2564,3 +2564,22 @@ label.adm-field input {
   font: 400 12px/1.5 ui-monospace, monospace;
   resize: vertical;
 }
+
+/* 수집 출처 묶음 고르기 (11/26) */
+.adm-src-groups {
+  margin: var(--tb-space-4) 0 var(--tb-space-1);
+}
+
+.adm-src-groups button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 세부 설정 (11/26): 탭마다 카드 둘을 넓은 화면에서 나란히 */
+@media (min-width: 1280px) {
+  .adm-tune-pair:not([hidden]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}

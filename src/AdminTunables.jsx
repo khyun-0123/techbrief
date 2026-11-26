@@ -135,7 +135,7 @@ export default function AdminTunables({ onToast }) {
   return (
     <SubTabs section="tunables" tabs={TABS.map(([k, label]) => [k, label])}>
       {TABS.map(([k, , ids], i) => (
-        <Pane key={k} tab={k}>
+        <Pane key={k} tab={k} className="adm-stack adm-tune-pair">
           {data.groups.filter((g) => ids.includes(g.id) || (i === TABS.length - 1 && !known.includes(g.id))).map(card)}
         </Pane>
       ))}

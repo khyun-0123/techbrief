@@ -967,11 +967,11 @@ function AdminApp() {
 }
 
 function LogTable({ log, compact = false }) {
-  // 11/26: 「변경 기록」 화면은 「무엇을」로 거르고 30건씩 (예전: 200건을 한 표에 — 화면 세 개 길이)
+  // 11/26: 「변경 기록」 화면은 「무엇을」로 거르고 20건씩 (예전: 200건을 한 표에 — 화면 세 개 길이)
   const [kind, setKind] = useState('')
   const kinds = [...new Set(log.map((e) => e.action))]
   const filtered = kind ? log.filter((e) => e.action === kind) : log
-  const p = usePages(filtered, compact ? filtered.length || 1 : 30)
+  const p = usePages(filtered, compact ? filtered.length || 1 : 20)
   if (log.length === 0) return <p className="adm-empty">아직 기록이 없어요. 수집 대상·자동 최신화·AI 모델·실험 기능을 바꾸면 여기에 남아요.</p>
   return (
     <>

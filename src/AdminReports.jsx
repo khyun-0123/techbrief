@@ -57,9 +57,9 @@ function AdminReports({ onToast, onChanged }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [confirm])
 
-  // 11/26: 15개씩 쪽 나누기 (예전: 모두 한 표 — 31개면 화면 두 개 반). 훅이라 일찍 돌아가기 전에
+  // 11/26: 10개씩 쪽 나누기 (예전: 모두 한 표 — 31개면 화면 두 개 반). 훅이라 일찍 돌아가기 전에
   const matching = (data?.reports ?? []).filter((r) => !q.trim() || `${r.report.title} ${r.createdIp ?? ''}`.toLowerCase().includes(q.trim().toLowerCase()))
-  const pg = usePages(matching, 15)
+  const pg = usePages(matching, 10)
   if (error) return <p className="adm-empty" role="alert">{error}</p>
   if (!data) return <p className="adm-empty">불러오는 중…</p>
 
