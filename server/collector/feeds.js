@@ -171,6 +171,64 @@ async function getText(url, ua = UA, { safe = false } = {}) {
 }
 const feedText = (feed) => getText(feed.url, feed.ua, { safe: Boolean(feed.custom) })
 
+// 11/26 3차: Railway(해외 서버)에서 LG디스플레이 뉴스룸 /feed/가 피드 대신 웹페이지(제목 없음)를 준다.
+// 같은 곳을 차례로 다시 받아 본다: ① 원래대로 ② 브라우저 User-Agent ③ 워드프레스 글 API(/wp-json/wp/v2/posts — 같은 글을 JSON으로)
+// 셋 다 안 되면 마지막 오류에 받은 페이지 글자 일부를 붙여 무엇이 왔는지 보이게 한다
+const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36'
+function wpApiUrl(url) {
+  const m = String(url).match(/^(https?:\/\/[^?#]+?)\/feed\/?$/)
+  return m ? `${m[1]}/wp-json/wp/v2/posts?per_page=20&_fields=date_gmt,date,link,title,excerpt` : null
+}
+const pageSnippet = (t) =>
+  String(t ?? '')
+    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 100)
+async function feedItems(feed) {
+  let first
+  let text = ''
+  try {
+    text = await feedText(feed)
+    return parseFeed(text)
+  } catch (err) {
+    first = err
+  }
+  if (!feed.custom || feed.ua === undefined) {
+    try {
+      const t = await getText(feed.url, BROWSER_UA, { safe: Boolean(feed.custom) })
+      const items = parseFeed(t)
+      if (items.length) {
+        console.warn(`[feeds] ${feed.id}: 원래대로는 못 읽어 브라우저 User-Agent로 받음`)
+        return items
+      }
+    } catch {
+      // 다음 방법
+    }
+  }
+  const api = wpApiUrl(feed.url)
+  if (api) {
+    try {
+      const raw = await getText(api, BROWSER_UA, { safe: Boolean(feed.custom) })
+      const posts = JSON.parse(raw)
+      if (Array.isArray(posts) && posts.length) {
+        console.warn(`[feeds] ${feed.id}: 피드 대신 워드프레스 글 API로 받음`)
+        return posts.map((p) => ({
+          title: cleanText(decode(p.title?.rendered ?? '')),
+          link: p.link ?? '',
+          description: cleanText(decode(String(p.excerpt?.rendered ?? '').replace(/<[^>]+>/g, ' '))).slice(0, DESC_MAX),
+          date: p.date_gmt ? `${p.date_gmt}Z` : p.date ?? '',
+        }))
+      }
+    } catch {
+      // 아래 오류로
+    }
+  }
+  const snip = pageSnippet(text)
+  throw new Error(`${first.message}${snip ? ` · 받은 내용: 「${snip}」` : ''}`)
+}
+
 // ── 출처 시험 · 수집 주기 추천 (11/25) ──
 // 주기 고르기: 0 = 자동 최신화 때마다, 그 밖은 시간
 export const EVERY_CHOICES = [0, 6, 12, 24, 168]
@@ -206,7 +264,7 @@ export async function testFeed({ id, url, ua } = {}) {
   if (!feed || feed.paper) throw Object.assign(new Error(feed?.paper ? '논문 검색은 시험할 수 없어요 (논문 출처 상태를 보세요).' : '없는 출처예요.'), { status: 400 })
   const t0 = Date.now()
   try {
-    const items = parseFeed(await feedText(feed)).filter((i) => i.title && i.link)
+    const items = (await feedItems(feed)).filter((i) => i.title && i.link)
     const times = items.map((i) => Date.parse(i.date)).filter(Number.isFinite)
     return {
       id: feed.id,
@@ -289,7 +347,7 @@ export async function collectFeeds(words, { disabled = [], skip = [] } = {}) {
   await Promise.all(
     feeds.map(async (feed) => {
       try {
-        const items = feed.paper ? await searchPapers(words) : parseFeed(await feedText(feed))
+        const items = feed.paper ? await searchPapers(words) : await feedItems(feed)
         let matched = 0
         for (const item of items) {
           if (!item.title || !item.link) continue
@@ -323,7 +381,7 @@ export async function collectFeeds(words, { disabled = [], skip = [] } = {}) {
 export async function fetchFeedAll(id, words = []) {
   const feed = allFeeds().find((f) => f.id === id && !f.paper)
   if (!feed) throw new Error(`없는 출처: ${id}`)
-  const items = parseFeed(await feedText(feed))
+  const items = await feedItems(feed)
   return items
     .filter((item) => item.title && item.link)
     .map((item) => toFeedArticle(item, feed, words.find((w) => hasKeyword(`${item.title} ${item.description}`, w)) ?? BROAD_KEYWORD))
