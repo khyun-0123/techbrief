@@ -1,6 +1,7 @@
 // 관리 페이지 「판정 기준」 (11/20, 관리자 인수인계 — server/judgeSettings.js)
 // ① 기술 단계 · 자사 위협 · 기회를 정하는 숫자 기준 ② 자사 · 경쟁사의 특허 출원인 이름
 // 예전에는 둘 다 코드에 있어 바꾸려면 프로그램을 고쳐 다시 올려야 했다. 경쟁사를 더해도 출원인 이름이 사전에 없으면 특허 비교에서 조용히 빠졌다
+import { Pane, SubTabs } from './AdminTabs.jsx'
 import { useCallback, useEffect, useState } from 'react'
 import { checkOwner, fetchJudge, saveJudge, saveOwnerApi } from './api.js'
 import AdminTechCpc from './AdminTechCpc.jsx'
@@ -133,8 +134,10 @@ export default function AdminJudge({ onToast }) {
     }
   }
   const missing = data.companies.filter((c) => c.source === 'none')
+  // 11/26: 카드 넷을 탭으로 (AdminTabs.jsx), 「바꾼 기록」은 모든 탭 아래에
   return (
-    <div className="adm-stack">
+    <SubTabs section="judge" tabs={[['nums', '판정 숫자'], ['cpc', '기술 ↔ CPC 연결표'], ['abstract', '초록으로도 세면?'], ['names', '회사 특허 이름', missing.length ? `빈 칸 ${missing.length}` : null]]}>
+      <Pane tab="nums">
       <section className="adm-card">
         <h2>
           판정 숫자 <span className="adm-tag adm-tag-muted">AI 안 씀</span>
@@ -191,10 +194,14 @@ export default function AdminJudge({ onToast }) {
           {changed && <span className="muted">바뀐 값이 있어요</span>}
         </div>
       </section>
-
-      <AdminTechCpc onToast={onToast} />
-      <AdminAbstractCompare />
-
+      </Pane>
+      <Pane tab="cpc">
+        <AdminTechCpc onToast={onToast} />
+      </Pane>
+      <Pane tab="abstract">
+        <AdminAbstractCompare />
+      </Pane>
+      <Pane tab="names">
       <section className="adm-card">
         <h2>회사 특허 이름</h2>
         <p className="adm-desc">
@@ -216,7 +223,8 @@ export default function AdminJudge({ onToast }) {
           </tbody>
         </table>
       </section>
-
+      </Pane>
+      <Pane tab="*">
       <section className="adm-card">
         <h2>바꾼 기록</h2>
         {data.history?.length ? (
@@ -247,6 +255,7 @@ export default function AdminJudge({ onToast }) {
           <p className="adm-desc">아직 바꾼 적이 없어요. 지금은 모두 기본값이에요.</p>
         )}
       </section>
-    </div>
+      </Pane>
+    </SubTabs>
   )
 }

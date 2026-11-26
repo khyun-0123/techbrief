@@ -84,8 +84,11 @@ export default function AdminReportStyle({ onToast }) {
   }
   const pages = deck?.pages.length ?? 0
 
+  // 11/26: 넓은 화면에서는 설정(왼쪽)과 미리보기(오른쪽, 따라 내려옴)를 나란히 — 예전엔 위아래로 화면 두 개 반
   return (
     <div className="adm-stack">
+      <div className="adm-style-split">
+      <div className="adm-stack">
       <section className="adm-card">
         <h2>글꼴</h2>
         <p className="adm-desc">
@@ -168,30 +171,6 @@ export default function AdminReportStyle({ onToast }) {
           {changed && <span className="muted">저장하지 않은 변경이 있어요</span>}
         </div>
       </section>
-
-      <section className="adm-card">
-        <div className="adm-ops-head">
-          <div>
-            <h2>미리보기</h2>
-            <p className="adm-desc">{sample ? `가장 최근 보고서 「${sample.report?.title ?? ''}」를 지금 값으로 그렸어요 (저장 전 값 포함).` : '아직 보고서가 없어 미리 볼 수 없어요.'}</p>
-          </div>
-          {pages > 0 && (
-            <div className="adm-actions">
-              <button type="button" className="adm-btn" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
-                ← 앞 쪽
-              </button>
-              <span className="muted">
-                {Math.min(page, pages - 1) + 1} / {pages}쪽
-              </span>
-              <button type="button" className="adm-btn" onClick={() => setPage((p) => Math.min(pages - 1, p + 1))} disabled={page >= pages - 1}>
-                다음 쪽 →
-              </button>
-            </div>
-          )}
-        </div>
-        {deck ? <SlideFrame deck={deck} index={Math.min(page, pages - 1)} /> : sample && <p className="adm-alert-inline">값을 다 채우면 미리보기가 나와요.</p>}
-      </section>
-
       <section className="adm-card">
         <h2>바꾼 기록</h2>
         {data.history?.length ? (
@@ -219,6 +198,32 @@ export default function AdminReportStyle({ onToast }) {
           <p className="adm-desc">아직 바꾼 적이 없어요. 지금은 처음 값(사내 규칙)이에요.</p>
         )}
       </section>
+      </div>
+
+      <section className="adm-card adm-style-preview">
+        <div className="adm-ops-head">
+          <div>
+            <h2>미리보기</h2>
+            <p className="adm-desc">{sample ? `가장 최근 보고서 「${sample.report?.title ?? ''}」를 지금 값으로 그렸어요 (저장 전 값 포함).` : '아직 보고서가 없어 미리 볼 수 없어요.'}</p>
+          </div>
+          {pages > 0 && (
+            <div className="adm-actions">
+              <button type="button" className="adm-btn" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
+                ← 앞 쪽
+              </button>
+              <span className="muted">
+                {Math.min(page, pages - 1) + 1} / {pages}쪽
+              </span>
+              <button type="button" className="adm-btn" onClick={() => setPage((p) => Math.min(pages - 1, p + 1))} disabled={page >= pages - 1}>
+                다음 쪽 →
+              </button>
+            </div>
+          )}
+        </div>
+        {deck ? <SlideFrame deck={deck} index={Math.min(page, pages - 1)} /> : sample && <p className="adm-alert-inline">값을 다 채우면 미리보기가 나와요.</p>}
+      </section>
+      </div>
+
     </div>
   )
 }

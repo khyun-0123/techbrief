@@ -1,6 +1,7 @@
 // 관리 페이지 「세부 설정」 (11/26, notes/admin-review-1120 S5 · S7~S12 — server/tunables.js)
 // 코드에만 있던 숫자 · 낱말 목록 · 세부 기술 분류를 카드(묶음)마다 바꾸고, 카드마다 「처음 값으로」 되돌린다
 // 처음 값 = 예전 코드 값. 아무도 안 바꾸면 동작이 같다
+import { Pane, SubTabs } from './AdminTabs.jsx'
 import { useEffect, useState } from 'react'
 import { fetchTunables, resetTunables, saveTunables } from './api.js'
 
@@ -109,6 +110,13 @@ function TuneCard({ group, data, onData, onToast }) {
   )
 }
 
+const TABS = [
+  ['report', '보고서 · 미리 분석', ['report', 'precompute']],
+  ['collect', '묶기 · 보관', ['dedupe', 'keep']],
+  ['words', '낱말 · 맵', ['words', 'map']],
+  ['categories', '세부 기술 분류', ['categories']],
+]
+
 export default function AdminTunables({ onToast }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
@@ -118,12 +126,19 @@ export default function AdminTunables({ onToast }) {
       .catch((err) => setError(err.message))
   }, [])
   if (!data) return error ? <p className="adm-error">{error}</p> : <p className="adm-desc">불러오는 중…</p>
+  // 11/26: 카드 일곱을 주제별 탭 넷으로 (AdminTabs.jsx). 모르는 묶음은 마지막 탭에
+  const card = (g) => (
+    // 이 카드 값이 바뀌면 key가 바뀌어 입력 칸을 새 값으로 (다른 카드를 저장해도 고치던 칸은 그대로)
+    <TuneCard key={`${g.id}:${JSON.stringify(draftOf(data, g.id))}`} group={g} data={data} onData={(d) => setData((old) => ({ ...old, ...d }))} onToast={onToast} />
+  )
+  const known = TABS.flatMap(([, , ids]) => ids)
   return (
-    <div className="adm-stack">
-      {data.groups.map((g) => (
-        // 이 카드 값이 바뀌면 key가 바뀌어 입력 칸을 새 값으로 (다른 카드를 저장해도 고치던 칸은 그대로)
-        <TuneCard key={`${g.id}:${JSON.stringify(draftOf(data, g.id))}`} group={g} data={data} onData={(d) => setData((old) => ({ ...old, ...d }))} onToast={onToast} />
+    <SubTabs section="tunables" tabs={TABS.map(([k, label]) => [k, label])}>
+      {TABS.map(([k, , ids], i) => (
+        <Pane key={k} tab={k} className="adm-stack adm-tune-pair">
+          {data.groups.filter((g) => ids.includes(g.id) || (i === TABS.length - 1 && !known.includes(g.id))).map(card)}
+        </Pane>
       ))}
-    </div>
+    </SubTabs>
   )
 }

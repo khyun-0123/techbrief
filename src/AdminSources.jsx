@@ -113,6 +113,7 @@ function AdminSources({ onToast }) {
   const [tests, setTests] = useState({}) // 출처 id → 시험 결과
   const [checking, setChecking] = useState(false)
   const [adding, setAdding] = useState(null) // { name, url, tier, lang, test }
+  const [group, setGroup] = useState(1) // 11/26: 보이는 출처 묶음 (1 · 2 · 'papers')
 
   const load = (d) => {
     setData(d)
@@ -264,7 +265,21 @@ function AdminSources({ onToast }) {
           </div>
         </form>
       )}
-      {TIERS.map(([tier, label]) => (
+      {/* 11/26: 묶음을 골라 보기 (예전: 1차 · 2차 · 논문 출처를 한 번에 — 화면 두 개 반). 오류가 있는 묶음은 이름 옆에 수 */}
+      <div className="adm-segment adm-src-groups" role="radiogroup" aria-label="출처 묶음">
+        {[...TIERS.map(([tier, label]) => [tier, label.split(' · ')[0] + ' · ' + (tier === 1 ? '기업 발표 · 학회' : '전문매체')]), ['papers', '논문 출처']].map(([g, label]) => {
+          const items = g === 'papers' ? [] : data.list.filter((f) => f.tier === g)
+          const bad = items.filter((f) => results[f.id] && !results[f.id].ok && !off.includes(f.id)).length
+          return (
+            <button key={g} type="button" role="radio" aria-checked={group === g} onClick={() => setGroup(g)}>
+              {label}
+              <span className="adm-subtab-n">{g === 'papers' ? data.papers?.length ?? 0 : items.length}</span>
+              {bad > 0 && <span className="adm-state bad">오류 {bad}</span>}
+            </button>
+          )
+        })}
+      </div>
+      {TIERS.filter(([tier]) => tier === group).map(([tier, label]) => (
         <div key={tier} className="adm-sources-group">
           <h3>{label}</h3>
           <ul className="adm-sources">
@@ -344,7 +359,7 @@ function AdminSources({ onToast }) {
           </ul>
         </div>
       ))}
-      <PaperProviders list={data.papers} corpus={data.corpus} kciOai={data.kciOai} />
+      {group === 'papers' && <PaperProviders list={data.papers} corpus={data.corpus} kciOai={data.kciOai} />}
       <div className="adm-sources-actions">
         <span className="adm-desc">
           쓸 수 없는 곳: 삼성디스플레이 · BOE 뉴스룸(RSS 없음), Display Daily · Counterpoint(접속 차단), Google 뉴스 RSS(개인 피드 리더 전용 약관). 공시(OpenDART)는 기술 내용이 적어 붙이지 않음(11/09).

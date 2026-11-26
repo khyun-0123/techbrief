@@ -1,6 +1,7 @@
 // 관리 페이지 「운영」 (19 문서 6장)
 // - 일반 화면 운영 상태: 정상 · 공지 · AI 기능 정지 · 점검 중 — 저장 막대와 별개로 「적용」하면 바로 바뀜 (급한 조치용)
 // - 서버 다시 켜기: npm run serve로 켰을 때만. 서버 코드 · .env.local 변경 반영, 멈춘 대기열 풀기
+import { Pane, SubTabs } from './AdminTabs.jsx'
 import { useEffect, useState } from 'react'
 import { fetchAdminErrors, fetchHealth, restartServerApi, saveOpsApi } from './api.js'
 import { OPS_LABEL } from './ops.js'
@@ -236,10 +237,11 @@ function AdminOps({ ops, onOps, onToast, health, refreshRunning, dirtyCount }) {
     setTimeout(poll, 1500)
   }
 
+  // 11/26: 탭 셋 — 운영 상태(대기열 · 일반 화면 · 서버 다시 켜기) | 오류 기록 | 외부 출처 상태 (AdminTabs.jsx)
   return (
-    <>
+    <SubTabs section="ops" tabs={[['status', '운영 상태'], ['errors', '오류 기록'], ['sources', '외부 출처 상태']]}>
+      <Pane tab="status">
       <QueueCard />
-      <ErrorsCard />
       <section className="adm-card">
         <div className="adm-ops-head">
           <div>
@@ -322,8 +324,6 @@ function AdminOps({ ops, onOps, onToast, health, refreshRunning, dirtyCount }) {
         </div>
       </section>
 
-      <SourcesCard sources={health?.sources} llm={health?.llm} patentDb={health?.patentDb} />
-
       <section className="adm-card">
         <div className="adm-ops-head">
           <div>
@@ -359,6 +359,13 @@ function AdminOps({ ops, onOps, onToast, health, refreshRunning, dirtyCount }) {
         </ul>
         <p className="adm-note">서버가 아예 꺼져 있으면 이 페이지도 열리지 않아요. 그때는 서버 PC에서 직접 켜야 해요.</p>
       </section>
+      </Pane>
+      <Pane tab="errors">
+        <ErrorsCard />
+      </Pane>
+      <Pane tab="sources">
+        <SourcesCard sources={health?.sources} llm={health?.llm} patentDb={health?.patentDb} />
+      </Pane>
 
       {confirm && (
         <div className="adm-modal-backdrop" onClick={() => setConfirm(null)}>
@@ -435,7 +442,7 @@ function AdminOps({ ops, onOps, onToast, health, refreshRunning, dirtyCount }) {
           </div>
         </div>
       )}
-    </>
+    </SubTabs>
   )
 }
 

@@ -3,6 +3,7 @@
 // - 자동 정리: 만든 지 정한 기간이 지난 보고서를 하루 한 번 휴지통으로 (기본 꺼짐). 바꾸면 바로 한 번 정리
 // - 휴지통 보관 기간 (11/13 조장): 휴지통에 정한 기간 있으면 영구 삭제 (기본 30일, 「안 지움」 가능). 여기서 지우면 휴지통 없이 바로 영구 삭제
 import { useEffect, useState } from 'react'
+import { Pager, usePages } from './AdminTabs.jsx'
 import { deleteReportApi, fetchAdminReports, saveReportRetentionApi, saveReportTrashDaysApi } from './api.js'
 
 const TRASH = [
@@ -56,10 +57,13 @@ function AdminReports({ onToast, onChanged }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [confirm])
 
+  // 11/26: 10개씩 쪽 나누기 (예전: 모두 한 표 — 31개면 화면 두 개 반). 훅이라 일찍 돌아가기 전에
+  const matching = (data?.reports ?? []).filter((r) => !q.trim() || `${r.report.title} ${r.createdIp ?? ''}`.toLowerCase().includes(q.trim().toLowerCase()))
+  const pg = usePages(matching, 10)
   if (error) return <p className="adm-empty" role="alert">{error}</p>
   if (!data) return <p className="adm-empty">불러오는 중…</p>
 
-  const shown = data.reports.filter((r) => !q.trim() || `${r.report.title} ${r.createdIp ?? ''}`.toLowerCase().includes(q.trim().toLowerCase()))
+  const shown = matching
 
   async function run() {
     setBusy(true)
@@ -162,7 +166,7 @@ function AdminReports({ onToast, onChanged }) {
               </tr>
             </thead>
             <tbody>
-              {shown.map((r) => (
+              {pg.items.map((r) => (
                 <tr key={r.id}>
                   <td className="adm-nowrap">{formatAt(r.createdAt)}</td>
                   <td>
@@ -180,6 +184,7 @@ function AdminReports({ onToast, onChanged }) {
             </tbody>
           </table>
         )}
+        {shown.length > 0 && <Pager p={pg} />}
       </section>
 
       {confirm && (
