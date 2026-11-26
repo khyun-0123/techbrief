@@ -42,11 +42,90 @@ export function isRerun(item, earlier) {
   return earlier.some((e) => item.time - e.time > MIN_GAP_HOURS * 3600_000 && jaccard(item.grams, e.grams) >= SIMILARITY)
 }
 
+// ── 재탕 판정 보강 (11/26, 33 문서 W2: 「첫 소식」이 이슈의 96~98%에 붙어 신규성 10점이 변별력이 없었음) ──
+// 글자 두 개 조각 자카드(0.35)는 같은 날 같은 보도를 묶는 데 맞춘 값이라, 며칠 뒤 다른 말로 다시 쓴 기사
+// (「우아한청년들, 라이더 방한용품 지원」 ↔ 「우아한청년들, 배민 라이더 500명에 … 안전용품 지원」)를 놓친다.
+// 그래서 「드문 낱말이 얼마나 겹치나」를 하나 더 본다: 영문 · 숫자는 낱말, 한글은 낱말 안 두 글자 조각,
+// 비교 대상(21일치 제목)에서 드물수록 무게(IDF)를 크게 해 무게 자카드를 잰다. 「삼성」 · 「OLED」처럼 흔한 말만 겹치면 낮다.
+// 기준 0.4: 11/26 로컬 DB 21일치(대표 이슈 3,783개)에서 0.4 이상 표본은 대부분 같은 소식의 재보도, 0.25~0.35는 다른 소식이 섞였다.
+const RERUN_WEIGHTED = Number(process.env.RERUN_WEIGHTED ?? 0.4)
+const STOP = new Set('the a an of to in for and on with at by from is are as its it new how why what after over into vs news says said will more than up out be has have this that'.split(' '))
+export function titleTokens(title) {
+  const t = String(title ?? '')
+    .replace(/\[[^\]]*\]|【[^】]*】|\([^)]*\)/g, ' ')
+    .toLowerCase()
+  const out = new Set()
+  for (const w of t.split(/[^\p{L}\p{N}]+/u)) {
+    if (!w) continue
+    if (/^[a-z0-9]+$/.test(w)) {
+      if (w.length >= 2 && !STOP.has(w)) out.add(w)
+      continue
+    }
+    for (let i = 0; i < w.length - 1; i += 1) out.add(w.slice(i, i + 2))
+  }
+  return out
+}
+
+// 무게 자카드로 재탕 찾기. items · earlier에 toks(titleTokens)가 있어야 한다. 낱말 무게는 earlier + items 전체에서 센다
+function weightedReruns(items, earlier, gap, out) {
+  const all = [...earlier, ...items]
+  const df = new Map()
+  for (const e of all) for (const g of e.toks ?? []) df.set(g, (df.get(g) ?? 0) + 1)
+  const N = all.length
+  const idf = (g) => Math.log(N / (df.get(g) ?? 1))
+  const weight = (e) => {
+    if (e.w == null) {
+      let s = 0
+      for (const g of e.toks) s += idf(g)
+      e.w = s
+    }
+    return e.w
+  }
+  const index = new Map()
+  earlier.forEach((e, i) => {
+    for (const g of e.toks ?? []) {
+      const list = index.get(g)
+      if (list) list.push(i)
+      else index.set(g, [i])
+    }
+  })
+  const shared = new Float64Array(earlier.length)
+  for (const item of items) {
+    if (out.has(item.id) || !item.toks?.size) continue
+    const touched = []
+    for (const g of item.toks) {
+      const list = index.get(g)
+      if (!list || list.length > N * 0.05) continue // 흔한 말(5% 넘는 제목에 있음)은 무게가 작아 건너뜀 — 빠르게
+      const w = idf(g)
+      for (const i of list) {
+        if (shared[i] === 0) touched.push(i)
+        shared[i] += w
+      }
+    }
+    const wi = weight(item)
+    for (const i of touched) {
+      const e = earlier[i]
+      const s = shared[i]
+      shared[i] = 0
+      if (out.has(item.id)) continue
+      if (item.time - e.time > gap && s / (wi + weight(e) - s) >= RERUN_WEIGHTED) out.add(item.id)
+    }
+  }
+  for (const e of all) delete e.w
+}
+
 // 재탕인 것들의 id를 한 번에 찾는다 (11/16). isRerun을 이슈마다 부르면 이슈 2,700개 × 제목 4,100개를 모두 견줘 3.9초가 걸렸다
 // (자료 현황 목록이 3초 걸리던 원인). 제목 조각 → 그 조각이 든 제목 목록(색인)을 만들어, 조각을 하나라도 같이 가진 제목만 센다.
 // 겹친 조각 수로 자카드 유사도를 그대로 계산하므로 결과는 isRerun과 같다.
-// items: [{ id, time, grams }] · earlier: [{ time, grams }]
+// 11/26: toks(titleTokens)가 있으면 드문 낱말 무게 자카드(RERUN_WEIGHTED)로도 재탕을 찾는다 (W2)
+// items: [{ id, time, grams, toks? }] · earlier: [{ time, grams, toks? }]
 export function findReruns(items, earlier) {
+  const out = findRerunsGrams(items, earlier)
+  if (RERUN_WEIGHTED > 0 && RERUN_WEIGHTED <= 1 && items.some((i) => i.toks)) weightedReruns(items, earlier, MIN_GAP_HOURS * 3600_000, out)
+  return out
+}
+
+function findRerunsGrams(items, earlier) {
   const index = new Map() // 조각 → earlier 안 위치들
   earlier.forEach((e, i) => {
     for (const g of e.grams) {

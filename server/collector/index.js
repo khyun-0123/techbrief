@@ -2,7 +2,7 @@
 // 저장: DATABASE_URL이 있으면 PostgreSQL, 없으면 서버 메모리 (서버를 끄면 비워짐)
 import { dbEnabled, query } from '../db/index.js'
 import { getSetting, getSummaries, setSetting } from '../db/store.js'
-import { findReruns, groupArticles, sameIssue, titleGrams } from './dedupe.js'
+import { findReruns, groupArticles, sameIssue, titleGrams, titleTokens } from './dedupe.js'
 import { allFeeds, collectFeeds, EVERY_CHOICES, fetchFeedAll, PAPER_KEYWORD_DAYS, setCustomFeeds, testFeed, tierOf } from './feeds.js'
 import { randomBytes } from 'node:crypto'
 import { searchNews } from './naver.js'
@@ -386,11 +386,10 @@ export async function scoreContext() {
     try {
       const { rows } = await query(
         `SELECT title, published_at FROM articles
-          WHERE published_at <= now() - make_interval(days => $1) AND published_at > now() - make_interval(days => $2)
-            AND (group_id IS NULL OR group_id = id)`,
+          WHERE published_at <= now() - make_interval(days => $1) AND published_at > now() - make_interval(days => $2)`, // 11/26 W2: 대표 기사만이 아니라 같은 이슈 기사 제목도 (같은 소식을 다른 말로 쓴 제목까지 견줌)
         [LIST_DAYS, RERUN_DAYS],
       )
-      older = rows.map((r) => ({ time: r.published_at.getTime(), grams: titleGrams(r.title) }))
+      older = rows.map((r) => ({ time: r.published_at.getTime(), grams: titleGrams(r.title), toks: titleTokens(r.title) }))
     } catch (err) {
       console.warn(`[score] 지난 기사 제목을 못 읽음: ${err.message}`)
     }
@@ -410,8 +409,8 @@ function toIssues(stored, lists, ctx = { rising: [], older: [] }) {
   // 대표 기사가 목록 기간(7일)을 지나 빠졌으면 남은 기사 중 가장 먼저 나온 기사가 대표
   const earliest = (group) => group.reduce((x, y) => (y.publishedAt < x.publishedAt ? y : x))
   const pairs = [...members.entries()].map(([groupId, group]) => [group.find((a) => a.id === groupId) ?? earliest(group), group])
-  // 재탕: 이 이슈보다 48시간 넘게 앞서 나온 비슷한 제목(목록 안 다른 이슈 + 그 전 21일) (dedupe.js isRerun)
-  const keyed = pairs.map(([rep]) => ({ id: rep.id, time: Date.parse(rep.publishedAt), grams: titleGrams(rep.fullTitle ?? rep.title) }))
+  // 재탕: 이 이슈보다 48시간 넘게 앞서 나온 비슷한 제목(목록 안 다른 이슈 + 그 전 21일) (dedupe.js findReruns — 글자 조각 0.35 또는 드문 낱말 무게 0.4, 11/26 W2)
+  const keyed = pairs.map(([rep]) => ({ id: rep.id, time: Date.parse(rep.publishedAt), grams: titleGrams(rep.fullTitle ?? rep.title), toks: titleTokens(rep.fullTitle ?? rep.title) }))
   const earlierPool = [...ctx.older, ...keyed]
   const reruns = findReruns(keyed, earlierPool) // 11/16: 색인으로 (예전 isRerun 이슈마다 → 3.9초, 결과는 같음)
   return pairs
