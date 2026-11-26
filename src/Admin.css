@@ -2583,3 +2583,148 @@ label.adm-field input {
     align-items: start;
   }
 }
+
+/* ───────── 11/26 디자인 통일 (조장: 「알약 · 박스를 너무 다양하게 써서 정신없다 · 수치 칸이 버튼과 어울리는지」) ─────────
+   기준: tokens.css — 조작 높이 40(--tb-control-lg) · 작은 조작 32(--tb-control-md), 버튼 · 입력 모서리 8, 칩 · 배지만 둥근 끝(999)
+   측정(1440, 관리 26화면): 배지 모양 4가지(11 · 12 · 13px, 모서리 4 · 999) → 1가지 / 입력 높이 30 · 36 · 41 · 43 · 46 → 40 · 32 */
+
+/* 배지 하나로: 높이 20 · 12px · 둥근 끝 · 글자 가운데 */
+.adm .adm-tag,
+.adm .adm-conn-tag,
+.adm .adm-choice .adm-choice-badge,
+.adm .adm-subtab-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--tb-radius-full);
+  background: var(--tb-color-bg-strong);
+  color: var(--tb-color-text-sub);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* 「사용 중」 · 고른 것 = 검정, 꺼짐 · 문제 = 빨강 옅은 바탕 */
+.adm .adm-conn-tag.on,
+.adm .adm-choice .adm-choice-badge {
+  background: var(--adm-accent);
+  color: #fff;
+}
+
+.adm .adm-conn-tag.off {
+  background: var(--adm-bad-soft);
+  color: var(--adm-bad);
+}
+
+.adm .adm-tag-warn {
+  background: var(--adm-warn-soft);
+  color: var(--adm-warn);
+}
+
+/* 입력 높이: 폼 칸 40, 표 · 목록 안 칸 32 */
+.adm input[type='text'],
+.adm input[type='password'],
+.adm input[type='time'],
+.adm input[type='number'],
+.adm input[type='email'],
+.adm input[type='url'],
+.adm input[type='search'],
+.adm select {
+  height: var(--tb-control-lg);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.adm .adm-table input,
+.adm .adm-table select,
+.adm .adm-src-every select,
+.adm .adm-sources select,
+.adm input.adm-imp-input {
+  height: var(--tb-control-md);
+}
+
+/* 수치 칸: 오른쪽 맞춤 · 같은 폭 숫자 · 보통 굵기 → 버튼(가운데 · 굵게)과 구분 */
+.adm input[type='number'] {
+  padding: 0 10px;
+  border: 1px solid var(--tb-color-line);
+  border-radius: var(--tb-radius-input);
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.adm .adm-table input[type='number'] {
+  width: 88px;
+}
+
+/* 입력 칸이 있는 표 줄은 칸마다 세로 가운데 (이름 · 설명 · 기본 · 입력이 한 줄에) */
+.adm .adm-table tr:has(input, select) > td,
+.adm .adm-table tr:has(input, select) > th {
+  vertical-align: middle;
+}
+
+/* 하나 고르기는 회색 판(adm-segment) 하나로 — 자동 최신화 「간격」 알약도 같게 */
+.adm .adm-pills {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0;
+  padding: 3px;
+  border-radius: var(--tb-radius-input);
+  background: var(--tb-color-bg-strong);
+}
+
+.adm .adm-pills button {
+  min-width: 0;
+  height: var(--tb-control-md);
+  padding: 0 14px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--adm-muted);
+}
+
+.adm .adm-pills button:hover {
+  color: var(--adm-ink);
+}
+
+.adm .adm-pills button[aria-checked='true'] {
+  background: #fff;
+  color: var(--adm-ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+}
+
+/* 세부 탭도 작은 조작 높이 */
+.adm .adm-subtab {
+  height: var(--tb-control-md);
+}
+
+/* 이름 · 고르기 · 설명을 위아래로 (예전: .adm label의 block이 이겨 한 줄에 섞여 흘렀음) */
+.adm .adm-field-inline {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0 0;
+}
+
+.adm .adm-field-inline input[type='number'] {
+  justify-self: start;
+  width: 88px;
+}
+
+/* 관리 페이지 안에서 쓰는 공용 조각(Seg · 대기열 거르기)도 작은 조작 높이 32, 버튼 글자는 한 줄 */
+.adm .segmented button,
+.adm .queue-filter button {
+  height: var(--tb-control-md);
+}
+
+.adm .adm-btn {
+  white-space: nowrap;
+}
