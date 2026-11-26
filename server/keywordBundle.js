@@ -19,7 +19,7 @@ import { supplierPatents } from './suppliers.js'
 import { buildTimeline, cachedTimeline, techStale } from './timeline.js'
 import { surgeMonths } from './timesfm.js'
 import { customOwners, judgeRule, judgeVersion, loadJudgeSettings, ownersVersion } from './judgeSettings.js'
-import { ruleSig } from './features.js'
+import { ruleSig, serverFlag } from './features.js'
 
 const TTL = 3 * 86_400_000
 const running = new Map()
@@ -53,6 +53,15 @@ const OWNER_DICT = [
   { id: 'innolux', names: ['이노룩스', 'Innolux'], like: ['INNOLUX%'] },
   { id: 'everdisplay', names: ['에버디스플레이', 'EverDisplay', 'EDO'], like: ['%EVERDISPLAY%'] },
 ]
+// 11/26 W25 출원인 이름 묶기 (스위치 applicantAlias, 꺼지면 위 이름만): 같은 회사가 다른 이름으로 낸 특허를 더한다.
+// 로컬 특허 DB 2018년~ 실측 — Visionox 계열 「YUNGU GUAN TECH」(云谷固安) 2,412건이 '%VISIONOX%'에 안 걸려 해마다 12~93% 덜 셈,
+// CSOT의 중국어 이름 「TCL HUAXING」 · 「SHENZHEN HUAXING」 854건(2022년 676건 몰림), BOE 계열사 「BOE CRYSTAL CORE」 · 「BOE MLED」 등 'BOE …'.
+// 「TCL CORP」 · 「TCL TECH」(TV · 지주)는 CSOT가 아니라 넣지 않음. 「BOEING」은 'BOE %'(뒤에 빈칸)에 안 걸림
+const OWNER_ALIAS = {
+  boe: ['BOE %', '% BOE %'],
+  csot: ['%HUAXING%'],
+  visionox: ['YUNGU %'],
+}
 const flatName = (t) => String(t ?? '').toLowerCase().replace(/[\s·.()-]/g, '')
 const dictOf = (name) => OWNER_DICT.find((d) => d.names.some((n) => flatName(n) === flatName(name)))
 // 11/20: 관리 페이지 「판정 기준 › 회사 특허 이름」에 넣은 출원인 이름이 있으면 그것을 먼저 (코드 사전에 없는 회사도 비교 가능)
@@ -76,6 +85,9 @@ export async function compareCompanies() {
     const d = ownerOf(name)
     if (!d) unmatched.push(name)
     else if (!out.some((x) => x.id === d.id)) out.push({ ...d, name: d.id === 'csot' ? 'CSOT' : String(name).trim() })
+  }
+  if (await serverFlag('applicantAlias').catch(() => false)) {
+    for (const c of out) if (c.source === 'dict' && OWNER_ALIAS[c.id]) c.like = [...new Set([...c.like, ...OWNER_ALIAS[c.id]])]
   }
   return { companies: out, unmatched }
 }
@@ -144,7 +156,8 @@ export async function competitorsWhere({ id, name, cacheId, where, tech = false 
   const meta = await patentDbReady().catch(() => null)
   if (!meta) return null
   const { companies: COMPANIES, unmatched } = await compareCompanies()
-  const key = `cat-competitors:v5:${cacheId}:${meta.at}:${COMPANIES.map((c) => c.id).join(',')}:${judgeVersion()}:${ownersVersion()}` // v2: 작은 수 보정 · v3: 2개국 이상 출원 비율 (11/15) · v4: 관리 페이지 경쟁사 목록 (11/17)
+  const likeV = createHash('sha1').update(JSON.stringify(COMPANIES.map((c) => c.like))).digest('hex').slice(0, 6) // 11/26 W25: 출원인 이름 묶기 스위치
+  const key = `cat-competitors:v5:${cacheId}:${meta.at}:${COMPANIES.map((c) => c.id).join(',')}:${judgeVersion()}:${ownersVersion()}:${likeV}` // v2: 작은 수 보정 · v3: 2개국 이상 출원 비율 (11/15) · v4: 관리 페이지 경쟁사 목록 (11/17)
   const hit = await cacheGet(key).catch(() => null)
   if (hit) return hit
   const last = new Date().getFullYear() - 1
