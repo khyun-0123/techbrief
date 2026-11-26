@@ -495,7 +495,16 @@ async function callChat(cfg, { messages, schema, schemaName, report = false, tim
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
-    throw new Error(`AI 서버 응답 오류 ${res.status} ${detail.slice(0, 200)}`)
+    // 11/27: OpenRouter의 새 OpenAI · Anthropic 모델(gpt-5 · gpt-6 · claude-haiku-5.5 등)은 temperature를 받지 않아
+    // require_parameters와 함께면 「No endpoints found that can handle the requested parameters」(404) → temperature를 빼고 한 번 더
+    if (res.status === 404 && /requested parameters/i.test(detail) && body.temperature !== undefined && !signal?.aborted) {
+      delete body.temperature
+      res = await fetch(`${baseUrl}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: auth }, body: JSON.stringify(body), signal: withAbort(timeoutMs, signal) })
+    }
+    if (!res.ok) {
+      const d2 = res.bodyUsed ? detail : await res.text().catch(() => '')
+      throw new Error(`AI 서버 응답 오류 ${res.status} ${d2.slice(0, 200)}`)
+    }
   }
   const data = await res.json()
   const usage = { input: data.usage?.prompt_tokens ?? 0, output: data.usage?.completion_tokens ?? 0 }
