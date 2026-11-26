@@ -226,7 +226,9 @@ async function feedItems(feed) {
     }
   }
   const snip = pageSnippet(text)
-  throw new Error(`${first.message}${snip ? ` · 받은 내용: 「${snip}」` : ''}`)
+  // 11/26: Railway에서 LG디스플레이 뉴스룸은 보이는 글자 없이 스크립트만 있는 페이지를 받음 → 자동 접속 확인(봇 검사) 화면으로 보임
+  const why = snip ? ` · 받은 내용: 「${snip}」` : /<script/i.test(text) ? ` · 받은 내용: 글자 없이 스크립트만(${text.length.toLocaleString()}자) — 사이트의 자동 접속 확인 화면으로 보여요. 브라우저 방식 · 글 API로도 못 받음` : ''
+  throw new Error(`${first.message}${why}`)
 }
 
 // ── 출처 시험 · 수집 주기 추천 (11/25) ──
