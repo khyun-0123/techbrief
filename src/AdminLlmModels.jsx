@@ -1,5 +1,6 @@
 // 관리 페이지 「AI 모델」 아래 칸: 모델 이름 · 예비 AI (11/20, 관리자 인수인계 — server/llm/client.js setModelOverrides)
 // 빈 칸은 서버 설정 파일 값. AI 서버 주소 · 열쇠(API 키)는 여기서 바꾸지 않는다
+import { Unsaved } from './unsaved.js'
 import { useState } from 'react'
 import { saveLlmModels } from './api.js'
 
@@ -32,6 +33,7 @@ export default function AdminLlmModels({ llm, onSaved, onToast }) {
   }
   return (
     <section className="adm-card">
+      <Unsaved id="llmModels" label="모델 이름 · 예비 AI" when={JSON.stringify(draft) !== JSON.stringify(init())} />
       <h2>모델 이름 · 예비 AI</h2>
       <p className="adm-desc">기본 AI 서버마다 쓸 모델 이름을 바꿀 수 있어요. 비워 두면 서버 설정 파일 값을 써요. 주소 · API 키는 위 「AI 연결 · API 키」에서, 새 연결의 모델은 그 연결의 「바꾸기」에서 바꿔요.</p>
       <table className="adm-table adm-llm-table">

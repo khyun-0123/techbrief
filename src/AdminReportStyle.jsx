@@ -1,6 +1,7 @@
 // 관리 페이지 「보고서 양식」 (11/20, 관리자 인수인계 — server/reportStyle.js)
 // 보고서(화면 미리보기 · PDF · PPT)의 글꼴 · 글자 크기 · 강조색 · 여백 · 줄 간격을 정한다. 바꾸는 동안 가장 최근 보고서로 미리 본다
 // 미리보기는 reportSlides.js의 값을 잠깐 바꿔 그리고, 이 화면을 떠나면 저장된 값으로 되돌린다
+import { Unsaved } from './unsaved.js'
 import { useCallback, useEffect, useState } from 'react'
 import { fetchReportStyleAdmin, saveReportStyleApi } from './api.js'
 import { SlideFrame } from './ReportSlide.jsx'
@@ -87,6 +88,7 @@ export default function AdminReportStyle({ onToast }) {
   // 11/26: 넓은 화면에서는 설정(왼쪽)과 미리보기(오른쪽, 따라 내려옴)를 나란히 — 예전엔 위아래로 화면 두 개 반
   return (
     <div className="adm-stack">
+      <Unsaved id="reportStyle" label="보고서 양식" when={changed} />
       <div className="adm-style-split">
       <div className="adm-stack">
       <section className="adm-card">

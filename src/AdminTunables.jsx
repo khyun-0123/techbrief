@@ -1,6 +1,7 @@
 // 관리 페이지 「세부 설정」 (11/26, notes/admin-review-1120 S5 · S7~S12 — server/tunables.js)
 // 코드에만 있던 숫자 · 낱말 목록 · 세부 기술 분류를 카드(묶음)마다 바꾸고, 카드마다 「처음 값으로」 되돌린다
 // 처음 값 = 예전 코드 값. 아무도 안 바꾸면 동작이 같다
+import { Unsaved } from './unsaved.js'
 import { Pane, SubTabs } from './AdminTabs.jsx'
 import { useEffect, useState } from 'react'
 import { fetchTunables, resetTunables, saveTunables } from './api.js'
@@ -51,6 +52,7 @@ function TuneCard({ group, data, onData, onToast }) {
 
   return (
     <section className="adm-card">
+      <Unsaved id={`tune-${group.id}`} label={`세부 설정 › ${group.title}`} when={dirty} />
       <h2>
         {group.title} {edited ? <span className="adm-tag">바꿈</span> : <span className="adm-tag adm-tag-muted">처음 값</span>}
       </h2>

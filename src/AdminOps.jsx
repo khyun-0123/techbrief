@@ -1,6 +1,7 @@
 // 관리 페이지 「운영」 (19 문서 6장)
 // - 일반 화면 운영 상태: 정상 · 공지 · AI 기능 정지 · 점검 중 — 저장 막대와 별개로 「적용」하면 바로 바뀜 (급한 조치용)
 // - 서버 다시 켜기: npm run serve로 켰을 때만. 서버 코드 · .env.local 변경 반영, 멈춘 대기열 풀기
+import { Unsaved } from './unsaved.js'
 import { Pane, SubTabs } from './AdminTabs.jsx'
 import { useEffect, useState } from 'react'
 import { fetchAdminErrors, fetchHealth, restartServerApi, saveOpsApi } from './api.js'
@@ -241,6 +242,7 @@ function AdminOps({ ops, onOps, onToast, health, refreshRunning, dirtyCount }) {
   return (
     <SubTabs section="ops" tabs={[['status', '운영 상태'], ['errors', '오류 기록'], ['sources', '외부 출처 상태']]}>
       <Pane tab="status">
+      <Unsaved id="ops" label="일반 화면 운영 상태" when={changed} />
       <QueueCard />
       <section className="adm-card">
         <div className="adm-ops-head">

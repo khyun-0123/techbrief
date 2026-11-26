@@ -1,6 +1,7 @@
 // 관리 페이지 「수집 대상」 › 수집 출처 (14 문서 4-B 출처 4단계)
 // - 네이버 밖 출처(RSS · 논문 검색)를 켜고 끈다. 저장 막대와 별개로 「적용」하면 다음 최신화부터 반영
 // - 지난 수집 때 출처마다 받은 글 · 키워드에 맞은 글 · 새로 넣은 글 · 오류
+import { Unsaved } from './unsaved.js'
 import { useEffect, useState } from 'react'
 import { withConfirm } from './AdminConfirm.jsx'
 import { addSourceApi, checkSourcesApi, deleteSourceApi, fetchSources, saveSourcesApi, testSourceApi } from './api.js'
@@ -154,6 +155,8 @@ function AdminSources({ onToast }) {
     try {
       const r = await testSourceApi({ id })
       setTests((t) => ({ ...t, [id]: r }))
+      // 정상이면 서버가 지난 수집 오류를 시험 결과로 바꿔 둠 → 상태 줄도 바로 (11/26)
+      if (r?.ok) setData((d) => (d?.status?.results ? { ...d, status: { ...d.status, results: d.status.results.map((x) => (x?.id === id && !x.ok ? { id, ok: true, items: r.items, testedAt: new Date().toISOString() } : x)) } } : d))
     } catch (err) {
       setTests((t) => ({ ...t, [id]: { ok: false, error: err.message } }))
     }
@@ -208,6 +211,8 @@ function AdminSources({ onToast }) {
 
   return (
     <>
+      <Unsaved id="sources" label="수집 출처" when={changed} />
+      <Unsaved id="sources-add" label="새 출처(입력 중)" when={Boolean(adding && (adding.name || adding.url))} />
       <p className="adm-desc">
         네이버 뉴스(3차)에 더해 아래 출처에서도 모아요. 피드에는 검색이 없어서 <b>자동 수집 키워드</b>(영문 표기 포함)가 제목·요약에 있는 글만 넣어요. 제목·요약·링크만 저장해요.
         {data.status?.at && ` 지난 수집 ${formatAt(data.status.at)}.`} 출처마다 <b>수집 주기</b>를 정할 수 있어요 — 「전체 점검」을 누르면 피드마다 글이 올라오는 간격을 재서 놓치지 않을 주기를 추천해요.
@@ -309,8 +314,14 @@ function AdminSources({ onToast }) {
                       ) : r.ok ? (
                         <>
                           {r.skipped && <span className="muted">지난번엔 주기가 안 돼 건너뜀 · </span>}
-                          받은 글 {r.items ?? '-'} · 키워드 맞음 <b>{r.matched ?? '-'}</b>
-                          {r.added != null && ` · 새로 ${r.added}`}
+                          {r.testedAt ? (
+                            <span className="muted">시험 정상 · 받은 글 {r.items ?? '-'} ({formatAt(r.testedAt)} 시험, 다음 수집부터 반영)</span>
+                          ) : (
+                            <>
+                              받은 글 {r.items ?? '-'} · 키워드 맞음 <b>{r.matched ?? '-'}</b>
+                              {r.added != null && ` · 새로 ${r.added}`}
+                            </>
+                          )}
                           {quiet ? (
                             <span className="muted" title="피드에 새 글이 올라오면 그때 모아요. 끌 필요 없어요">
                               {' '}

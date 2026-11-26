@@ -2,6 +2,7 @@
 // - 자동 수집 키워드는 회의를 거쳐 관리자가 넣는다(11/10 조장). 이 표는 그 판단 자료: 최근 N일 동안 「논문 · 뉴스에서 찾기」로 찾은 말
 //   (이미 자동 수집 키워드인 말은 뺌. 11/16 추천 검색어는 자동 수집 키워드로 합침). 사람은 날짜마다 IP를 해시로 세서 더한 값
 // - 한글 검색어는 AI가 영문 검색어 1~3개를 만들어 논문 · 영문 출처를 찾는다. 틀렸으면 여기서 고친다 (고친 값은 AI가 덮어쓰지 않음)
+import { Unsaved } from './unsaved.js'
 import { Pager, usePages } from './AdminTabs.jsx'
 import { useCallback, useEffect, useState } from 'react'
 import { fetchSearchTerms, saveQueryTermsApi } from './api.js'
@@ -41,6 +42,7 @@ function TermsCell({ row, onSave }) {
   }
   return (
     <span className="adm-field-inline">
+      <Unsaved id={`terms-${row.query}`} label={`영문 검색어 › ${row.query}`} when={text.trim() !== (row.terms ?? []).join(', ')} />
       <input
         className="adm-input"
         value={text}
