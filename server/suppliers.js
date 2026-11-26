@@ -6,6 +6,7 @@
 import { dbEnabled, query } from './db/index.js'
 import { patentDbReady } from './patentDb.js'
 import { patternFromTerms } from './patents.js'
+import { titleExclude } from './techCpc.js'
 
 export const SUPPLIER_DICT = [
   { id: 'duksan', kind: '소재', names: ['덕산네오룩스', 'Duksan Neolux'], like: ['DUKSAN NEOLUX%'] },
@@ -59,11 +60,12 @@ export async function supplierPatents(terms, names = DEFAULT_SUPPLIERS) {
   if (!dicts.length) return { years: null, items: [], unmatched }
   const thisYear = new Date().getFullYear()
   const from = thisYear - 6
+  const ex = await titleExclude(pattern) // 11/26 W34: 태양전지 · 광검출기 제목 빼기 (스위치)
   const cols = dicts.map((_, i) => `count(*) FILTER (WHERE EXISTS (SELECT 1 FROM unnest(owners) o WHERE o LIKE ANY($${i + 4}::text[])))::int AS s${i}`)
   // 단어 경계 \b → PostgreSQL \y (patentDb.js toPg와 같음)
   const { rows } = await query(
-    `SELECT ${cols.join(', ')} FROM display_patents WHERE pub >= $2 AND pub < $3 AND lower(title) ~ $1`,
-    [pattern.toLowerCase().replace(/\\b/g, '\\y'), from * 10000, thisYear * 10000, ...dicts.map((d) => d.like)],
+    `SELECT ${cols.join(', ')} FROM display_patents WHERE pub >= $2 AND pub < $3 AND lower(title) ~ $1${ex ? ` AND NOT lower(title) ~ $${dicts.length + 4}` : ''}`,
+    [pattern.toLowerCase().replace(/\\b/g, '\\y'), from * 10000, thisYear * 10000, ...dicts.map((d) => d.like), ...(ex ? [ex] : [])],
   )
   const items = dicts
     .map((d, i) => ({ name: d.name, kind: d.kind, count: rows[0]?.[`s${i}`] ?? 0 }))

@@ -72,7 +72,7 @@ import { adminConfigured, adminHere, adminOf, changeLog, clientIp, confirmAdmin,
 import { ACCESS_COOKIE, ACCESS_MAX_AGE, envAccessCodeSet, tokenOf as accessTokenOf } from './accessGate.js'
 import { checkNewCode, clearAdminPassword, loadCredentials, saveAccessToken, saveAdminPassword, storedAccessToken, storedPassword } from './credentials.js'
 import { backgroundAllowed, backlogBrief, queueSearchSummaries, refreshStatus, saveRefreshSettings, startRefresh, startScheduler as startRefreshScheduler } from './refresh.js'
-import { featureList, FEATURES, getFeatures, saveFeatures } from './features.js'
+import { featureList, FEATURES, getFeatures, RULE_FLAGS, saveFeatures } from './features.js'
 import { prefetchLater } from './papers/prefetch.js'
 import { summarizeArticle, summarizeOnly } from './summarize.js'
 import { pruneUsage, recordClientEvent, usageStats } from './usage.js'
@@ -632,6 +632,11 @@ async function handleApiInner(req, res) {
       const STATE = { off: '꺼짐', test: '테스트에서만', all: '모두에게' }
       for (const f of FEATURES) {
         if (before[f.key] !== after[f.key]) await logChange(admin, '실험 기능', `${f.label}: ${STATE[before[f.key]]} → ${STATE[after[f.key]]}`)
+      }
+      // 판단 규칙 스위치(11/26)를 바꿨으면 점수 재료 기억을 비우고 목록 · 중요도를 새 규칙으로 다시 계산 (끝날 때까지는 기존 점수)
+      if (RULE_FLAGS.some((k) => (before[k] === 'all') !== (after[k] === 'all'))) {
+        globalThis.__scoreCtx = { at: 0, value: null }
+        markListStale()
       }
       return send(res, 200, { features: after, list: featureList() })
     }
