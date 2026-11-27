@@ -23,9 +23,9 @@ flowchart LR
 | 보고서 | 1페이지(헤드라인 · 핵심 사실 · 시사점) + 유첨, 「확인할 점」 맨 위 |
 | 관리 페이지 | 수집 출처 · 중요도 · 판정 기준 · AI 연결 · 운영, 저장 안 한 변경 경고 |
 
-![대시보드](images/d-dash.jpg)
+![대시보드: 요즘 뜨는 기술 · 연관 키워드 맵 · 기술 시계열](images/d-ai.jpg)
 
-![분석 화면](images/d-ai.jpg)
+<img src="images/d-timeline.jpg" width="560" alt="기술 시계열 카드">
 
 ![자료 고르기](images/d-ai-mat.jpg)
 

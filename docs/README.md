@@ -4,7 +4,7 @@
 <tr>
 <td width="60%">
 
-### 👀 처음이라면 — [쉽게 보는 소개 →](../README.md)
+### 👀 처음이라면 — [쉽게&nbsp;보는&nbsp;소개&nbsp;→](../README.md)
 
 **새 기술 소식이 온 그날, 「우리 회사에 위협인가 기회인가」를 근거와 함께 보고서 초안으로.**
 
@@ -16,7 +16,7 @@
 [🌐 운영 사이트](https://cheonan-ax-project-production.up.railway.app) · 2026 천안형 글로벌 인재육성사업 AX 액션러닝 5조 최최최종.zip
 
 </td>
-<td width="40%"><img src="images/d-report.jpg" alt="보고서 화면: 헤드라인에 자사 2.03배 판정과 근거 번호"></td>
+<td width="40%"><img src="images/d-report.jpg" alt="보고서 화면: 헤드라인에 자사 특허 2.02배 판정과 근거 번호"></td>
 </tr>
 </table>
 

@@ -6,18 +6,20 @@
 
 <table>
 <tr>
-<td align="center" width="50%">
-<h3>🔧 <a href="docs/README.md">개발 문서 자세히 보기 →</a></h3>
+<td align="center" width="1000">
+<h3>🔧 <a href="docs/README.md">개발&nbsp;문서&nbsp;자세히&nbsp;보기&nbsp;→</a></h3>
 <sub>판정 규칙 · 근거 대조 · AI 모델 평가 · 시간 실측 · 구조</sub>
 </td>
-<td align="center" width="50%">
-<h3>🌐 <a href="https://cheonan-ax-project-production.up.railway.app">운영 사이트 열기 →</a></h3>
+</tr>
+<tr>
+<td align="center" width="1000">
+<h3>🌐 <a href="https://cheonan-ax-project-production.up.railway.app">운영&nbsp;사이트&nbsp;열기&nbsp;→</a></h3>
 <sub>접속 코드는 담당자에게 안내</sub>
 </td>
 </tr>
 </table>
 
-![키워드 분석 화면: 왼쪽 「요즘 뜨는 기술」 순위, 가운데 연관 키워드 맵, 오른쪽 기술 시계열](docs/images/d-dash.jpg)
+![키워드 분석 화면: 왼쪽 「요즘 뜨는 기술」 순위, 가운데 마이크로LED 연관 키워드 맵, 오른쪽 기술 시계열과 「자사 기회」 표시](docs/images/d-ai.jpg)
 
 ---
 
@@ -39,7 +41,7 @@
 
 **① 키워드를 넣으면** — 기술 단계 · 특허가 몰린 분야 · 논문 낸 회사를 한 화면에
 
-![분석 화면: 기술 단계와 특허 · 논문 흐름](docs/images/d-ai.jpg)
+<img src="docs/images/d-timeline.jpg" width="560" alt="기술 시계열: 성장 · 상용화 진입 판정, 논문 수 · 기업 저자 비율 · 특허 공개 수 막대">
 
 **② 자료는 중요도 순으로** — 1만 건 중 매일 볼 것만 ([중요도 기준](docs/04_collection_importance.md))
 
@@ -47,7 +49,9 @@
 
 **③ 보고서는 판정이 헤드라인으로** — 근거 번호와 「확인할 점」이 먼저
 
-![보고서: 헤드라인에 자사 2.03배 판정, 확인할 점, 핵심 사실 근거](docs/images/d-report.jpg)
+![보고서: 헤드라인에 자사 특허 2.02배 판정, 확인할 점 4개, 핵심 사실 근거 번호, 오른쪽 근거 자료](docs/images/d-report.jpg)
+
+<sub>11/19 보고서 화면 — 배수는 만든 날의 특허 자료에 따라 조금씩 다릅니다 (11/24 보고서 2.03배).</sub>
 
 ## 숫자 다섯 개
 
