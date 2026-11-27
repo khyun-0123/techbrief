@@ -13,8 +13,8 @@
 </tr>
 <tr>
 <td align="center" width="1000">
-<h3>🌐 <a href="https://cheonan-ax-project-production.up.railway.app">운영&nbsp;사이트&nbsp;열기&nbsp;→</a></h3>
-<sub>접속 코드 <b><code>finalzip1!</code></b> · 기본 AI는 팀 자체 서버(맥미니)라 보고서는 몇 분 걸릴 수 있어요</sub>
+<h3>🌐 <a href="https://techbrief.up.railway.app/?code=finalzip1!">운영&nbsp;사이트&nbsp;열기&nbsp;→</a></h3>
+<sub>누르면 접속 코드 자동 입력 · <code>techbrief.up.railway.app</code> (코드 <b><code>finalzip1!</code></b>) · 기본 AI는 팀 자체 서버(맥미니)라 보고서는 몇 분 걸릴 수 있어요</sub>
 </td>
 </tr>
 </table>
