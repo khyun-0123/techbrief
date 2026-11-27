@@ -49,6 +49,8 @@
 | 수집 | 네이버 뉴스 · RSS 28곳 · 논문 4곳 + 국내 KCI · 특허(받아 둠) | **인터넷 서버에서**, 업무망엔 PDF · PPT만 |
 | AI | 맥미니(자체 모델) · Vertex AI · OpenRouter · K-EXAONE 중 선택 | **사내 GPU의 공개 모델** (Gemma 4 26B / 31B) |
 
+회사 망의 어느 구역에 무엇을 두는지 · 비용은 [12 문서](12_onprem_cost.md).
+
 * AI 호출은 `server/llm/client.js` 한 곳. OpenAI 호환 방식이라 **주소 · 모델만 바꾸면** 다른 AI로 바뀐다. 연결마다 「동시 요청 수」를 둔다 ([07](07_performance_ops.md)).
 * 외부 사이트가 막혀도(예: 봇 차단) 대체 경로 — 브라우저 흉내 → WordPress API → 자체 중계 — 로 받는다.
 
