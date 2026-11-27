@@ -36,6 +36,7 @@
 | 8 | [**데이터 · 약관 · 회사 도입**](08_data_terms.md) | 데이터별 이용 조건, 사내 설치 때 확인할 것 |
 | 9 | [**화면 · 디자인**](09_design.md) | 사용 흐름, 디자인 토큰 · 여백 규칙 |
 | 10 | [**10주 과정**](10_history.md) | 받은 말 → 바꾼 것, 틀렸던 것, 다음 단계 |
+| 11 | [**받아서 실행하기 · 인수인계**](11_setup_handover.md) | 설치 10분, 없으면 빠지는 기능, 서버에 올리기, 넘겨받을 때 확인할 것 |
 
 <sub>이 문서들은 팀의 개발 일지(52편, 비공개)를 **주제별로 다시 정리**한 것입니다. 인터뷰 원문 · 회의 · 개인 정보는 싣지 않습니다.</sub>
 
@@ -75,11 +76,14 @@ docs/         이 문서들
 ## 실행
 
 ```bash
+git clone https://github.com/khyun-0123/techbrief.git
+cd techbrief
 npm install
 cp .env.example .env.local   # 값 채우기 — 설명은 .env.example 안에
 npm run dev                  # 화면 + API (http://localhost:5173)
 ```
 
+* **자세한 설치 · 서버에 올리기 · 인수인계는 [11 문서](11_setup_handover.md).**
 * 필수는 Node.js 22. PostgreSQL · AI 서버 · 네이버 키가 없으면 그 기능만 꺼진다.
 * `npm run storybook` 부품 카탈로그 · `npm run patent-db` 특허 자료 받기 · `npm run lint` 검사
 
