@@ -78,6 +78,6 @@
 
 ## 팀
 
-5조 **최최최종.zip** (8명) — [@khyun-0123](https://github.com/khyun-0123) (팀장) · [@jeonghwan415](https://github.com/jeonghwan415) · [@jonghak1564](https://github.com/jonghak1564) · [@lizzyojinau](https://github.com/lizzyojinau) · [@Park11234](https://github.com/Park11234) · [@qwer4022as-ui](https://github.com/qwer4022as-ui) (김동현) · [@rbdmh2jskv-web](https://github.com/rbdmh2jskv-web) · [@seojin-pixel](https://github.com/seojin-pixel)
+5조 **최최최종.zip** (8명) — 김재현 [@khyun-0123](https://github.com/khyun-0123) (팀장) · 김동현 [@qwer4022as-ui](https://github.com/qwer4022as-ui) · 박세현 [@Park11234](https://github.com/Park11234) · 박정환 [@jeonghwan415](https://github.com/jeonghwan415) · 오현주 [@lizzyojinau](https://github.com/lizzyojinau) · 원종학 [@jonghak1564](https://github.com/jonghak1564) · 정서진 [@seojin-pixel](https://github.com/seojin-pixel) · 추주형 [@rbdmh2jskv-web](https://github.com/rbdmh2jskv-web)
 
 <p align="center"><b><a href="docs/README.md">🔧 개발 문서 자세히 보기 →</a></b></p>
