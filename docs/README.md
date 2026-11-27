@@ -85,7 +85,7 @@ npm run dev                  # 화면 + API (http://localhost:5173)
 
 ## 팀
 
-5조 최최최종.zip — [@khyun-0123](https://github.com/khyun-0123) (팀장) · [@qwer4022as-ui](https://github.com/qwer4022as-ui) (김동현) · [@jeonghwan415](https://github.com/jeonghwan415)
+5조 최최최종.zip (8명) — [@khyun-0123](https://github.com/khyun-0123) (팀장) · [@jeonghwan415](https://github.com/jeonghwan415) · [@jonghak1564](https://github.com/jonghak1564) · [@lizzyojinau](https://github.com/lizzyojinau) · [@Park11234](https://github.com/Park11234) · [@qwer4022as-ui](https://github.com/qwer4022as-ui) (김동현) · [@rbdmh2jskv-web](https://github.com/rbdmh2jskv-web) · [@seojin-pixel](https://github.com/seojin-pixel)
 
 ---
 
