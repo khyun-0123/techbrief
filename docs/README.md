@@ -13,7 +13,7 @@
 * 문장마다 **근거 번호**, 원문과 다르면 「확인 필요」
 * 담당자 양식 **1페이지 PPT** 그대로
 
-[🌐 운영 사이트](https://cheonan-ax-project-production.up.railway.app) · 2026 천안형 글로벌 인재육성사업 AX 액션러닝 5조 최최최종.zip
+[🌐 운영 사이트](https://cheonan-ax-project-production.up.railway.app) (접속 코드 `finalzip1!`) · 2026 천안형 글로벌 인재육성사업 AX 액션러닝 5조 최최최종.zip
 
 </td>
 <td width="40%"><img src="images/d-report.jpg" alt="보고서 화면: 헤드라인에 자사 특허 2.02배 판정과 근거 번호"></td>
